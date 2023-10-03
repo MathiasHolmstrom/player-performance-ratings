@@ -1,6 +1,6 @@
 from typing import Dict
 
-from src.player_performance_ratings.data_structures import MatchEntity, MatchRating
+from src.player_performance_ratings.data_structures import MatchPlayer, MatchRating
 
 
 class LeagueRatingAdjustor():
@@ -13,7 +13,7 @@ class LeagueRatingAdjustor():
         self.league_ratings: Dict[str, float] = {}
 
     def update_league_ratings(self,
-                              match_entity: MatchEntity,
+                              match_entity: MatchPlayer,
                               match_entity_rating: MatchRating,
                               ) -> Dict[str, float]:
 

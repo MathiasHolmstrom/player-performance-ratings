@@ -54,7 +54,7 @@ class MatchOutValues:
 
 
 @dataclass
-class EntityRating:
+class PlayerRating:
     id: str
     rating: float
     games_played: int = 0
@@ -90,18 +90,25 @@ class MatchPerformanceRating:
 
 
 @dataclass
-class MatchEntity:
-    entity_id: str
+class MatchPlayer:
+    id: str
     match_performance_rating: MatchPerformanceRating
     league: str = None
+
+
+@dataclass
+class MatchTeam:
+    id: str
+    entites: list[MatchPlayer]
     opponent_league: str = None
-    team_id: str = None
 
 
 @dataclass
 class Match:
     match_id: str
-    entities: List[MatchEntity]
+    teams: List[MatchTeam]
     team_ids: List[str]
     day_number: int
     league: str = None
+
+

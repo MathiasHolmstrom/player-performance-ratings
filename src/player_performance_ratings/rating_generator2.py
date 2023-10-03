@@ -8,11 +8,11 @@ import pandas as pd
 
 from sklearn.base import TransformerMixin, BaseEstimator
 
-from src.player_performance_ratings.data_structures import EntityRating
+from src.player_performance_ratings.data_structures import PlayerRating
 from src.player_performance_ratings.match_rating.match_rating_calculator import MatchGenerator
 from src.player_performance_ratings.data_structures import MatchOutValues, PredictedRatingMethod, RatingColumnNames, \
     MatchPerformanceRating, \
-    RatingType, MatchEntity, Match, ConfigurationColumnNames
+    RatingType, MatchPlayer, Match, ConfigurationColumnNames
 
 HOUR_NUMBER_COLUMN_NAME = "hour_number"
 
@@ -70,8 +70,8 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
         self._instantiate_new()
 
     @property
-    def entity_ratings(self) -> Dict[str, EntityRating]:
-        return self.match_generator.match_rating_calculator.entity_ratings
+    def entity_ratings(self) -> Dict[str, PlayerRating]:
+        return self.match_generator.match_rating_calculator.player_ratings
 
 
 
@@ -299,7 +299,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
             if league_in_df:
                 league = row[col_names.league]
 
-            match_entity = MatchEntity(
+            match_entity = MatchPlayer(
                 entity_id=entity_id,
                 team_id=row[col_names.team_id],
                 league=league,
@@ -653,7 +653,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
     def update_out_with_projected_entity_rating_difference(self,
                                                            out_column_name: RatingColumnNames,
                                                            match_id: str,
-                                                           match_entity: MatchEntity,
+                                                           match_entity: MatchPlayer,
                                                            match_data_is_bugged: bool,
                                                            rating_type: RatingType
                                                            ):
@@ -680,7 +680,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
     def update_out_with_entity_rating_difference(self,
                                                  out_column_name: RatingColumnNames,
                                                  match_id: str,
-                                                 match_entity: MatchEntity,
+                                                 match_entity: MatchPlayer,
                                                  match_data_is_bugged: bool,
                                                  rating_type: RatingType
                                                  ):
@@ -706,7 +706,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
     def update_out_with_rating_difference(self,
                                           out_column_name: RatingColumnNames,
                                           match_id: str,
-                                          match_entity: MatchEntity,
+                                          match_entity: MatchPlayer,
                                           match_data_is_bugged: bool,
                                           rating_type: RatingType
                                           ):
@@ -732,7 +732,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
     def update_out_with_rating_mean(self,
                                     out_column_name: RatingColumnNames,
                                     match_id: str,
-                                    match_entity: MatchEntity,
+                                    match_entity: MatchPlayer,
                                     match_data_is_bugged: bool,
                                     rating_type: RatingType
                                     ):
@@ -761,7 +761,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
     def update_out_with_projected_rating_mean(self,
                                               out_column_name: RatingColumnNames,
                                               match_id: str,
-                                              match_entity: MatchEntity,
+                                              match_entity: MatchPlayer,
                                               match_data_is_bugged: bool,
                                               rating_type: RatingType
                                               ):
@@ -788,7 +788,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
     def update_out_with_projected_opponent_rating(self,
                                                   out_column_name: RatingColumnNames,
                                                   match_id: str,
-                                                  match_entity: MatchEntity,
+                                                  match_entity: MatchPlayer,
                                                   match_data_is_bugged: bool,
                                                   rating_type: RatingType
                                                   ):
@@ -811,7 +811,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
     def update_out_with_projected_team_rating(self,
                                               out_column_name: RatingColumnNames,
                                               match_id: str,
-                                              match_entity: MatchEntity,
+                                              match_entity: MatchPlayer,
                                               match_data_is_bugged: bool,
                                               rating_type: RatingType
                                               ):
@@ -834,7 +834,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
     def update_out_with_rating_difference_averaged_for_game(self,
                                                             out_column_name: RatingColumnNames,
                                                             match_id: str,
-                                                            match_entity: MatchEntity,
+                                                            match_entity: MatchPlayer,
                                                             match_data_is_bugged: bool,
                                                             rating_type: RatingType
                                                             ):
@@ -865,7 +865,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
     def update_out_with_projected_rating_difference_averaged_for_game(self,
                                                                       out_column_name: RatingColumnNames,
                                                                       match_id: str,
-                                                                      match_entity: MatchEntity,
+                                                                      match_entity: MatchPlayer,
                                                                       match_data_is_bugged: bool,
                                                                       rating_type: RatingType
                                                                       ):
@@ -898,7 +898,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
     def update_out_with_projected_rating_difference(self,
                                                     out_column_name: RatingColumnNames,
                                                     match_id: str,
-                                                    match_entity: MatchEntity,
+                                                    match_entity: MatchPlayer,
                                                     match_data_is_bugged: bool,
                                                     rating_type: RatingType
                                                     ):
@@ -923,7 +923,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
     def update_out_with_opponent_rating(self,
                                         out_column_name: RatingColumnNames,
                                         match_id: str,
-                                        match_entity: MatchEntity,
+                                        match_entity: MatchPlayer,
                                         match_data_is_bugged: bool,
                                         rating_type: RatingType
                                         ):
@@ -948,7 +948,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
     def update_out_with_team_rating(self,
                                     out_column_name: RatingColumnNames,
                                     match_id: str,
-                                    match_entity: MatchEntity,
+                                    match_entity: MatchPlayer,
                                     match_data_is_bugged: bool,
                                     rating_type: RatingType
                                     ):
@@ -973,7 +973,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
     def update_out_with_entity_rating(self,
                                       out_column_name: RatingColumnNames,
                                       match_id: str,
-                                      match_entity: MatchEntity,
+                                      match_entity: MatchPlayer,
                                       match_data_is_bugged: bool,
                                       rating_type: RatingType
                                       ):

@@ -5,7 +5,7 @@ import time
 from typing import Dict, List, Union
 import math
 
-from src.player_performance_ratings.data_structures import EntityRating, Match, MatchEntity
+from src.player_performance_ratings.data_structures import PlayerRating, Match, MatchPlayer
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 MODIFIED_RATING_CHANGE_CONSTANT = 1
@@ -125,10 +125,10 @@ class MatchRatingCalculatorMixin:
         self.start_rating_calculator = start_rating_calculator
         self.league_rating_adjustor = league_rating_adjustor
         self.performance_predictor = performance_predictor
-        self.entity_ratings: Dict[str, EntityRating] = {}
+        self.entity_ratings: Dict[str, PlayerRating] = {}
 
     def _calculate_rating_change_multiplier(self,
-                                            entity_rating: EntityRating,
+                                            entity_rating: PlayerRating,
                                             rating_change_multiplier: float
                                             ) -> float:
         certain_multiplier = self._calculate_certain_multiplier(
@@ -140,14 +140,14 @@ class MatchRatingCalculatorMixin:
         min_rating_change_multiplier = rating_change_multiplier * self.min_rating_change_multiplier_ratio
         return max(min_rating_change_multiplier, multiplier)
 
-    def _calculate_certain_multiplier(self, entity_rating: EntityRating, rating_change_multiplier: float) -> float:
+    def _calculate_certain_multiplier(self, entity_rating: PlayerRating, rating_change_multiplier: float) -> float:
         net_certain_sum_value = entity_rating.certain_sum - self.reference_certain_sum_value
         certain_factor = -sigmoid_subtract_half_and_multiply2(net_certain_sum_value,
                                                               self.certain_value_denom) + MODIFIED_RATING_CHANGE_CONSTANT
         return certain_factor * rating_change_multiplier
 
     def _calculate_post_match_certain_sum(self,
-                                          entity_rating: EntityRating,
+                                          entity_rating: PlayerRating,
                                           match: Match,
                                           particpation_weight: float
                                           ) -> float:
@@ -256,7 +256,7 @@ class MatchRatingCalculatorMixin:
                 self.league_rating_adjustor.league_ratings[league] = 0
 
     def _calculate_team_rating_by_ratio(self,
-                                        match_entity: MatchEntity,
+                                        match_entity: MatchPlayer,
                                         match: Match,
                                         min_games_played: int,
                                         ) -> Union[None, float]:
@@ -288,7 +288,7 @@ class MatchRatingCalculatorMixin:
         return pre_match_team_rating / sum_ratio
 
     def _calculate_rating_change(self,
-                                 match_entity: MatchEntity,
+                                 match_entity: MatchPlayer,
                                  match: Match,
                                  rating_change_multiplier: float,
                                  ):
@@ -509,13 +509,13 @@ class MatchRatingCalculator(MatchRatingCalculatorMixin):
             if match_entity.entity_id not in entity_ids:
                 continue
             team_rating = team_ratings[match_entity.team_id]
-            start_rating = self.start_rating_calculator.generate_rating(
+            start_rating = self.start_rating_calculator.update_rating(
                 day_number=match.day_number,
                 match_entity=match_entity,
                 team_rating=team_rating,
             )
 
-            self.entity_ratings[match_entity.entity_id] = EntityRating(
+            self.entity_ratings[match_entity.entity_id] = PlayerRating(
                 id=match_entity.entity_id,
                 rating=start_rating,
                 prev_rating_changes=[],
@@ -539,7 +539,7 @@ class MatchRatingCalculator(MatchRatingCalculatorMixin):
 
         return team_ratings_proj, team_ratings
 
-    def update_league_ratings(self, day_number: int, match_entity: MatchEntity):
+    def update_league_ratings(self, day_number: int, match_entity: MatchPlayer):
         self.start_rating_calculator.update_league_ratings(day_number=day_number, match_entity=match_entity)
 
 

@@ -2,8 +2,9 @@ import copy
 from dataclasses import dataclass
 
 import numpy as np
-from typing import Dict, Any, List
-from src.rating_model2.data_structures import MatchRating, MatchEntity, RatingType, MatchPerformanceRating
+from typing import Dict, Any, List, Optional
+
+from src.player_performance_ratings.data_structures import MatchPlayer
 
 DEFAULT_START_RATING = 1000
 
@@ -14,16 +15,11 @@ class LeagueEntityRatings:
     entity_ratings: List[float]
 
 
-@dataclass
-class RatingTypeLeagueEntityRatings:
-    rating_type: RatingType
-    league_entity_ratings: Dict[str, LeagueEntityRatings]
 
-
-class StartRatingCalculator():
+class StartRatingGenerator():
 
     def __init__(self,
-                 start_league_ratings: Dict[RatingType, Dict[str, float]] = None,
+                 start_league_ratings: Optional[Dict[str, float]] = None,
                  min_count_using_percentiles: int = 150,
                  league_quantile: float = 0.2,
                  team_rating_subtract: float = 80,
@@ -37,22 +33,19 @@ class StartRatingCalculator():
         self.min_count_for_percentiles = min_count_using_percentiles
         self.team_rating_subtract = team_rating_subtract
         self.league_quantile = league_quantile
-        if start_league_ratings is None:
-            start_league_ratings: Dict[RatingType, Dict[str, float]] = {}
-        self.region_ratings_original = start_league_ratings
+
+        self.region_ratings_original = start_league_ratings or {}
 
         self.rating_type_to_league_ratings = copy.deepcopy(self.region_ratings_original)
 
         self.league_to_last_day_number: Dict[str, List[Any]] = {}
         self.league_to_entity_ids: Dict[str, List[str]] = {}
         self.entity_to_league: Dict[str, str] = {}
-        self.ratings_type_to_league_entity_ratings: Dict[RatingType, RatingTypeLeagueEntityRatings] = {}
 
     def generate_rating(self,
                         day_number: int,
-                        match_entity: MatchEntity,
+                        match_entity: MatchPlayer,
                         team_rating: float,
-                        rating_type: RatingType,
                         ) -> float:
 
         if rating_type not in self.ratings_type_to_league_entity_ratings:
@@ -119,7 +112,7 @@ class StartRatingCalculator():
             if days_ago <= self.max_days_ago_league_entities:
 
                 entity_ratings.append(self.ratings_type_to_league_entity_ratings[rating_type].league_entity_ratings[
-                                          league].entity_ratings[index])
+                                          league].player_ratings[index])
 
         return entity_ratings
 
@@ -132,7 +125,7 @@ class StartRatingCalculator():
 
     def update_league_ratings(self,
                               day_number: int,
-                              match_entity: MatchEntity
+                              match_entity: MatchPlayer
                               ):
 
         league = match_entity.league
@@ -163,7 +156,7 @@ class StartRatingCalculator():
                     continue
                 entity_has_active_rating = True
                 self.ratings_type_to_league_entity_ratings[rating_type].league_entity_ratings[
-                    league].entity_ratings.append(
+                    league].player_ratings.append(
                     match_performance_rating.rating.post_match_entity_rating)
 
             if not entity_has_active_rating:
@@ -177,7 +170,7 @@ class StartRatingCalculator():
             for rating_type, match_performance_rating in match_entity.match_performance_rating.items():
                 if  match_performance_rating.rating.post_match_entity_rating is None:
                     continue
-                self.ratings_type_to_league_entity_ratings[rating_type].league_entity_ratings[league].entity_ratings[
+                self.ratings_type_to_league_entity_ratings[rating_type].league_entity_ratings[league].player_ratings[
                     index] = \
                     match_performance_rating.rating.post_match_entity_rating
 
@@ -187,11 +180,11 @@ class StartRatingCalculator():
             entity_index = self.league_to_entity_ids[current_entity_league].index(entity_id)
             for rating_type, match_performance_rating in match_entity.match_performance_rating.items():
                 self.ratings_type_to_league_entity_ratings[rating_type].league_entity_ratings[
-                    current_entity_league].entity_ratings = \
+                    current_entity_league].player_ratings = \
                     self.ratings_type_to_league_entity_ratings[rating_type].league_entity_ratings[
-                        current_entity_league].entity_ratings[:entity_index] + \
+                        current_entity_league].player_ratings[:entity_index] + \
                     self.ratings_type_to_league_entity_ratings[rating_type].league_entity_ratings[
-                        current_entity_league].entity_ratings[entity_index + 1:]
+                        current_entity_league].player_ratings[entity_index + 1:]
 
 
             self.league_to_last_day_number[current_entity_league] = \
