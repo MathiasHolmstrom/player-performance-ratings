@@ -2,9 +2,10 @@ import logging
 import math
 from typing import Dict, List, Union, Optional, Tuple
 
-from src.player_performance_ratings.data_structures import Match, MatchPlayer, PlayerRating, MatchTeam
-from src.player_performance_ratings.match_rating.match_rating_calculator import PerformancePredictor
-from src.player_performance_ratings.start_rating_calculator import StartRatingGenerator
+from src.ratings.data_structures import Match, MatchPlayer, PlayerRating, MatchTeam, RatingUpdateParameters, \
+    TeamRatingParameters, PreMatchTeamRating, PreMatchPlayerRating
+from src.ratings.match_rating.match_rating_calculator import PerformancePredictor
+from src.ratings.start_rating_calculator import StartRatingGenerator
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 MODIFIED_RATING_CHANGE_CONSTANT = 1
@@ -17,33 +18,12 @@ def sigmoid_subtract_half_and_multiply2(value: float, x: float) -> float:
 
 class BasePlayerRatingUpdater():
 
-    def __init__(self, min_games_played: int,
-                 reference_certain_sum_value: float,
-                 certain_weight: float,
-                 min_rating_change_multiplier_ratio: float,
-                 min_rating_change_for_league: float,
-                 certain_value_denom: float,
-                 max_certain_sum: float,
-                 certain_days_ago_multiplier: float,
-                 rating_change_multiplier: float,
-                 rating_change_momentum_games_count: int,
-                 rating_change_momentum_multiplier: float,
-                 max_days_ago: float,
+    def __init__(self,
+                 update_params: RatingUpdateParameters,
                  start_rating_generator: StartRatingGenerator,
                  performance_predictor: PerformancePredictor
                  ):
-        self.min_games_played = min_games_played
-        self.reference_certain_sum_value = reference_certain_sum_value
-        self.certain_weight = certain_weight
-        self.min_rating_change_multiplier_ratio = min_rating_change_multiplier_ratio
-        self.min_rating_change_for_league = min_rating_change_for_league
-        self.certain_value_denom = certain_value_denom
-        self.max_days_ago = max_days_ago
-        self.rating_change_multiplier = rating_change_multiplier
-        self.max_certain_sum = max_certain_sum
-        self.certain_days_ago_multiplier = certain_days_ago_multiplier
-        self.rating_change_momentum_games_count = rating_change_momentum_games_count
-        self.rating_change_momentum_multiplier = rating_change_momentum_multiplier
+        self.update_params = update_params
         self.player_ratings: Dict[str, PlayerRating] = {}
         self.performance_predictor = performance_predictor
         self.start_rating_generator = start_rating_generator
@@ -56,7 +36,7 @@ class BasePlayerRatingUpdater():
         )
         self.player_ratings[match_entity.entity_id].rating += rating_change
         self.player_ratings[
-            match_entity.entity_id].games_played += match_entity.match_performance_rating.participation_weight
+            match_entity.entity_id].games_played += match_entity.match_player_performance.participation_weight
         return self.player_ratings[match_entity.entity_id].rating
 
     def _calculate_rating_change(self,
@@ -70,20 +50,20 @@ class BasePlayerRatingUpdater():
             match=match,
         )
 
-        entity_rating = self.player_ratings[match_entity.entity_id]
+        entity_rating = self.player_ratings[match_entity.id]
 
         predicted_performance = self.performance_predictor.predict_performance(
-            rating=match_entity.match_performance_rating.rating.pre_match_entity_rating,
-            opponent_rating=match_entity.match_performance_rating.rating.pre_match_opponent_rating,
+            rating=match_entity.match_player_performance.rating.pre_match_entity_rating,
+            opponent_rating=match_entity.match_player_performance.rating.pre_match_opponent_rating,
             team_rating=pre_match_team_rating
         )
-        performance_difference = match_entity.match_performance_rating.match_performance - predicted_performance
+        performance_difference = match_entity.match_player_performance.match_performance - predicted_performance
 
-        rating_change_multiplier = self._calculate_rating_change_multiplier(entity_id=match_entity.entity_id)
+        rating_change_multiplier = self._calculate_rating_change_multiplier(entity_id=match_entity.id)
 
-        rating_change = performance_difference * rating_change_multiplier * match_entity.match_performance_rating.participation_weight
+        rating_change = performance_difference * rating_change_multiplier * match_entity.match_player_performance.participation_weight
         if math.isnan(rating_change):
-            logging.warning(f"rating change is nan return 0 entity id {match_entity.entity_id}")
+            logging.warning(f"rating change is nan return 0 entity id {match_entity.id}")
             return 0
 
         st_idx = max(0, len(entity_rating.prev_rating_changes) - self.rating_change_momentum_games_count)
@@ -131,20 +111,20 @@ class BasePlayerRatingUpdater():
     def _calculate_team_rating(self,
                                team_id: str,
                                entity_id: str,
-                               match: Match,
+                               team: MatchTeam,
                                ) -> Optional[float]:
         sum_rating = 0
         count = 0
-        for match_entity in match.entities:
-            if match_entity.team_id == team_id and match_entity.entity_id != entity_id:
-                if match_entity.entity_id not in self.player_ratings or self.player_ratings[
-                    match_entity.entity_id].games_played < self.min_games_played:
+        for match_player in team.players:
+            if match_player.id != entity_id:
+                if match_player.id not in self.player_ratings or self.player_ratings[
+                    match_player.id].games_played < self.min_games_played:
                     continue
 
-                sum_rating += self.player_ratings[match_entity.entity_id].rating * \
-                              match_entity.match_performance_rating.participation_weight
+                sum_rating += self.player_ratings[match_player.id].rating * \
+                              match_player.match_player_performance.participation_weight
 
-                count += match_entity.match_performance_rating.participation_weight
+                count += match_player.match_player_performance.participation_weight
 
         if count == 0:
             return None
@@ -156,7 +136,8 @@ class BasePlayerRatingUpdater():
             raise KeyError(f"{id} not in player_ratings")
         return self.player_ratings[id]
 
-    def get_rating_for_new_player(self, match: Match, match_player: MatchPlayer, existing_team_rating: float) -> PlayerRating:
+    def get_rating_for_new_player(self, match: Match, match_player: MatchPlayer,
+                                  existing_team_rating: Optional[float]) -> PlayerRating:
         id = match_player.id
 
         rating = self.start_rating_generator.generate_rating(
@@ -173,7 +154,7 @@ class BasePlayerRatingUpdater():
         return self.player_ratings[match_player.id]
 
 
-class ProjectedRatioEntityRatingGenerator(BasePlayerRatingUpdater):
+class ProjectedRatioEntityRatingUpdater(BasePlayerRatingUpdater):
 
     def _calculate_team_rating(self,
                                team_id: str,
@@ -190,8 +171,8 @@ class ProjectedRatioEntityRatingGenerator(BasePlayerRatingUpdater):
                 other_entity_id].games_played < self.min_games_played:
                 continue
             if other_match_entity.team_id == team_id and other_entity_id != match_entity.entity_id and \
-                    other_entity_id in match_entity.match_performance_rating.ratio:
-                ratio = match_entity.match_performance_rating.ratio[other_entity_id]
+                    other_entity_id in match_entity.match_player_performance.ratio:
+                ratio = match_entity.match_player_performance.ratio[other_entity_id]
                 sum_ratio += ratio
                 pre_match_team_rating += ratio * self.player_ratings[other_entity_id].rating
 
@@ -221,8 +202,8 @@ class ProjectedRatioEntityRatingGenerator(BasePlayerRatingUpdater):
                     continue
 
                 sum_rating += self.player_ratings[match_entity.entity_id].rating * \
-                              match_entity.match_performance_rating.projected_participation_weight
-                count += match_entity.match_performance_rating.projected_participation_weight
+                              match_entity.match_player_performance.projected_participation_weight
+                count += match_entity.match_player_performance.projected_participation_weight
 
         if count == 0:
             return None
@@ -233,71 +214,82 @@ class ProjectedRatioEntityRatingGenerator(BasePlayerRatingUpdater):
 class TeamRatingGenerator():
 
     def __init__(self,
-                 entity_rating_generator: BasePlayerRatingUpdater,
-                 min_match_count: int
+                 player_rating_updater: BasePlayerRatingUpdater,
+                 params: TeamRatingParameters
                  ):
-        self.player_rating_generator = entity_rating_generator
-        self.min_match_count = min_match_count
+        self.player_rating_generator = player_rating_updater
+        self.params = params
 
-    def pre_match_rating(self, match: Match, team: MatchTeam) -> float:
+    def pre_match_rating(self, match: Match, team: MatchTeam) -> PreMatchTeamRating:
 
-        player_ratings, new_players = self._get_player_ratings_and_new_players(team=team)
-        tot_player_game_count = sum([p.games_played for p in player_ratings])
+        pre_match_player_ratings, new_players = self._get_pre_match_player_ratings_and_new_players(team=team)
+        tot_player_game_count = sum([p.games_played for p in pre_match_player_ratings])
         if len(new_players) == 0:
-            return sum(player_ratings) / len(player_ratings)
+            return PreMatchTeamRating(
+                id=team.id,
+                players=pre_match_player_ratings,
+                rating=sum(pre_match_player_ratings) / len(pre_match_player_ratings),
+            )
 
-        elif tot_player_game_count < self.min_match_count:
+        elif tot_player_game_count < self.params.min_match_count:
             existing_team_rating = None
         else:
-            existing_team_rating = sum(player_ratings) / len(player_ratings)
+            existing_team_rating = sum(pre_match_player_ratings) / len(pre_match_player_ratings)
 
-        new_ratings = self._generate_new_start_ratings(match=match, new_players=new_players,
-                                                       existing_team_rating=existing_team_rating)
-        player_ratings += new_ratings
-        return sum(player_ratings) / len(player_ratings)
+        new_player_pre_match_ratings = self._generate_new_player_pre_match_ratings(match=match, new_players=new_players,
+                                                                                   existing_team_rating=existing_team_rating)
+        pre_match_player_ratings += new_player_pre_match_ratings
+        return PreMatchTeamRating(
+            id=team.id,
+            players=pre_match_player_ratings,
+            rating=sum(pre_match_player_ratings) / len(pre_match_player_ratings),
+        )
 
-    def _get_player_ratings_and_new_players(self, team: MatchTeam) -> Tuple[
-        list[PlayerRating], list[MatchPlayer]]:
+    def _get_pre_match_player_ratings_and_new_players(self, team: MatchTeam) -> Tuple[
+        dict[str, PreMatchPlayerRating], list[MatchPlayer]]:
 
-        player_ratings = []
+        pre_match_player_ratings = {}
         player_count = 0
 
         new_match_entities = []
 
-        for match_entity in team.entites:
+        for match_player in team.players:
 
-            entity_rating = self.player_rating_generator.get_rating_by_id(id=match_entity.id)
-            if entity_rating is None:
-                new_match_entities.append(match_entity)
+            player_rating = self.player_rating_generator.get_rating_by_id(id=match_player.id)
+            if player_rating is None:
+                new_match_entities.append(match_player)
                 continue
 
-            player_count += entity_rating.games_played
-            player_ratings.append(entity_rating)
+            player_count += player_rating.games_played
 
-        return player_ratings, new_match_entities
+            pre_match_player_rating = PreMatchPlayerRating(
+                id=match_player.id,
+                rating=player_rating.rating,
+                projected_rating=match_player.match_player_performance.projected_participation_weight * player_rating.rating
+            )
 
-    def _generate_new_start_ratings(self, match: Match, new_players: List[MatchPlayer],
-                                    existing_team_rating: float) -> list[PlayerRating]:
+            pre_match_player_ratings[match_player.id] = pre_match_player_rating
 
-        player_ratings = []
+        return pre_match_player_ratings, new_match_entities
+
+    def _generate_new_player_pre_match_ratings(self, match: Match, new_players: List[MatchPlayer],
+                                               existing_team_rating: Optional[float]) -> dict[
+        str, PreMatchPlayerRating]:
+
+        pre_match_player_ratings = {}
 
         for match_player in new_players:
-            player_rating = self.player_rating_generator.get_rating_for_new_player(match=match, match_player=match_player,
-                                                                           existing_team_rating=existing_team_rating)
-            player_ratings.append(player_rating)
+            player_rating = self.player_rating_generator.get_rating_for_new_player(match=match,
+                                                                                   match_player=match_player,
+                                                                                   existing_team_rating=existing_team_rating)
+            pre_match_player_rating = PreMatchPlayerRating(
+                id=player_rating.id,
+                rating=player_rating.rating,
+                projected_rating=match_player.match_player_performance.projected_participation_weight * player_rating.rating
+            )
+            pre_match_player_ratings[match_player.id] = pre_match_player_rating
 
-        return player_ratings
+        return pre_match_player_ratings
 
-
-class NewMatchRatingCalculator():
-
-    def __init__(self, team_rating_generator: TeamRatingGenerator):
-        self.team_rating_generator = team_rating_generator
-
-    def generate_pre_match_ratings(self,
-                                   match: Match,
-                                   ) -> Match:
-        for match_team in match.teams:
-            pre_match_pre_start_team_rating, new_entity_ids = self.team_rating_generator.pre_match_pre_start_rating(
-                team=match_team)
-            self.up
+    def predict_performance(self, match: Match):
+        for team in match.teams:

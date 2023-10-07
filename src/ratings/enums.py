@@ -1,7 +1,14 @@
+from dataclasses import dataclass
 from enum import Enum
 
+@dataclass
+class InputColumnNames:
+    hour = 'hour'
+    performance = 'performance'
 
-class RatingColumnNames(Enum):
+
+@dataclass
+class RatingColumnNames:
     entity_rating_difference_from_team = "entity_rating_difference_from_team"
     entity_rating_difference_from_team_projected = "entity_rating_difference_from_team_projected"
     entity_rating = 'entity_rating'

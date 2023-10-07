@@ -5,7 +5,7 @@ import time
 from typing import Dict, List, Union
 import math
 
-from src.player_performance_ratings.data_structures import PlayerRating, Match, MatchPlayer
+from src.ratings.data_structures import PlayerRating, Match, MatchPlayer, PerformancePredictorParameters
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 MODIFIED_RATING_CHANGE_CONSTANT = 1
@@ -19,15 +19,9 @@ def sigmoid_subtract_half_and_multiply2(value: float, x: float) -> float:
 class PerformancePredictor:
 
     def __init__(self,
-                 rating_diff_coef,
-                 rating_diff_team_from_entity_coef,
-                 team_rating_diff_coef: float,
-                 max_predict_value: float = 1,
+                 params: PerformancePredictorParameters,
                  ):
-        self.rating_diff_coef = rating_diff_coef
-        self.team_rating_diff_coef = team_rating_diff_coef
-        self.rating_diff_team_from_entity_coef = rating_diff_team_from_entity_coef
-        self.max_predict_value = max_predict_value
+        self.params = params
 
     def predict_performance(self, rating: float, opponent_rating: float, team_rating: float = 0) -> float:
         rating_difference = rating - opponent_rating
@@ -183,17 +177,17 @@ class MatchRatingCalculatorMixin:
                     continue
                 if use_projected_participation_weight:
                     sum_rating += self.entity_ratings[match_entity.entity_id].rating * \
-                                  match_entity.match_performance_rating.projected_participation_weight
+                                  match_entity.match_player_performance.projected_participation_weight
                 else:
-                    if match_entity.match_performance_rating.participation_weight is None:
+                    if match_entity.match_player_performance.participation_weight is None:
                         continue
                     sum_rating += self.entity_ratings[match_entity.entity_id].rating * \
-                                  match_entity.match_performance_rating.participation_weight
+                                  match_entity.match_player_performance.participation_weight
 
                 if use_projected_participation_weight:
-                    count += match_entity.match_performance_rating.projected_participation_weight
+                    count += match_entity.match_player_performance.projected_participation_weight
                 else:
-                    count += match_entity.match_performance_rating.participation_weight
+                    count += match_entity.match_player_performance.participation_weight
 
         #  elif match_entity.entity_id == match_entity.team_id and len(match.entities) == len(
         #         match.team_ids) and match_entity.team_id == team_id:
@@ -219,8 +213,8 @@ class MatchRatingCalculatorMixin:
                     continue
 
                 sum_rating += self.entity_ratings[match_entity.entity_id].rating * \
-                              match_entity.match_performance_rating.projected_participation_weight
-                count += match_entity.match_performance_rating.projected_participation_weight
+                              match_entity.match_player_performance.projected_participation_weight
+                count += match_entity.match_player_performance.projected_participation_weight
 
         if count == 0:
             return None
@@ -232,7 +226,7 @@ class MatchRatingCalculatorMixin:
             entity_id = match_entity.entity_id
             if match_entity.league != match_entity.opponent_league:
                 league_ratings_change = self.league_rating_adjustor.update_league_ratings(
-                    match_entity_rating=match_entity.match_performance_rating.rating,
+                    match_entity_rating=match_entity.match_player_performance.rating,
                     match_entity=match_entity
                 )
 
@@ -271,8 +265,8 @@ class MatchRatingCalculatorMixin:
                 other_entity_id].games_played < min_games_played:
                 continue
             if other_match_entity.team_id == team_id and other_entity_id != match_entity.entity_id and \
-                    other_entity_id in match_entity.match_performance_rating.ratio:
-                ratio = match_entity.match_performance_rating.ratio[other_entity_id]
+                    other_entity_id in match_entity.match_player_performance.ratio:
+                ratio = match_entity.match_player_performance.ratio[other_entity_id]
                 sum_ratio += ratio
                 pre_match_team_rating += ratio * self.entity_ratings[other_entity_id].rating
 
@@ -293,8 +287,8 @@ class MatchRatingCalculatorMixin:
                                  rating_change_multiplier: float,
                                  ):
 
-        if match_entity.match_performance_rating.ratio is not None \
-                and len(match_entity.match_performance_rating.ratio) > 0:
+        if match_entity.match_player_performance.ratio is not None \
+                and len(match_entity.match_player_performance.ratio) > 0:
             pre_match_team_rating = self._calculate_team_rating_by_ratio(
                 match_entity=match_entity,
                 match=match,
@@ -313,18 +307,18 @@ class MatchRatingCalculatorMixin:
         entity_rating = self.entity_ratings[match_entity.entity_id]
 
         predicted_performance = self.performance_predictor.predict_performance(
-            rating=match_entity.match_performance_rating.rating.pre_match_entity_rating,
-            opponent_rating=match_entity.match_performance_rating.rating.pre_match_opponent_rating,
+            rating=match_entity.match_player_performance.rating.pre_match_entity_rating,
+            opponent_rating=match_entity.match_player_performance.rating.pre_match_opponent_rating,
             team_rating=pre_match_team_rating
         )
-        performance_difference = match_entity.match_performance_rating.match_performance - predicted_performance
+        performance_difference = match_entity.match_player_performance.match_performance - predicted_performance
 
         rating_change_multiplier = self._calculate_rating_change_multiplier(
             entity_rating=entity_rating,
             rating_change_multiplier=rating_change_multiplier
         )
 
-        rating_change = performance_difference * rating_change_multiplier * match_entity.match_performance_rating.participation_weight
+        rating_change = performance_difference * rating_change_multiplier * match_entity.match_player_performance.participation_weight
         if math.isnan(rating_change):
             logging.debug(f"rating change is nan return 0 entity id {match_entity.entity_id}")
             return 0
@@ -341,13 +335,13 @@ class MatchRatingCalculatorMixin:
 
         self.entity_ratings[match_entity.entity_id].rating += rating_change
         self.entity_ratings[match_entity.entity_id].prev_rating_changes.append(rating_change)
-        match_entity.match_performance_rating.rating.post_match_entity_rating = \
+        match_entity.match_player_performance.rating.post_match_entity_rating = \
             self.entity_ratings[match_entity.entity_id].rating
 
         self.entity_ratings[match_entity.entity_id].certain_sum = self._calculate_post_match_certain_sum(
             entity_rating=self.entity_ratings[match_entity.entity_id],
             match=match,
-            particpation_weight=match_entity.match_performance_rating.participation_weight
+            particpation_weight=match_entity.match_player_performance.participation_weight
         )
 
         self.entity_ratings[match_entity.entity_id].last_match_day_number = match.day_number
@@ -355,7 +349,6 @@ class MatchRatingCalculatorMixin:
 
 
 class MatchRatingCalculator(MatchRatingCalculatorMixin):
-
 
     def generate_pre_match_ratings(self,
                                    match: Match,
@@ -398,20 +391,20 @@ class MatchRatingCalculator(MatchRatingCalculatorMixin):
             if team_id not in team_id_to_rating_change:
                 team_id_to_rating_change[team_id] = 0
 
-            match.entities[match_entity_index].match_performance_rating.rating = MatchRating(
+            match.entities[match_entity_index].match_player_performance.rating = MatchRating(
                 pre_match_entity_rating=self.entity_ratings[match_entity.entity_id].rating,
                 pre_match_opponent_rating=team_ratings[team_id_opponent],
                 pre_match_team_rating=team_ratings[team_id],
                 rating_type=RatingType.DEFAULT,
             )
             if team_id in team_ratings_proj:
-                match.entities[match_entity_index].match_performance_rating[
+                match.entities[match_entity_index].match_player_performance[
                     RatingType.DEFAULT].rating.pre_match_projected_team_rating = team_ratings_proj[team_id]
-                match.entities[match_entity_index].match_performance_rating[
+                match.entities[match_entity_index].match_player_performance[
                     RatingType.DEFAULT].rating.pre_match_projected_opponent_rating = team_ratings_proj[
                     team_id_opponent]
 
-            match_entity.match_performance_rating[RatingType.DEFAULT].rating.pre_match_opponent_rating = \
+            match_entity.match_player_performance[RatingType.DEFAULT].rating.pre_match_opponent_rating = \
                 team_ratings[team_id_opponent]
 
             self.rating_type_to_ratings[RatingType.DEFAULT].append(
@@ -438,8 +431,6 @@ class MatchRatingCalculator(MatchRatingCalculatorMixin):
             team_ids[1]: team_ids[0]
         }
 
-
-
     def update_entity_ratings_for_matches(self, matches: List[Match]):
 
         entity_rating_changes = {}
@@ -449,7 +440,7 @@ class MatchRatingCalculator(MatchRatingCalculatorMixin):
             match_count += 1
             for match_entity_index, match_entity in enumerate(match.entities):
 
-                if math.isnan(match_entity.match_performance_rating.match_performance) is False:
+                if math.isnan(match_entity.match_player_performance.match_performance) is False:
 
                     if match_entity.entity_id not in entity_rating_changes:
                         entity_rating_changes[match_entity.entity_id] = 0
@@ -465,7 +456,7 @@ class MatchRatingCalculator(MatchRatingCalculatorMixin):
                     if len(matches) == match_count:
                         self.update_entity_ratings(match_entity=match_entity,
                                                    rating_change=entity_rating_changes[
-                                                                      match_entity.entity_id],
+                                                       match_entity.entity_id],
                                                    match=match
                                                    )
                     match.entities[match_entity_index] = match_entity
@@ -530,11 +521,11 @@ class MatchRatingCalculator(MatchRatingCalculatorMixin):
                 team_ratings_proj[match_entity.team_id] = 0
 
             team_ratings_proj[match_entity.team_id] += self.entity_ratings[match_entity.entity_id].ratings[
-                                                           RatingType.DEFAULT] * match_entity.match_performance_rating[
+                                                           RatingType.DEFAULT] * match_entity.match_player_performance[
                                                            RatingType.DEFAULT].projected_participation_weight
 
             team_ratings[match_entity.team_id] += self.entity_ratings[match_entity.entity_id].ratings[
-                                                      RatingType.DEFAULT] * match_entity.match_performance_rating[
+                                                      RatingType.DEFAULT] * match_entity.match_player_performance[
                                                       RatingType.DEFAULT].participation_weight
 
         return team_ratings_proj, team_ratings

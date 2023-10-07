@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 
 
 @dataclass
-class ConfigurationColumnNames:
+class ColumnNames:
     team_id: str
     match_id: str
     start_date_time: str
@@ -41,15 +41,17 @@ class RatingUpdateParameters:
     rating_change_multiplier: float = 50
 
 
-
+@dataclass
+class PerformancePredictorParameters:
+    rating_diff_coef: float
+    rating_diff_team_from_entity_coef: float
+    team_rating_diff_coef: float
+    max_predict_value: float = 1,
 
 
 @dataclass
-class MatchOutValues:
-    match_id: str
-    RatingValues: Dict[RatingColumnNames, List[float]]
-    indexes: List[int]
-
+class TeamRatingParameters:
+    min_match_count: int
 
 
 
@@ -65,47 +67,87 @@ class PlayerRating:
 
 
 @dataclass
-class MatchRating:
-    pre_match_entity_rating: float
-    pre_match_team_rating: float
-    pre_match_opponent_rating: float
-    pre_match_team_other_rating_type: float = None
-    pre_match_opponent_rating_same_type: float = None
-    post_match_entity_rating: float = None
-    pre_match_projected_team_rating: float = None
-    pre_match_projected_opponent_rating: float = None
-    pre_match_projected_team_other_rating_type: float = None
-    pre_match_projected_opponent_rating_same_rating_type: float = None
-    # team_rating_change: float = None
-    entity_rating_change: float = None
+class PreMatchPlayerRating:
+    id: str
+    rating: float
+    projected_rating: float
 
 
 @dataclass
-class MatchPerformanceRating:
+class PreMatchTeamRating:
+    id: str
+    players: Dict[str, PreMatchPlayerRating]
+    rating: float
+
+
+@dataclass
+class PreMatchRating:
+    id: str
+    teams: dict[str, PreMatchTeamRating]
+
+@dataclass
+class PostMatchPlayerRating:
+    id: str
+    rating: float
+
+@dataclass
+class PostMatchTeamRating:
+    id: str
+    players: Dict[str, PlayerRating]
+    rating: float
+
+
+@dataclass
+class PostMatchRating:
+    id: str
+    teams: dict[str, PostMatchTeamRating]
+
+
+@dataclass
+class MatchRating:
+    id: str
+    pre_match_rating: PreMatchRating
+    post_match_rating: PostMatchRating
+    pre_match_player_ratings: list[float]
+    pre_match_team_ratings: list[float]
+    pre_match_opponent_ratings: list[float]
+
+
+
+@dataclass
+class MatchRatings:
+    pre_match_team_ratings: list[float]
+    pre_match_player_ratings: list[float]
+    pre_match_opponent_ratings: list[float]
+
+
+
+
+@dataclass
+class MatchPerformance:
     match_performance: float
     participation_weight: float
     projected_participation_weight: float
     ratio: Dict[str, float]
-    rating: MatchRating = None
 
 
 @dataclass
 class MatchPlayer:
     id: str
-    match_performance_rating: MatchPerformanceRating
+    match_player_performance: MatchPerformance
     league: str = None
 
 
 @dataclass
 class MatchTeam:
     id: str
-    entites: list[MatchPlayer]
+    players: list[MatchPlayer]
     opponent_league: str = None
 
 
 @dataclass
 class Match:
-    match_id: str
+    id: str
     teams: List[MatchTeam]
     team_ids: List[str]
     day_number: int

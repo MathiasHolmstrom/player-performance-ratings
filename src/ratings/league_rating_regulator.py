@@ -1,6 +1,6 @@
 from typing import Dict
 
-from src.player_performance_ratings.data_structures import MatchPlayer, MatchRating
+from src.ratings.data_structures import MatchPlayer, PreMatchPlayerRating
 
 
 class LeagueRatingAdjustor():
@@ -14,7 +14,7 @@ class LeagueRatingAdjustor():
 
     def update_league_ratings(self,
                               match_entity: MatchPlayer,
-                              match_entity_rating: MatchRating,
+                              match_entity_rating: PreMatchPlayerRating,
                               ) -> Dict[str, float]:
 
         if match_entity_rating.post_match_entity_rating is None:

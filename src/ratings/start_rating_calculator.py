@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 from typing import Dict, Any, List, Optional
 
-from src.player_performance_ratings.data_structures import MatchPlayer
+from src.ratings.data_structures import MatchPlayer, StartRatingParameters
 
 DEFAULT_START_RATING = 1000
 
@@ -19,24 +19,11 @@ class LeagueEntityRatings:
 class StartRatingGenerator():
 
     def __init__(self,
-                 start_league_ratings: Optional[Dict[str, float]] = None,
-                 min_count_using_percentiles: int = 150,
-                 league_quantile: float = 0.2,
-                 team_rating_subtract: float = 80,
-                 team_weight: float = 0.2,
-                 max_days_ago_league_entities: int = 120,
+                    params: StartRatingParameters,
                  ):
 
-        self.team_weight = team_weight
-        self.max_days_ago_league_entities = max_days_ago_league_entities
-
-        self.min_count_for_percentiles = min_count_using_percentiles
-        self.team_rating_subtract = team_rating_subtract
-        self.league_quantile = league_quantile
-
-        self.region_ratings_original = start_league_ratings or {}
-
-        self.rating_type_to_league_ratings = copy.deepcopy(self.region_ratings_original)
+        self.params = params
+        self.league_ratings_original = self.params.start_league_ratings or {}
 
         self.league_to_last_day_number: Dict[str, List[Any]] = {}
         self.league_to_entity_ids: Dict[str, List[str]] = {}
@@ -45,7 +32,7 @@ class StartRatingGenerator():
     def generate_rating(self,
                         day_number: int,
                         match_entity: MatchPlayer,
-                        team_rating: float,
+                        team_rating: Optional[float],
                         ) -> float:
 
         if rating_type not in self.ratings_type_to_league_entity_ratings:
@@ -132,8 +119,8 @@ class StartRatingGenerator():
         entity_id = match_entity.entity_id
 
         if league not in self.league_to_entity_ids:
-            for rating_type in match_entity.match_performance_rating:
-                if match_entity.match_performance_rating[rating_type].rating.post_match_entity_rating is None:
+            for rating_type in match_entity.match_player_performance:
+                if match_entity.match_player_performance[rating_type].rating.post_match_entity_rating is None:
                     continue
                 if rating_type not in self.ratings_type_to_league_entity_ratings:
                     self.ratings_type_to_league_entity_ratings[rating_type] = RatingTypeLeagueEntityRatings(
@@ -151,7 +138,7 @@ class StartRatingGenerator():
 
         entity_has_active_rating = False
         if entity_id not in self.league_to_entity_ids[league]:
-            for rating_type, match_performance_rating in match_entity.match_performance_rating.items():
+            for rating_type, match_performance_rating in match_entity.match_player_performance.items():
                 if match_performance_rating.rating.post_match_entity_rating is None:
                     continue
                 entity_has_active_rating = True
@@ -167,7 +154,7 @@ class StartRatingGenerator():
         else:
             index = self.league_to_entity_ids[league].index(entity_id)
             self.league_to_last_day_number[league][index] = day_number
-            for rating_type, match_performance_rating in match_entity.match_performance_rating.items():
+            for rating_type, match_performance_rating in match_entity.match_player_performance.items():
                 if  match_performance_rating.rating.post_match_entity_rating is None:
                     continue
                 self.ratings_type_to_league_entity_ratings[rating_type].league_entity_ratings[league].player_ratings[
@@ -178,7 +165,7 @@ class StartRatingGenerator():
 
         if league != current_entity_league:
             entity_index = self.league_to_entity_ids[current_entity_league].index(entity_id)
-            for rating_type, match_performance_rating in match_entity.match_performance_rating.items():
+            for rating_type, match_performance_rating in match_entity.match_player_performance.items():
                 self.ratings_type_to_league_entity_ratings[rating_type].league_entity_ratings[
                     current_entity_league].player_ratings = \
                     self.ratings_type_to_league_entity_ratings[rating_type].league_entity_ratings[
