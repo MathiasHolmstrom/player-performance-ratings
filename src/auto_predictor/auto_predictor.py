@@ -29,7 +29,7 @@ class ParameterTuner():
         match_predictor = MatchPredictor()
         parameter_tuning = ParameterTuner()
 
-        df = self.match_predictor.generate(df=df)
+        df = match_predictor.generate(df=df)
 
     @property
     def best_model(self) ->  MatchPredictor:

@@ -3,7 +3,7 @@ from typing import List
 
 import pandas as pd
 
-from src.ratings.player_performance_rating import PlayerPerformanceRating
+from src.ratings.player_performance_rating import PlayerRatingGenerator
 
 
 class PredictorTransformer(ABC):
@@ -24,7 +24,7 @@ class MatchPredictor():
 
     def __init__(self,
                  pre_rating_transformers: List[PredictorTransformer],
-                 player_performance_rating: PlayerPerformanceRating,
+                 player_performance_rating: PlayerRatingGenerator,
                  post_rating_transformers: List[PredictorTransformer],
                  predictor: Predictor
                  ):

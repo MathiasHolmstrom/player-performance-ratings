@@ -29,10 +29,9 @@ class StartRatingParameters:
 
 @dataclass
 class RatingUpdateParameters:
-    rating_change_momentum_games_count: int = 6,
-    rating_change_momentum_multiplier: float = 0,
     certain_weight: float = 0.9,
     certain_days_ago_multiplier: float = 0.06,
+    max_days_ago: int = 90
     max_certain_sum: float = 60,
     min_rating_change_for_league: float = 4,
     certain_value_denom: float = 35,
@@ -54,6 +53,13 @@ class TeamRatingParameters:
     min_match_count: int
 
 
+@dataclass
+class MatchPerformance:
+    performance: float
+    participation_weight: float
+    projected_participation_weight: float
+    ratio: Dict[str, float]
+
 
 @dataclass
 class PlayerRating:
@@ -71,6 +77,7 @@ class PreMatchPlayerRating:
     id: str
     rating: float
     projected_rating: float
+    match_performance: MatchPerformance
 
 
 @dataclass
@@ -85,10 +92,12 @@ class PreMatchRating:
     id: str
     teams: dict[str, PreMatchTeamRating]
 
+
 @dataclass
 class PostMatchPlayerRating:
     id: str
     rating: float
+
 
 @dataclass
 class PostMatchTeamRating:
@@ -113,22 +122,11 @@ class MatchRating:
     pre_match_opponent_ratings: list[float]
 
 
-
 @dataclass
 class MatchRatings:
     pre_match_team_ratings: list[float]
     pre_match_player_ratings: list[float]
     pre_match_opponent_ratings: list[float]
-
-
-
-
-@dataclass
-class MatchPerformance:
-    match_performance: float
-    participation_weight: float
-    projected_participation_weight: float
-    ratio: Dict[str, float]
 
 
 @dataclass
@@ -152,5 +150,3 @@ class Match:
     team_ids: List[str]
     day_number: int
     league: str = None
-
-

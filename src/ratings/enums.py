@@ -16,7 +16,6 @@ class RatingColumnNames:
     opponent_rating_projected = "opponent_rating_projected"
     team_rating = 'team_rating'
     team_rating_change = "team_rating_change"
-    entity_rating_change = "entity_rating_change"
     team_rating_projected = 'team_rating_projected'
     entity_rating_difference = 'entity_rating_difference'
     entity_rating_difference_projected = 'entity_rating_difference_projected'

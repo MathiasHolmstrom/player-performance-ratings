@@ -178,7 +178,7 @@ def generate_matches(df: pd.DataFrame, column_names: ColumnNames) -> list[Match]
         prev_parent_match_id = parent_match_id
 
 
-class PlayerPerformanceRating():
+class PlayerRatingGenerator():
 
     def __init__(self,
                  column_names: ColumnNames,
@@ -198,7 +198,10 @@ class PlayerPerformanceRating():
 
         matches = generate_matches(column_names=self.column_names, df=df)
 
-        self.rating_generator.generate(matches)
+        match_ratings = self.rating_generator.generate(matches)
+        df[RatingColumnNames.entity_rating] = match_ratings.pre_match_player_ratings
+        df[RatingColumnNames.team_rating] = match_ratings.pre_match_team_ratings
+        df[RatingColumnNames.opponent_rating] = match_ratings.pre_match_opponent_ratings
         return df
 
     @property

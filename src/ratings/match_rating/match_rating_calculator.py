@@ -5,7 +5,8 @@ import time
 from typing import Dict, List, Union
 import math
 
-from src.ratings.data_structures import PlayerRating, Match, MatchPlayer, PerformancePredictorParameters
+from src.ratings.data_structures import PlayerRating, Match, MatchPlayer, PerformancePredictorParameters, \
+    PreMatchPlayerRating, PreMatchTeamRating
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 MODIFIED_RATING_CHANGE_CONSTANT = 1
@@ -23,22 +24,26 @@ class PerformancePredictor:
                  ):
         self.params = params
 
-    def predict_performance(self, rating: float, opponent_rating: float, team_rating: float = 0) -> float:
-        rating_difference = rating - opponent_rating
+    def predict_performance(self,
+                            player_rating: PreMatchPlayerRating,
+                            opponent_team_rating: PreMatchTeamRating,
+                            team_rating: PreMatchTeamRating
+                            ) -> float:
+        rating_difference = player_rating.rating - opponent_team_rating.rating
         if team_rating is not None:
-            rating_diff_team_from_entity = team_rating - rating
-            team_rating_diff = team_rating - opponent_rating
+            rating_diff_team_from_entity = team_rating.rating - player_rating.rating
+            team_rating_diff = team_rating.rating - opponent_team_rating.rating
         else:
             rating_diff_team_from_entity = 0
             team_rating_diff = 0
 
-        value = self.rating_diff_coef * rating_difference + \
-                self.rating_diff_team_from_entity_coef * rating_diff_team_from_entity + team_rating_diff * self.team_rating_diff_coef
+        value = self.params.rating_diff_coef * rating_difference + \
+                self.params.rating_diff_team_from_entity_coef * rating_diff_team_from_entity + team_rating_diff * self.params.team_rating_diff_coef
         prediction = (math.exp(value)) / (1 + math.exp(value))
-        if prediction > self.max_predict_value:
-            return self.max_predict_value
-        elif prediction < (1 - self.max_predict_value):
-            return (1 - self.max_predict_value)
+        if prediction > self.params.max_predict_value:
+            return self.params.max_predict_value
+        elif prediction < (1 - self.params.max_predict_value):
+            return (1 - self.params.max_predict_value)
         return prediction
 
 
@@ -311,7 +316,7 @@ class MatchRatingCalculatorMixin:
             opponent_rating=match_entity.match_player_performance.rating.pre_match_opponent_rating,
             team_rating=pre_match_team_rating
         )
-        performance_difference = match_entity.match_player_performance.match_performance - predicted_performance
+        performance_difference = match_entity.match_player_performance.performance - predicted_performance
 
         rating_change_multiplier = self._calculate_rating_change_multiplier(
             entity_rating=entity_rating,
@@ -440,7 +445,7 @@ class MatchRatingCalculator(MatchRatingCalculatorMixin):
             match_count += 1
             for match_entity_index, match_entity in enumerate(match.entities):
 
-                if math.isnan(match_entity.match_player_performance.match_performance) is False:
+                if math.isnan(match_entity.match_player_performance.performance) is False:
 
                     if match_entity.entity_id not in entity_rating_changes:
                         entity_rating_changes[match_entity.entity_id] = 0

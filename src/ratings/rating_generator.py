@@ -39,7 +39,9 @@ class RatingGenerator():
             teams=self._get_pre_match_team_ratings(match=match)
         )
 
-        post_match_rating = PostMatchRating()
+        post_match_rating = PostMatchRating(
+            id= match.id
+        )
 
         return MatchRating(
             id=match.id,
