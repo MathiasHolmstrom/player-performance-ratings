@@ -18,12 +18,12 @@ class LeagueIdentifier():
 
     def update_entity_leagues(self, match: Match) -> Match:
 
-        for index, match_entity in enumerate(match.teams):
-            entity_league = self._identify(match_entity.entity_id,
-                                           match.league)
-            match.entities[index].league = entity_league
+        for team_idx, team in enumerate(match.teams):
+            for player_idx, player in enumerate(team.players):
+                player_league = self._identify(player.id,
+                                               match.league)
+                match.teams[team_idx].players[player_idx].league = player_league
 
-        match = self._update_opponent_leagues(match)
         return match
 
     def _identify(self, entity_id: str, league_match: str) -> str:
@@ -53,18 +53,7 @@ class LeagueIdentifier():
 
         return self.entity_id_to_most_league_name[entity_id]
 
-    def _update_opponent_leagues(self, match: Match) -> Match:
-        team_league_counts = self._generate_team_league_counts(match)
-        team_ids = [t for t in team_league_counts]
-        team_leagues = self._generate_teams_to_leagues(team_ids, team_league_counts)
-        for entity_index, entity in enumerate(match.entities):
-            try:
-                opponent_league = self._get_opponent_league(entity.team_id, team_leagues)
-            except KeyError:
-                opponent_league = None
-            match.entities[entity_index].opponent_league = opponent_league
 
-        return match
 
     def _generate_teams_to_leagues(self, team_ids: List[str], team_league_counts: Dict[str, Dict[str, int]]) -> Dict[
         str, str]:
