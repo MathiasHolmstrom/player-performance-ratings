@@ -667,12 +667,12 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
             self.match_id_to_out_df_column_values[match_id].RatingValues[
                 out_column_name].append(None)
             return
-        if match_entity.match_player_performance[rating_type].rating.pre_match_projected_opponent_rating is None:
+        if match_entity.match_player_performance[rating_type].raitng_value.pre_match_projected_opponent_rating is None:
             return
 
-        rating_difference = match_entity.match_player_performance[rating_type].rating.pre_match_entity_rating - \
+        rating_difference = match_entity.match_player_performance[rating_type].raitng_value.pre_match_entity_rating - \
                             match_entity.match_player_performance[
-                                rating_type].rating.pre_match_projected_opponent_rating
+                                rating_type].raitng_value.pre_match_projected_opponent_rating
 
         self.match_id_to_out_df_column_values[match_id].RatingValues[
             out_column_name].append(rating_difference)
@@ -694,11 +694,11 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
                 out_column_name].append(None)
             return
 
-        if match_entity.match_player_performance[rating_type].rating.pre_match_opponent_rating is None:
+        if match_entity.match_player_performance[rating_type].raitng_value.pre_match_opponent_rating is None:
             return
 
-        rating_difference = match_entity.match_player_performance[rating_type].rating.pre_match_entity_rating - \
-                            match_entity.match_player_performance[rating_type].rating.pre_match_opponent_rating
+        rating_difference = match_entity.match_player_performance[rating_type].raitng_value.pre_match_entity_rating - \
+                            match_entity.match_player_performance[rating_type].raitng_value.pre_match_opponent_rating
 
         self.match_id_to_out_df_column_values[match_id].RatingValues[
             out_column_name].append(rating_difference)
@@ -720,11 +720,11 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
                 out_column_name].append(None)
             return
 
-        if match_entity.match_player_performance[rating_type].rating.pre_match_team_rating is None:
+        if match_entity.match_player_performance[rating_type].raitng_value.pre_match_team_rating is None:
             return
 
-        rating_difference = match_entity.match_player_performance[rating_type].rating.pre_match_team_rating - \
-                            match_entity.match_player_performance[rating_type].rating.pre_match_opponent_rating
+        rating_difference = match_entity.match_player_performance[rating_type].raitng_value.pre_match_team_rating - \
+                            match_entity.match_player_performance[rating_type].raitng_value.pre_match_opponent_rating
 
         self.match_id_to_out_df_column_values[match_id].RatingValues[
             out_column_name].append(rating_difference)
@@ -747,11 +747,11 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
                 out_column_name].append(None)
             return
 
-        if match_entity.match_player_performance[rating_type].rating.pre_match_team_rating is None:
+        if match_entity.match_player_performance[rating_type].raitng_value.pre_match_team_rating is None:
             return
 
-        rating_mean = match_entity.match_player_performance[rating_type].rating.pre_match_team_rating * 0.5 + \
-                      match_entity.match_player_performance[rating_type].rating.pre_match_opponent_rating * 0.5
+        rating_mean = match_entity.match_player_performance[rating_type].raitng_value.pre_match_team_rating * 0.5 + \
+                      match_entity.match_player_performance[rating_type].raitng_value.pre_match_opponent_rating * 0.5
 
         rating_mean = rating_mean - self.match_generator.match_rating_calculator.average_rating + 1000
 
@@ -776,8 +776,8 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
                 out_column_name].append(None)
             return
 
-        value = match_entity.match_player_performance[rating_type].rating.pre_match_projected_team_rating * 0.5 + \
-                match_entity.match_player_performance[rating_type].rating.pre_match_projected_opponent_rating * 0.5
+        value = match_entity.match_player_performance[rating_type].raitng_value.pre_match_projected_team_rating * 0.5 + \
+                match_entity.match_player_performance[rating_type].raitng_value.pre_match_projected_opponent_rating * 0.5
 
         if self.target_rating is not None and self.match_generator.match_rating_calculator.average_rating is not None:
             value = value - self.match_generator.match_rating_calculator.average_rating + self.target_rating
@@ -803,7 +803,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
                 out_column_name].append(None)
             return
 
-        value = match_entity.match_player_performance[rating_type].rating.pre_match_projected_opponent_rating
+        value = match_entity.match_player_performance[rating_type].raitng_value.pre_match_projected_opponent_rating
 
         self.match_id_to_out_df_column_values[match_id].RatingValues[
             out_column_name].append(value)
@@ -826,7 +826,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
                 out_column_name].append(None)
             return
 
-        value = match_entity.match_player_performance[rating_type].rating.pre_match_projected_team_rating
+        value = match_entity.match_player_performance[rating_type].raitng_value.pre_match_projected_team_rating
 
         self.match_id_to_out_df_column_values[match_id].RatingValues[
             out_column_name].append(value)
@@ -849,13 +849,13 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
                 out_column_name].append(None)
             return
 
-        rating_same_type = match_entity.match_player_performance[rating_type].rating.pre_match_team_rating * 0.5 + \
+        rating_same_type = match_entity.match_player_performance[rating_type].raitng_value.pre_match_team_rating * 0.5 + \
                            match_entity.match_player_performance[
-                               rating_type].rating.pre_match_opponent_rating_same_type * 0.5
+                               rating_type].raitng_value.pre_match_opponent_rating_same_type * 0.5
 
         other_rating_type = match_entity.match_player_performance[
-                                rating_type].rating.pre_match_opponent_rating * 0.5 + 0.5 * \
-                            match_entity.match_player_performance[rating_type].rating.pre_match_team_other_rating_type
+                                rating_type].raitng_value.pre_match_opponent_rating * 0.5 + 0.5 * \
+                            match_entity.match_player_performance[rating_type].raitng_value.pre_match_team_other_rating_type
 
         rating_difference = rating_same_type - other_rating_type
 
@@ -881,14 +881,14 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
             return
 
         rating_same_type = match_entity.match_player_performance[
-                               rating_type].rating.pre_match_projected_team_rating * 0.5 + \
+                               rating_type].raitng_value.pre_match_projected_team_rating * 0.5 + \
                            match_entity.match_player_performance[
-                               rating_type].rating.pre_match_projected_opponent_rating_same_rating_type * 0.5
+                               rating_type].raitng_value.pre_match_projected_opponent_rating_same_rating_type * 0.5
 
         other_rating_type = match_entity.match_player_performance[
-                                rating_type].rating.pre_match_projected_opponent_rating * 0.5 + 0.5 * \
+                                rating_type].raitng_value.pre_match_projected_opponent_rating * 0.5 + 0.5 * \
                             match_entity.match_player_performance[
-                                rating_type].rating.pre_match_projected_team_other_rating_type
+                                rating_type].raitng_value.pre_match_projected_team_other_rating_type
 
         rating_difference = rating_same_type - other_rating_type
 
@@ -913,9 +913,9 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
                 out_column_name].append(None)
             return
 
-        rating_difference = match_entity.match_player_performance[rating_type].rating.pre_match_projected_team_rating - \
+        rating_difference = match_entity.match_player_performance[rating_type].raitng_value.pre_match_projected_team_rating - \
                             match_entity.match_player_performance[
-                                rating_type].rating.pre_match_projected_opponent_rating
+                                rating_type].raitng_value.pre_match_projected_opponent_rating
 
         self.match_id_to_out_df_column_values[match_id].RatingValues[
             out_column_name].append(rating_difference)
@@ -937,10 +937,10 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
                 out_column_name].append(None)
             return
 
-        if match_entity.match_player_performance[rating_type].rating.pre_match_opponent_rating is None:
+        if match_entity.match_player_performance[rating_type].raitng_value.pre_match_opponent_rating is None:
             return
 
-        opponent_rating = match_entity.match_player_performance[rating_type].rating.pre_match_opponent_rating
+        opponent_rating = match_entity.match_player_performance[rating_type].raitng_value.pre_match_opponent_rating
 
         self.match_id_to_out_df_column_values[match_id].RatingValues[
             out_column_name].append(opponent_rating)
@@ -962,10 +962,10 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
                 out_column_name].append(None)
             return
 
-        if match_entity.match_player_performance[rating_type].rating.pre_match_team_rating is None:
+        if match_entity.match_player_performance[rating_type].raitng_value.pre_match_team_rating is None:
             return
 
-        rating = match_entity.match_player_performance[rating_type].rating.pre_match_team_rating
+        rating = match_entity.match_player_performance[rating_type].raitng_value.pre_match_team_rating
 
         self.match_id_to_out_df_column_values[match_id].RatingValues[
             out_column_name].append(rating)
@@ -988,7 +988,7 @@ class RatingTransformer(TransformerMixin, BaseEstimator):
                 out_column_name].append(None)
             return
 
-        rating = match_entity.match_player_performance[rating_type].rating.pre_match_entity_rating
+        rating = match_entity.match_player_performance[rating_type].raitng_value.pre_match_entity_rating
 
         self.match_id_to_out_df_column_values[match_id].RatingValues[
             out_column_name].append(rating)

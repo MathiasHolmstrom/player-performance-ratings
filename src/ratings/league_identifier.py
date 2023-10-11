@@ -2,6 +2,7 @@ import math
 
 from typing import List, Dict
 
+from src.ratings.data_structures import Match
 
 
 class LeagueIdentifier():
@@ -15,7 +16,17 @@ class LeagueIdentifier():
         self.entity_id_to_most_league_count: Dict[str, int] = {}
         self.entity_id_to_most_league_name: Dict[str, str] = {}
 
-    def update_and_return_entity_league(self, entity_id: str, league_match: str) -> str:
+    def update_entity_leagues(self, match: Match) -> Match:
+
+        for index, match_entity in enumerate(match.teams):
+            entity_league = self._identify(match_entity.entity_id,
+                                           match.league)
+            match.entities[index].league = entity_league
+
+        match = self._update_opponent_leagues(match)
+        return match
+
+    def _identify(self, entity_id: str, league_match: str) -> str:
         if entity_id not in self.entity_to_match_leagues:
             self.entity_to_match_leagues[entity_id] = []
             self.entity_to_match_league_counts[entity_id] = {}
@@ -41,3 +52,77 @@ class LeagueIdentifier():
             self.entity_id_to_most_league_count[entity_id] += 1
 
         return self.entity_id_to_most_league_name[entity_id]
+
+    def _update_opponent_leagues(self, match: Match) -> Match:
+        team_league_counts = self._generate_team_league_counts(match)
+        team_ids = [t for t in team_league_counts]
+        team_leagues = self._generate_teams_to_leagues(team_ids, team_league_counts)
+        for entity_index, entity in enumerate(match.entities):
+            try:
+                opponent_league = self._get_opponent_league(entity.team_id, team_leagues)
+            except KeyError:
+                opponent_league = None
+            match.entities[entity_index].opponent_league = opponent_league
+
+        return match
+
+    def _generate_teams_to_leagues(self, team_ids: List[str], team_league_counts: Dict[str, Dict[str, int]]) -> Dict[
+        str, str]:
+        team_leagues: Dict[str, str] = {}
+        for team_id in team_ids:
+            league = self._identify_primary_league_for_team(team_league_counts[team_id])
+            team_leagues[team_id] = league
+
+        return team_leagues
+
+    def _identify_primary_league_for_team(self, league_counts: Dict[str, int]) -> str:
+        max_league: str = ""
+        max_count = -math.inf
+        for league, count in league_counts.items():
+            if count > max_count:
+                max_count = count
+                max_league = league
+
+        return max_league
+
+    def _get_opponent_league(self, team_id: str, team_leagues: Dict[
+        str, str]) -> str:
+
+        for team_id2, league in team_leagues.items():
+            if team_id2 != team_id:
+                return team_leagues[team_id2]
+
+        raise KeyError
+
+    def _generate_team_league_counts(self, match: Match) -> Dict[str, Dict[str, int]]:
+
+        team_league_counts: Dict[str, Dict[str, int]] = {}
+        for team in match.teams:
+            for player in team.players:
+                if team.id not in team_league_counts:
+                    team_league_counts[team.id] = {}
+
+                if player.league not in team_league_counts[team.id]:
+                    team_league_counts[team.id][player.league] = 0
+
+                team_league_counts[team.id][player.league] += 1
+
+        return team_league_counts
+
+    def get_primary_league(self, match: Match) -> str:
+        region_counts: dict[str, int] = {}
+        max_count: int = 0
+        primary_league: str = ""
+        for team in match.teams:
+            for player in team.players:
+                region = player.league
+
+                if region not in region_counts:
+                    region_counts[region] = 0
+                region_counts[region] += 1
+
+                if region_counts[region] > max_count:
+                    max_count = region_counts[region]
+                    primary_league = region
+
+        return primary_league

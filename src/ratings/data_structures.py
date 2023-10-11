@@ -27,18 +27,6 @@ class StartRatingParameters:
     team_weight: float = 0.2
 
 
-@dataclass
-class RatingUpdateParameters:
-    certain_weight: float = 0.9,
-    certain_days_ago_multiplier: float = 0.06,
-    max_days_ago: int = 90
-    max_certain_sum: float = 60,
-    min_rating_change_for_league: float = 4,
-    certain_value_denom: float = 35,
-    min_rating_change_multiplier_ratio: float = 0.1,
-    reference_certain_sum_value: float = 3
-    rating_change_multiplier: float = 50
-
 
 @dataclass
 class PerformancePredictorParameters:
@@ -47,10 +35,6 @@ class PerformancePredictorParameters:
     team_rating_diff_coef: float
     max_predict_value: float = 1,
 
-
-@dataclass
-class TeamRatingParameters:
-    min_match_count: int
 
 
 @dataclass
@@ -64,7 +48,7 @@ class MatchPerformance:
 @dataclass
 class PlayerRating:
     id: str
-    rating: float
+    rating_value: float
     games_played: int = 0
     last_match_day_number: int = None
     certain_ratio: float = 0
@@ -75,41 +59,44 @@ class PlayerRating:
 @dataclass
 class PreMatchPlayerRating:
     id: str
-    rating: float
-    projected_rating: float
+    rating_value: float
+    games_played: int
+    projected_rating_value: float
+    certain_ratio: float
     match_performance: MatchPerformance
 
 
 @dataclass
 class PreMatchTeamRating:
     id: str
-    players: Dict[str, PreMatchPlayerRating]
-    rating: float
+    players: list[PreMatchPlayerRating]
+    rating_value: float
+    projected_rating_value: float
 
 
 @dataclass
 class PreMatchRating:
     id: str
-    teams: dict[str, PreMatchTeamRating]
+    teams: list[PreMatchTeamRating]
 
 
 @dataclass
 class PostMatchPlayerRating:
     id: str
-    rating: float
+    rating_value: float
 
 
 @dataclass
 class PostMatchTeamRating:
     id: str
-    players: Dict[str, PlayerRating]
-    rating: float
+    players: list[PostMatchPlayerRating]
+    rating_value: float
 
 
 @dataclass
 class PostMatchRating:
     id: str
-    teams: dict[str, PostMatchTeamRating]
+    teams: list[PostMatchTeamRating]
 
 
 @dataclass
@@ -117,16 +104,13 @@ class MatchRating:
     id: str
     pre_match_rating: PreMatchRating
     post_match_rating: PostMatchRating
-    pre_match_player_ratings: list[float]
-    pre_match_team_ratings: list[float]
-    pre_match_opponent_ratings: list[float]
 
 
 @dataclass
 class MatchRatings:
-    pre_match_team_ratings: list[float]
-    pre_match_player_ratings: list[float]
-    pre_match_opponent_ratings: list[float]
+    pre_match_team_rating_values: list[float]
+    pre_match_player_rating_values: list[float]
+    pre_match_opponent_rating_values: list[float]
 
 
 @dataclass
