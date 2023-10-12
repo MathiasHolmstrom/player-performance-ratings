@@ -16,42 +16,33 @@ class LeagueIdentifier():
         self.entity_id_to_most_league_count: Dict[str, int] = {}
         self.entity_id_to_most_league_name: Dict[str, str] = {}
 
-    def update_entity_leagues(self, match: Match) -> Match:
 
-        for team_idx, team in enumerate(match.teams):
-            for player_idx, player in enumerate(team.players):
-                player_league = self._identify(player.id,
-                                               match.league)
-                match.teams[team_idx].players[player_idx].league = player_league
+    def identify(self, player_id: str, league_match: str) -> str:
+        if player_id not in self.entity_to_match_leagues:
+            self.entity_to_match_leagues[player_id] = []
+            self.entity_to_match_league_counts[player_id] = {}
+            self.entity_id_to_most_league_count[player_id] = 0
+            self.entity_id_to_most_league_name[player_id] = ""
 
-        return match
+        self.entity_to_match_leagues[player_id].append(league_match)
+        if league_match not in self.entity_to_match_league_counts[player_id]:
+            self.entity_to_match_league_counts[player_id][league_match] = 0
 
-    def _identify(self, entity_id: str, league_match: str) -> str:
-        if entity_id not in self.entity_to_match_leagues:
-            self.entity_to_match_leagues[entity_id] = []
-            self.entity_to_match_league_counts[entity_id] = {}
-            self.entity_id_to_most_league_count[entity_id] = 0
-            self.entity_id_to_most_league_name[entity_id] = ""
+        if len(self.entity_to_match_leagues[player_id]) > self.matches_back:
+            league_drop_out = self.entity_to_match_leagues[player_id][0]
+            self.entity_to_match_league_counts[player_id][league_drop_out] -= 1
+            self.entity_to_match_leagues[player_id] = self.entity_to_match_leagues[player_id][1:]
+            if league_drop_out == self.entity_id_to_most_league_name[player_id]:
+                self.entity_id_to_most_league_count[player_id] -= 1
 
-        self.entity_to_match_leagues[entity_id].append(league_match)
-        if league_match not in self.entity_to_match_league_counts[entity_id]:
-            self.entity_to_match_league_counts[entity_id][league_match] = 0
+        self.entity_to_match_league_counts[player_id][league_match] += 1
+        if self.entity_to_match_league_counts[player_id][league_match] > self.entity_id_to_most_league_count[player_id]:
+            self.entity_id_to_most_league_name[player_id] = league_match
 
-        if len(self.entity_to_match_leagues[entity_id]) > self.matches_back:
-            league_drop_out = self.entity_to_match_leagues[entity_id][0]
-            self.entity_to_match_league_counts[entity_id][league_drop_out] -= 1
-            self.entity_to_match_leagues[entity_id] = self.entity_to_match_leagues[entity_id][1:]
-            if league_drop_out == self.entity_id_to_most_league_name[entity_id]:
-                self.entity_id_to_most_league_count[entity_id] -= 1
+        if self.entity_id_to_most_league_name[player_id] == league_match:
+            self.entity_id_to_most_league_count[player_id] += 1
 
-        self.entity_to_match_league_counts[entity_id][league_match] += 1
-        if self.entity_to_match_league_counts[entity_id][league_match] > self.entity_id_to_most_league_count[entity_id]:
-            self.entity_id_to_most_league_name[entity_id] = league_match
-
-        if self.entity_id_to_most_league_name[entity_id] == league_match:
-            self.entity_id_to_most_league_count[entity_id] += 1
-
-        return self.entity_id_to_most_league_name[entity_id]
+        return self.entity_id_to_most_league_name[player_id]
 
 
 

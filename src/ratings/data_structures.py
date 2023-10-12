@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from enum import Enum
 from typing import Dict, List, Optional
 
 
@@ -7,14 +6,14 @@ from typing import Dict, List, Optional
 class ColumnNames:
     team_id: str
     match_id: str
-    start_date_time: str
+    start_date: str
     player_id: str
     performance: str = "performance"
     league: str = None
     participation_weight: str = None
     projected_participation_weight: str = None
     team_players_percentage_playing_time: str = None
-    parent_match_id: str = None
+
 
 
 @dataclass
@@ -23,7 +22,6 @@ class StartRatingParameters:
     league_quantile: float = 0.2
     team_rating_subtract: float = 80
     team_weight: float = 0.2
-
 
 
 @dataclass
@@ -73,6 +71,7 @@ class PreMatchRating:
 class PostMatchPlayerRating:
     id: str
     rating_value: float
+    predicted_performance: float
 
 
 @dataclass
@@ -80,6 +79,7 @@ class PostMatchTeamRating:
     id: str
     players: list[PostMatchPlayerRating]
     rating_value: float
+    predicted_performance: float
 
 
 @dataclass

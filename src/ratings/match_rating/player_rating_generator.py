@@ -56,7 +56,7 @@ class PlayerRatingGenerator():
             projected_rating_value=projected_rating_value,
             match_performance=match_player.performance,
             certain_ratio=player_rating.certain_ratio,
-            games_played=player_rating.games_played
+            games_played=player_rating.games_played,
         )
 
 
@@ -110,7 +110,8 @@ class PlayerRatingGenerator():
 
         return PostMatchPlayerRating(
             id=pre_match_player_rating.id,
-            rating_value=self.player_ratings[id].rating_value
+            rating_value=self.player_ratings[id].rating_value,
+            predicted_performance=predicted_performance
         )
 
 

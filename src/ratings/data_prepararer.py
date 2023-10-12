@@ -19,16 +19,16 @@ def _validate_sorting(X: pd.DataFrame, config_column_names) -> bool:
     prev_team_id = ""
     prev_match_id = ""
     match_id_to_team_ids = {}
-    X[config_column_names.start_date_time] = pd.to_datetime(X[config_column_names.start_date_time],
-                                                            format='%Y-%m-%d %H:%M:%S')
+    X[config_column_names.start_date] = pd.to_datetime(X[config_column_names.start_date],
+                                                       format='%Y-%m-%d %H:%M:%S')
     for index, row in X.iterrows():
         try:
-            if row[config_column_names.start_date_time] < prev_row_date:
+            if row[config_column_names.start_date] < prev_row_date:
                 return False
         except TypeError:
 
             prev_row_date = prev_row_date.tz_localize('CET')
-            if row[config_column_names.start_date_time] < prev_row_date:
+            if row[config_column_names.start_date] < prev_row_date:
                 return False
 
         match_id = row[config_column_names.match_id]
@@ -49,7 +49,7 @@ def _validate_sorting(X: pd.DataFrame, config_column_names) -> bool:
         if len(match_id_to_team_ids) == max_game_id_checks:
             return True
 
-        prev_row_date = row[config_column_names.start_date_time]
+        prev_row_date = row[config_column_names.start_date]
         prev_match_id = match_id
         prev_team_id = team_id
 
@@ -62,11 +62,11 @@ def get_matches_from_df(df: pd.DataFrame, column_names: ColumnNames) -> list[Mat
         raise ValueError("X needs to be sorted by date, game_id, team_id in ascending order")
 
     col_names = column_names
-    df[col_names.start_date_time] = pd.to_datetime(df[col_names.start_date_time], format='%Y-%m-%d %H:%M:%S')
+    df[col_names.start_date] = pd.to_datetime(df[col_names.start_date], format='%Y-%m-%d %H:%M:%S')
     try:
-        date_time = df[col_names.start_date_time].dt.tz_convert('UTC')
+        date_time = df[col_names.start_date].dt.tz_convert('UTC')
     except TypeError:
-        date_time = df[col_names.start_date_time].dt.tz_localize('UTC')
+        date_time = df[col_names.start_date].dt.tz_localize('UTC')
     df[HOUR_NUMBER_COLUMN_NAME] = (date_time - pd.Timestamp("1970-01-01").tz_localize('UTC')) // pd.Timedelta(
         '1h')
 
@@ -86,12 +86,7 @@ def get_matches_from_df(df: pd.DataFrame, column_names: ColumnNames) -> list[Mat
     if column_names.team_players_percentage_playing_time in df.columns.tolist():
         team_players_percentage_playing_time_in_df = True
 
-    use_parent_match_id = False
-    if column_names.parent_match_id is not None and col_names.parent_match_id in df.columns:
-        use_parent_match_id = True
-
     prev_match_id = None
-    prev_parent_match_id = None
     match = None
 
     data_dict = df.to_dict('records')
@@ -102,11 +97,9 @@ def get_matches_from_df(df: pd.DataFrame, column_names: ColumnNames) -> list[Mat
         match_id = row[col_names.match_id]
 
         parent_match_id = None
-        if use_parent_match_id:
-            parent_match_id = row[col_names.parent_match_id]
 
         if match_id != prev_match_id:
-
+            teams = []
             if prev_match_id is not None:
                 matches.append(match)
 
@@ -116,15 +109,11 @@ def get_matches_from_df(df: pd.DataFrame, column_names: ColumnNames) -> list[Mat
                 day_number=int(row[HOUR_NUMBER_COLUMN_NAME] / 24),
             )
 
-        if use_parent_match_id and parent_match_id != prev_parent_match_id and prev_parent_match_id is not None or \
-                use_parent_match_id is False and match_id != prev_match_id and prev_match_id is not None:
-            matches = []
-
         participation_weight = 1.0
         if column_names.participation_weight is not None and participation_weight_in_df:
             participation_weight = row[column_names.participation_weight]
 
-        projected_participation_weight = None
+        projected_participation_weight = 1
         if column_names.projected_participation_weight is not None and projected_participation_weight_in_df:
             projected_participation_weight = row[column_names.projected_participation_weight]
 
@@ -171,7 +160,6 @@ def get_matches_from_df(df: pd.DataFrame, column_names: ColumnNames) -> list[Mat
         teams[len(teams) - 1].players.append(match_player)
 
         prev_match_id = match_id
-        prev_parent_match_id = parent_match_id
 
     if match is not None:
         matches.append(match)
