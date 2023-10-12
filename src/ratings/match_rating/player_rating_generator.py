@@ -16,11 +16,11 @@ def sigmoid_subtract_half_and_multiply2(value: float, x: float) -> float:
     return (1 / (1 + math.exp(-value / x)) - 0.5) * 2
 
 
-class BasePlayerRatingUpdater():
+class PlayerRatingGenerator():
 
     def __init__(self,
-                 start_rating_generator: StartRatingGenerator,
-                 performance_predictor: PerformancePredictor,
+                 start_rating_generator: Optional[StartRatingGenerator] = None,
+                 performance_predictor: Optional[PerformancePredictor] = None,
                  certain_weight: float = 0.9,
                  certain_days_ago_multiplier: float = 0.06,
                  max_days_ago: int = 90,
@@ -41,20 +41,20 @@ class BasePlayerRatingUpdater():
         self.max_certain_sum = max_certain_sum
         self.max_days_ago = max_days_ago
         self.player_ratings: Dict[str, PlayerRating] = {}
-        self.performance_predictor = performance_predictor
-        self.start_rating_generator = start_rating_generator
+        self.performance_predictor = performance_predictor or PerformancePredictor()
+        self.start_rating_generator = start_rating_generator or StartRatingGenerator()
         self.ratings: dict[str, float] = {}
 
 
     def generate_pre_rating(self, match_player: MatchPlayer) -> PreMatchPlayerRating:
         player_rating = self.get_rating_by_id(id=match_player.id)
-        projected_rating_value = match_player.match_player_performance.projected_participation_weight * \
+        projected_rating_value = match_player.performance.projected_participation_weight * \
                                  player_rating.rating_value
         return PreMatchPlayerRating(
             id=match_player.id,
             rating_value=player_rating.rating_value,
             projected_rating_value=projected_rating_value,
-            match_performance=match_player.match_player_performance,
+            match_performance=match_player.performance,
             certain_ratio=player_rating.certain_ratio,
             games_played=player_rating.games_played
         )
@@ -78,8 +78,8 @@ class BasePlayerRatingUpdater():
         return PreMatchPlayerRating(
             id=id,
             rating_value=rating_value,
-            projected_rating_value=match_player.match_player_performance.projected_participation_weight * rating_value,
-            match_performance=match_player.match_player_performance,
+            projected_rating_value=match_player.performance.projected_participation_weight * rating_value,
+            match_performance=match_player.performance,
             certain_ratio=self.player_ratings[match_player.id].certain_ratio,
             games_played=self.player_ratings[match_player.id].games_played
         )
@@ -96,7 +96,7 @@ class BasePlayerRatingUpdater():
             opponent_team_rating=pre_match_opponent_rating,
             team_rating=pre_match_team_rating
         )
-        performance_difference = pre_match_player_rating.match_performance.performance - predicted_performance
+        performance_difference = pre_match_player_rating.match_performance.performance_value - predicted_performance
 
         rating_change_multiplier = self._calculate_rating_change_multiplier(entity_id=id)
 

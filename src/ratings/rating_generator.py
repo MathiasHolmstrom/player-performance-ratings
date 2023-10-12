@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional
 
 import pandas as pd
 
@@ -10,9 +11,12 @@ from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
 
 class RatingGenerator():
 
-    def __init__(self, team_rating_generator: TeamRatingGenerator, league_identifier: LeagueIdentifier):
-        self.team_rating_generator = team_rating_generator
-        self.league_identifier = league_identifier
+    def __init__(self,
+                 team_rating_generator: Optional[TeamRatingGenerator],
+                 league_identifier: Optional[LeagueIdentifier] = None
+                 ):
+        self.team_rating_generator = team_rating_generator or TeamRatingGenerator()
+        self.league_identifier = league_identifier or LeagueIdentifier()
 
     def generate(self, matches: list[Match]) -> MatchRatings:
 
@@ -76,5 +80,8 @@ class RatingGenerator():
     def _validate_match(self, match: Match):
         if len(match.team_ids) < 2:
             raise ValueError
+
+
+
 
 

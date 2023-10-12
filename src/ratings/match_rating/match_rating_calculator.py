@@ -1,11 +1,6 @@
-import copy
-import logging
-import math
-import time
-from typing import Dict, List, Union
 import math
 
-from src.ratings.data_structures import PlayerRating, Match, MatchPlayer, PerformancePredictorParameters, \
+from src.ratings.data_structures import PlayerRating, Match, MatchPlayer, \
     PreMatchPlayerRating, PreMatchTeamRating
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
@@ -21,30 +16,36 @@ class PerformancePredictor:
 
     # TODO: Performance prediction based on team-players sharing time with.
     def __init__(self,
-                 params: PerformancePredictorParameters,
+                 rating_diff_coef: float = 0.005757,
+                 rating_diff_team_from_entity_coef: float= 0.0,
+                 team_rating_diff_coef: float= 0.0,
+                 max_predict_value: float = 1,
                  ):
-        self.params = params
+        self.rating_diff_coef = rating_diff_coef
+        self.rating_diff_team_from_entity_coef = rating_diff_team_from_entity_coef
+        self.team_rating_diff_coef = team_rating_diff_coef
+        self.max_predict_value = max_predict_value
 
     def predict_performance(self,
                             player_rating: PreMatchPlayerRating,
                             opponent_team_rating: PreMatchTeamRating,
                             team_rating: PreMatchTeamRating
                             ) -> float:
-        rating_difference = player_rating.rating_value - opponent_team_rating.raitng_value
+        rating_difference = player_rating.rating_value - opponent_team_rating.rating_value
         if team_rating is not None:
-            rating_diff_team_from_entity = team_rating.raitng_value - player_rating.rating_value
-            team_rating_diff = team_rating.raitng_value - opponent_team_rating.raitng_value
+            rating_diff_team_from_entity = team_rating.rating_value - player_rating.rating_value
+            team_rating_diff = team_rating.rating_value - opponent_team_rating.rating_value
         else:
             rating_diff_team_from_entity = 0
             team_rating_diff = 0
 
-        value = self.params.rating_diff_coef * rating_difference + \
-                self.params.rating_diff_team_from_entity_coef * rating_diff_team_from_entity + team_rating_diff * self.params.team_rating_diff_coef
+        value = self.rating_diff_coef * rating_difference + \
+                self.rating_diff_team_from_entity_coef * rating_diff_team_from_entity + team_rating_diff * self.team_rating_diff_coef
         prediction = (math.exp(value)) / (1 + math.exp(value))
-        if prediction > self.params.max_predict_value:
-            return self.params.max_predict_value
-        elif prediction < (1 - self.params.max_predict_value):
-            return (1 - self.params.max_predict_value)
+        if prediction > self.max_predict_value:
+            return self.max_predict_value
+        elif prediction < (1 - self.max_predict_value):
+            return (1 - self.max_predict_value)
         return prediction
 
 
@@ -84,43 +85,3 @@ class RatingMeanPerformancePredictor:
         elif prediction < (1 - self.max_predict_value):
             return (1 - self.max_predict_value)
         return prediction
-
-
-class MatchGenerator():
-
-    def __init__(self,
-
-                 league_identifier: LeagueIdentifier,
-                 match_rating_calculator: DefaultMatchRatingCalculator,
-                 ):
-        self.league_identifier = league_identifier
-        self.match_rating_calculator = match_rating_calculator
-
-    def generate(self, match: Match, calculate_participation_weight: bool):
-        try:
-            self._validate_match(match)
-        except ValueError:
-            raise
-
-        self._update_entity_leagues(match)
-
-        match = self.match_rating_calculator.generate_pre_match_ratings(
-            match=match,
-            calculate_participation_weight=calculate_participation_weight
-        )
-        self._set_match_league(match)
-        return match
-
-    def update_ratings_for_matches(self, matches: List[Match]):
-        self.match_rating_calculator.update_entity_ratings_for_matches(matches)
-
-        for match in matches:
-            if match.league is not None:
-                self._update_entity_leagues(match)
-
-            for match_entity in match.entities:
-                self.match_rating_calculator.update_league_ratings(match.day_number, match_entity)
-
-            if match.league is not None:
-                self.match_rating_calculator.update_entity_ratings_by_league_result(match=match)
-

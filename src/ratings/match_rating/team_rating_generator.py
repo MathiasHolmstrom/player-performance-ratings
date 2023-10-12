@@ -2,17 +2,17 @@ from typing import Tuple, List, Optional
 
 from src.ratings.data_structures import MatchPlayer, MatchTeam, PreMatchPlayerRating, Match, PreMatchTeamRating, \
    PostMatchTeamRating
-from src.ratings.match_rating.player_rating_generator import BasePlayerRatingUpdater
+from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerator
 
 
 class TeamRatingGenerator():
 
     def __init__(self,
-                 player_rating_updater: BasePlayerRatingUpdater,
+                 player_rating_generator: Optional[PlayerRatingGenerator] = None,
                  min_match_count: int = 1
 
                  ):
-        self.player_rating_generator = player_rating_updater
+        self.player_rating_generator = player_rating_generator or PlayerRatingGenerator()
         self.min_match_count = min_match_count
 
     def pre_match_rating(self, match: Match, team: MatchTeam) -> PreMatchTeamRating:

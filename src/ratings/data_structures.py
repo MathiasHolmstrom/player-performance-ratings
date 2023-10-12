@@ -8,10 +8,8 @@ class ColumnNames:
     team_id: str
     match_id: str
     start_date_time: str
-    default_performance: str = None
-    offense_performance: str = None
-    defense_performance: str = None
-    player_id: str = None
+    player_id: str
+    performance: str = "performance"
     league: str = None
     participation_weight: str = None
     projected_participation_weight: str = None
@@ -29,17 +27,8 @@ class StartRatingParameters:
 
 
 @dataclass
-class PerformancePredictorParameters:
-    rating_diff_coef: float
-    rating_diff_team_from_entity_coef: float
-    team_rating_diff_coef: float
-    max_predict_value: float = 1,
-
-
-
-@dataclass
 class MatchPerformance:
-    performance: float
+    performance_value: float
     participation_weight: float
     projected_participation_weight: float
     ratio: Dict[str, float]
@@ -116,8 +105,8 @@ class MatchRatings:
 @dataclass
 class MatchPlayer:
     id: str
-    match_player_performance: MatchPerformance
-    league: str = None
+    performance: MatchPerformance
+    league: Optional[str] = None
 
 
 @dataclass
@@ -131,6 +120,5 @@ class MatchTeam:
 class Match:
     id: str
     teams: List[MatchTeam]
-    team_ids: List[str]
     day_number: int
     league: str = None
