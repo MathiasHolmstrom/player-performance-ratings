@@ -15,16 +15,17 @@ class Params:
 class ParameterTuner():
 
     def __init__(self,
-                 performance_params: Optional[dict[str, Any]] = None,
-                 rating_params: Optional[dict[str, Any]] = None,
-                 start_rating_params: Optional[dict[str, Any]] = None
+                 performance_params: Optional[dict[str, list[Any]]] = None,
+                 rating_params: Optional[dict[str, list[Any]]] = None,
+                 start_rating_params: Optional[dict[str, list[Any]]] = None
                  ):
 
-        self.performance_params = performance_params
-        self.rating_params = rating_params
-        self.start_rating_params = start_rating_params
+        self.performance_params = performance_params or {}
+        self.rating_params = rating_params or {}
+        self.start_rating_params = start_rating_params or {}
 
     def tune(self,  df: pd.DataFrame):
+        
         rating_generator_factory = RatingGeneratorFactory()
         match_predictor = MatchPredictor()
         parameter_tuning = ParameterTuner()

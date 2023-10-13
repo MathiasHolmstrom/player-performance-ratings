@@ -4,6 +4,8 @@ from src.predictor.match_predictor import MatchPredictor
 from src.ratings.data_structures import ColumnNames
 from sklearn.metrics import log_loss
 
+from src.ratings.start_rating_calculator import StartRatingGenerator
+
 df = pd.read_csv("data/2023_LoL.csv")
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 
@@ -19,8 +21,28 @@ column_names = ColumnNames(
     start_date="date",
     player_id="playername",
     performance="result",
+    league='league'
 )
-match_predictor = MatchPredictor(column_names=column_names)
+
+start_rating_generator = StartRatingGenerator(
+    league_ratings={'LPL': 2600, 'LCK': 2500, 'LEC': 1950, 'LCS': 1850, 'TCL': 1450, 'VCS': 1650,
+                          'PCS': 1550,
+                          'LLA': 1300,
+                          'CBLOL': 1450,
+                          'EM': 1300,
+                          'LJL': 1400, 'LFL': 1235, 'PRM': 1200, 'UL': 1200, 'LCSA': 1340, 'SL': 1220, 'LHE': 1200,
+                          'GLL': 1100,
+                          'EBL': 1100,
+                          'NLC': 1100,
+                          'UKLC': 1100,
+                          'PGN': 1100,
+                          'HM': 950,
+                          'WCS': 2200,
+                          'HC': 800,
+                          'AL': 1100,
+                          })
+
+match_predictor = MatchPredictor(column_names=column_names, start_rating_generator=start_rating_generator)
 df = match_predictor.generate(df)
 
 print(log_loss(df['result'], df[match_predictor.predictor.prob_column_name]))

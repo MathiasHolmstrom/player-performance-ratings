@@ -18,7 +18,7 @@ class LeagueEntityRatings:
 class StartRatingGenerator():
 
     def __init__(self,
-                 start_league_ratings: Optional[dict[str, float]] = None,
+                 league_ratings: Optional[dict[str, float]] = None,
                  league_quantile: float = 0.2,
                  min_count_for_percentiles: int = 100,
                  team_rating_subtract: float = 80,
@@ -26,7 +26,7 @@ class StartRatingGenerator():
                  max_days_ago_league_entities: int = 120,
                  ):
 
-        self.start_league_ratings = start_league_ratings or {}
+        self.league_ratings = league_ratings or {}
         self.league_quantile = league_quantile
         self.min_count_for_percentiles = min_count_for_percentiles
         self.team_rating_subtract = team_rating_subtract
@@ -37,7 +37,7 @@ class StartRatingGenerator():
         self.league_to_entity_ids: Dict[str, List[str]] = {}
         self.league_entity_ratings: dict[str, list] = {}
         self.entity_to_league: Dict[str, str] = {}
-        self.league_ratings: dict[str, float] = {}
+
 
     def generate_rating_value(self,
                               day_number: int,

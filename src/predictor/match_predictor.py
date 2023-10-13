@@ -12,7 +12,12 @@ from src.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
 from src.ratings.data_prepararer import get_matches_from_df
 from src.ratings.data_structures import ColumnNames
 from src.ratings.enums import RatingColumnNames
+from src.ratings.factory.match_generator_factory import RatingGeneratorFactory
+from src.ratings.match_rating.match_rating_calculator import PerformancePredictor
+from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerator
+from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
 from src.ratings.rating_generator import RatingGenerator
+from src.ratings.start_rating_calculator import StartRatingGenerator
 
 
 class PredictorTransformer(ABC):
@@ -31,27 +36,42 @@ class MatchPredictor():
                  post_rating_transformers: Optional[List[PredictorTransformer]] = None,
                  predictor: [Optional[BaseMLWrapper]] = None,
                  train_split_date: Optional[pendulum.datetime] = None,
+                 start_rating_generator: Optional[StartRatingGenerator] = None,
+                 performance_predictor: Optional[PerformancePredictor] = None,
+                 team_rating_generator: Optional[TeamRatingGenerator] = None,
+                 player_rating_generator: Optional[PlayerRatingGenerator] = None,
                  ):
         self.column_names = column_names
         self.pre_rating_transformers = pre_rating_transformers or []
         self.player_performance_rating = player_performance_rating
         self.post_rating_transformers = post_rating_transformers or []
         if predictor is None:
-            logging.warning(f"predictor is set to warn, will use rating-difference as feature and {self.column_names.performance} as target")
+            logging.warning(
+                f"predictor is set to warn, will use rating-difference as feature and {self.column_names.performance} as target")
         self.predictor = predictor or SKLearnClassifierWrapper(
             features=[RatingColumnNames.rating_difference],
             target=self.column_names.performance
         )
+        self.start_rating_generator = start_rating_generator
+        self.performance_predictor = performance_predictor
+        self.team_rating_generator = team_rating_generator
+        self.player_rating_generator = player_rating_generator
         self.train_split_date = train_split_date
 
     def generate(self, df: pd.DataFrame) -> pd.DataFrame:
 
         if self.train_split_date is None:
-            self.train_split_date = df.iloc[int(len(df)/1.3)][self.column_names.start_date]
+            self.train_split_date = df.iloc[int(len(df) / 1.3)][self.column_names.start_date]
 
         matches = get_matches_from_df(df=df, column_names=self.column_names)
 
-        rating_generator = RatingGenerator(generate_leagues=False)
+        match_generator_factory = RatingGeneratorFactory(
+            start_rating_generator=self.start_rating_generator,
+            team_rating_generator=self.team_rating_generator,
+            player_rating_generator=self.player_rating_generator,
+            performance_predictor=self.performance_predictor,
+        )
+        rating_generator = match_generator_factory.create()
 
         for pre_rating_transformer in self.pre_rating_transformers:
             df = pre_rating_transformer.transform(df)

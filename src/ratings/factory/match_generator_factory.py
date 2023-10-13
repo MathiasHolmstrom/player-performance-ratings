@@ -1,9 +1,13 @@
-from src.ratings.data_structures import RatingUpdateParameters, StartRatingParameters, PerformancePredictorParameters, \
-    TeamRatingParameters
+import copy
+from typing import Any, Optional
+
 from src.ratings.enums import PredictedRatingMethod
-from src.ratings.match_rating.entity_rating_generator import TeamRatingGenerator, BasePlayerRatingUpdater
+from src.ratings.league_identifier import LeagueIdentifier
+
 from src.ratings.match_rating.match_rating_calculator import RatingMeanPerformancePredictor, \
     PerformancePredictor
+from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerator
+from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
 from src.ratings.rating_generator import RatingGenerator
 from src.ratings.start_rating_calculator import StartRatingGenerator
 
@@ -11,22 +15,26 @@ from src.ratings.start_rating_calculator import StartRatingGenerator
 class RatingGeneratorFactory():
 
     def __init__(self,
-                 rating_update_params: RatingUpdateParameters,
-                 start_rating_params: StartRatingParameters,
-                 performance_predictor_params: PerformancePredictorParameters,
-                 team_rating_parameters: TeamRatingParameters
+                 start_rating_generator: Optional[StartRatingGenerator] = None,
+                 player_rating_generator: Optional[PlayerRatingGenerator] = None,
+                 performance_predictor: Optional[PerformancePredictor] = None,
+                 team_rating_generator: Optional[TeamRatingGenerator] = None,
+                 league_identifier: Optional[LeagueIdentifier] = None,
                  ):
-        self.rating_update_params = rating_update_params
-        self.start_rating_params = start_rating_params
-        self.performance_predictor_params = performance_predictor_params
-        self.team_rating_params = team_rating_parameters
+        self.start_rating_generator = start_rating_generator or StartRatingGenerator()
+        self.player_rating_generator = player_rating_generator or PlayerRatingGenerator()
+        self.performance_predictor = performance_predictor or PerformancePredictor()
+        self.team_rating_generator = team_rating_generator or TeamRatingGenerator()
+        self.league_identifier = league_identifier or LeagueIdentifier()
 
     def create(self) -> RatingGenerator:
-        performance_predictor = PerformancePredictor(params=self.performance_predictor_params)
-        start_rating_generator = StartRatingGenerator(params=self.start_rating_params)
-        player_rating_updater = BasePlayerRatingUpdater(update_params=self.rating_update_params,
-                                                        start_rating_generator=start_rating_generator,
-                                                        performance_predictor=performance_predictor)
-        team_rating_generator = TeamRatingGenerator(player_rating_updater=player_rating_updater,
-                                                    params=self.team_rating_params)
-        return RatingGenerator(team_rating_generator=team_rating_generator)
+        player_rating_generator = copy.deepcopy(self.player_rating_generator)
+        player_rating_generator.start_rating_generator = self.start_rating_generator
+        player_rating_generator.performance_predictor = self.performance_predictor
+        team_rating_generator = copy.deepcopy(self.team_rating_generator)
+        team_rating_generator.player_rating_generator = player_rating_generator
+
+        return RatingGenerator(
+            team_rating_generator=team_rating_generator,
+            league_identifier=self.league_identifier
+        )
