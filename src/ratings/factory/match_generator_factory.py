@@ -19,13 +19,11 @@ class RatingGeneratorFactory():
                  player_rating_generator: Optional[PlayerRatingGenerator] = None,
                  performance_predictor: Optional[PerformancePredictor] = None,
                  team_rating_generator: Optional[TeamRatingGenerator] = None,
-                 league_identifier: Optional[LeagueIdentifier] = None,
                  ):
         self.start_rating_generator = start_rating_generator or StartRatingGenerator()
         self.player_rating_generator = player_rating_generator or PlayerRatingGenerator()
         self.performance_predictor = performance_predictor or PerformancePredictor()
         self.team_rating_generator = team_rating_generator or TeamRatingGenerator()
-        self.league_identifier = league_identifier or LeagueIdentifier()
 
     def create(self) -> RatingGenerator:
         player_rating_generator = copy.deepcopy(self.player_rating_generator)
@@ -36,5 +34,4 @@ class RatingGeneratorFactory():
 
         return RatingGenerator(
             team_rating_generator=team_rating_generator,
-            league_identifier=self.league_identifier
         )

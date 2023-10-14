@@ -50,6 +50,7 @@ class PreMatchPlayerRating:
     games_played: int
     projected_rating_value: float
     certain_ratio: float
+    league: str
     match_performance: MatchPerformance
 
 
@@ -58,6 +59,7 @@ class PreMatchTeamRating:
     id: str
     players: list[PreMatchPlayerRating]
     rating_value: float
+    league: str
     projected_rating_value: float
 
 
@@ -65,6 +67,7 @@ class PreMatchTeamRating:
 class PreMatchRating:
     id: str
     teams: list[PreMatchTeamRating]
+    day_number: int
 
 
 @dataclass
@@ -100,6 +103,10 @@ class MatchRatings:
     pre_match_team_rating_values: list[float]
     pre_match_player_rating_values: list[float]
     pre_match_opponent_rating_values: list[float]
+    player_rating_changes: list[float]
+    player_leagues: list[str]
+    team_opponent_leagues: list[str]
+    match_ids: list[str]
 
 
 @dataclass
@@ -113,7 +120,7 @@ class MatchPlayer:
 class MatchTeam:
     id: str
     players: list[MatchPlayer]
-    opponent_league: str = None
+    league: str = None
 
 
 @dataclass

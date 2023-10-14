@@ -27,6 +27,7 @@ class TeamRatingGenerator():
                 rating_value=sum(pre_match_player_rating_values) / len(pre_match_player_rating_values),
                 projected_rating_value=sum([p.projected_rating_value for p in pre_match_player_ratings]) / len(
                     pre_match_player_ratings),
+                league=team.league
             )
 
         elif tot_player_game_count < self.min_match_count:
@@ -43,6 +44,7 @@ class TeamRatingGenerator():
             rating_value=sum([p.rating_value for p in pre_match_player_ratings]) / len(pre_match_player_ratings),
             projected_rating_value=sum([p.projected_rating_value for p in pre_match_player_ratings]) / len(
                 pre_match_player_ratings),
+            league=team.league
         )
 
     def _get_pre_match_player_ratings_and_new_players(self, team: MatchTeam) -> Tuple[
@@ -81,8 +83,11 @@ class TeamRatingGenerator():
 
         return pre_match_player_ratings
 
-    def generate_post_match_rating(self, pre_match_team_ratings: list[PreMatchTeamRating],
-                                   team_idx: int) -> PostMatchTeamRating:
+    def generate_post_match_rating(self,
+                                   day_number: int,
+                                   pre_match_team_ratings: list[PreMatchTeamRating],
+                                   team_idx: int
+                                   ) -> PostMatchTeamRating:
         pre_opponent_team_rating = pre_match_team_ratings[-team_idx + 1]
         pre_team_rating = pre_match_team_ratings[team_idx]
         post_player_ratings = []
@@ -93,7 +98,9 @@ class TeamRatingGenerator():
             post_player_rating = self.player_rating_generator.generate_post_rating(
                 pre_match_player_rating=pre_player_rating,
                 pre_match_team_rating=pre_team_rating,
-                pre_match_opponent_rating=pre_opponent_team_rating)
+                pre_match_opponent_rating=pre_opponent_team_rating,
+                day_number=day_number,
+            )
             post_player_ratings.append(post_player_rating)
             sum_post_team_rating += post_player_rating.rating_value * pre_player_rating.match_performance.participation_weight
             sum_predicted_performance += post_player_rating.predicted_performance * pre_player_rating.match_performance.participation_weight

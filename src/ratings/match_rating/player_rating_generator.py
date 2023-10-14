@@ -3,7 +3,7 @@ import math
 from typing import Dict, Union, Optional
 
 from src.ratings.data_structures import Match, MatchPlayer, PlayerRating, MatchTeam, \
-     PreMatchTeamRating, PreMatchPlayerRating, PostMatchPlayerRating
+    PreMatchTeamRating, PreMatchPlayerRating, PostMatchPlayerRating
 from src.ratings.match_rating.match_rating_calculator import PerformancePredictor
 from src.ratings.start_rating_calculator import StartRatingGenerator
 
@@ -45,7 +45,6 @@ class PlayerRatingGenerator():
         self.start_rating_generator = start_rating_generator or StartRatingGenerator()
         self.ratings: dict[str, float] = {}
 
-
     def generate_pre_rating(self, match_player: MatchPlayer) -> PreMatchPlayerRating:
         player_rating = self.get_rating_by_id(id=match_player.id)
         projected_rating_value = match_player.performance.projected_participation_weight * \
@@ -57,8 +56,8 @@ class PlayerRatingGenerator():
             match_performance=match_player.performance,
             certain_ratio=player_rating.certain_ratio,
             games_played=player_rating.games_played,
+            league=match_player.league
         )
-
 
     def generate_new_player_rating(self, match: Match, match_player: MatchPlayer,
                                    existing_team_rating: Optional[float]) -> PreMatchPlayerRating:
@@ -81,11 +80,12 @@ class PlayerRatingGenerator():
             projected_rating_value=match_player.performance.projected_participation_weight * rating_value,
             match_performance=match_player.performance,
             certain_ratio=self.player_ratings[match_player.id].certain_ratio,
-            games_played=self.player_ratings[match_player.id].games_played
+            games_played=self.player_ratings[match_player.id].games_played,
+            league=match_player.league
         )
 
-
     def generate_post_rating(self,
+                             day_number: int,
                              pre_match_player_rating: PreMatchPlayerRating,
                              pre_match_team_rating: PreMatchTeamRating,
                              pre_match_opponent_rating: PreMatchTeamRating) -> PostMatchPlayerRating:
@@ -107,13 +107,17 @@ class PlayerRatingGenerator():
 
         self.player_ratings[id].rating_value += rating_change
         self.player_ratings[id].games_played += pre_match_player_rating.match_performance.participation_weight
+        self.player_ratings[id].last_match_day_number = day_number
+
+        self.start_rating_generator.update_league_ratings(day_number=day_number,
+                                                          pre_match_player_rating=pre_match_player_rating,
+                                                          rating_value=self.player_ratings[id].rating_value)
 
         return PostMatchPlayerRating(
             id=pre_match_player_rating.id,
             rating_value=self.player_ratings[id].rating_value,
             predicted_performance=predicted_performance
         )
-
 
     def _calculate_rating_change_multiplier(self,
                                             entity_id: str,
@@ -124,13 +128,11 @@ class PlayerRatingGenerator():
         min_rating_change_multiplier = self.rating_change_multiplier * self.min_rating_change_multiplier_ratio
         return max(min_rating_change_multiplier, multiplier)
 
-
     def _calculate_certain_multiplier(self, entity_rating: PlayerRating) -> float:
         net_certain_sum_value = entity_rating.certain_sum - self.reference_certain_sum_value
         certain_factor = -sigmoid_subtract_half_and_multiply2(net_certain_sum_value,
                                                               self.certain_value_denom) + MODIFIED_RATING_CHANGE_CONSTANT
         return certain_factor * self.rating_change_multiplier
-
 
     def _calculate_post_match_certain_sum(self,
                                           entity_rating: PlayerRating,
@@ -144,7 +146,6 @@ class PlayerRatingGenerator():
 
         return max(0.0, min(certain_sum_value, self.max_certain_sum))
 
-
     def _calculate_days_ago_since_last_match(self, last_match_day_number, match: Match) -> float:
         match_day_number = match.day_number
         if last_match_day_number is None:
@@ -152,9 +153,7 @@ class PlayerRatingGenerator():
 
         return match_day_number - last_match_day_number
 
-
     def get_rating_by_id(self, id: str):
         if id not in self.player_ratings:
             raise KeyError(f"{id} not in player_ratings")
         return self.player_ratings[id]
-

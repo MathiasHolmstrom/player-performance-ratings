@@ -36,7 +36,7 @@ class PlayerRatingGeneratorOld():
         matches = generate_matches(column_names=self.column_names, df=df)
 
         match_ratings = self.rating_generator.generate(matches)
-        df[RatingColumnNames.entity_rating] = match_ratings.pre_match_player_rating_values
+        df[RatingColumnNames.player_rating] = match_ratings.pre_match_player_rating_values
         df[RatingColumnNames.team_rating] = match_ratings.pre_match_team_rating_values
         df[RatingColumnNames.opponent_rating] = match_ratings.pre_match_opponent_rating_values
         return df

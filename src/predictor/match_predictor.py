@@ -4,12 +4,12 @@ from typing import List, Optional
 
 import numpy as np
 import pandas as pd
-import pendulum as pendulum
-from sklearn.linear_model import LogisticRegression
+import pendulum
+import pendulum as pendulumf
 
 from src.predictor.ml_wrappers.base_wrapper import BaseMLWrapper
 from src.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
-from src.ratings.data_prepararer import get_matches_from_df
+from src.ratings.data_prepararer import MatchGenerator
 from src.ratings.data_structures import ColumnNames
 from src.ratings.enums import RatingColumnNames
 from src.ratings.factory.match_generator_factory import RatingGeneratorFactory
@@ -63,7 +63,8 @@ class MatchPredictor():
         if self.train_split_date is None:
             self.train_split_date = df.iloc[int(len(df) / 1.3)][self.column_names.start_date]
 
-        matches = get_matches_from_df(df=df, column_names=self.column_names)
+        match_generator = MatchGenerator(column_names=self.column_names)
+        matches = match_generator.generate(df=df)
 
         match_generator_factory = RatingGeneratorFactory(
             start_rating_generator=self.start_rating_generator,

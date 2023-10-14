@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 from typing import Dict, Any, List, Optional
 
-from src.ratings.data_structures import MatchPlayer, PostMatchPlayerRating
+from src.ratings.data_structures import MatchPlayer, PostMatchPlayerRating, PreMatchPlayerRating
 
 DEFAULT_START_RATING = 1000
 
@@ -37,7 +37,6 @@ class StartRatingGenerator():
         self.league_to_entity_ids: Dict[str, List[str]] = {}
         self.league_entity_ratings: dict[str, list] = {}
         self.entity_to_league: Dict[str, str] = {}
-
 
     def generate_rating_value(self,
                               day_number: int,
@@ -101,18 +100,15 @@ class StartRatingGenerator():
         percentile = np.percentile(entity_ratings, self.league_quantile * 100)
         return percentile
 
-    def _update_league_ratings(self,
-                               day_number: int,
-                               match_player: MatchPlayer,
-                               post_match_player_rating: PostMatchPlayerRating
-                               ):
+    def update_league_ratings(self,
+                              day_number: int,
+                              pre_match_player_rating: PreMatchPlayerRating,
+                              rating_value: float
+                              ):
 
-        league = match_player.league
-        id = match_player.id
+        league = pre_match_player_rating.league
 
-        if post_match_player_rating.rating_value is None:
-            raise ValueError
-
+        id = pre_match_player_rating.id
         if league not in self.league_to_entity_ids:
             self.league_entity_ratings[league] = []
 
@@ -120,7 +116,7 @@ class StartRatingGenerator():
         self.league_to_last_day_number[league] = []
 
         if id not in self.league_to_entity_ids[league]:
-            self.league_entity_ratings[league].append(post_match_player_rating.rating_value)
+            self.league_entity_ratings[league].append(rating_value)
 
             self.league_to_entity_ids[league].append(id)
             self.league_to_last_day_number[league].append(day_number)
@@ -130,7 +126,7 @@ class StartRatingGenerator():
             self.league_to_last_day_number[league][index] = day_number
 
             self.league_entity_ratings[league][index] = \
-                post_match_player_rating.rating_value
+                rating_value
 
         current_entity_league = self.entity_to_league[id]
 
