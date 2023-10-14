@@ -26,6 +26,7 @@ class RatingColumnNames:
     rating_mean_projected = 'rating_mean_projected'
     player_league = "player_league"
     opponent_league = "opponent_league"
+    match_id = "match_id"
 
 class PredictedRatingMethod(Enum):
     DEFAULT = 'default'

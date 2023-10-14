@@ -1,7 +1,10 @@
 from typing import Optional
 
+import numpy as np
+
 from src.ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PostMatchRating, MatchRating, \
     MatchRatings, PostMatchTeamRating
+from src.ratings.enums import RatingColumnNames
 from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
 
 
@@ -13,7 +16,7 @@ class RatingGenerator():
                  ):
         self.team_rating_generator = team_rating_generator or TeamRatingGenerator()
 
-    def generate(self, matches: list[Match]) -> MatchRatings:
+    def generate(self, matches: list[Match]) -> dict[RatingColumnNames, list[float]]:
 
         pre_match_player_rating_values = []
         pre_match_team_rating_values = []
@@ -40,16 +43,18 @@ class RatingGenerator():
                     team_opponent_leagues.append(match_rating.pre_match_rating.teams[-team_idx + 1].league)
                     match_ids.append(match.id)
 
-        return MatchRatings(
-            pre_match_team_rating_values=pre_match_team_rating_values,
-            pre_match_player_rating_values=pre_match_player_rating_values,
-            pre_match_opponent_rating_values=pre_match_opponent_rating_values,
-            player_rating_changes=player_rating_changes,
-            player_leagues=player_leagues,
-            match_ids=match_ids,
-            team_opponent_leagues=team_opponent_leagues
-        )
+        return {
+            RatingColumnNames.rating_difference:np.array(pre_match_team_rating_values) - (
+            pre_match_opponent_rating_values),
+            RatingColumnNames.player_league: player_leagues,
+            RatingColumnNames.opponent_league: team_opponent_leagues,
+            RatingColumnNames.player_rating: pre_match_player_rating_values,
+            RatingColumnNames.player_rating_change: player_rating_changes,
+            RatingColumnNames.match_id: match_ids,
+            RatingColumnNames.team_rating: pre_match_team_rating_values,
+            RatingColumnNames.opponent_rating: pre_match_opponent_rating_values
 
+        }
     def _create_match_rating(self, match: Match) -> MatchRating:
 
         pre_match_rating = PreMatchRating(
