@@ -8,6 +8,10 @@ from src.ratings.enums import RatingColumnNames
 
 class BaseScorer(ABC):
 
+    def __init__(self, target: str, pred_column: str):
+        self.target = target
+        self.pred_column = pred_column
+
     @abstractmethod
     def score(self, df: pd.DataFrame) -> float:
         pass
@@ -15,20 +19,21 @@ class BaseScorer(ABC):
 
 class LogLossScorer(BaseScorer):
 
-    def __init__(self, target: str, prob_column_name: str, weight_cross_league: float = 1):
+    def __init__(self, target: str, pred_column: str, weight_cross_league: float = 1):
         self.target = target
-        self.prob_column_name = prob_column_name
+        self.pred_column_name = pred_column
         self.weight_cross_league = weight_cross_league
+        super().__init__(target=target, pred_column=pred_column)
 
     def score(self, df: pd.DataFrame) -> float:
         if self.weight_cross_league == 1:
-            return log_loss(df[self.target], df[self.prob_column_name])
+            return log_loss(df[self.target], df[self.pred_column_name])
 
         else:
             cross_league_rows = df[df[RatingColumnNames.player_league] != RatingColumnNames.opponent_league]
             same_league_rows = df[df[RatingColumnNames.player_league] == df[RatingColumnNames.opponent_league]]
-            cross_league_logloss = log_loss(cross_league_rows[self.target], cross_league_rows[self.prob_column_name])
-            same_league_logloss = log_loss(same_league_rows[self.target], same_league_rows[self.prob_column_name])
+            cross_league_logloss = log_loss(cross_league_rows[self.target], cross_league_rows[self.pred_column_name])
+            same_league_logloss = log_loss(same_league_rows[self.target], same_league_rows[self.pred_column_name])
 
             weight_cross_league = len(cross_league_rows) * self.weight_cross_league / (
                     len(same_league_rows) + len(cross_league_rows) * self.weight_cross_league)

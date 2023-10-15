@@ -4,10 +4,8 @@ from sklearn.metrics import log_loss
 
 from src.predictor.match_predictor import MatchPredictor
 from src.ratings.data_structures import ColumnNames
-from src.ratings.enums import RatingColumnNames
-from src.transformers import BaseTransformer, ColumnWeighter
+from src.transformers import BaseTransformer
 
-from src.transformers.common import MinMaxTransformer, ColumnWeight
 
 
 class LolPlayerPerformanceGenerator(BaseTransformer):
@@ -99,33 +97,16 @@ class DurationPerformanceGenerator(BaseTransformer):
         return df
 
 
-class CustomLolPerformanceGenerators(BaseTransformer):
+class FinalLolTransformer(BaseTransformer):
 
     def __init__(self, column_names: ColumnNames):
         self.column_names = column_names
-        self.performance_generators = [
-            DurationPerformanceGenerator(),
-            LolPlayerPerformanceGenerator(),
-            MinMaxTransformer(
-                column_names=['net_damage_percentage', 'net_deaths_percentage', 'net_kills_assists_percentage']
-            ),
-            ColumnWeighter(
-                column_weights=[
-                    ColumnWeight(name='team_duration_performance', weight=0.65),
-                    ColumnWeight(name='net_damage_percentage', weight=0.25),
-                    ColumnWeight(name='net_kills_assists_percentage', weight=0.1)
-                ],
-                weighted_column_name=column_names.performance
-            ),
-        ]
+
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
-        for performance_generator in self.performance_generators:
-            df = performance_generator.transform(df)
-
         df[self.column_names.performance] *= 0.5 / df[self.column_names.performance].mean()
-        df = df.sort_values(by=['date', 'gameid', 'teamname'], ascending=True)
+        df.sort_values(by=['date', 'gameid', 'teamname'], ascending=True)
         return df
 
 
@@ -156,4 +137,4 @@ if __name__ == '__main__':
     )
     df = match_predictor.generate(df)
 
-    print(log_loss(df['result'], df[match_predictor.predictor.prob_column_name]))
+    print(log_loss(df['result'], df[match_predictor.predictor.pred_column]))

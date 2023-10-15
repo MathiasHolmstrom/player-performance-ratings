@@ -45,4 +45,4 @@ start_rating_generator = StartRatingGenerator(
 match_predictor = MatchPredictor(column_names=column_names, start_rating_generator=start_rating_generator)
 df = match_predictor.generate(df)
 
-print(log_loss(df['result'], df[match_predictor.predictor.prob_column_name]))
+print(log_loss(df['result'], df[match_predictor.predictor.pred_column]))

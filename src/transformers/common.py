@@ -13,7 +13,7 @@ class ColumnWeight:
     is_negative: bool = False
 
 
-class ColumnWeighter(BaseTransformer):
+class ColumnsWeighter(BaseTransformer):
 
     def __init__(self,
                  weighted_column_name: str,
@@ -38,8 +38,8 @@ class ColumnWeighter(BaseTransformer):
 
 class MinMaxTransformer(BaseTransformer):
 
-    def __init__(self, column_names: list[str], quantile: float = 0.99, prefix: str = ""):
-        self.column_names = column_names
+    def __init__(self, features: list[str], quantile: float = 0.99, prefix: str = ""):
+        self.features = features
         self.quantile = quantile
         self.prefix = prefix
         if self.quantile < 0 or self.quantile > 1:
@@ -47,11 +47,11 @@ class MinMaxTransformer(BaseTransformer):
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
-        for column in self.column_names:
-            max_value = df[column].quantile(self.quantile)
-            min_value = df[column].quantile(1 - self.quantile)
+        for feature in self.features:
+            max_value = df[feature].quantile(self.quantile)
+            min_value = df[feature].quantile(1 - self.quantile)
 
-            df[self.prefix + column] = (df[column] - min_value) / (max_value - min_value)
-            df[self.prefix + column].clip(0, 1, inplace=True)
+            df[self.prefix + feature] = (df[feature] - min_value) / (max_value - min_value)
+            df[self.prefix + feature].clip(0, 1, inplace=True)
 
         return df

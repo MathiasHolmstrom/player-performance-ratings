@@ -34,6 +34,7 @@ class MatchPredictor():
                  performance_predictor: Optional[PerformancePredictor] = None,
                  team_rating_generator: Optional[TeamRatingGenerator] = None,
                  player_rating_generator: Optional[PlayerRatingGenerator] = None,
+                 rating_generator: Optional[RatingGenerator] = None,
                  ):
         self.column_names = column_names
         self.rating_features = rating_features or [RatingColumnNames.rating_difference]
@@ -55,7 +56,16 @@ class MatchPredictor():
         self.team_rating_generator = team_rating_generator
         self.player_rating_generator = player_rating_generator
         self.train_split_date = train_split_date
-        self.rating_generator: Optional[RatingGenerator] = None
+        self.rating_generator = rating_generator
+        if self.rating_generator is None:
+            match_generator_factory = RatingGeneratorFactory(
+                start_rating_generator=self.start_rating_generator,
+                team_rating_generator=self.team_rating_generator,
+                player_rating_generator=self.player_rating_generator,
+                performance_predictor=self.performance_predictor,
+            )
+            self.rating_generator = match_generator_factory.create()
+
 
     def generate(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> pd.DataFrame:
         for pre_rating_transformer in self.pre_rating_transformers:
@@ -68,14 +78,6 @@ class MatchPredictor():
             match_generator = MatchGenerator(column_names=self.column_names)
             matches = match_generator.generate(df=df)
 
-        if self.rating_generator is None:
-            match_generator_factory = RatingGeneratorFactory(
-                start_rating_generator=self.start_rating_generator,
-                team_rating_generator=self.team_rating_generator,
-                player_rating_generator=self.player_rating_generator,
-                performance_predictor=self.performance_predictor,
-            )
-            self.rating_generator = match_generator_factory.create()
 
         match_ratings = self.rating_generator.generate(matches)
         for rating_feature, values in match_ratings.items():

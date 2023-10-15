@@ -50,10 +50,9 @@ class StartRatingTuner():
         rating_column_names = [RC.rating_difference, RC.player_rating_change, RC.player_league, RC.opponent_league]
         self.iterations = iterations
         self.learning_step = learning_step
-        self.match_predictor = match_predictor or MatchPredictor(column_names=column_names,
-                                                                 rating_features=rating_column_names)
-        self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target, weight_cross_league=3,
-                                              prob_column_name=self.match_predictor.predictor.prob_column_name)
+        self.match_predictor = match_predictor
+        self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target, weight_cross_league=2,
+                                              pred_column=self.match_predictor.predictor.pred_column)
 
         self.start_rating_generator = start_rating_generator or StartRatingGenerator()
         self.player_rating_generator = player_rating_generator or PlayerRatingGenerator()
