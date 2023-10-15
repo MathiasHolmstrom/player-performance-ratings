@@ -66,6 +66,15 @@ if __name__ == '__main__':
         ),
     ]
 
+    player_rating_generator_search_ranges = [
+        ParameterSearchRange(
+            name='rating_change_multiplier',
+            type='int',
+            low=50,
+            high=250
+        ),
+    ]
+
     pre_transformer_search_ranges = [
         (DurationPerformanceGenerator(), []),
         (LolPlayerPerformanceGenerator(), []),
@@ -81,7 +90,9 @@ if __name__ == '__main__':
     predictor = SKLearnClassifierWrapper(features=[RatingColumnNames.rating_difference], target='result')
     pre_transformer_tuner = PreTransformerTuner(column_names=column_names,
                                                 pre_transformer_search_ranges=pre_transformer_search_ranges,
+                                                player_rating_generator_search_ranges=player_rating_generator_search_ranges,
                                                 rating_generator=rating_generator,
-                                                predictor=predictor
+                                                predictor=predictor,
+                                                n_trials=100
                                                 )
     pre_transformer_tuner.tune(df=df)

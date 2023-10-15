@@ -74,14 +74,15 @@ class PreTransformerTuner(BaseTuner):
 
     def __init__(self,
                  pre_transformer_search_ranges: list[Tuple[BaseTransformer, list[ParameterSearchRange]]],
+                 player_rating_generator_search_ranges: list[ParameterSearchRange],
                  column_names: ColumnNames,
                  rating_generator: RatingGenerator,
                  predictor: BaseMLWrapper,
                  n_trials: int = 30,
                  scorer: Optional[BaseScorer] = None,
                  train_split_date: Optional[pendulum.datetime] = None,
-
                  ):
+        self.player_rating_generator_search_ranges = player_rating_generator_search_ranges
         self.pre_transformer_search_ranges = pre_transformer_search_ranges
         self.predictor = predictor
         self.train_split_date = train_split_date
@@ -92,15 +93,11 @@ class PreTransformerTuner(BaseTuner):
         self.scorer = scorer or LogLossScorer(target=self.predictor.target, weight_cross_league=3,
                                               pred_column=self.predictor.pred_column)
 
-
         self.column_names = column_names
         self._scores = []
 
     def tune(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> dict[str, float]:
-
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
-
-            rating_generator = copy.deepcopy(self.rating_generator)
             pre_rating_transformers = []
             for transformer, parameter_search_range in self.pre_transformer_search_ranges:
                 transformer_params = list(
@@ -112,18 +109,33 @@ class PreTransformerTuner(BaseTuner):
                                                                 parameter_search_range=parameter_search_range)
                 class_transformer = type(transformer)
                 pre_rating_transformers.append(class_transformer(**params))
-                predictor = copy.deepcopy(self.predictor)
 
-                match_predictor = MatchPredictor(column_names=self.column_names,
-                                                 rating_generator=rating_generator,
-                                                 pre_rating_transformers=pre_rating_transformers,
-                                                 predictor=predictor,
-                                                 rating_features=[RC.rating_difference],
-                                                 train_split_date=self.train_split_date,
-                                                 )
+            predictor = copy.deepcopy(self.predictor)
+
+            all_player_rating_params = list(
+                inspect.signature(
+                    self.rating_generator.team_rating_generator.player_rating_generator.__class__.__init__).parameters.keys())[
+                                       1:]
+            player_rating_params = {
+                attr: getattr(self.rating_generator.team_rating_generator.player_rating_generator, attr) for attr in
+                dir(PlayerRatingGenerator()) if
+                attr in all_player_rating_params}
+
+            player_rating_params = add_custom_hyperparams(params=player_rating_params, trial=trial,
+                                                          parameter_search_range=self.player_rating_generator_search_ranges)
+            player_rating_generator = PlayerRatingGenerator(**player_rating_params)
+            rating_generator = copy.deepcopy(self.rating_generator)
+            self.rating_generator.team_rating_generator.player_rating_generator = player_rating_generator
+
+            match_predictor = MatchPredictor(column_names=self.column_names,
+                                             rating_generator=rating_generator,
+                                             pre_rating_transformers=pre_rating_transformers,
+                                             predictor=predictor,
+                                             rating_features=[RC.rating_difference],
+                                             train_split_date=self.train_split_date,
+                                             )
             df = match_predictor.generate(df=df)
             return self.scorer.score(df)
-
 
         direction = "minimize"
         study_name = "optuna_study"

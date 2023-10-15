@@ -43,7 +43,6 @@ class PlayerRatingGenerator():
         self.player_ratings: Dict[str, PlayerRating] = {}
         self.performance_predictor = performance_predictor or PerformancePredictor()
         self.start_rating_generator = start_rating_generator or StartRatingGenerator()
-        self.ratings: dict[str, float] = {}
 
     def generate_pre_rating(self, match_player: MatchPlayer) -> PreMatchPlayerRating:
         player_rating = self.get_rating_by_id(id=match_player.id)

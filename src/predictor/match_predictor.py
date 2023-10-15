@@ -44,13 +44,14 @@ class MatchPredictor():
         if predictor is None:
             logging.warning(
                 f"predictor is set to warn, will use rating-difference as feature and {self.column_names.performance} as target")
-
-        if predictor is None:
             self.target = target or self.column_names.performance
             self.predictor = predictor or SKLearnClassifierWrapper(
                 features=[RatingColumnNames.rating_difference],
                 target=self.target
             )
+        else:
+            self.predictor = predictor
+
         self.start_rating_generator = start_rating_generator
         self.performance_predictor = performance_predictor
         self.team_rating_generator = team_rating_generator
@@ -66,7 +67,6 @@ class MatchPredictor():
             )
             self.rating_generator = match_generator_factory.create()
 
-
     def generate(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> pd.DataFrame:
         for pre_rating_transformer in self.pre_rating_transformers:
             df = pre_rating_transformer.transform(df)
@@ -77,7 +77,6 @@ class MatchPredictor():
         if matches is None:
             match_generator = MatchGenerator(column_names=self.column_names)
             matches = match_generator.generate(df=df)
-
 
         match_ratings = self.rating_generator.generate(matches)
         for rating_feature, values in match_ratings.items():
