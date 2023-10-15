@@ -1,11 +1,9 @@
 import logging
-from abc import ABC, abstractmethod
 from typing import List, Optional
 
 import numpy as np
 import pandas as pd
 import pendulum
-import pendulum as pendulumf
 
 from src.predictor.ml_wrappers.base_wrapper import BaseMLWrapper
 from src.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
@@ -18,23 +16,18 @@ from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerat
 from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
 from src.ratings.rating_generator import RatingGenerator
 from src.ratings.start_rating_calculator import StartRatingGenerator
-
-
-class PredictorTransformer(ABC):
-
-    @abstractmethod
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        pass
+from src.transformers import BaseTransformer
 
 
 class MatchPredictor():
 
     def __init__(self,
                  column_names: ColumnNames,
-                 rating_features: Optional[list[RatingColumnNames]],
-                 pre_rating_transformers: Optional[List[PredictorTransformer]] = None,
+                 rating_features: Optional[list[RatingColumnNames]] = None,
+                 pre_rating_transformers: Optional[List[BaseTransformer]] = None,
                  player_performance_rating: Optional[RatingGenerator] = None,
-                 post_rating_transformers: Optional[List[PredictorTransformer]] = None,
+                 post_rating_transformers: Optional[List[BaseTransformer]] = None,
+                 target: Optional[str] = None,
                  predictor: [Optional[BaseMLWrapper]] = None,
                  train_split_date: Optional[pendulum.datetime] = None,
                  start_rating_generator: Optional[StartRatingGenerator] = None,
@@ -50,10 +43,13 @@ class MatchPredictor():
         if predictor is None:
             logging.warning(
                 f"predictor is set to warn, will use rating-difference as feature and {self.column_names.performance} as target")
-        self.predictor = predictor or SKLearnClassifierWrapper(
-            features=[RatingColumnNames.rating_difference],
-            target=self.column_names.performance
-        )
+
+        if predictor is None:
+            self.target = target or self.column_names.performance
+            self.predictor = predictor or SKLearnClassifierWrapper(
+                features=[RatingColumnNames.rating_difference],
+                target=self.target
+            )
         self.start_rating_generator = start_rating_generator
         self.performance_predictor = performance_predictor
         self.team_rating_generator = team_rating_generator
@@ -62,6 +58,8 @@ class MatchPredictor():
         self.rating_generator: Optional[RatingGenerator] = None
 
     def generate(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> pd.DataFrame:
+        for pre_rating_transformer in self.pre_rating_transformers:
+            df = pre_rating_transformer.transform(df)
 
         if self.train_split_date is None:
             self.train_split_date = df.iloc[int(len(df) / 1.3)][self.column_names.start_date]
@@ -78,9 +76,6 @@ class MatchPredictor():
                 performance_predictor=self.performance_predictor,
             )
             self.rating_generator = match_generator_factory.create()
-
-        for pre_rating_transformer in self.pre_rating_transformers:
-            df = pre_rating_transformer.transform(df)
 
         match_ratings = self.rating_generator.generate(matches)
         for rating_feature, values in match_ratings.items():

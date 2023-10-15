@@ -111,9 +111,8 @@ class StartRatingGenerator():
         id = pre_match_player_rating.id
         if league not in self.league_to_entity_ids:
             self.league_entity_ratings[league] = []
-
-        self.league_to_entity_ids[league] = []
-        self.league_to_last_day_number[league] = []
+            self.league_to_entity_ids[league] = []
+            self.league_to_last_day_number[league] = []
 
         if id not in self.league_to_entity_ids[league]:
             self.league_entity_ratings[league].append(rating_value)
