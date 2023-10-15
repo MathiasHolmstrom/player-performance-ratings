@@ -62,7 +62,9 @@ def add_hyperparams_to_common_transformers(object: object, params: dict[str, Uni
     params = add_custom_hyperparams(params=params, trial=trial, parameter_search_range=parameter_search_range)
 
     if object.__class__.__name__ == "ColumnsWeighter":
-        column_weights = [ColumnWeight(name=p.name, weight=params[p.name]) for p in parameter_search_range]
+        sum_weights = sum([params[p.name] for p in parameter_search_range])
+        column_weights = [ColumnWeight(name=p.name, weight=params[p.name] / sum_weights) for p in
+                          parameter_search_range]
         for p in parameter_search_range:
             del params[p.name]
         params['column_weights'] = column_weights
