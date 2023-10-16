@@ -5,10 +5,6 @@ import pandas as pd
 
 class BaseMLWrapper(ABC):
 
-    def __init__(self, features: list[str], target: str, pred_column: str = "prob"):
-        self.features = features
-        self.target = target
-        self.pred_column = pred_column
 
     @abstractmethod
     def fit(self, df: pd.DataFrame) -> None:
@@ -16,4 +12,14 @@ class BaseMLWrapper(ABC):
 
     @abstractmethod
     def add_prediction(self, df: pd.DataFrame) -> None:
+        pass
+
+    @property
+    @abstractmethod
+    def pred_column(self) -> str:
+        pass
+
+    @property
+    @abstractmethod
+    def target(self) -> str:
         pass

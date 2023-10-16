@@ -33,6 +33,7 @@ class PlayerRatingGenerator():
                  ):
         self.certain_weight = certain_weight
         self.certain_days_ago_multiplier = certain_days_ago_multiplier
+        #TODO implement below
         self.min_rating_change_for_league = min_rating_change_for_league
         self.certain_value_denom = certain_value_denom
         self.min_rating_change_multiplier_ratio = min_rating_change_multiplier_ratio

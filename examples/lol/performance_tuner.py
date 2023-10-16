@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from sklearn.metrics import log_loss
+from sklearn.preprocessing import StandardScaler
 
 from examples.lol.custom_performance import DurationPerformanceGenerator, \
     LolPlayerPerformanceGenerator, FinalLolTransformer
@@ -10,10 +11,12 @@ from src.predictor.match_predictor import MatchPredictor
 from src.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
 from src.ratings.data_structures import ColumnNames
 from src.ratings.enums import RatingColumnNames
+from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerator
+from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
 from src.ratings.rating_generator import RatingGenerator
 from src.transformers import BaseTransformer, ColumnsWeighter
 
-from src.transformers.common import MinMaxTransformer, ColumnWeight
+from src.transformers.common import MinMaxTransformer, ColumnWeight, SkLearnTransformerWrapper
 
 if __name__ == '__main__':
     column_names = ColumnNames(
@@ -33,10 +36,6 @@ if __name__ == '__main__':
         .loc[lambda x: x.team_count == 2]
     )
 
-    match_predictor = MatchPredictor(
-        column_names=column_names,
-        target='result'
-    )
 
     duration_performance_search_range = []
     column_weigher_search_range = [
@@ -44,55 +43,56 @@ if __name__ == '__main__':
             name='net_damage_percentage',
             type='uniform',
             low=0,
-            high=0.4
+            high=0.45
         ),
         ParameterSearchRange(
             name='net_deaths_percentage',
             type='uniform',
             low=0,
-            high=0.2
+            high=.3,
         ),
         ParameterSearchRange(
             name='net_kills_assists_percentage',
             type='uniform',
             low=0,
-            high=0.4
+            high=0.3
         ),
         ParameterSearchRange(
             name='team_duration_performance',
             type='uniform',
-            low=0.3,
-            high=0.8
+            low=0.15,
+            high=0.85
         ),
     ]
 
-    player_rating_generator_search_ranges = [
-        ParameterSearchRange(
-            name='rating_change_multiplier',
-            type='int',
-            low=50,
-            high=250
-        ),
-    ]
+    features = ["net_damage_percentage", "net_deaths_percentage",
+                "net_kills_assists_percentage", "team_duration_performance"]
+    standard_scaler = SkLearnTransformerWrapper(transformer=StandardScaler(), features=features)
 
     pre_transformer_search_ranges = [
         (DurationPerformanceGenerator(), []),
         (LolPlayerPerformanceGenerator(), []),
-        (MinMaxTransformer(features=["net_damage_percentage", "net_deaths_percentage",
-                                     "net_kills_assists_percentage", "team_duration_performance"]), []),
+        (standard_scaler, []),
+        (MinMaxTransformer(features=features), []),
         (
             ColumnsWeighter(weighted_column_name=column_names.performance, column_weights=[]),
             column_weigher_search_range),
         (FinalLolTransformer(column_names), []),
     ]
 
+    team_rating_generator = TeamRatingGenerator(
+        player_rating_generator=PlayerRatingGenerator(rating_change_multiplier=80))
     rating_generator = RatingGenerator()
     predictor = SKLearnClassifierWrapper(features=[RatingColumnNames.rating_difference], target='result')
-    pre_transformer_tuner = PreTransformerTuner(column_names=column_names,
+
+    match_predictor = MatchPredictor(
+        rating_generator=rating_generator,
+        column_names=column_names,
+        predictor=predictor
+    )
+
+    pre_transformer_tuner = PreTransformerTuner(match_predictor=match_predictor,
                                                 pre_transformer_search_ranges=pre_transformer_search_ranges,
-                                                player_rating_generator_search_ranges=player_rating_generator_search_ranges,
-                                                rating_generator=rating_generator,
-                                                predictor=predictor,
                                                 n_trials=100
                                                 )
     pre_transformer_tuner.tune(df=df)

@@ -36,6 +36,18 @@ class ColumnsWeighter(BaseTransformer):
         return df
 
 
+class SkLearnTransformerWrapper(BaseTransformer):
+
+    def __init__(self, transformer, features: list[str]):
+        self.transformer = transformer
+        self.features = features
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        df[self.features] = self.transformer.fit_transform(df[self.features])
+        return df
+
+
 class MinMaxTransformer(BaseTransformer):
 
     def __init__(self, features: list[str], quantile: float = 0.99, prefix: str = ""):

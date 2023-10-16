@@ -7,7 +7,6 @@ from src.ratings.data_structures import ColumnNames
 from src.transformers import BaseTransformer
 
 
-
 class LolPlayerPerformanceGenerator(BaseTransformer):
 
     def __init__(self):
@@ -52,7 +51,7 @@ class LolPlayerPerformanceGenerator(BaseTransformer):
 
         df['predicted_deaths_percentage'] = df['champion_deaths'] / df['team_sum_champion_deaths']
         df['actual_deaths_percentage'] = df['deaths'] / df['team_sum_deaths']
-        df['net_deaths_percentage'] = (df['actual_deaths_percentage'] - df['predicted_deaths_percentage']) * df[
+        df['net_deaths_percentage'] = 1 - (df['actual_deaths_percentage'] - df['predicted_deaths_percentage']) * df[
             'deaths_weight']
 
         df['predicted_kills_assists_percentage'] = df['champion_kills_assists'] / df['team_sum_champion_kills']
@@ -101,7 +100,6 @@ class FinalLolTransformer(BaseTransformer):
 
     def __init__(self, column_names: ColumnNames):
         self.column_names = column_names
-
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
