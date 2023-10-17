@@ -3,7 +3,6 @@ from sklearn.preprocessing import StandardScaler
 
 from examples.lol.custom_performance import DurationPerformanceGenerator, LolPlayerPerformanceGenerator, \
     FinalLolTransformer
-from src.auto_predictor.tuner import PreTransformerTuner
 from src.auto_predictor.tuner.base_tuner import ParameterSearchRange
 from src.auto_predictor.tuner.player_rating_tuner import PlayerRatingTuner
 from src.predictor.match_predictor import MatchPredictor

@@ -1,10 +1,18 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, Match, Literal, Union, Any
+from typing import Optional, Match, Literal, Union, Any, Tuple
 
 import pandas as pd
 from optuna.trial import BaseTrial
 
+from src.transformers import BaseTransformer
+
+
+class TransformerTuner(ABC):
+
+    @abstractmethod
+    def tune(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> list[BaseTransformer]:
+        pass
 
 class BaseTuner(ABC):
 
@@ -21,7 +29,7 @@ class ParameterSearchRange:
     high: Optional[Union[float, int]] = None
     choices: Optional[list[Any]] = None
 
-def add_custom_hyperparams(params: dict[str, Union[float, None, bool, int, str]], trial: BaseTrial,
+def add_custom_hyperparams(params: dict, trial: BaseTrial,
                            parameter_search_range: list[ParameterSearchRange]) -> dict:
     for config in parameter_search_range:
         if config.type == "uniform":

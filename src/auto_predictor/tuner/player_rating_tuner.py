@@ -11,11 +11,10 @@ from src.auto_predictor.tuner.base_tuner import ParameterSearchRange, add_custom
 from src.predictor.match_predictor import MatchPredictor
 from src.ratings.data_structures import  Match
 from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerator
-from src.scorer.base_score import BaseScorer
-
+from src.scorer.base_score import BaseScorer, LogLossScorer
 
 DEFAULT_PLAYER_RATING_SEARCH_RANGE = [
-    
+
 ]
 
 
@@ -29,10 +28,13 @@ class PlayerRatingTuner():
                  ):
         self.search_ranges = search_ranges
         self.match_predictor = match_predictor
-        self.scorer = scorer
+        self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target,
+                                              weight_cross_league=3,
+                                              pred_column=self.match_predictor.predictor.pred_column
+                                              )
         self.n_trials = n_trials
 
-    def tune(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> dict[str, float]:
+    def tune(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> PlayerRatingGenerator:
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
             params = {}
             params = add_custom_hyperparams(params=params,
@@ -54,4 +56,4 @@ class PlayerRatingTuner():
 
         best_params = study.best_params
 
-        return best_params
+        return PlayerRatingGenerator(**best_params)

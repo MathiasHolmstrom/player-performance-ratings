@@ -1,7 +1,12 @@
+import copy
 from typing import Optional
 
+import optuna
 import pandas as pd
+from optuna.samplers import TPESampler
+from optuna.trial import BaseTrial
 
+from src.auto_predictor.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams
 from src.predictor.match_predictor import MatchPredictor
 from src.ratings.data_structures import ColumnNames, Match
 from src.ratings.enums import RatingColumnNames
@@ -34,70 +39,88 @@ class StartRatingTuner():
 
     def __init__(self,
                  column_names: ColumnNames,
+                 match_predictor: MatchPredictor,
+                 search_ranges: Optional[list[ParameterSearchRange]] = None,
                  iterations: int = 4,
                  learning_step: float = 10,
                  final_adj_iterations: int = 6,
                  scorer: Optional[BaseScorer] = None,
-                 match_predictor: Optional[MatchPredictor] = None,
-                 start_rating_generator: Optional[StartRatingGenerator] = None,
-                 player_rating_generator: Optional[PlayerRatingGenerator] = None,
-                 performance_predictor: Optional[PerformancePredictor] = None,
-                 team_rating_generator: Optional[TeamRatingGenerator] = None,
-                 league_identifier: Optional[LeagueIdentifier] = None,
+                 n_trials: int = 8,
                  ):
 
         self.final_adj_iterations = final_adj_iterations
         rating_column_names = [RC.rating_difference, RC.player_rating_change, RC.player_league, RC.opponent_league]
         self.iterations = iterations
         self.learning_step = learning_step
+        self.n_trials = n_trials
         self.match_predictor = match_predictor
+        self.search_ranges = search_ranges
         self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target, weight_cross_league=2,
                                               pred_column=self.match_predictor.predictor.pred_column)
 
-        self.start_rating_generator = start_rating_generator or StartRatingGenerator()
-        self.player_rating_generator = player_rating_generator or PlayerRatingGenerator()
-        self.performance_predictor = performance_predictor or PerformancePredictor()
-        self.team_rating_generator = team_rating_generator or TeamRatingGenerator()
-        self.league_identifier = league_identifier or LeagueIdentifier()
         self.column_names = column_names
         self._scores = []
-        self._start_ratings: list[dict[str, float]] = []
 
-    def tune(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> dict[str, float]:
+    def tune(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> StartRatingGenerator:
+
+        def objective(trial: BaseTrial, df: pd.DataFrame, league_start_ratings: dict[str, float]) -> float:
+            params = {'league_ratings': league_start_ratings}
+            params = add_custom_hyperparams(params=params,
+                                            trial=trial,
+                                            parameter_search_range=self.search_ranges,
+                                            )
+            start_rating_generator = StartRatingGenerator(**params)
+            match_predictor = copy.deepcopy(self.match_predictor)
+            match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator = start_rating_generator
+            df = match_predictor.generate(df=df)
+            return self.scorer.score(df)
+
         if matches is None:
             match_generator = MatchGenerator(column_names=self.column_names)
             matches = match_generator.generate(df=df)
 
-        start_rating_init_params = list(
-            inspect.signature(self.start_rating_generator.__class__.__init__).parameters.keys())[1:]
-        new_start_ratings = self.start_rating_generator.league_ratings.copy()
+        new_league_ratings = {}
+        best_models = []
         for iteration in range(self.iterations + 1):
-            start_rating_instance_variables = {attr: getattr(self.start_rating_generator, attr) for attr in
-                                               dir(self.start_rating_generator) if
-                                               attr in start_rating_init_params and attr != 'league_ratings'}
 
-            start_rating_generator = StartRatingGenerator(league_ratings=new_start_ratings,
-                                                          **start_rating_instance_variables)
-            rating_generator_factory = RatingGeneratorFactory(
-                start_rating_generator=start_rating_generator,
-                team_rating_generator=self.team_rating_generator,
-                player_rating_generator=self.player_rating_generator,
-                performance_predictor=self.performance_predictor,
-            )
-            rating_generator = rating_generator_factory.create()
-            self.match_predictor.rating_generator = rating_generator
-            df = self.match_predictor.generate(df=df, matches=matches)
+            if self.search_ranges is None:
+                start_rating_generator = StartRatingGenerator(**new_league_ratings)
+                match_predictor = copy.deepcopy(self.match_predictor)
+                match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator = start_rating_generator
+                df = match_predictor.generate(df=df)
+                score = self.scorer.score(df)
+                self._scores.append(score)
+                best_models.append(StartRatingGenerator(**new_league_ratings))
 
-            score = self.scorer.score(df)
-            self._scores.append(score)
-            self._start_ratings.append(new_start_ratings.copy())
+            else:
+                direction = "minimize"
+                study_name = "optuna_study"
+                optuna_seed = 12
+                sampler = TPESampler(seed=optuna_seed)
+                study = optuna.create_study(direction=direction, study_name=study_name, sampler=sampler)
+                callbacks = []
+                study.optimize(lambda trial: objective(trial, df, league_start_ratings=new_league_ratings),
+                               n_trials=self.n_trials, callbacks=callbacks)
+                best_params= study.best_params
+                best_params['league_ratings'] = new_league_ratings
+                best_models.append(StartRatingGenerator(**best_params))
+                self._scores.append(study.best_value)
+
             if iteration == self.iterations:
                 min_idx = self._scores.index(min(self._scores))
-                return self._start_ratings[min_idx]
-            new_start_ratings = self._optimize_start_ratings(df)
+                return best_models[min_idx]
 
-    def _optimize_start_ratings(self, df: pd.DataFrame) -> dict[str, float]:
-        new_start_ratings = self.match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator.league_ratings
+
+            start_rating_generator = StartRatingGenerator(**study.best_params)
+            match_predictor = copy.deepcopy(self.match_predictor)
+            match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator = start_rating_generator
+            df = match_predictor.generate(df=df, matches=matches)
+
+            new_league_ratings = self._optimize_start_ratings(df, match_predictor=match_predictor)
+
+    def _optimize_start_ratings(self, df: pd.DataFrame, match_predictor: MatchPredictor) -> dict[str, float]:
+        player_rating_generator = match_predictor.rating_generator.team_rating_generator.player_rating_generator
+        new_start_ratings = match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator.league_ratings
 
         league_rating_changes = (df
         .groupby([RatingColumnNames.player_league, RatingColumnNames.opponent_league])
@@ -218,7 +241,7 @@ class StartRatingTuner():
                     continue
 
                 start_rating_diff = new_start_ratings[league] - new_start_ratings[opp_league]
-                expected_start_rating_diff = h2h.mean_rating_change * self.player_rating_generator.rating_change_multiplier * 0.4
+                expected_start_rating_diff = h2h.mean_rating_change * player_rating_generator.rating_change_multiplier * 0.4
                 new_start_ratings[league] += (expected_start_rating_diff - start_rating_diff) * h2h.weight * 0.5
 
         return new_start_ratings
