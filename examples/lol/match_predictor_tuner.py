@@ -27,8 +27,8 @@ column_names = ColumnNames(
     league='league'
 )
 file_names = [
-   # "2018_LoL.csv",
-  #  "2019_LoL.csv",
+    # "2018_LoL.csv",
+    #  "2019_LoL.csv",
     "2020_LoL.csv",
     "2021_LoL.csv",
     "2022_LoL.csv",
@@ -41,7 +41,10 @@ for index, file_name in enumerate(file_names):
     dfs.append(df)
 
 df = pd.concat(dfs, ignore_index=True)
-df = df[df['league'] != 'UPL']
+df = df[df['league'] != 'UPL'][['gameid', 'league', 'date', 'teamname', 'playername', 'result',
+                                'gamelength', 'totalgold', 'teamkills', 'teamdeaths', 'position',
+                                'damagetochampions',
+                                'champion', 'kills', 'assists', 'deaths']]
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 
 df = (
@@ -90,8 +93,8 @@ search_ranges = [
     ParameterSearchRange(
         name='rating_change_multiplier',
         type='uniform',
-        low=40,
-        high=240
+        low=30,
+        high=140
     ),
 ]
 
@@ -208,17 +211,20 @@ search_range = [ParameterSearchRange(
     low=0.12,
     high=.4,
 )]
-start_rating_tuner = StartRatingTuner(column_names=column_names, match_predictor=match_predictor, n_trials=2,
+start_rating_tuner = StartRatingTuner(column_names=column_names,
+                                      match_predictor=match_predictor,
+                                      iterations=3,
+                                      n_trials=2,
                                       search_ranges=search_range)
 
 player_rating_tuner = PlayerRatingTuner(match_predictor=match_predictor,
                                         search_ranges=search_ranges,
-                                        n_trials=3
+                                        n_trials=60
                                         )
 
 pre_transformer_tuner = PreTransformerTuner(match_predictor=match_predictor,
                                             pre_transformer_search_ranges=pre_transformer_search_ranges,
-                                            n_trials=3
+                                            n_trials=15
                                             )
 
 tuner = MatchPredictorTuner(pre_transformer_tuner=pre_transformer_tuner,

@@ -54,33 +54,6 @@ def add_hyperparams_to_common_transformers(object: object, params: dict[str, Uni
                                                 parameter_search_range=parameter_search_range)
 
 
-def pre_transformer_objective(trial: BaseTrial,
-                              df: pd.DataFrame,
-                              pre_transformer_search_ranges: list[
-                                  Tuple[BaseTransformer, list[ParameterSearchRange]]],
-                              match_predictor: MatchPredictor,
-                              scorer: BaseScorer
-
-                              ) -> float:
-    pre_rating_transformers = []
-    for transformer, parameter_search_range in pre_transformer_search_ranges:
-        transformer_params = list(
-            inspect.signature(transformer.__class__.__init__).parameters.keys())[1:]
-        params = {attr: getattr(transformer, attr) for attr in
-                  dir(transformer) if
-                  attr in transformer_params}
-        params = add_hyperparams_to_common_transformers(object=transformer, params=params, trial=trial,
-                                                        parameter_search_range=parameter_search_range)
-        class_transformer = type(transformer)
-        pre_rating_transformers.append(class_transformer(**params))
-
-    match_predictor = copy.deepcopy(match_predictor)
-    match_predictor.pre_rating_transformers = pre_rating_transformers
-
-    df = match_predictor.generate(df=df)
-    return scorer.score(df)
-
-
 class PreTransformerTuner(TransformerTuner):
 
     def __init__(self,
@@ -104,6 +77,32 @@ class PreTransformerTuner(TransformerTuner):
 
     def tune(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> list[BaseTransformer]:
 
+        def objective(trial: BaseTrial,
+                      df: pd.DataFrame,
+                      pre_transformer_search_ranges: list[
+                          Tuple[BaseTransformer, list[ParameterSearchRange]]],
+                      match_predictor: MatchPredictor,
+                      scorer: BaseScorer
+
+                      ) -> float:
+            pre_rating_transformers = []
+            for transformer, parameter_search_range in pre_transformer_search_ranges:
+                transformer_params = list(
+                    inspect.signature(transformer.__class__.__init__).parameters.keys())[1:]
+                params = {attr: getattr(transformer, attr) for attr in
+                          dir(transformer) if
+                          attr in transformer_params}
+                params = add_hyperparams_to_common_transformers(object=transformer, params=params, trial=trial,
+                                                                parameter_search_range=parameter_search_range)
+                class_transformer = type(transformer)
+                pre_rating_transformers.append(class_transformer(**params))
+
+            match_predictor = copy.deepcopy(match_predictor)
+            match_predictor.pre_rating_transformers = pre_rating_transformers
+
+            df = match_predictor.generate(df=df)
+            return scorer.score(df)
+
         best_transformers = []
         direction = "minimize"
         study_name = "optuna_study"
@@ -112,8 +111,8 @@ class PreTransformerTuner(TransformerTuner):
         study = optuna.create_study(direction=direction, study_name=study_name, sampler=sampler)
         callbacks = []
         study.optimize(
-            lambda trial: pre_transformer_objective(trial, df, self.pre_transformer_search_ranges, self.match_predictor,
-                                                    self.scorer), n_trials=self.n_trials, callbacks=callbacks)
+            lambda trial: objective(trial, df, self.pre_transformer_search_ranges, self.match_predictor,
+                                    self.scorer), n_trials=self.n_trials, callbacks=callbacks)
 
         best_params = study.best_params
         for transformer, search_range in self.pre_transformer_search_ranges:

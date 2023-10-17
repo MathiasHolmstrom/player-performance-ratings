@@ -67,18 +67,21 @@ class MatchPredictor():
             )
             self.rating_generator = match_generator_factory.create()
 
+
+
     def generate(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> pd.DataFrame:
+
         for pre_rating_transformer in self.pre_rating_transformers:
             df = pre_rating_transformer.transform(df)
 
         if self.train_split_date is None:
             self.train_split_date = df.iloc[int(len(df) / 1.3)][self.column_names.start_date]
 
-        if matches is None:
+        if not matches:
             match_generator = MatchGenerator(column_names=self.column_names)
-            matches = match_generator.generate(df=df)
+            _matches = match_generator.generate(df=df)
 
-        match_ratings = self.rating_generator.generate(matches)
+        match_ratings = self.rating_generator.generate(_matches)
         for rating_feature, values in match_ratings.items():
             df[rating_feature] = values
 

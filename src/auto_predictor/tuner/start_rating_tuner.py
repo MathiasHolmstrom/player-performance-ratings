@@ -55,7 +55,7 @@ class StartRatingTuner():
         self.n_trials = n_trials
         self.match_predictor = match_predictor
         self.search_ranges = search_ranges
-        self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target, weight_cross_league=2,
+        self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target, weight_cross_league=1.5,
                                               pred_column=self.match_predictor.predictor.pred_column)
 
         self.column_names = column_names
@@ -80,7 +80,7 @@ class StartRatingTuner():
             matches = match_generator.generate(df=df)
 
         new_league_ratings = {}
-        best_models = []
+        all_params = []
         for iteration in range(self.iterations + 1):
 
             if self.search_ranges is None:
@@ -90,7 +90,7 @@ class StartRatingTuner():
                 df = match_predictor.generate(df=df)
                 score = self.scorer.score(df)
                 self._scores.append(score)
-                best_models.append(StartRatingGenerator(**new_league_ratings))
+                all_params.append(new_league_ratings)
 
             else:
                 direction = "minimize"
@@ -103,12 +103,12 @@ class StartRatingTuner():
                                n_trials=self.n_trials, callbacks=callbacks)
                 best_params= study.best_params
                 best_params['league_ratings'] = new_league_ratings
-                best_models.append(StartRatingGenerator(**best_params))
+                all_params.append(best_params)
                 self._scores.append(study.best_value)
 
             if iteration == self.iterations:
                 min_idx = self._scores.index(min(self._scores))
-                return best_models[min_idx]
+                return StartRatingGenerator(**all_params[min_idx])
 
 
             start_rating_generator = StartRatingGenerator(**study.best_params)
