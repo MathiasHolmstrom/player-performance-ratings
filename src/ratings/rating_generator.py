@@ -3,7 +3,7 @@ from typing import Optional
 import numpy as np
 
 from src.ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PostMatchRating, MatchRating, \
-    MatchRatings, PostMatchTeamRating
+    MatchRatings, PostMatchTeamRating, PlayerRating, TeamRating
 from src.ratings.enums import RatingColumnNames
 from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
 
@@ -44,8 +44,8 @@ class RatingGenerator():
                     match_ids.append(match.id)
 
         return {
-            RatingColumnNames.rating_difference:np.array(pre_match_team_rating_values) - (
-            pre_match_opponent_rating_values),
+            RatingColumnNames.rating_difference: np.array(pre_match_team_rating_values) - (
+                pre_match_opponent_rating_values),
             RatingColumnNames.player_league: player_leagues,
             RatingColumnNames.opponent_league: team_opponent_leagues,
             RatingColumnNames.player_rating: pre_match_player_rating_values,
@@ -55,6 +55,7 @@ class RatingGenerator():
             RatingColumnNames.opponent_rating: pre_match_opponent_rating_values
 
         }
+
     def _create_match_rating(self, match: Match) -> MatchRating:
 
         pre_match_rating = PreMatchRating(
@@ -78,7 +79,7 @@ class RatingGenerator():
         pre_match_team_ratings = []
         for match_team in match.teams:
             pre_match_team_ratings.append(self.team_rating_generator.pre_match_rating(
-                team=match_team, match=match))
+                match_team=match_team, match=match))
 
         return pre_match_team_ratings
 
@@ -95,3 +96,23 @@ class RatingGenerator():
         if len(match.teams) < 2:
             print(f"{match.id} only contains {len(match.teams)} teams")
             raise ValueError
+
+    @property
+    def player_ratings(self) -> dict[str, PlayerRating]:
+        return dict(sorted(self.team_rating_generator.player_rating_generator.player_ratings.items(),
+                           key=lambda item: item[1].rating_value, reverse=True))
+
+    @property
+    def team_ratings(self) -> list[TeamRating]:
+        team_id_ratings: list[TeamRating] = []
+        teams = self.team_rating_generator.teams
+        player_ratings = self.player_ratings
+        for id, team in teams.items():
+            team_player_ratings = [player_ratings[p] for p in team.player_ids]
+            team_rating_value = sum([p.rating_value for p in team_player_ratings]) / len(team_player_ratings)
+            team_id_ratings.append(TeamRating(id=team.id, name=team.name, players=team_player_ratings,
+                                              last_match_day_number=team.last_match_day_number,
+                                              rating_value=team_rating_value))
+
+        return list(sorted(team_id_ratings,
+                           key=lambda team: team.rating_value, reverse=True))

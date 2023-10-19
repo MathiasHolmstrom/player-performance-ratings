@@ -1,15 +1,11 @@
 import copy
-from typing import Any, Optional
+from typing import Optional
 
-from src.ratings.enums import PredictedRatingMethod
-from src.ratings.league_identifier import LeagueIdentifier
-
-from src.ratings.match_rating.match_rating_calculator import RatingMeanPerformancePredictor, \
-    PerformancePredictor
+from src.ratings.match_rating.match_rating_calculator import PerformancePredictor
 from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerator
 from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
 from src.ratings.rating_generator import RatingGenerator
-from src.ratings.start_rating_calculator import StartRatingGenerator
+from src.ratings.match_rating.start_rating_calculator import StartRatingGenerator
 
 
 class RatingGeneratorFactory():

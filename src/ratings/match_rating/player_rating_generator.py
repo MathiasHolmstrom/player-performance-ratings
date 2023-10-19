@@ -1,11 +1,11 @@
 import logging
 import math
-from typing import Dict, Union, Optional
+from typing import Dict, Optional
 
-from src.ratings.data_structures import Match, MatchPlayer, PlayerRating, MatchTeam, \
-    PreMatchTeamRating, PreMatchPlayerRating, PostMatchPlayerRating
+from src.ratings.data_structures import Match, MatchPlayer, PlayerRating, PreMatchTeamRating, PreMatchPlayerRating, \
+    PostMatchPlayerRating
 from src.ratings.match_rating.match_rating_calculator import PerformancePredictor
-from src.ratings.start_rating_calculator import StartRatingGenerator
+from src.ratings.match_rating.start_rating_calculator import StartRatingGenerator
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 MODIFIED_RATING_CHANGE_CONSTANT = 1
@@ -30,18 +30,24 @@ class PlayerRatingGenerator():
                  min_rating_change_multiplier_ratio: float = 0.1,
                  reference_certain_sum_value: float = 3,
                  rating_change_multiplier: float = 50,
+                 league_rating_adjustor_multiplier: float = 1,
+                 league_rating_change_sum_count: int = 0
                  ):
         self.certain_weight = certain_weight
         self.certain_days_ago_multiplier = certain_days_ago_multiplier
-        #TODO implement below
+        # TODO implement below
         self.min_rating_change_for_league = min_rating_change_for_league
         self.certain_value_denom = certain_value_denom
         self.min_rating_change_multiplier_ratio = min_rating_change_multiplier_ratio
         self.reference_certain_sum_value = reference_certain_sum_value
         self.rating_change_multiplier = rating_change_multiplier
         self.max_certain_sum = max_certain_sum
+        self.league_rating_adjustor_multiplier = league_rating_adjustor_multiplier
+        self.league_rating_change_sum_count = league_rating_change_sum_count
         self.max_days_ago = max_days_ago
         self.player_ratings: Dict[str, PlayerRating] = {}
+        self._league_rating_changes: dict[str, float] = {}
+        self._league_rating_changes_count: dict[str, float] = {}
         self.performance_predictor = performance_predictor or PerformancePredictor()
         self.start_rating_generator = start_rating_generator or StartRatingGenerator()
 
@@ -118,6 +124,26 @@ class PlayerRatingGenerator():
             rating_value=self.player_ratings[id].rating_value,
             predicted_performance=predicted_performance
         )
+
+    def _update_league_ratings(self,
+                               pre_match_player_rating: PreMatchPlayerRating,
+                               post_match_team_rating: PostMatchPlayerRating,
+                               ):
+
+        league = pre_match_player_rating.league
+
+        if league not in self._league_rating_changes:
+            self._league_rating_changes[pre_match_player_rating.league] = 0
+
+        pre_match_player = pre_match_player_rating
+        rating_change = post_match_team_rating.rating_value - pre_match_player.rating_value
+        self._league_rating_changes[pre_match_player_rating.league] += rating_change
+
+        if self._league_rating_changes[league] > self.league_rating_change_sum_count:
+            for player_id in self.start_rating_generator.league_to_entity_ids[league]:
+                self.player_ratings[player_id].rating_value += self.league_rating_adjustor_multiplier
+
+            self._league_rating_changes[league] = 0
 
     def _calculate_rating_change_multiplier(self,
                                             entity_id: str,

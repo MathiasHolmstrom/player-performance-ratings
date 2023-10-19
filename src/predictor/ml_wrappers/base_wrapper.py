@@ -11,7 +11,7 @@ class BaseMLWrapper(ABC):
         pass
 
     @abstractmethod
-    def add_prediction(self, df: pd.DataFrame) -> None:
+    def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
         pass
 
     @property

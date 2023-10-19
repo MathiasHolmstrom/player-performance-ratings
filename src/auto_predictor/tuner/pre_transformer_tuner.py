@@ -1,29 +1,16 @@
 import copy
 import inspect
-import logging
-from dataclasses import dataclass
-from typing import Optional, Match, Tuple, Literal, Union, Any
+from typing import Optional, Match, Tuple, Union
 
 import optuna
 import pandas as pd
-import pendulum
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
-from src.auto_predictor.tuner.base_tuner import BaseTuner, ParameterSearchRange, add_custom_hyperparams, \
+from src.auto_predictor.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams, \
     TransformerTuner
 from src.predictor.match_predictor import MatchPredictor
-from src.predictor.ml_wrappers.base_wrapper import BaseMLWrapper
-from src.ratings.data_prepararer import MatchGenerator
-from src.ratings.data_structures import ColumnNames
 from src.ratings.enums import RatingColumnNames
-from src.ratings.factory.match_generator_factory import RatingGeneratorFactory
-from src.ratings.league_identifier import LeagueIdentifier
-from src.ratings.match_rating.match_rating_calculator import PerformancePredictor
-from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerator
-from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
-from src.ratings.rating_generator import RatingGenerator
-from src.ratings.start_rating_calculator import StartRatingGenerator
 from src.scorer.base_score import BaseScorer, LogLossScorer
 from src.transformers import BaseTransformer
 from src.transformers.common import ColumnWeight
@@ -82,8 +69,7 @@ class PreTransformerTuner(TransformerTuner):
                       pre_transformer_search_ranges: list[
                           Tuple[BaseTransformer, list[ParameterSearchRange]]],
                       match_predictor: MatchPredictor,
-                      scorer: BaseScorer
-
+                      scorer: BaseScorer,
                       ) -> float:
             pre_rating_transformers = []
             for transformer, parameter_search_range in pre_transformer_search_ranges:

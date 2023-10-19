@@ -1,5 +1,7 @@
+import json
 from dataclasses import dataclass
 from typing import Dict, List, Optional
+from dataclasses_json import DataClassJsonMixin
 
 
 @dataclass
@@ -13,7 +15,6 @@ class ColumnNames:
     participation_weight: str = None
     projected_participation_weight: str = None
     team_players_percentage_playing_time: str = None
-
 
 
 @dataclass
@@ -33,14 +34,32 @@ class MatchPerformance:
 
 
 @dataclass
-class PlayerRating:
+class PlayerRating(DataClassJsonMixin):
     id: str
     rating_value: float
+    name: Optional[str] = None
     games_played: int = 0
     last_match_day_number: int = None
     certain_ratio: float = 0
     certain_sum: float = 0
     prev_rating_changes: List[float] = None
+
+@dataclass
+class Team:
+    id: str
+    player_ids: list[str]
+    last_match_day_number: int
+    name: Optional[str] = None
+
+
+@dataclass
+class TeamRating(DataClassJsonMixin):
+    id: str
+    name: str
+    rating_value: float
+    players: list[PlayerRating]
+    games_played: int = 0
+    last_match_day_number: int = None
 
 
 @dataclass

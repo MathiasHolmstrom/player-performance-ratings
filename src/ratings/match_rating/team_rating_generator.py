@@ -1,7 +1,7 @@
 from typing import Tuple, List, Optional
 
 from src.ratings.data_structures import MatchPlayer, MatchTeam, PreMatchPlayerRating, Match, PreMatchTeamRating, \
-    PostMatchTeamRating
+    PostMatchTeamRating, Team
 from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerator
 
 
@@ -14,20 +14,27 @@ class TeamRatingGenerator():
                  ):
         self.player_rating_generator = player_rating_generator or PlayerRatingGenerator()
         self.min_match_count = min_match_count
+        self._teams: dict[str, Team] = {}
 
-    def pre_match_rating(self, match: Match, team: MatchTeam) -> PreMatchTeamRating:
+    def pre_match_rating(self, match: Match, match_team: MatchTeam) -> PreMatchTeamRating:
+
+        self._teams[match_team.id] = Team(
+            id=match_team.id,
+            last_match_day_number=match.day_number,
+            player_ids=[p.id for p in match_team.players]
+        )
 
         pre_match_player_ratings, pre_match_player_rating_values, new_players = self._get_pre_match_player_ratings_and_new_players(
-            team=team)
+            team=match_team)
         tot_player_game_count = sum([p.games_played for p in pre_match_player_ratings])
         if len(new_players) == 0:
             return PreMatchTeamRating(
-                id=team.id,
+                id=match_team.id,
                 players=pre_match_player_ratings,
                 rating_value=sum(pre_match_player_rating_values) / len(pre_match_player_rating_values),
                 projected_rating_value=sum([p.projected_rating_value for p in pre_match_player_ratings]) / len(
                     pre_match_player_ratings),
-                league=team.league
+                league=match_team.league
             )
 
         elif tot_player_game_count < self.min_match_count:
@@ -39,12 +46,12 @@ class TeamRatingGenerator():
                                                                                    existing_team_rating=existing_team_rating)
         pre_match_player_ratings += new_player_pre_match_ratings
         return PreMatchTeamRating(
-            id=team.id,
+            id=match_team.id,
             players=pre_match_player_ratings,
             rating_value=sum([p.rating_value for p in pre_match_player_ratings]) / len(pre_match_player_ratings),
             projected_rating_value=sum([p.projected_rating_value for p in pre_match_player_ratings]) / len(
                 pre_match_player_ratings),
-            league=team.league
+            league=match_team.league
         )
 
     def _get_pre_match_player_ratings_and_new_players(self, team: MatchTeam) -> Tuple[
@@ -112,3 +119,7 @@ class TeamRatingGenerator():
             rating_value=sum_post_team_rating / sum_participation_weight,
             predicted_performance=sum_predicted_performance / sum_participation_weight,
         )
+
+    @property
+    def teams(self) -> dict[str, Team]:
+        return self._teams

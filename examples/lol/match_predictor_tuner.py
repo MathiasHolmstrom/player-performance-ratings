@@ -1,5 +1,7 @@
 import os
+import pickle
 
+import joblib
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
@@ -28,7 +30,7 @@ column_names = ColumnNames(
 )
 file_names = [
     # "2018_LoL.csv",
-    #  "2019_LoL.csv",
+    "2019_LoL.csv",
     "2020_LoL.csv",
     "2021_LoL.csv",
     "2022_LoL.csv",
@@ -143,8 +145,8 @@ player_search_ranges = [
     ParameterSearchRange(
         name='rating_change_multiplier',
         type='uniform',
-        low=40,
-        high=240
+        low=30,
+        high=100
     )
 ]
 
@@ -178,7 +180,7 @@ column_weigher_search_range = [
     ParameterSearchRange(
         name='team_duration_performance',
         type='uniform',
-        low=0.15,
+        low=0.25,
         high=0.85
     ),
 ]
@@ -205,30 +207,41 @@ match_predictor = MatchPredictor(
     pre_rating_transformers=pre_transformers,
 )
 
-search_range = [ParameterSearchRange(
-    name='team_weight',
-    type='uniform',
-    low=0.12,
-    high=.4,
-)]
-start_rating_tuner = StartRatingTuner(column_names=column_names,
-                                      match_predictor=match_predictor,
-                                      iterations=3,
-                                      n_trials=2,
-                                      search_ranges=search_range)
-
-player_rating_tuner = PlayerRatingTuner(match_predictor=match_predictor,
-                                        search_ranges=search_ranges,
-                                        n_trials=60
-                                        )
-
+search_range = [
+    ParameterSearchRange(
+        name='team_weight',
+        type='uniform',
+        low=0.12,
+        high=.4,
+    ),
+    ParameterSearchRange(
+        name='team_rating_subtract',
+        type='uniform',
+        low=70,
+        high=400,
+    )
+]
 pre_transformer_tuner = PreTransformerTuner(match_predictor=match_predictor,
                                             pre_transformer_search_ranges=pre_transformer_search_ranges,
                                             n_trials=15
                                             )
 
-tuner = MatchPredictorTuner(pre_transformer_tuner=pre_transformer_tuner,
-                            player_rating_tuner=player_rating_tuner,
-                            start_rating_tuner=start_rating_tuner,
-                            )
-tuner.tune(df=df)
+player_rating_tuner = PlayerRatingTuner(match_predictor=match_predictor,
+                                        search_ranges=search_ranges,
+                                        n_trials=35
+                                        )
+
+start_rating_tuner = StartRatingTuner(column_names=column_names,
+                                      match_predictor=match_predictor,
+                                      max_iterations=4,
+                                      n_trials=3,
+                                      search_ranges=search_range)
+
+tuner = MatchPredictorTuner(
+    pre_transformer_tuner=pre_transformer_tuner,
+    player_rating_tuner=player_rating_tuner,
+    start_rating_tuner=start_rating_tuner,
+    fit_best=True,
+)
+best_match_predictor = tuner.tune(df=df)
+pickle.dump(best_match_predictor, open("models/lol_match_predictor", 'wb'))

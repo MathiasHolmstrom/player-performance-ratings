@@ -35,7 +35,7 @@ class StartRatingGenerator():
 
         self.league_to_last_day_number: Dict[str, List[Any]] = {}
         self.league_to_entity_ids: Dict[str, List[str]] = {}
-        self.league_entity_ratings: dict[str, list] = {}
+        self.league_player_ratings: dict[str, list] = {}
         self.entity_to_league: Dict[str, str] = {}
 
     def generate_rating_value(self,
@@ -52,8 +52,8 @@ class StartRatingGenerator():
             self.league_to_entity_ids[league] = []
             self.league_to_last_day_number[league] = []
 
-        if league not in self.league_entity_ratings:
-            self.league_entity_ratings[league] = []
+        if league not in self.league_player_ratings:
+            self.league_player_ratings[league] = []
 
         if team_rating is None:
             team_weight = 0
@@ -91,7 +91,7 @@ class StartRatingGenerator():
             days_ago = match_day_number - last_day_number
 
             if days_ago <= self.max_days_ago_league_entities:
-                entity_ratings.append(self.league_entity_ratings[
+                entity_ratings.append(self.league_player_ratings[
                                           league][index])
 
         return entity_ratings
@@ -110,12 +110,12 @@ class StartRatingGenerator():
 
         id = pre_match_player_rating.id
         if league not in self.league_to_entity_ids:
-            self.league_entity_ratings[league] = []
+            self.league_player_ratings[league] = []
             self.league_to_entity_ids[league] = []
             self.league_to_last_day_number[league] = []
 
         if id not in self.league_to_entity_ids[league]:
-            self.league_entity_ratings[league].append(rating_value)
+            self.league_player_ratings[league].append(rating_value)
 
             self.league_to_entity_ids[league].append(id)
             self.league_to_last_day_number[league].append(day_number)
@@ -124,7 +124,7 @@ class StartRatingGenerator():
             index = self.league_to_entity_ids[league].index(id)
             self.league_to_last_day_number[league][index] = day_number
 
-            self.league_entity_ratings[league][index] = \
+            self.league_player_ratings[league][index] = \
                 rating_value
 
         current_entity_league = self.entity_to_league[id]
@@ -132,10 +132,10 @@ class StartRatingGenerator():
         if league != current_entity_league:
             entity_index = self.league_to_entity_ids[current_entity_league].index(id)
 
-            self.league_entity_ratings[current_entity_league] = \
-                self.league_entity_ratings[
+            self.league_player_ratings[current_entity_league] = \
+                self.league_player_ratings[
                     current_entity_league][:entity_index] + \
-                self.league_entity_ratings[
+                self.league_player_ratings[
                     current_entity_league][entity_index + 1:]
 
             self.league_to_last_day_number[current_entity_league] = \

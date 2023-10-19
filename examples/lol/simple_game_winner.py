@@ -4,7 +4,10 @@ from src.predictor.match_predictor import MatchPredictor
 from src.ratings.data_structures import ColumnNames
 from sklearn.metrics import log_loss
 
-from src.ratings.start_rating_calculator import StartRatingGenerator
+from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerator
+from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
+from src.ratings.rating_generator import RatingGenerator
+from src.ratings.match_rating.start_rating_calculator import StartRatingGenerator
 
 df = pd.read_csv("data/2023_LoL.csv")
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
@@ -42,7 +45,15 @@ start_rating_generator = StartRatingGenerator(
                           'AL': 1100,
                           })
 
-match_predictor = MatchPredictor(column_names=column_names, start_rating_generator=start_rating_generator)
+rating_generator = RatingGenerator(
+    team_rating_generator=TeamRatingGenerator(
+        player_rating_generator=PlayerRatingGenerator(
+            start_rating_generator=start_rating_generator
+        )
+    )
+)
+
+match_predictor = MatchPredictor(column_names=column_names, rating_generator=rating_generator)
 df = match_predictor.generate(df)
 
 print(log_loss(df['result'], df[match_predictor.predictor.pred_column]))
