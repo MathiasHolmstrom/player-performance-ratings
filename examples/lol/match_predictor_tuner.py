@@ -185,17 +185,17 @@ start_rating_search_range = [
 
 pre_transformer_tuner = PreTransformerTuner(match_predictor=match_predictor,
                                             pre_transformer_search_ranges=pre_transformer_search_ranges,
-                                            n_trials=1
+                                            n_trials=15
                                             )
 
 player_rating_tuner = PlayerRatingTuner(match_predictor=match_predictor,
                                         search_ranges=player_search_ranges,
-                                        n_trials=1
+                                        n_trials=20
                                         )
 
 start_rating_tuner = StartRatingTuner(column_names=column_names,
                                       match_predictor=match_predictor,
-                                      n_trials=8,
+                                      n_trials=15,
                                       search_ranges=start_rating_search_range)
 
 tuner = MatchPredictorTuner(
