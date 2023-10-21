@@ -1,5 +1,3 @@
-import pandas as pd
-
 from examples.utils import load_data
 from src.ratings.data_structures import ColumnNames
 

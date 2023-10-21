@@ -1,5 +1,3 @@
-import pandas as pd
-
 from examples.utils import load_data
 from src.predictor.match_predictor import MatchPredictor
 from src.ratings.data_structures import ColumnNames

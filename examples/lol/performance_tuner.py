@@ -1,6 +1,3 @@
-import numpy as np
-import pandas as pd
-from sklearn.metrics import log_loss
 from sklearn.preprocessing import StandardScaler
 
 from examples.lol.custom_performance import DurationPerformanceGenerator, \
