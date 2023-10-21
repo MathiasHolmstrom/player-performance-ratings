@@ -3,8 +3,8 @@ from sklearn.preprocessing import StandardScaler
 from examples.lol.custom_performance import DurationPerformanceGenerator, LolPlayerPerformanceGenerator, \
     FinalLolTransformer
 from examples.utils import load_data
-from src.auto_predictor.tuner.base_tuner import ParameterSearchRange
-from src.auto_predictor.tuner.player_rating_tuner import PlayerRatingTuner
+from src.tuner.base_tuner import ParameterSearchRange
+from src.tuner.player_rating_tuner import PlayerRatingTuner
 from src.predictor.match_predictor import MatchPredictor
 from src.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
 from src.ratings.data_structures import ColumnNames

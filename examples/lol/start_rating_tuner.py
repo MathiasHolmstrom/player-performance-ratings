@@ -5,9 +5,9 @@ from sklearn.preprocessing import StandardScaler
 
 from examples.lol.custom_performance import DurationPerformanceGenerator, LolPlayerPerformanceGenerator, \
     FinalLolTransformer
-from src.auto_predictor.optimizer.start_rating_optimizer import StartLeagueRatingOptimizer
-from src.auto_predictor.tuner import StartRatingTuner
-from src.auto_predictor.tuner.base_tuner import ParameterSearchRange
+from src.tuner.optimizer.start_rating_optimizer import StartLeagueRatingOptimizer
+from src.tuner import StartRatingTuner
+from src.tuner.base_tuner import ParameterSearchRange
 from src.predictor.match_predictor import MatchPredictor
 from src.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
 from src.ratings.data_structures import ColumnNames

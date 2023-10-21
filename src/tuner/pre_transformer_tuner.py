@@ -7,7 +7,7 @@ import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
-from src.auto_predictor.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams, \
+from src.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams, \
     TransformerTuner
 from src.predictor.match_predictor import MatchPredictor
 from src.ratings.enums import RatingColumnNames

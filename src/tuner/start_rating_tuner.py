@@ -7,8 +7,8 @@ import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
-from src.auto_predictor.optimizer.start_rating_optimizer import StartLeagueRatingOptimizer
-from src.auto_predictor.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams
+from src.tuner.optimizer.start_rating_optimizer import StartLeagueRatingOptimizer
+from src.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams
 from src.predictor.match_predictor import MatchPredictor
 from src.ratings.data_structures import ColumnNames, Match
 from src.ratings.enums import RatingColumnNames

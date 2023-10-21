@@ -3,11 +3,10 @@ from typing import Optional
 
 import optuna
 import pandas as pd
-import pendulum
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
-from src.auto_predictor.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams
+from src.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams
 from src.predictor.match_predictor import MatchPredictor
 from src.ratings.data_structures import  Match
 from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerator

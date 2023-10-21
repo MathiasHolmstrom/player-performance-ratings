@@ -3,9 +3,9 @@ from typing import Optional
 
 import pandas as pd
 
-from src.auto_predictor.tuner import StartRatingTuner
-from src.auto_predictor.tuner.player_rating_tuner import PlayerRatingTuner
-from src.auto_predictor.tuner.pre_transformer_tuner import PreTransformerTuner
+from src.tuner import StartRatingTuner
+from src.tuner.player_rating_tuner import PlayerRatingTuner
+from src.tuner.pre_transformer_tuner import PreTransformerTuner
 from src.predictor.match_predictor import MatchPredictor
 from src.ratings.data_prepararer import MatchGenerator
 

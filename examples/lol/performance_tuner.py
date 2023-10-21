@@ -3,8 +3,8 @@ from sklearn.preprocessing import StandardScaler
 from examples.lol.custom_performance import DurationPerformanceGenerator, \
     LolPlayerPerformanceGenerator, FinalLolTransformer
 from examples.utils import load_data
-from src.auto_predictor.tuner import PreTransformerTuner
-from src.auto_predictor.tuner.pre_transformer_tuner import ParameterSearchRange
+from src.tuner import PreTransformerTuner
+from src.tuner.pre_transformer_tuner import ParameterSearchRange
 from src.predictor.match_predictor import MatchPredictor
 from src.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
 from src.ratings.data_structures import ColumnNames
@@ -12,9 +12,9 @@ from src.ratings.enums import RatingColumnNames
 from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerator
 from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
 from src.ratings.rating_generator import RatingGenerator
-from src.transformers import BaseTransformer, ColumnsWeighter
+from src.transformers import ColumnsWeighter
 
-from src.transformers.common import MinMaxTransformer, ColumnWeight, SkLearnTransformerWrapper
+from src.transformers.common import MinMaxTransformer, SkLearnTransformerWrapper
 
 if __name__ == '__main__':
     column_names = ColumnNames(
