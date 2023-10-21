@@ -30,8 +30,8 @@ class PlayerRatingGenerator():
                  min_rating_change_multiplier_ratio: float = 0.1,
                  reference_certain_sum_value: float = 3,
                  rating_change_multiplier: float = 50,
-                 league_rating_adjustor_multiplier: float = 1,
-                 league_rating_change_sum_count: int = 0
+                 league_rating_adjustor_multiplier: float = 5,
+                 league_rating_change_sum_count: int = 250
                  ):
         self.certain_weight = certain_weight
         self.certain_days_ago_multiplier = certain_days_ago_multiplier
@@ -119,29 +119,38 @@ class PlayerRatingGenerator():
                                                           pre_match_player_rating=pre_match_player_rating,
                                                           rating_value=self.player_ratings[id].rating_value)
 
-        return PostMatchPlayerRating(
+        post_match_player_rating = PostMatchPlayerRating(
             id=pre_match_player_rating.id,
             rating_value=self.player_ratings[id].rating_value,
             predicted_performance=predicted_performance
         )
 
+        self._update_league_ratings(pre_match_player_rating=pre_match_player_rating,
+                                    post_match_player_rating=post_match_player_rating)
+
+        return post_match_player_rating
+
     def _update_league_ratings(self,
                                pre_match_player_rating: PreMatchPlayerRating,
-                               post_match_team_rating: PostMatchPlayerRating,
+                               post_match_player_rating: PostMatchPlayerRating,
                                ):
 
         league = pre_match_player_rating.league
 
         if league not in self._league_rating_changes:
             self._league_rating_changes[pre_match_player_rating.league] = 0
+            self._league_rating_changes_count[league] = 0
 
         pre_match_player = pre_match_player_rating
-        rating_change = post_match_team_rating.rating_value - pre_match_player.rating_value
+        rating_change = post_match_player_rating.rating_value - pre_match_player.rating_value
         self._league_rating_changes[pre_match_player_rating.league] += rating_change
+        self._league_rating_changes_count[league] += 1
 
-        if self._league_rating_changes[league] > self.league_rating_change_sum_count:
+        if self._league_rating_changes[league] > abs(self.league_rating_change_sum_count):
             for player_id in self.start_rating_generator.league_to_entity_ids[league]:
-                self.player_ratings[player_id].rating_value += self.league_rating_adjustor_multiplier
+                mean_rating_change = self._league_rating_changes[league] / self._league_rating_changes_count[league]
+                self.player_ratings[
+                    player_id].rating_value += mean_rating_change * self.league_rating_adjustor_multiplier
 
             self._league_rating_changes[league] = 0
 

@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
@@ -16,8 +18,27 @@ from src.ratings.rating_generator import RatingGenerator
 from src.transformers import MinMaxTransformer, ColumnsWeighter
 from src.transformers.common import SkLearnTransformerWrapper, ColumnWeight
 
-df = pd.read_csv("data/2023_LoL.csv")
+file_names = [
+    # "2018_LoL.csv",
+    "2019_LoL.csv",
+    "2020_LoL.csv",
+    "2021_LoL.csv",
+    "2022_LoL.csv",
+    "2023_LoL.csv"
+]
+dfs = []
+for index, file_name in enumerate(file_names):
+    full_path = os.path.join("data", file_name)
+    df = pd.read_csv(full_path)
+    dfs.append(df)
+
+df = pd.concat(dfs, ignore_index=True)
+df = df[df['league'] != 'UPL'][['gameid', 'league', 'date', 'teamname', 'playername', 'result',
+                                'gamelength', 'totalgold', 'teamkills', 'teamdeaths', 'position',
+                                'damagetochampions',
+                                'champion', 'kills', 'assists', 'deaths']]
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
+
 
 df = (
     df.loc[lambda x: x.position != 'team']
@@ -100,27 +121,12 @@ search_range = [
     )
 ]
 
-start_rating_parameters = {
-    'league_ratings': {
-        'LFL2': 995.3690978570788, 'DDH': 1001.6972563977271, 'EL': 1001.9623801765927,
-        'LPL': 1193.0036543233155, 'GL': 972.0860804918582, 'LCKC': 1047.1402570481089, 'NEXO': 891.655203212699,
-        'UL': 940.8878432041025, 'LVP SL': 1081.4615017055773, 'LCK': 1154.8937930743673, 'LFL': 1069.6820198639168,
-        'PRM': 1083.1975832498783, 'LMF': 943.49789088995, 'SL (LATAM)': 814.6748295855517, 'VL': 841.8126766232117,
-        'CBLOL': 1005.8671690942587, 'LEC': 1074.558028243576, 'NACL': 1019.0726786568753, 'LCO': 822.4594339879523,
-        'CBLOLA': 898.7513037925586, 'LHE': 904.4400617161584, 'NLC': 956.2065299896113, 'GLL': 929.8384912191916,
-        'ESLOL': 884.3034129874928, 'LLA': 1097.8867133917997, 'EBL': 923.7731732694314, 'TCL': 1036.971705880626,
-        'PGN': 990.9156256948643, 'LPLOL': 895.1271163310976, 'LCS': 1076.694045068959, 'HM': 921.2211142189522,
-        'LJL': 939.969333778972, 'HC': 871.5986289844975, 'AL': 957.638651307455, 'PCS': 1044.872177953617,
-        'LDL': 1043.1029452803796, 'VCS': 964.1923669197374, 'EM': 838.7029865377992, 'LAS': 1002.5220624803582,
-        'LRN': 1021.1969680354867, 'LRS': 1088.9773334605372, 'LJLA': 967.8531921903349, 'CT': 971.3692074260497,
-        'EPL': 1493.4401321751918, 'CDF': 1053.5173594266287
-        , 'IC': 873.8968953062821, 'WLDs': 996.9654114054242}
-
-}
-
 start_rating_optimizer = StartLeagueRatingOptimizer(column_names=column_names, match_predictor=match_predictor)
 
-start_rating_tuner = StartRatingTuner(column_names=column_names, match_predictor=match_predictor, n_trials=4,
-                                      search_ranges=search_range, start_rating_parameters=start_rating_parameters,
-                                      start_rating_optimizer=start_rating_optimizer)
+start_rating_tuner = StartRatingTuner(column_names=column_names,
+                                      match_predictor=match_predictor,
+                                      n_trials=20,
+                                      search_ranges=search_range,
+                                      start_rating_optimizer=start_rating_optimizer
+                                      )
 start_rating_tuner.tune(df=df)

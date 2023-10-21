@@ -25,19 +25,23 @@ class StartLeagueRatingOptimizer():
 
     def __init__(self, column_names: ColumnNames,
                  match_predictor: MatchPredictor,
-                 max_iterations: int = 20,
+                 max_iterations: int = 25,
                  learning_step: int = 20,
                  scorer: Optional[BaseScorer] = None,
+                 weight_div: int = 500,
+                 indirect_weight: float = 1.5,
                  verbose: int = 1,
                  ):
         self.match_predictor = match_predictor
         self.max_iterations = max_iterations
         self.learning_step = learning_step
+        self.weight_div = weight_div
+        self.indirect_weight = indirect_weight
         self.column_names = column_names
         self.verbose = verbose
         self._scores = []
         self._league_ratings_iterations = []
-        self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target, weight_cross_league=1.5,
+        self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target, weight_cross_league=3,
                                               pred_column=self.match_predictor.predictor.pred_column)
 
     def optimize(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> dict[str, float]:
@@ -62,8 +66,14 @@ class StartLeagueRatingOptimizer():
             match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator = start_rating_generator
             df = match_predictor.generate(df=df, matches=matches)
             score = self.scorer.score(df)
+
+            if not league_ratings:
+                league_ratings = match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator.league_ratings
+
             self._league_ratings_iterations.append(league_ratings)
             self._scores.append(score)
+            if self.verbose:
+                logging.info(f"iteration {iteration} finished. Score: {score}. best startings {league_ratings}")
 
             league_rating_changes = (df
             .groupby([RatingColumnNames.player_league, RatingColumnNames.opponent_league])
@@ -103,7 +113,7 @@ class StartLeagueRatingOptimizer():
                         mean_rating_change = 0
                     else:
                         count = rows['count'].iloc[0]
-                        weight = min(1, count / 160)
+                        weight = min(1, count / self.weight_div)
                         mean_rating_change = rows['mean_rating_change'].iloc[0]
 
                     league_h2h = LeagueH2H(
@@ -118,9 +128,11 @@ class StartLeagueRatingOptimizer():
 
             league_sum_final_weights = {}
             for league, opp_league_h2h in league_opp_league_h2hs.items():
+
                 league_sum_final_weights[league] = 0
                 final_league_opp_league_h2hs[league] = {}
                 for opp_league, h2h in opp_league_h2h.items():
+
                     if h2h.weight < 1:
                         league_against = league_to_played_against_leagues[league]
                         opp_played_against = league_to_played_against_leagues[opp_league]
@@ -141,7 +153,7 @@ class StartLeagueRatingOptimizer():
                                 opp_vs_shared_h2h.weight, league_vs_shared_h2h.weight)
 
                     weighted_mean = h2h.mean_rating_change * h2h.weight + min(1,
-                                                                              shared_weight) * relative_shared_weighted_mean
+                                                                              shared_weight * self.indirect_weight) * relative_shared_weighted_mean
                     final_weight = min(1, h2h.weight + shared_weight)
                     final_league_h2h = LeagueH2H(
                         weight=final_weight,
@@ -163,8 +175,5 @@ class StartLeagueRatingOptimizer():
                         league] * final_h2h.mean_rating_change * self.learning_step
 
                 league_ratings[league] += start_rating_rating_change
-
-            if self.verbose:
-                logging.info(f"iteration {iteration} finished. best startings {league_ratings}")
 
         return league_ratings

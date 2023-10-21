@@ -1,11 +1,11 @@
 import pandas as pd
 
+from examples.utils import load_data
 from src.ratings.data_structures import ColumnNames
 
 from src.ratings.rating_generator import RatingGenerator
 
-
-df = pd.read_csv("data/2023_LoL.csv")
+df = load_data()
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 
 df = df[df['position'] != 'team']

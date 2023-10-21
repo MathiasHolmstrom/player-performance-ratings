@@ -31,7 +31,9 @@ class LogLossScorer(BaseScorer):
 
         else:
             cross_league_rows = df[df[RatingColumnNames.player_league] != RatingColumnNames.opponent_league]
+         #   cross_league_rows = df[df[RatingColumnNames.player_league] == 'WCS']
             same_league_rows = df[df[RatingColumnNames.player_league] == df[RatingColumnNames.opponent_league]]
+          #  same_league_rows = df[df[RatingColumnNames.player_league] != 'WCS']
             cross_league_logloss = log_loss(cross_league_rows[self.target], cross_league_rows[self.pred_column_name])
             same_league_logloss = log_loss(same_league_rows[self.target], same_league_rows[self.pred_column_name])
 

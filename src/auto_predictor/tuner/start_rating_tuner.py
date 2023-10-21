@@ -15,9 +15,7 @@ from src.ratings.enums import RatingColumnNames
 from src.ratings.match_rating.start_rating_calculator import StartRatingGenerator
 from src.ratings.data_prepararer import MatchGenerator
 from src.scorer.base_score import BaseScorer, LogLossScorer
-from dataclasses import dataclass
-import random
-from itertools import combinations
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -42,7 +40,7 @@ class StartRatingTuner():
         self.n_trials = n_trials
         self.match_predictor = match_predictor
         self.search_ranges = search_ranges
-        self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target, weight_cross_league=1.5,
+        self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target, weight_cross_league=5,
                                               pred_column=self.match_predictor.predictor.pred_column)
 
         self.column_names = column_names
@@ -69,7 +67,8 @@ class StartRatingTuner():
             matches = match_generator.generate(df=df)
 
         if self.start_rating_optimizer:
-            optimized_league_ratings = self.start_rating_optimizer.optimize(df, matches=matches)
+            optimized_league_ratings = self.start_rating_optimizer.optimize(df,
+                                                                            matches=matches)
         else:
             optimized_league_ratings = self.match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator.league_ratings
 

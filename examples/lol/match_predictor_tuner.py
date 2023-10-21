@@ -1,5 +1,6 @@
 import os
 import pickle
+import random
 
 import joblib
 import pandas as pd
@@ -36,6 +37,7 @@ file_names = [
     "2022_LoL.csv",
     "2023_LoL.csv"
 ]
+
 dfs = []
 for index, file_name in enumerate(file_names):
     full_path = os.path.join("data", file_name)
@@ -54,51 +56,6 @@ df = (
     .assign(team_count=df.groupby('gameid')['teamname'].transform('nunique'))
     .loc[lambda x: x.team_count == 2]
 )
-
-search_ranges = [
-    ParameterSearchRange(
-        name='certain_weight',
-        type='uniform',
-        low=0.7,
-        high=0.95
-    ),
-    ParameterSearchRange(
-        name='certain_days_ago_multiplier',
-        type='uniform',
-        low=0.02,
-        high=.12,
-    ),
-    ParameterSearchRange(
-        name='max_days_ago',
-        type='uniform',
-        low=40,
-        high=150,
-    ),
-    ParameterSearchRange(
-        name='max_certain_sum',
-        type='uniform',
-        low=20,
-        high=70,
-    ),
-    ParameterSearchRange(
-        name='certain_value_denom',
-        type='uniform',
-        low=15,
-        high=50
-    ),
-    ParameterSearchRange(
-        name='reference_certain_sum_value',
-        type='uniform',
-        low=0.5,
-        high=5
-    ),
-    ParameterSearchRange(
-        name='rating_change_multiplier',
-        type='uniform',
-        low=30,
-        high=140
-    ),
-]
 
 team_rating_generator = TeamRatingGenerator(
     player_rating_generator=PlayerRatingGenerator())
@@ -215,26 +172,32 @@ search_range = [
         high=.4,
     ),
     ParameterSearchRange(
-        name='team_rating_subtract',
+        name='league_quantile',
         type='uniform',
-        low=70,
-        high=400,
+        low=0.12,
+        high=.4,
+    ),
+    ParameterSearchRange(
+        name='min_count_for_percentiles',
+        type='uniform',
+        low=20,
+        high=100,
     )
 ]
+
 pre_transformer_tuner = PreTransformerTuner(match_predictor=match_predictor,
                                             pre_transformer_search_ranges=pre_transformer_search_ranges,
                                             n_trials=15
                                             )
 
 player_rating_tuner = PlayerRatingTuner(match_predictor=match_predictor,
-                                        search_ranges=search_ranges,
+                                        search_ranges=player_search_ranges,
                                         n_trials=35
                                         )
 
 start_rating_tuner = StartRatingTuner(column_names=column_names,
                                       match_predictor=match_predictor,
-                                      max_iterations=4,
-                                      n_trials=3,
+                                      n_trials=8,
                                       search_ranges=search_range)
 
 tuner = MatchPredictorTuner(

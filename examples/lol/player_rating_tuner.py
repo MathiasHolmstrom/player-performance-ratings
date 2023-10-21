@@ -3,6 +3,7 @@ from sklearn.preprocessing import StandardScaler
 
 from examples.lol.custom_performance import DurationPerformanceGenerator, LolPlayerPerformanceGenerator, \
     FinalLolTransformer
+from examples.utils import load_data
 from src.auto_predictor.tuner.base_tuner import ParameterSearchRange
 from src.auto_predictor.tuner.player_rating_tuner import PlayerRatingTuner
 from src.predictor.match_predictor import MatchPredictor
@@ -22,7 +23,7 @@ column_names = ColumnNames(
     performance='performance',
     league='league'
 )
-df = pd.read_csv("data/2023_LoL.csv")
+df = load_data()
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 
 df = (

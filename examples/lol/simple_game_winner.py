@@ -1,5 +1,6 @@
 import pandas as pd
 
+from examples.utils import load_data
 from src.predictor.match_predictor import MatchPredictor
 from src.ratings.data_structures import ColumnNames
 from sklearn.metrics import log_loss
@@ -9,7 +10,7 @@ from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
 from src.ratings.rating_generator import RatingGenerator
 from src.ratings.match_rating.start_rating_calculator import StartRatingGenerator
 
-df = pd.read_csv("data/2023_LoL.csv")
+df = load_data()
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 
 df = (
