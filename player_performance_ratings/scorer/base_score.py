@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import pandas as pd
 from sklearn.metrics import log_loss
 
-from src.ratings.enums import RatingColumnNames
+from src import RatingColumnNames
 
 
 class BaseScorer(ABC):

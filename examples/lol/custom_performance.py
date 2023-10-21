@@ -2,9 +2,9 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import log_loss
 
-from src.predictor.match_predictor import MatchPredictor
-from src.ratings.data_structures import ColumnNames
-from src.transformers import BaseTransformer
+from src import MatchPredictor
+from src import ColumnNames
+from src import BaseTransformer
 
 
 class LolPlayerPerformanceGenerator(BaseTransformer):

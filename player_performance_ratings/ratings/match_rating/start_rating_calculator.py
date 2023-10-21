@@ -1,10 +1,9 @@
-import copy
 from dataclasses import dataclass
 
 import numpy as np
 from typing import Dict, Any, List, Optional
 
-from src.ratings.data_structures import MatchPlayer, PostMatchPlayerRating, PreMatchPlayerRating
+from src import MatchPlayer, PreMatchPlayerRating
 
 DEFAULT_START_RATING = 1000
 

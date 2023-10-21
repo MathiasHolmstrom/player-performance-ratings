@@ -2,7 +2,7 @@ import math
 
 from typing import List, Dict
 
-from src.ratings.data_structures import Match
+from src import Match
 
 
 class LeagueIdentifier():

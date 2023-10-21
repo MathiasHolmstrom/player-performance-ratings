@@ -1,11 +1,9 @@
 from dataclasses import dataclass
-from typing import Optional, Dict
 import pandas as pd
 
-from src.ratings.data_structures import ColumnNames, Match
-from src.ratings.enums import RatingColumnNames, InputColumnNames
-from src.ratings.performance.performance_generator import BasePerformanceGenerator
-from src.ratings.rating_generator import RatingGenerator
+from src import ColumnNames
+from src import RatingColumnNames
+from src import RatingGenerator
 
 PERFORMANCE = "performance"
 

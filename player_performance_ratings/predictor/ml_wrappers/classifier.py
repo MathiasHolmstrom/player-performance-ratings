@@ -3,8 +3,8 @@ from typing import Optional
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
-from src.predictor.ml_wrappers.base_wrapper import BaseMLWrapper
-from src.ratings.data_structures import ColumnNames
+from src import BaseMLWrapper
+from src import ColumnNames
 
 
 class SKLearnClassifierWrapper(BaseMLWrapper):

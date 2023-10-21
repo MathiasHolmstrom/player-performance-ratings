@@ -1,9 +1,8 @@
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import pandas as pd
 
-from src.transformers.base_transformer import BaseTransformer
+from src import BaseTransformer
 
 
 @dataclass

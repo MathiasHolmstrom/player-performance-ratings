@@ -8,11 +8,11 @@ from typing import Dict, Optional
 
 import pandas as pd
 
-from src.ratings.data_structures import MatchTeam, ColumnNames
+from src import MatchTeam, ColumnNames
 
-from src.ratings.data_structures import MatchPerformance, \
+from src import MatchPerformance, \
     MatchPlayer, Match
-from src.ratings.league_identifier import LeagueIdentifier
+from src import LeagueIdentifier
 
 HOUR_NUMBER_COLUMN_NAME = "hour_number"
 

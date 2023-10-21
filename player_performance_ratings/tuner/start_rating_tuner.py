@@ -7,14 +7,14 @@ import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
-from src.tuner.optimizer.start_rating_optimizer import StartLeagueRatingOptimizer
-from src.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams
-from src.predictor.match_predictor import MatchPredictor
-from src.ratings.data_structures import ColumnNames, Match
-from src.ratings.enums import RatingColumnNames
-from src.ratings.match_rating.start_rating_calculator import StartRatingGenerator
-from src.ratings.data_prepararer import MatchGenerator
-from src.scorer.base_score import BaseScorer, LogLossScorer
+from player_performance_ratings.tuner.optimizer.start_rating_optimizer import StartLeagueRatingOptimizer
+from player_performance_ratings.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams
+from src import MatchPredictor
+from src import ColumnNames, Match
+from src import RatingColumnNames
+from src import StartRatingGenerator
+from src import MatchGenerator
+from src import BaseScorer, LogLossScorer
 
 logging.basicConfig(level=logging.INFO)
 

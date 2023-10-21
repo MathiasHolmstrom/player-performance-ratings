@@ -1,17 +1,16 @@
 import logging
 from typing import List, Optional
 
-import numpy as np
 import pandas as pd
 import pendulum
 
-from src.predictor.ml_wrappers.base_wrapper import BaseMLWrapper
-from src.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
-from src.ratings.data_prepararer import MatchGenerator
-from src.ratings.data_structures import ColumnNames, Match
-from src.ratings.enums import RatingColumnNames
-from src.ratings.rating_generator import RatingGenerator
-from src.transformers import BaseTransformer
+from src import BaseMLWrapper
+from src import SKLearnClassifierWrapper
+from src import MatchGenerator
+from src import ColumnNames, Match
+from src import RatingColumnNames
+from src import RatingGenerator
+from src import BaseTransformer
 
 
 class MatchPredictor():

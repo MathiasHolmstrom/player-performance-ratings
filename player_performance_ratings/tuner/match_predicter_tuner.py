@@ -3,14 +3,14 @@ from typing import Optional
 
 import pandas as pd
 
-from src.tuner import StartRatingTuner
-from src.tuner.player_rating_tuner import PlayerRatingTuner
-from src.tuner.pre_transformer_tuner import PreTransformerTuner
-from src.predictor.match_predictor import MatchPredictor
-from src.ratings.data_prepararer import MatchGenerator
+from src import StartRatingTuner
+from player_performance_ratings.tuner.player_rating_tuner import PlayerRatingTuner
+from src import PreTransformerTuner
+from src import MatchPredictor
+from src import MatchGenerator
 
-from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
-from src.ratings.rating_generator import RatingGenerator
+from player_performance_ratings.ratings.match_rating.team_rating_generator import TeamRatingGenerator
+from src import RatingGenerator
 logging.basicConfig(level = logging.INFO)
 
 class MatchPredictorTuner():

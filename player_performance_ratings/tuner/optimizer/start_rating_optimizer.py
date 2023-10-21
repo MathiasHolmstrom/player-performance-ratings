@@ -6,11 +6,11 @@ from typing import Optional
 
 import pandas as pd
 
-from src.predictor.match_predictor import MatchPredictor
-from src.ratings.data_structures import ColumnNames, Match
-from src.ratings.enums import RatingColumnNames
-from src.ratings.match_rating.start_rating_calculator import StartRatingGenerator
-from src.scorer.base_score import LogLossScorer, BaseScorer
+from src import MatchPredictor
+from src import ColumnNames, Match
+from src import RatingColumnNames
+from src import StartRatingGenerator
+from src import LogLossScorer, BaseScorer
 
 
 @dataclass

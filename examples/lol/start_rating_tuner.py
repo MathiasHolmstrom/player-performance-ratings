@@ -5,18 +5,18 @@ from sklearn.preprocessing import StandardScaler
 
 from examples.lol.custom_performance import DurationPerformanceGenerator, LolPlayerPerformanceGenerator, \
     FinalLolTransformer
-from src.tuner.optimizer.start_rating_optimizer import StartLeagueRatingOptimizer
-from src.tuner import StartRatingTuner
-from src.tuner.base_tuner import ParameterSearchRange
-from src.predictor.match_predictor import MatchPredictor
-from src.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
-from src.ratings.data_structures import ColumnNames
-from src.ratings.enums import RatingColumnNames
-from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerator
-from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
-from src.ratings.rating_generator import RatingGenerator
-from src.transformers import MinMaxTransformer, ColumnsWeighter
-from src.transformers.common import SkLearnTransformerWrapper, ColumnWeight
+from player_performance_ratings.tuner.optimizer.start_rating_optimizer import StartLeagueRatingOptimizer
+from src import StartRatingTuner
+from player_performance_ratings.tuner.base_tuner import ParameterSearchRange
+from src import MatchPredictor
+from src import SKLearnClassifierWrapper
+from src import ColumnNames
+from src import RatingColumnNames
+from src import PlayerRatingGenerator
+from player_performance_ratings.ratings.match_rating.team_rating_generator import TeamRatingGenerator
+from src import RatingGenerator
+from src import MinMaxTransformer, ColumnsWeighter
+from player_performance_ratings.transformers.common import SkLearnTransformerWrapper, ColumnWeight
 
 file_names = [
     # "2018_LoL.csv",

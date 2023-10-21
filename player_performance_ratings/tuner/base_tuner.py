@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, Match, Literal, Union, Any, Tuple
+from typing import Optional, Match, Literal, Union, Any
 
 import pandas as pd
 from optuna.trial import BaseTrial
 
-from src.transformers import BaseTransformer
+from src import BaseTransformer
 
 
 class TransformerTuner(ABC):

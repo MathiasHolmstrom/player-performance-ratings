@@ -1,8 +1,8 @@
 from typing import Tuple, List, Optional
 
-from src.ratings.data_structures import MatchPlayer, MatchTeam, PreMatchPlayerRating, Match, PreMatchTeamRating, \
+from src import MatchPlayer, MatchTeam, PreMatchPlayerRating, Match, PreMatchTeamRating, \
     PostMatchTeamRating, Team
-from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerator
+from src import PlayerRatingGenerator
 
 
 class TeamRatingGenerator():

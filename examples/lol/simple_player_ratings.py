@@ -1,7 +1,7 @@
 from examples.utils import load_data
-from src.ratings.data_structures import ColumnNames
+from src import ColumnNames
 
-from src.ratings.rating_generator import RatingGenerator
+from src import RatingGenerator
 
 df = load_data()
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])

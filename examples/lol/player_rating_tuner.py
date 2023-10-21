@@ -3,16 +3,16 @@ from sklearn.preprocessing import StandardScaler
 from examples.lol.custom_performance import DurationPerformanceGenerator, LolPlayerPerformanceGenerator, \
     FinalLolTransformer
 from examples.utils import load_data
-from src.tuner.base_tuner import ParameterSearchRange
-from src.tuner.player_rating_tuner import PlayerRatingTuner
-from src.predictor.match_predictor import MatchPredictor
-from src.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
-from src.ratings.data_structures import ColumnNames
-from src.ratings.enums import RatingColumnNames
-from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerator
-from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
-from src.ratings.rating_generator import RatingGenerator
-from src.transformers.common import SkLearnTransformerWrapper, MinMaxTransformer, ColumnsWeighter, ColumnWeight
+from player_performance_ratings.tuner.base_tuner import ParameterSearchRange
+from player_performance_ratings.tuner.player_rating_tuner import PlayerRatingTuner
+from src import MatchPredictor
+from src import SKLearnClassifierWrapper
+from src import ColumnNames
+from src import RatingColumnNames
+from src import PlayerRatingGenerator
+from player_performance_ratings.ratings.match_rating.team_rating_generator import TeamRatingGenerator
+from src import RatingGenerator
+from player_performance_ratings.transformers.common import SkLearnTransformerWrapper, MinMaxTransformer, ColumnsWeighter, ColumnWeight
 
 column_names = ColumnNames(
     team_id='teamname',

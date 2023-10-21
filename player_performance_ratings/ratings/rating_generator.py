@@ -2,10 +2,10 @@ from typing import Optional
 
 import numpy as np
 
-from src.ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PostMatchRating, MatchRating, \
-    MatchRatings, PostMatchTeamRating, PlayerRating, TeamRating
-from src.ratings.enums import RatingColumnNames
-from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
+from src import Match, PreMatchRating, PreMatchTeamRating, PostMatchRating, MatchRating, \
+    PostMatchTeamRating, PlayerRating, TeamRating
+from src import RatingColumnNames
+from player_performance_ratings.ratings.match_rating.team_rating_generator import TeamRatingGenerator
 
 
 class RatingGenerator():

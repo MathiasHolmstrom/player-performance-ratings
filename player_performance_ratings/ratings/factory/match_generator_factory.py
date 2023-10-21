@@ -1,11 +1,11 @@
 import copy
 from typing import Optional
 
-from src.ratings.match_rating.match_rating_calculator import PerformancePredictor
-from src.ratings.match_rating.player_rating_generator import PlayerRatingGenerator
-from src.ratings.match_rating.team_rating_generator import TeamRatingGenerator
-from src.ratings.rating_generator import RatingGenerator
-from src.ratings.match_rating.start_rating_calculator import StartRatingGenerator
+from src import PerformancePredictor
+from src import PlayerRatingGenerator
+from player_performance_ratings.ratings.match_rating.team_rating_generator import TeamRatingGenerator
+from src import RatingGenerator
+from src import StartRatingGenerator
 
 
 class RatingGeneratorFactory():
