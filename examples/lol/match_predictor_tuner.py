@@ -6,6 +6,7 @@ from sklearn.preprocessing import StandardScaler
 
 from examples.lol.custom_performance import DurationPerformanceGenerator, LolPlayerPerformanceGenerator, \
     FinalLolTransformer
+from examples.utils import load_data
 from src.auto_predictor.tuner import PreTransformerTuner, StartRatingTuner
 from src.auto_predictor.tuner.base_tuner import ParameterSearchRange
 from src.auto_predictor.tuner.match_predicter_tuner import MatchPredictorTuner
@@ -27,26 +28,7 @@ column_names = ColumnNames(
     performance='performance',
     league='league'
 )
-file_names = [
-    # "2018_LoL.csv",
-    "2019_LoL.csv",
-    "2020_LoL.csv",
-    "2021_LoL.csv",
-    "2022_LoL.csv",
-    "2023_LoL.csv"
-]
-
-dfs = []
-for index, file_name in enumerate(file_names):
-    full_path = os.path.join("data", file_name)
-    df = pd.read_csv(full_path)
-    dfs.append(df)
-
-df = pd.concat(dfs, ignore_index=True)
-df = df[df['league'] != 'UPL'][['gameid', 'league', 'date', 'teamname', 'playername', 'result',
-                                'gamelength', 'totalgold', 'teamkills', 'teamdeaths', 'position',
-                                'damagetochampions',
-                                'champion', 'kills', 'assists', 'deaths']]
+df = load_data()
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 
 df = (

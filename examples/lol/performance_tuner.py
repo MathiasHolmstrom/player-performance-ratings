@@ -91,6 +91,6 @@ if __name__ == '__main__':
 
     pre_transformer_tuner = PreTransformerTuner(match_predictor=match_predictor,
                                                 pre_transformer_search_ranges=pre_transformer_search_ranges,
-                                                n_trials=1
+                                                n_trials=10
                                                 )
     pre_transformer_tuner.tune(df=df)
