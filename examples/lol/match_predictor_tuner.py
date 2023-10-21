@@ -162,7 +162,7 @@ match_predictor = MatchPredictor(
     pre_rating_transformers=pre_transformers,
 )
 
-search_range = [
+start_rating_search_range = [
     ParameterSearchRange(
         name='team_weight',
         type='uniform',
@@ -185,18 +185,18 @@ search_range = [
 
 pre_transformer_tuner = PreTransformerTuner(match_predictor=match_predictor,
                                             pre_transformer_search_ranges=pre_transformer_search_ranges,
-                                            n_trials=15
+                                            n_trials=1
                                             )
 
 player_rating_tuner = PlayerRatingTuner(match_predictor=match_predictor,
                                         search_ranges=player_search_ranges,
-                                        n_trials=35
+                                        n_trials=1
                                         )
 
 start_rating_tuner = StartRatingTuner(column_names=column_names,
                                       match_predictor=match_predictor,
                                       n_trials=8,
-                                      search_ranges=search_range)
+                                      search_ranges=start_rating_search_range)
 
 tuner = MatchPredictorTuner(
     pre_transformer_tuner=pre_transformer_tuner,

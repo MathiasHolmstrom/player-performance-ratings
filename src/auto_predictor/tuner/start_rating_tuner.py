@@ -16,7 +16,6 @@ from src.ratings.match_rating.start_rating_calculator import StartRatingGenerato
 from src.ratings.data_prepararer import MatchGenerator
 from src.scorer.base_score import BaseScorer, LogLossScorer
 
-
 logging.basicConfig(level=logging.INFO)
 
 RC = RatingColumnNames
@@ -36,7 +35,9 @@ class StartRatingTuner():
 
         self.start_rating_parameters = start_rating_parameters
         rating_column_names = [RC.rating_difference, RC.player_rating_change, RC.player_league, RC.opponent_league]
-        self.start_rating_optimizer = start_rating_optimizer
+        self.start_rating_optimizer = start_rating_optimizer or StartLeagueRatingOptimizer(column_names=column_names,
+                                                                                           match_predictor=match_predictor)
+        self.start_rating_optimizer = None
         self.n_trials = n_trials
         self.match_predictor = match_predictor
         self.search_ranges = search_ranges
@@ -48,7 +49,7 @@ class StartRatingTuner():
     def tune(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> StartRatingGenerator:
 
         def objective(trial: BaseTrial, df: pd.DataFrame, league_start_ratings: dict[str, float]) -> float:
-            params = self.start_rating_parameters
+            params = self.start_rating_parameters or {}
             if league_start_ratings != {}:
                 params['league_ratings'] = league_start_ratings
 
