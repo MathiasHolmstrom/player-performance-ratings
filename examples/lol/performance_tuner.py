@@ -1,20 +1,21 @@
+
+
+from player_performance_ratings import MatchPredictor
+from player_performance_ratings import SKLearnClassifierWrapper
+from player_performance_ratings import PlayerRatingGenerator
+from player_performance_ratings import TeamRatingGenerator
+
 from sklearn.preprocessing import StandardScaler
 
-from examples.lol.custom_performance import DurationPerformanceGenerator, \
-    LolPlayerPerformanceGenerator, FinalLolTransformer
-from examples.utils import load_data
-from src import PreTransformerTuner
-from src import ParameterSearchRange
-from src import MatchPredictor
-from src import SKLearnClassifierWrapper
-from src import ColumnNames
-from src import RatingColumnNames
-from src import PlayerRatingGenerator
-from player_performance_ratings.ratings.match_rating.team_rating_generator import TeamRatingGenerator
-from src import RatingGenerator
-from src import ColumnsWeighter
 
-from player_performance_ratings.transformers.common import MinMaxTransformer, SkLearnTransformerWrapper
+from examples.utils import load_data
+
+from player_performance_ratings import ColumnNames
+from player_performance_ratings import RatingColumnNames, RatingGenerator
+
+from player_performance_ratings import MinMaxTransformer, SkLearnTransformerWrapper, ColumnsWeighter
+from player_performance_ratings import PreTransformerTuner
+from player_performance_ratings import ParameterSearchRange
 
 if __name__ == '__main__':
     column_names = ColumnNames(
@@ -38,50 +39,53 @@ if __name__ == '__main__':
     duration_performance_search_range = []
     column_weigher_search_range = [
         ParameterSearchRange(
-            name='net_damage_percentage',
+            name='result',
             type='uniform',
             low=0,
             high=0.45
         ),
         ParameterSearchRange(
-            name='net_deaths_percentage',
+            name='kills',
             type='uniform',
             low=0,
             high=.3,
         ),
         ParameterSearchRange(
-            name='net_kills_assists_percentage',
+            name='deaths',
             type='uniform',
             low=0,
             high=0.3
         ),
         ParameterSearchRange(
-            name='team_duration_performance',
+            name='assists',
             type='uniform',
-            low=0.15,
-            high=0.85
+            low=0,
+            high=0.2
+        ),
+        ParameterSearchRange(
+            name='damagetochampions',
+            type='uniform',
+            low=0,
+            high=0.4,
         ),
     ]
 
-    features = ["net_damage_percentage", "net_deaths_percentage",
-                "net_kills_assists_percentage", "team_duration_performance"]
+    features = ["result", "kills",
+                "deaths", "assists", "damagetochampions"]
     standard_scaler = SkLearnTransformerWrapper(transformer=StandardScaler(), features=features)
 
     pre_transformer_search_ranges = [
-        (DurationPerformanceGenerator(), []),
-        (LolPlayerPerformanceGenerator(), []),
         (standard_scaler, []),
         (MinMaxTransformer(features=features), []),
         (
             ColumnsWeighter(weighted_column_name=column_names.performance, column_weights=[]),
             column_weigher_search_range),
-        (FinalLolTransformer(column_names), []),
     ]
 
     team_rating_generator = TeamRatingGenerator(
         player_rating_generator=PlayerRatingGenerator(rating_change_multiplier=80))
     rating_generator = RatingGenerator()
-    predictor = SKLearnClassifierWrapper(features=[RatingColumnNames.rating_difference], target='result')
+    predictor = SKLearnClassifierWrapper(features=[RatingColumnNames.RATING_DIFFERENCE], target='result')
 
     match_predictor = MatchPredictor(
         rating_generator=rating_generator,

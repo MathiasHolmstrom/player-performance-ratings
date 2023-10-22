@@ -7,14 +7,16 @@ import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
+from player_performance_ratings.data_structures import ColumnNames, Match
+from player_performance_ratings.predictor.match_predictor import MatchPredictor
+from player_performance_ratings.ratings.data_prepararer import MatchGenerator
+from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.match_rating.player_rating.start_rating.start_rating_generator import \
+    StartRatingGenerator
+from player_performance_ratings.scorer.score import BaseScorer, LogLossScorer
 from player_performance_ratings.tuner.optimizer.start_rating_optimizer import StartLeagueRatingOptimizer
 from player_performance_ratings.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams
-from src import MatchPredictor
-from src import ColumnNames, Match
-from src import RatingColumnNames
-from src import StartRatingGenerator
-from src import MatchGenerator
-from src import BaseScorer, LogLossScorer
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -34,7 +36,7 @@ class StartRatingTuner():
                  ):
 
         self.start_rating_parameters = start_rating_parameters
-        rating_column_names = [RC.rating_difference, RC.player_rating_change, RC.player_league, RC.opponent_league]
+        rating_column_names = [RC.RATING_DIFFERENCE, RC.PLAYER_RATING_CHANGE, RC.PLAYER_LEAGUE, RC.OPPONENT_LEAGUE]
         self.start_rating_optimizer = start_rating_optimizer or StartLeagueRatingOptimizer(column_names=column_names,
                                                                                            match_predictor=match_predictor)
         self.n_trials = n_trials

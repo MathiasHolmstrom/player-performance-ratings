@@ -8,11 +8,10 @@ from typing import Dict, Optional
 
 import pandas as pd
 
-from src import MatchTeam, ColumnNames
-
-from src import MatchPerformance, \
+from player_performance_ratings.data_structures import MatchTeam, ColumnNames, MatchPerformance, \
     MatchPlayer, Match
-from src import LeagueIdentifier
+
+from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
 
 HOUR_NUMBER_COLUMN_NAME = "hour_number"
 
@@ -155,7 +154,7 @@ class MatchGenerator():
 
     def _create_match_team(self, team_league_counts: dict, team_id: str,
                            match_team_players: list[MatchPlayer]) -> MatchTeam:
-        if team_league_counts is not None:
+        if team_league_counts:
             team_league = max(team_league_counts[team_id], key=team_league_counts[team_id].get)
         else:
             team_league = None

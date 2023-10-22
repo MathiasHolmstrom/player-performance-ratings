@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from src import BaseTransformer
+from player_performance_ratings.transformers.base_transformer import BaseTransformer
 
 
 @dataclass

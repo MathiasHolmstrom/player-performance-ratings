@@ -1,44 +1,19 @@
-import os
+from examples.utils import load_data
+from player_performance_ratings.data_structures import ColumnNames
+from player_performance_ratings.predictor.match_predictor import MatchPredictor
+from player_performance_ratings.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
+from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.match_rating.player_rating.player_rating_generator import PlayerRatingGenerator
+from player_performance_ratings import TeamRatingGenerator
+from player_performance_ratings import RatingGenerator
+from player_performance_ratings import StartRatingTuner
+from player_performance_ratings import ParameterSearchRange
+from player_performance_ratings import StartLeagueRatingOptimizer
 
-import pandas as pd
-from sklearn.preprocessing import StandardScaler
 
-from examples.lol.custom_performance import DurationPerformanceGenerator, LolPlayerPerformanceGenerator, \
-    FinalLolTransformer
-from player_performance_ratings.tuner.optimizer.start_rating_optimizer import StartLeagueRatingOptimizer
-from src import StartRatingTuner
-from player_performance_ratings.tuner.base_tuner import ParameterSearchRange
-from src import MatchPredictor
-from src import SKLearnClassifierWrapper
-from src import ColumnNames
-from src import RatingColumnNames
-from src import PlayerRatingGenerator
-from player_performance_ratings.ratings.match_rating.team_rating_generator import TeamRatingGenerator
-from src import RatingGenerator
-from src import MinMaxTransformer, ColumnsWeighter
-from player_performance_ratings.transformers.common import SkLearnTransformerWrapper, ColumnWeight
+df = load_data()
 
-file_names = [
-    # "2018_LoL.csv",
-    "2019_LoL.csv",
-    "2020_LoL.csv",
-    "2021_LoL.csv",
-    "2022_LoL.csv",
-    "2023_LoL.csv"
-]
-dfs = []
-for index, file_name in enumerate(file_names):
-    full_path = os.path.join("data", file_name)
-    df = pd.read_csv(full_path)
-    dfs.append(df)
-
-df = pd.concat(dfs, ignore_index=True)
-df = df[df['league'] != 'UPL'][['gameid', 'league', 'date', 'teamname', 'playername', 'result',
-                                'gamelength', 'totalgold', 'teamkills', 'teamdeaths', 'position',
-                                'damagetochampions',
-                                'champion', 'kills', 'assists', 'deaths']]
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
-
 
 df = (
     df.loc[lambda x: x.position != 'team']
@@ -51,51 +26,16 @@ column_names = ColumnNames(
     match_id='gameid',
     start_date="date",
     player_id="playername",
-    performance="performance",
+    performance="result",
     league='league'
 )
 team_rating_generator = TeamRatingGenerator(
     player_rating_generator=PlayerRatingGenerator())
 rating_generator = RatingGenerator()
-predictor = SKLearnClassifierWrapper(features=[RatingColumnNames.rating_difference], target='result',
+predictor = SKLearnClassifierWrapper(features=[RatingColumnNames.RATING_DIFFERENCE], target='result',
                                      granularity=[column_names.match_id, column_names.team_id])
 
-features = ["net_damage_percentage", "net_deaths_percentage",
-            "net_kills_assists_percentage", "team_duration_performance"]
-standard_scaler = SkLearnTransformerWrapper(transformer=StandardScaler(), features=features)
-
-column_weights = [
-    ColumnWeight(
-        name='net_damage_percentage',
-        weight=0.25,
-    ),
-    ColumnWeight(
-        name='net_deaths_percentage',
-        weight=0.1,
-    ),
-    ColumnWeight(
-        name='net_kills_assists_percentage',
-        weight=0.1,
-    ),
-    ColumnWeight(
-        name='team_duration_performance',
-        weight=0.55,
-    )
-]
-pre_rating_transformers = [
-    DurationPerformanceGenerator(),
-    LolPlayerPerformanceGenerator(),
-    standard_scaler,
-    MinMaxTransformer(features=features),
-    ColumnsWeighter(weighted_column_name=column_names.performance, column_weights=column_weights),
-    FinalLolTransformer(column_names),
-]
-
-for pre_rating_transformer in pre_rating_transformers:
-    df = pre_rating_transformer.transform(df)
-
 match_predictor = MatchPredictor(
-    pre_rating_transformers=pre_rating_transformers,
     rating_generator=rating_generator,
     column_names=column_names,
     predictor=predictor,

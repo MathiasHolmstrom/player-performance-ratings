@@ -7,12 +7,13 @@ import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
+from player_performance_ratings.predictor.match_predictor import MatchPredictor
+from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.scorer.score import LogLossScorer, BaseScorer
+from player_performance_ratings.transformers.base_transformer import BaseTransformer
 from player_performance_ratings.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams, \
     TransformerTuner
-from src import MatchPredictor
-from src import RatingColumnNames
-from src import BaseScorer, LogLossScorer
-from src import BaseTransformer
+
 from player_performance_ratings.transformers.common import ColumnWeight
 
 RC = RatingColumnNames

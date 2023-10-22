@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 import pandas as pd
 
-from src import ColumnNames
-from src import RatingColumnNames
-from src import RatingGenerator
+from player_performance_ratings.data_structures import ColumnNames
+from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
 PERFORMANCE = "performance"
 
@@ -34,9 +34,9 @@ class PlayerRatingGeneratorOld():
         matches = generate_matches(column_names=self.column_names, df=df)
 
         match_ratings = self.rating_generator.generate(matches)
-        df[RatingColumnNames.player_rating] = match_ratings.pre_match_player_rating_values
-        df[RatingColumnNames.team_rating] = match_ratings.pre_match_team_rating_values
-        df[RatingColumnNames.opponent_rating] = match_ratings.pre_match_opponent_rating_values
+        df[RatingColumnNames.PLAYER_RATING] = match_ratings.pre_match_player_rating_values
+        df[RatingColumnNames.TEAM_RATING] = match_ratings.pre_match_team_rating_values
+        df[RatingColumnNames.OPPONENT_RATING] = match_ratings.pre_match_opponent_rating_values
         return df
 
     @property

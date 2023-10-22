@@ -2,10 +2,11 @@ from typing import Optional
 
 import numpy as np
 
-from src import Match, PreMatchRating, PreMatchTeamRating, PostMatchRating, MatchRating, \
-    PostMatchTeamRating, PlayerRating, TeamRating
-from src import RatingColumnNames
+from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.match_rating.team_rating_generator import TeamRatingGenerator
+from player_performance_ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PostMatchRating, MatchRating, \
+    PostMatchTeamRating, PlayerRating, TeamRating
+
 
 
 class RatingGenerator():
@@ -44,15 +45,15 @@ class RatingGenerator():
                     match_ids.append(match.id)
 
         return {
-            RatingColumnNames.rating_difference: np.array(pre_match_team_rating_values) - (
+            RatingColumnNames.RATING_DIFFERENCE: np.array(pre_match_team_rating_values) - (
                 pre_match_opponent_rating_values),
-            RatingColumnNames.player_league: player_leagues,
-            RatingColumnNames.opponent_league: team_opponent_leagues,
-            RatingColumnNames.player_rating: pre_match_player_rating_values,
-            RatingColumnNames.player_rating_change: player_rating_changes,
-            RatingColumnNames.match_id: match_ids,
-            RatingColumnNames.team_rating: pre_match_team_rating_values,
-            RatingColumnNames.opponent_rating: pre_match_opponent_rating_values
+            RatingColumnNames.PLAYER_LEAGUE: player_leagues,
+            RatingColumnNames.OPPONENT_LEAGUE: team_opponent_leagues,
+            RatingColumnNames.PLAYER_RATING: pre_match_player_rating_values,
+            RatingColumnNames.PLAYER_RATING_CHANGE: player_rating_changes,
+            RatingColumnNames.MATCH_ID: match_ids,
+            RatingColumnNames.TEAM_RATING: pre_match_team_rating_values,
+            RatingColumnNames.OPPONENT_RATING: pre_match_opponent_rating_values
 
         }
 

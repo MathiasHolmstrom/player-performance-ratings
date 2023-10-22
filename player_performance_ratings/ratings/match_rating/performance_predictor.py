@@ -1,6 +1,6 @@
 import math
 
-from src import PreMatchPlayerRating, PreMatchTeamRating
+from player_performance_ratings.data_structures import PreMatchPlayerRating, PreMatchTeamRating
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 MODIFIED_RATING_CHANGE_CONSTANT = 1

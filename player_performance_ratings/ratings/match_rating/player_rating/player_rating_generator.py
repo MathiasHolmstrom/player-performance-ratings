@@ -2,10 +2,10 @@ import logging
 import math
 from typing import Dict, Optional
 
-from src import Match, MatchPlayer, PlayerRating, PreMatchTeamRating, PreMatchPlayerRating, \
+from player_performance_ratings.data_structures import Match, MatchPlayer, PlayerRating, PreMatchTeamRating, PreMatchPlayerRating, \
     PostMatchPlayerRating
-from src import PerformancePredictor
-from src import StartRatingGenerator
+from player_performance_ratings.ratings.match_rating.performance_predictor import PerformancePredictor
+from player_performance_ratings.ratings.match_rating.player_rating.start_rating.start_rating_generator import StartRatingGenerator
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 MODIFIED_RATING_CHANGE_CONSTANT = 1

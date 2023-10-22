@@ -6,11 +6,12 @@ import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
+from player_performance_ratings.predictor.match_predictor import MatchPredictor
+from player_performance_ratings.data_structures import Match
+from player_performance_ratings.ratings.match_rating.player_rating.player_rating_generator import PlayerRatingGenerator
+from player_performance_ratings.scorer.score import BaseScorer, LogLossScorer
 from player_performance_ratings.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams
-from src import MatchPredictor
-from src import Match
-from src import PlayerRatingGenerator
-from src import BaseScorer, LogLossScorer
+
 
 class PlayerRatingTuner():
 

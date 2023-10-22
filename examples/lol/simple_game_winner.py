@@ -1,12 +1,13 @@
 from examples.utils import load_data
-from src import MatchPredictor
-from src import ColumnNames
+
 from sklearn.metrics import log_loss
 
-from src import PlayerRatingGenerator
-from player_performance_ratings.ratings.match_rating.team_rating_generator import TeamRatingGenerator
-from src import RatingGenerator
-from src import StartRatingGenerator
+from player_performance_ratings.data_structures import ColumnNames
+from player_performance_ratings.predictor.match_predictor import MatchPredictor
+from player_performance_ratings import PlayerRatingGenerator
+from player_performance_ratings import  StartRatingGenerator
+from player_performance_ratings import TeamRatingGenerator
+from player_performance_ratings import RatingGenerator
 
 df = load_data()
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])

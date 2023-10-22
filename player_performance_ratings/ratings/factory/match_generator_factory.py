@@ -1,8 +1,8 @@
 import copy
 from typing import Optional
 
-from src import PerformancePredictor
-from src import PlayerRatingGenerator
+from player_performance_ratings.ratings.match_rating.performance_predictor import PerformancePredictor
+from player_performance_ratings.ratings.match_rating.player_rating.player_rating_generator import PlayerRatingGenerator
 from player_performance_ratings.ratings.match_rating.team_rating_generator import TeamRatingGenerator
 from src import RatingGenerator
 from src import StartRatingGenerator

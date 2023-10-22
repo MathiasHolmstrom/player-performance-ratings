@@ -3,8 +3,8 @@ from typing import Optional
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
-from src import BaseMLWrapper
-from src import ColumnNames
+from player_performance_ratings.predictor.ml_wrappers.base_wrapper import BaseMLWrapper
+from player_performance_ratings.data_structures import ColumnNames
 
 
 class SKLearnClassifierWrapper(BaseMLWrapper):
@@ -23,7 +23,8 @@ class SKLearnClassifierWrapper(BaseMLWrapper):
         self.model = model or LogisticRegression()
         self.granularity = granularity
         self.column_names = column_names
-        self._pred_column = pred_column
+
+        super().__init__(target=self._target, pred_column=pred_column)
 
     def fit(self, df: pd.DataFrame) -> None:
         if self.granularity:
@@ -44,11 +45,3 @@ class SKLearnClassifierWrapper(BaseMLWrapper):
         else:
             df[self._pred_column] = self.model.predict_proba(df[self.features])[:, 1]
         return df
-
-    @property
-    def pred_column(self) -> str:
-        return self._pred_column
-
-    @property
-    def target(self) -> str:
-        return self._target

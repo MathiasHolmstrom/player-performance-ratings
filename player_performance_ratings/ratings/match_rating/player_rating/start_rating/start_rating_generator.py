@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 from typing import Dict, Any, List, Optional
 
-from src import MatchPlayer, PreMatchPlayerRating
+from player_performance_ratings.data_structures import MatchPlayer, PreMatchPlayerRating
 
 DEFAULT_START_RATING = 1000
 

@@ -6,11 +6,12 @@ from typing import Optional
 
 import pandas as pd
 
-from src import MatchPredictor
-from src import ColumnNames, Match
-from src import RatingColumnNames
-from src import StartRatingGenerator
-from src import LogLossScorer, BaseScorer
+from player_performance_ratings.data_structures import ColumnNames, Match
+from player_performance_ratings.predictor.match_predictor import MatchPredictor
+from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.match_rating.player_rating.start_rating.start_rating_generator import \
+    StartRatingGenerator
+from player_performance_ratings.scorer.score import BaseScorer, LogLossScorer
 
 
 @dataclass
@@ -76,38 +77,38 @@ class StartLeagueRatingOptimizer():
                 logging.info(f"iteration {iteration} finished. Score: {score}. best startings {league_ratings}")
 
             league_rating_changes = (df
-            .groupby([RatingColumnNames.player_league, RatingColumnNames.opponent_league])
+            .groupby([RatingColumnNames.PLAYER_LEAGUE, RatingColumnNames.OPPONENT_LEAGUE])
             .agg(
                 {
-                    RatingColumnNames.player_rating_change: 'mean',
+                    RatingColumnNames.PLAYER_RATING_CHANGE: 'mean',
                     self.column_names.player_id: 'count'
                 }
             )
             .reset_index()
             .rename(
                 columns={
-                    RatingColumnNames.player_rating_change: 'mean_rating_change',
+                    RatingColumnNames.PLAYER_RATING_CHANGE: 'mean_rating_change',
                     self.column_names.player_id: 'count'
                 })
             )
-            leagues = league_rating_changes[RatingColumnNames.player_league].unique().tolist()
+            leagues = league_rating_changes[RatingColumnNames.PLAYER_LEAGUE].unique().tolist()
 
             league_opp_league_h2hs: dict[str, dict[str, LeagueH2H]] = {}
             league_to_played_against_leagues = {}
 
             for league in leagues:
                 league_to_played_against_leagues[league] = \
-                    league_rating_changes[league_rating_changes[RatingColumnNames.player_league] == league][
-                        RatingColumnNames.opponent_league].unique().tolist()
+                    league_rating_changes[league_rating_changes[RatingColumnNames.PLAYER_LEAGUE] == league][
+                        RatingColumnNames.OPPONENT_LEAGUE].unique().tolist()
 
                 league_opp_league_h2hs[league] = {}
                 for opp_league in leagues:
                     if league == opp_league:
                         continue
 
-                    rows = league_rating_changes[(league_rating_changes[RatingColumnNames.player_league] == league) &
+                    rows = league_rating_changes[(league_rating_changes[RatingColumnNames.PLAYER_LEAGUE] == league) &
                                                  (league_rating_changes[
-                                                      RatingColumnNames.opponent_league] == opp_league)]
+                                                      RatingColumnNames.OPPONENT_LEAGUE] == opp_league)]
                     if len(rows) == 0:
                         weight = 0
                         mean_rating_change = 0
@@ -171,8 +172,10 @@ class StartLeagueRatingOptimizer():
                 start_rating_rating_change = 0
 
                 for opp_league, final_h2h in final_opp_league_h2h.items():
-                    start_rating_rating_change += final_h2h.weight / league_sum_final_weights[
-                        league] * final_h2h.mean_rating_change * self.learning_step
+                    if league_sum_final_weights[
+                        league] > 0:
+                        start_rating_rating_change += final_h2h.weight / league_sum_final_weights[
+                            league] * final_h2h.mean_rating_change * self.learning_step
 
                 league_ratings[league] += start_rating_rating_change
 

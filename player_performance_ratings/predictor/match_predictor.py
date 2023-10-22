@@ -4,13 +4,13 @@ from typing import List, Optional
 import pandas as pd
 import pendulum
 
-from src import BaseMLWrapper
-from src import SKLearnClassifierWrapper
-from src import MatchGenerator
-from src import ColumnNames, Match
-from src import RatingColumnNames
-from src import RatingGenerator
-from src import BaseTransformer
+from player_performance_ratings.predictor.ml_wrappers.base_wrapper import BaseMLWrapper
+from player_performance_ratings.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
+from player_performance_ratings.ratings.data_prepararer import MatchGenerator
+from player_performance_ratings.data_structures import ColumnNames, Match
+from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.rating_generator import RatingGenerator
+from player_performance_ratings.transformers.base_transformer import BaseTransformer
 
 
 class MatchPredictor():
@@ -32,17 +32,19 @@ class MatchPredictor():
                 f"predictor was not defined. Will use rating-difference as feature and {self.column_names.performance} as target")
             self.target = target or self.column_names.performance
             self.predictor = predictor or SKLearnClassifierWrapper(
-                features=[RatingColumnNames.rating_difference],
-                target=self.target
+                features=[RatingColumnNames.RATING_DIFFERENCE],
+                target=RatingColumnNames.TARGET
             )
         else:
             self.predictor = predictor
-            self.target = self.predictor.target
-
+            self.target = predictor.target
+            self.predictor.set_target(RatingColumnNames.TARGET)
         self.train_split_date = train_split_date
         self.rating_generator = rating_generator
 
     def generate(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> pd.DataFrame:
+
+        df[RatingColumnNames.TARGET] = df[self.target]
 
         for pre_rating_transformer in self.pre_rating_transformers:
             df = pre_rating_transformer.transform(df)
