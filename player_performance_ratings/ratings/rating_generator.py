@@ -1,23 +1,31 @@
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.match_rating.team_rating_generator import TeamRatingGenerator
-from player_performance_ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PostMatchRating, MatchRating, \
-    PostMatchTeamRating, PlayerRating, TeamRating
-
+from player_performance_ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PostMatchRating, \
+    MatchRating, \
+    PostMatchTeamRating, PlayerRating, TeamRating, ColumnNames
 
 
 class RatingGenerator():
 
     def __init__(self,
                  team_rating_generator: Optional[TeamRatingGenerator] = None,
+                 store_game_ratings: bool = False,
+                 column_names: Optional[ColumnNames] = None
 
                  ):
         self.team_rating_generator = team_rating_generator or TeamRatingGenerator()
+        self.store_game_ratings = store_game_ratings
+        self.ratings_df = None
+        self.column_names = column_names
+        if self.store_game_ratings and not self.column_names:
+            raise ValueError("in order to store ratings, column_names must be passed to constructor")
 
-    def generate(self, matches: list[Match]) -> dict[RatingColumnNames, list[float]]:
+    def generate(self, matches: list[Match], df: Optional[pd.DataFrame] = None) -> dict[RatingColumnNames, list[float]]:
 
         pre_match_player_rating_values = []
         pre_match_team_rating_values = []
@@ -44,9 +52,28 @@ class RatingGenerator():
                     team_opponent_leagues.append(match_rating.pre_match_rating.teams[-team_idx + 1].league)
                     match_ids.append(match.id)
 
+        rating_differences = np.array(pre_match_team_rating_values) - (
+            pre_match_opponent_rating_values)
+
+        if self.store_game_ratings:
+            if df is None:
+                raise ValueError(
+                    "df must be passed in order to store ratings. Set store_ratings to False or pass df to method")
+            self.ratings_df = df[
+                [self.column_names.team_id, self.column_names.player_id, self.column_names.match_id]].assign(
+                **{
+                    RatingColumnNames.RATING_DIFFERENCE: rating_differences,
+                    RatingColumnNames.PLAYER_LEAGUE: player_leagues,
+                    RatingColumnNames.OPPONENT_LEAGUE: team_opponent_leagues,
+                    RatingColumnNames.PLAYER_RATING: pre_match_player_rating_values,
+                    RatingColumnNames.PLAYER_RATING_CHANGE: player_rating_changes,
+                    RatingColumnNames.TEAM_RATING: pre_match_team_rating_values,
+                    RatingColumnNames.OPPONENT_RATING: pre_match_opponent_rating_values,
+
+                })
+
         return {
-            RatingColumnNames.RATING_DIFFERENCE: np.array(pre_match_team_rating_values) - (
-                pre_match_opponent_rating_values),
+            RatingColumnNames.RATING_DIFFERENCE: rating_differences,
             RatingColumnNames.PLAYER_LEAGUE: player_leagues,
             RatingColumnNames.OPPONENT_LEAGUE: team_opponent_leagues,
             RatingColumnNames.PLAYER_RATING: pre_match_player_rating_values,
@@ -54,7 +81,6 @@ class RatingGenerator():
             RatingColumnNames.MATCH_ID: match_ids,
             RatingColumnNames.TEAM_RATING: pre_match_team_rating_values,
             RatingColumnNames.OPPONENT_RATING: pre_match_opponent_rating_values
-
         }
 
     def _create_match_rating(self, match: Match) -> MatchRating:

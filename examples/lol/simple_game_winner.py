@@ -46,6 +46,8 @@ start_rating_generator = StartRatingGenerator(
                           })
 
 rating_generator = RatingGenerator(
+    store_game_ratings=True,
+    column_names=column_names,
     team_rating_generator=TeamRatingGenerator(
         player_rating_generator=PlayerRatingGenerator(
             start_rating_generator=start_rating_generator

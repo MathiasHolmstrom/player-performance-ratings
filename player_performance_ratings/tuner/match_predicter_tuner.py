@@ -10,9 +10,8 @@ from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.tuner import StartRatingTuner, PreTransformerTuner
 from player_performance_ratings.tuner.player_rating_tuner import PlayerRatingTuner
 
+logging.basicConfig(level=logging.INFO)
 
-
-logging.basicConfig(level = logging.INFO)
 
 class MatchPredictorTuner():
 
@@ -69,7 +68,8 @@ class MatchPredictorTuner():
                 best_player_rating_generator.start_rating_generator = best_start_rating
 
         team_rating_generator = TeamRatingGenerator(player_rating_generator=best_player_rating_generator)
-        rating_generator = RatingGenerator(team_rating_generator=team_rating_generator)
+        rating_generator = RatingGenerator(team_rating_generator=team_rating_generator, store_game_ratings=True,
+                                           column_names=column_names)
         best_match_predictor = MatchPredictor(column_names=column_names, rating_generator=rating_generator,
                                               pre_rating_transformers=best_pre_transformers,
                                               predictor=match_predictor.predictor, target=match_predictor.target)

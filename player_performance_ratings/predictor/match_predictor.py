@@ -56,7 +56,7 @@ class MatchPredictor():
             match_generator = MatchGenerator(column_names=self.column_names)
             matches = match_generator.generate(df=df)
 
-        match_ratings = self.rating_generator.generate(matches)
+        match_ratings = self.rating_generator.generate(matches, df=df)
         for rating_feature, values in match_ratings.items():
             df[rating_feature] = values
 
