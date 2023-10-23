@@ -63,7 +63,8 @@ search_range = [
     )
 ]
 
-start_rating_optimizer = StartLeagueRatingOptimizer(column_names=column_names, match_predictor=match_predictor)
+start_rating_optimizer = StartLeagueRatingOptimizer(column_names=column_names, match_predictor=match_predictor,
+                                                    max_iterations=1)
 
 start_rating_tuner = StartRatingTuner(column_names=column_names,
                                       match_predictor=match_predictor,

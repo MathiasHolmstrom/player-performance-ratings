@@ -47,24 +47,18 @@ class StartRatingTuner():
 
         self.column_names = column_names
 
-    def _add_start_rating_hyperparams(self, params, trial, league_start_ratings,
-                                      league_start_rating_change: dict[str, float]):
+    def _add_start_rating_hyperparams(self, params, trial, league_start_ratings):
         params['league_ratings'] = {}
-        for league, rating_change in league_start_rating_change.items():
-            if league not in league_start_ratings:
-                continue
-            current_start_rating = league_start_ratings[league]
-            expected_start_rating = current_start_rating + rating_change * 2
-            low_start_rating = expected_start_rating - 120
-            high_start_rating = expected_start_rating + 120
+        for league, rating in league_start_ratings.items():
+            low_start_rating = league_start_ratings[league] - 120
+            high_start_rating = league_start_ratings[league] + 120
             params['league_ratings'][league] = trial.suggest_int(league, low=low_start_rating, high=high_start_rating)
 
         return params
 
     def tune(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> StartRatingGenerator:
 
-        def objective(trial: BaseTrial, df: pd.DataFrame, league_start_ratings: dict[str, float],
-                      league_start_rating_change: dict[str, float]) -> float:
+        def objective(trial: BaseTrial, df: pd.DataFrame, league_start_ratings: dict[str, float]) -> float:
             params = self.start_rating_parameters or {}
             if league_start_ratings != {}:
                 params['league_ratings'] = league_start_ratings
@@ -74,8 +68,7 @@ class StartRatingTuner():
                                             parameter_search_range=self.search_ranges,
                                             )
             params = self._add_start_rating_hyperparams(params=params, trial=trial,
-                                                        league_start_ratings=league_start_ratings,
-                                                        league_start_rating_change=league_start_rating_change)
+                                                        league_start_ratings=league_start_ratings)
             start_rating_generator = StartRatingGenerator(**params)
             match_predictor = copy.deepcopy(self.match_predictor)
             match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator = start_rating_generator
@@ -87,11 +80,10 @@ class StartRatingTuner():
             matches = match_generator.generate(df=df)
 
         if self.start_rating_optimizer:
-            league_start_rating_change, optimized_league_ratings = self.start_rating_optimizer.optimize(df,
-                                                                                                        matches=matches)
-
+            optimized_league_ratings = self.start_rating_optimizer.optimize(df,
+                                                                            matches=matches)
         else:
-            league_start_rating_change = {}
+
             optimized_league_ratings = self.match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator.league_ratings
 
         direction = "minimize"
@@ -101,8 +93,7 @@ class StartRatingTuner():
         study = optuna.create_study(direction=direction, study_name=study_name, sampler=sampler)
         callbacks = []
         # logging.info(f"start league ratings {optimized_league_ratings}")
-        study.optimize(lambda trial: objective(trial, df, league_start_ratings=optimized_league_ratings,
-                                               league_start_rating_change=league_start_rating_change),
+        study.optimize(lambda trial: objective(trial, df, league_start_ratings=optimized_league_ratings),
                        n_trials=self.n_trials, callbacks=callbacks)
         start_rating_generator_params = list(
             inspect.signature(StartRatingGenerator().__class__.__init__).parameters.keys())[1:]
@@ -110,7 +101,7 @@ class StartRatingTuner():
                   dir(StartRatingGenerator()) if
                   attr in start_rating_generator_params}
         best_params = {k: v for k, v in study.best_params.items() if k in params}
-        best_league_ratings= {k: v for k, v in study.best_params.items() if k not in best_params}
+        best_league_ratings = {k: v for k, v in study.best_params.items() if k not in best_params}
         return StartRatingGenerator(league_ratings=best_league_ratings, **best_params)
 
 

@@ -26,7 +26,7 @@ class StartLeagueRatingOptimizer():
 
     def __init__(self, column_names: ColumnNames,
                  match_predictor: MatchPredictor,
-                 max_iterations: int = 25,
+                 max_iterations: int = 20,
                  learning_step: int = 20,
                  scorer: Optional[BaseScorer] = None,
                  weight_div: int = 500,
@@ -53,8 +53,6 @@ class StartLeagueRatingOptimizer():
         non_league_ratings_params = {attr: getattr(start_rating_generator, attr) for attr in
                                      dir(start_rating_generator) if
                                      attr in start_rating_params and attr != 'league_ratings'}
-
-
 
         for iteration in range(self.max_iterations + 1):
 
@@ -167,8 +165,6 @@ class StartLeagueRatingOptimizer():
                     final_league_opp_league_h2hs[league][opp_league] = final_league_h2h
                     league_sum_final_weights[league] += final_weight
 
-            league_start_rating_change = {}
-
             for league, final_opp_league_h2h in final_league_opp_league_h2hs.items():
 
                 if league not in league_ratings:
@@ -176,14 +172,9 @@ class StartLeagueRatingOptimizer():
                 start_rating_rating_change = 0
 
                 for opp_league, final_h2h in final_opp_league_h2h.items():
-                    if league_sum_final_weights[
-                        league] > 0:
-                        start_rating_rating_change += final_h2h.weight / league_sum_final_weights[
-                            league] * final_h2h.mean_rating_change * self.learning_step
+                    start_rating_rating_change += final_h2h.weight / league_sum_final_weights[
+                        league] * final_h2h.mean_rating_change * self.learning_step
 
-                league_start_rating_change[league] = start_rating_rating_change
-              #  league_ratings[league] += start_rating_rating_change
+                league_ratings[league] += start_rating_rating_change
 
-            return league_start_rating_change, league_ratings
-
-        #return league_ratings
+        return league_ratings
