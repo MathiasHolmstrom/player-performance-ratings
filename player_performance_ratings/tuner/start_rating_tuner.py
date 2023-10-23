@@ -1,4 +1,5 @@
 import copy
+import inspect
 import logging
 from typing import Optional, Any
 
@@ -103,8 +104,14 @@ class StartRatingTuner():
         study.optimize(lambda trial: objective(trial, df, league_start_ratings=optimized_league_ratings,
                                                league_start_rating_change=league_start_rating_change),
                        n_trials=self.n_trials, callbacks=callbacks)
-
-        return StartRatingGenerator(league_ratings=optimized_league_ratings, **study.best_params)
+        start_rating_generator_params = list(
+            inspect.signature(StartRatingGenerator().__class__.__init__).parameters.keys())[1:]
+        params = {attr: getattr(StartRatingGenerator(), attr) for attr in
+                  dir(StartRatingGenerator()) if
+                  attr in start_rating_generator_params}
+        best_params = {k: v for k, v in study.best_params.items() if k in params}
+        best_league_ratings= {k: v for k, v in study.best_params.items() if k not in best_params}
+        return StartRatingGenerator(league_ratings=best_league_ratings, **best_params)
 
 
 def _get_cross_league_matches(self, matches: list[Match]) -> list[Match]:

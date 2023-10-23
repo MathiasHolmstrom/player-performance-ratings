@@ -16,7 +16,6 @@ from player_performance_ratings import StartLeagueRatingOptimizer
 
 df = load_data()
 
-
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 df = (
     df.loc[lambda x: x.position != 'team']
@@ -68,7 +67,7 @@ start_rating_optimizer = StartLeagueRatingOptimizer(column_names=column_names, m
 
 start_rating_tuner = StartRatingTuner(column_names=column_names,
                                       match_predictor=match_predictor,
-                                      n_trials=50,
+                                      n_trials=1,
                                       search_ranges=search_range,
                                       start_rating_optimizer=start_rating_optimizer
                                       )
