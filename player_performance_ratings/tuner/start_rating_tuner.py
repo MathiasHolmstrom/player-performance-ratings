@@ -14,9 +14,8 @@ from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.match_rating.player_rating.start_rating.start_rating_generator import \
     StartRatingGenerator
 from player_performance_ratings.scorer.score import BaseScorer, LogLossScorer
-from player_performance_ratings.tuner.optimizer.start_rating_optimizer import StartLeagueRatingOptimizer
+from player_performance_ratings.tuner.optimizer.start_rating_optimizer import StartLeagueRatingOptimizer, LeagueH2H
 from player_performance_ratings.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams
-
 
 logging.basicConfig(level=logging.INFO)
 
@@ -47,9 +46,24 @@ class StartRatingTuner():
 
         self.column_names = column_names
 
+    def _add_start_rating_hyperparams(self, params, trial, league_start_ratings,
+                                      league_start_rating_change: dict[str, float]):
+        params['league_ratings'] = {}
+        for league, rating_change in league_start_rating_change.items():
+            if league not in league_start_ratings:
+                continue
+            current_start_rating = league_start_ratings[league]
+            expected_start_rating = current_start_rating + rating_change * 2
+            low_start_rating = expected_start_rating - 120
+            high_start_rating = expected_start_rating + 120
+            params['league_ratings'][league] = trial.suggest_int(league, low=low_start_rating, high=high_start_rating)
+
+        return params
+
     def tune(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> StartRatingGenerator:
 
-        def objective(trial: BaseTrial, df: pd.DataFrame, league_start_ratings: dict[str, float]) -> float:
+        def objective(trial: BaseTrial, df: pd.DataFrame, league_start_ratings: dict[str, float],
+                      league_start_rating_change: dict[str, float]) -> float:
             params = self.start_rating_parameters or {}
             if league_start_ratings != {}:
                 params['league_ratings'] = league_start_ratings
@@ -58,6 +72,9 @@ class StartRatingTuner():
                                             trial=trial,
                                             parameter_search_range=self.search_ranges,
                                             )
+            params = self._add_start_rating_hyperparams(params=params, trial=trial,
+                                                        league_start_ratings=league_start_ratings,
+                                                        league_start_rating_change=league_start_rating_change)
             start_rating_generator = StartRatingGenerator(**params)
             match_predictor = copy.deepcopy(self.match_predictor)
             match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator = start_rating_generator
@@ -69,9 +86,11 @@ class StartRatingTuner():
             matches = match_generator.generate(df=df)
 
         if self.start_rating_optimizer:
-            optimized_league_ratings = self.start_rating_optimizer.optimize(df,
-                                                                            matches=matches)
+            league_start_rating_change, optimized_league_ratings = self.start_rating_optimizer.optimize(df,
+                                                                                                        matches=matches)
+
         else:
+            league_start_rating_change = {}
             optimized_league_ratings = self.match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator.league_ratings
 
         direction = "minimize"
@@ -80,8 +99,9 @@ class StartRatingTuner():
         sampler = TPESampler(seed=optuna_seed)
         study = optuna.create_study(direction=direction, study_name=study_name, sampler=sampler)
         callbacks = []
-        logging.info(f"start league ratings {optimized_league_ratings}")
-        study.optimize(lambda trial: objective(trial, df, league_start_ratings=optimized_league_ratings),
+        # logging.info(f"start league ratings {optimized_league_ratings}")
+        study.optimize(lambda trial: objective(trial, df, league_start_ratings=optimized_league_ratings,
+                                               league_start_rating_change=league_start_rating_change),
                        n_trials=self.n_trials, callbacks=callbacks)
 
         return StartRatingGenerator(league_ratings=optimized_league_ratings, **study.best_params)

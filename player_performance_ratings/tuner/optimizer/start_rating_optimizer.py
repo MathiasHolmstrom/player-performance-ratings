@@ -54,6 +54,8 @@ class StartLeagueRatingOptimizer():
                                      dir(start_rating_generator) if
                                      attr in start_rating_params and attr != 'league_ratings'}
 
+
+
         for iteration in range(self.max_iterations + 1):
 
             start_rating_generator = StartRatingGenerator(league_ratings=league_ratings, **non_league_ratings_params)
@@ -165,6 +167,8 @@ class StartLeagueRatingOptimizer():
                     final_league_opp_league_h2hs[league][opp_league] = final_league_h2h
                     league_sum_final_weights[league] += final_weight
 
+            league_start_rating_change = {}
+
             for league, final_opp_league_h2h in final_league_opp_league_h2hs.items():
 
                 if league not in league_ratings:
@@ -177,6 +181,9 @@ class StartLeagueRatingOptimizer():
                         start_rating_rating_change += final_h2h.weight / league_sum_final_weights[
                             league] * final_h2h.mean_rating_change * self.learning_step
 
-                league_ratings[league] += start_rating_rating_change
+                league_start_rating_change[league] = start_rating_rating_change
+              #  league_ratings[league] += start_rating_rating_change
 
-        return league_ratings
+            return league_start_rating_change, league_ratings
+
+        #return league_ratings
