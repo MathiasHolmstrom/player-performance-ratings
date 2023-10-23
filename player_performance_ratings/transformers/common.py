@@ -34,6 +34,22 @@ class ColumnsWeighter(BaseTransformer):
 
         return df
 
+class SklearnEstimatorImputer(BaseTransformer):
+
+    def __init__(self, estimator, features: list[str], target_name: str):
+        self.estimator = estimator
+        self.features = features
+        self.target_name = target_name
+
+    def impute(self, df: pd.DataFrame) -> pd.DataFrame:
+        self.estimator.fit(df[self.features], df[self.target_name])
+        df = df.assign(**{
+            f'imputed_col_{self.target_name}': self.estimator.predict(df[self.features])
+        })
+        df[self.target_name] = df[self.target_name].fillna(df[f'imputed_col_{self.target_name}'])
+        return df.drop(columns=[f'imputed_col_{self.target_name}'])
+
+
 
 class SkLearnTransformerWrapper(BaseTransformer):
 
