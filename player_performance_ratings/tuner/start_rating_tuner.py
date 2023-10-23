@@ -42,7 +42,7 @@ class StartRatingTuner():
         self.n_trials = n_trials
         self.match_predictor = match_predictor
         self.search_ranges = search_ranges
-        self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target, weight_cross_league=5,
+        self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target, weight_cross_league=3,
                                               pred_column=self.match_predictor.predictor.pred_column)
 
         self.column_names = column_names
