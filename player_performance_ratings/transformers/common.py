@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from typing import Optional
 
 import pandas as pd
+from lightgbm import LGBMRegressor
 
 from player_performance_ratings.transformers.base_transformer import BaseTransformer
 
@@ -25,30 +27,44 @@ class ColumnsWeighter(BaseTransformer):
         df = df.copy()
         df[self.weighted_column_name] = 0
 
+        df['sum_cols_weights'] = 0
+        for column_weight in self.column_weights:
+            df[f'weight__{column_weight.name}'] = column_weight.weight
+            df.loc[df[column_weight.name].isna(), f'weight__{column_weight.name}'] = 0
+            df.loc[df[column_weight.name].isna(), column_weight.name] = 0
+            df['sum_cols_weights'] = df['sum_cols_weights'] + df[f'weight__{column_weight.name}']
+
+        drop_cols = ['sum_cols_weights']
+        for column_weight in self.column_weights:
+            df[f'weight__{column_weight.name}'] / df['sum_cols_weights']
+            drop_cols.append(f'weight__{column_weight.name}')
+
+
+
         for column_weight in self.column_weights:
 
             if column_weight.is_negative:
-                df[self.weighted_column_name] += column_weight.weight * -df[column_weight.name]
+                df[self.weighted_column_name] += df[f'weight__{column_weight.name}'] * -df[column_weight.name]
             else:
-                df[self.weighted_column_name] += column_weight.weight * df[column_weight.name]
-
+                df[self.weighted_column_name] += df[f'weight__{column_weight.name}'] * df[column_weight.name]
+        df = df.drop(columns=drop_cols)
         return df
+
 
 class SklearnEstimatorImputer(BaseTransformer):
 
-    def __init__(self, estimator, features: list[str], target_name: str):
-        self.estimator = estimator
+    def __init__(self, features: list[str], target_name: str, estimator: Optional[LGBMRegressor] = None, ):
+        self.estimator = estimator or LGBMRegressor()
         self.features = features
         self.target_name = target_name
 
-    def impute(self, df: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         self.estimator.fit(df[self.features], df[self.target_name])
         df = df.assign(**{
             f'imputed_col_{self.target_name}': self.estimator.predict(df[self.features])
         })
         df[self.target_name] = df[self.target_name].fillna(df[f'imputed_col_{self.target_name}'])
         return df.drop(columns=[f'imputed_col_{self.target_name}'])
-
 
 
 class SkLearnTransformerWrapper(BaseTransformer):
