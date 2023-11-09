@@ -10,16 +10,17 @@ from player_performance_ratings.data_structures import ColumnNames
 class SKLearnClassifierWrapper(BaseMLWrapper):
 
     def __init__(self,
-
                  features: list[str],
                  target: str,
                  model: Optional = None,
+                 multiclassifier: bool = False,
                  granularity: Optional[list[str]] = None,
                  pred_column: Optional[str] = "prob",
                  column_names: Optional[ColumnNames] = None
                  ):
         self.features = features
         self._target = target
+        self.multiclassifier = multiclassifier
         self.model = model or LogisticRegression()
         self.granularity = granularity
         self.column_names = column_names
@@ -38,10 +39,16 @@ class SKLearnClassifierWrapper(BaseMLWrapper):
         if self.granularity:
             grouped = df.groupby(self.granularity)[self.features + [self._target]].mean().reset_index()
             grouped[self._target] = grouped[self._target].astype('int')
-            grouped[self._pred_column] = self.model.predict_proba(grouped[self.features])[:, 1]
+            if self.multiclassifier:
+                grouped[self._pred_column] = self.model.predict_proba(grouped[self.features]).tolist()
+            else:
+                grouped[self._pred_column] = self.model.predict_proba(grouped[self.features])[:, 1]
             if self.pred_column in df.columns:
                 df = df.drop(columns=[self.pred_column])
             df = df.merge(grouped[self.granularity + [self._pred_column]], on=self.granularity)
         else:
-            df[self._pred_column] = self.model.predict_proba(df[self.features])[:, 1]
+            if self.multiclassifier:
+                df[self._pred_column] = self.model.predict_proba(df[self.features]).tolist()
+            else:
+                df[self._pred_column] = self.model.predict_proba(df[self.features])[:, 1]
         return df

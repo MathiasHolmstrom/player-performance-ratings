@@ -36,7 +36,6 @@ class StartRatingTuner():
                  ):
 
         self.start_rating_parameters = start_rating_parameters
-        rating_column_names = [RC.RATING_DIFFERENCE, RC.PLAYER_RATING_CHANGE, RC.PLAYER_LEAGUE, RC.OPPONENT_LEAGUE]
         self.start_rating_optimizer = start_rating_optimizer or StartLeagueRatingOptimizer(column_names=column_names,
                                                                                            match_predictor=match_predictor)
         self.n_trials = n_trials

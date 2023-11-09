@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Any, List
 
+import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
 
@@ -38,8 +39,6 @@ class ColumnsWeighter(BaseTransformer):
         for column_weight in self.column_weights:
             df[f'weight__{column_weight.name}'] / df['sum_cols_weights']
             drop_cols.append(f'weight__{column_weight.name}')
-
-
 
         for column_weight in self.column_weights:
 
@@ -96,5 +95,43 @@ class MinMaxTransformer(BaseTransformer):
 
             df[self.prefix + feature] = (df[feature] - min_value) / (max_value - min_value)
             df[self.prefix + feature].clip(0, 1, inplace=True)
+
+        return df
+
+
+class DiminishingValueTransformer(BaseTransformer):
+
+    def __init__(self,
+                 features: List[str],
+                 cutoff_value: Optional[float] = None,
+                 quantile_cutoff: float = 0.95,
+                 excessive_multiplier: float = 0.8,
+
+                 ):
+        self.features = features
+        self.cutoff_value = cutoff_value
+        self.excessive_multiplier = excessive_multiplier
+        self.trained_count: int = 0
+        self.quantile_cutoff = quantile_cutoff
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        for feature_name in self.features:
+            if self.cutoff_value is None:
+                cutoff_value = df[feature_name].quantile(self.quantile_cutoff)
+            else:
+                cutoff_value = self.cutoff_value
+
+            df = df.assign(feature_name=lambda x: np.where(
+                x[feature_name] >= cutoff_value,
+                (x[feature_name] - cutoff_value).clip(lower=0) * self.excessive_multiplier + cutoff_value,
+                np.where(
+                    x[feature_name] < -cutoff_value,
+                    (-x[feature_name] - cutoff_value).clip(upper=0) * self.excessive_multiplier - cutoff_value,
+                    x[feature_name]
+                )
+            ))
+
+        df[self.features] = df[self.features].fillna(df[self.features])
 
         return df

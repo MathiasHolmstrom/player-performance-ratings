@@ -4,7 +4,8 @@ from typing import Dict, Optional
 
 from player_performance_ratings.data_structures import Match, MatchPlayer, PlayerRating, PreMatchTeamRating, PreMatchPlayerRating, \
     PostMatchPlayerRating
-from player_performance_ratings.ratings.match_rating.performance_predictor import PerformancePredictor
+from player_performance_ratings.ratings.match_rating.performance_predictor import RatingDifferencePerformancePredictor, \
+    PerformancePredictor
 from player_performance_ratings.ratings.match_rating.player_rating.start_rating.start_rating_generator import StartRatingGenerator
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
@@ -48,7 +49,7 @@ class PlayerRatingGenerator():
         self.player_ratings: Dict[str, PlayerRating] = {}
         self._league_rating_changes: dict[str, float] = {}
         self._league_rating_changes_count: dict[str, float] = {}
-        self.performance_predictor = performance_predictor or PerformancePredictor()
+        self.performance_predictor = performance_predictor or RatingDifferencePerformancePredictor()
         self.start_rating_generator = start_rating_generator or StartRatingGenerator()
 
     def generate_pre_rating(self, match_player: MatchPlayer) -> PreMatchPlayerRating:

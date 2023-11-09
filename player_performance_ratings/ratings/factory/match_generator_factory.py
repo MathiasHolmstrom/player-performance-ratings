@@ -1,7 +1,7 @@
 import copy
 from typing import Optional
 
-from player_performance_ratings.ratings.match_rating.performance_predictor import PerformancePredictor
+from player_performance_ratings.ratings.match_rating.performance_predictor import RatingDifferencePerformancePredictor
 from player_performance_ratings.ratings.match_rating.player_rating.player_rating_generator import PlayerRatingGenerator
 from player_performance_ratings.ratings.match_rating.team_rating_generator import TeamRatingGenerator
 from src import RatingGenerator
@@ -13,12 +13,12 @@ class RatingGeneratorFactory():
     def __init__(self,
                  start_rating_generator: Optional[StartRatingGenerator] = None,
                  player_rating_generator: Optional[PlayerRatingGenerator] = None,
-                 performance_predictor: Optional[PerformancePredictor] = None,
+                 performance_predictor: Optional[RatingDifferencePerformancePredictor] = None,
                  team_rating_generator: Optional[TeamRatingGenerator] = None,
                  ):
         self.start_rating_generator = start_rating_generator or StartRatingGenerator()
         self.player_rating_generator = player_rating_generator or PlayerRatingGenerator()
-        self.performance_predictor = performance_predictor or PerformancePredictor()
+        self.performance_predictor = performance_predictor or RatingDifferencePerformancePredictor()
         self.team_rating_generator = team_rating_generator or TeamRatingGenerator()
 
     def create(self) -> RatingGenerator:

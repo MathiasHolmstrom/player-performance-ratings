@@ -99,50 +99,33 @@ class StartRatingGenerator():
         percentile = np.percentile(entity_ratings, self.league_quantile * 100)
         return percentile
 
-    def update_league_ratings(self,
-                              day_number: int,
-                              pre_match_player_rating: PreMatchPlayerRating,
-                              rating_value: float
-                              ):
-
+    def update_league_ratings(self, day_number: int, pre_match_player_rating: PreMatchPlayerRating,
+                              rating_value: float):
         league = pre_match_player_rating.league
-
         id = pre_match_player_rating.id
-        if league not in self.league_to_entity_ids:
-            self.league_player_ratings[league] = []
-            self.league_to_entity_ids[league] = []
-            self.league_to_last_day_number[league] = []
 
-        if id not in self.league_to_entity_ids[league]:
-            self.league_player_ratings[league].append(rating_value)
+        league_data = self.league_player_ratings.setdefault(league, [])
+        league_entity_ids = self.league_to_entity_ids.setdefault(league, [])
+        league_last_day_numbers = self.league_to_last_day_number.setdefault(league, [])
 
-            self.league_to_entity_ids[league].append(id)
-            self.league_to_last_day_number[league].append(day_number)
+        if id not in league_entity_ids:
+            league_data.append(rating_value)
+            league_entity_ids.append(id)
+            league_last_day_numbers.append(day_number)
             self.entity_to_league[id] = league
         else:
-            index = self.league_to_entity_ids[league].index(id)
-            self.league_to_last_day_number[league][index] = day_number
 
-            self.league_player_ratings[league][index] = \
-                rating_value
+            index = league_entity_ids.index(id)
+            league_last_day_numbers[index] = day_number
+            league_data[index] = rating_value
 
-        current_entity_league = self.entity_to_league[id]
-
+        current_entity_league = self.entity_to_league.get(id, league)
         if league != current_entity_league:
             entity_index = self.league_to_entity_ids[current_entity_league].index(id)
 
-            self.league_player_ratings[current_entity_league] = \
-                self.league_player_ratings[
-                    current_entity_league][:entity_index] + \
-                self.league_player_ratings[
-                    current_entity_league][entity_index + 1:]
-
-            self.league_to_last_day_number[current_entity_league] = \
-                self.league_to_last_day_number[current_entity_league][:entity_index] + \
-                self.league_to_last_day_number[current_entity_league][entity_index + 1:]
-
-            self.league_to_entity_ids[current_entity_league] = \
-                self.league_to_entity_ids[current_entity_league][:entity_index] + \
-                self.league_to_entity_ids[current_entity_league][entity_index + 1:]
+            for data_structure in (self.league_player_ratings[current_entity_league],
+                                   self.league_to_last_day_number[current_entity_league],
+                                   self.league_to_entity_ids[current_entity_league]):
+                del data_structure[entity_index]
 
             self.entity_to_league[id] = league

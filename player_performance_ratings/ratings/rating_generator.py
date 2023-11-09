@@ -34,6 +34,7 @@ class RatingGenerator():
         match_ids = []
         player_rating_changes = []
         player_leagues = []
+        performances = []
 
         for match in matches:
             self._validate_match(match)
@@ -51,8 +52,11 @@ class RatingGenerator():
                     player_leagues.append(player.league)
                     team_opponent_leagues.append(match_rating.pre_match_rating.teams[-team_idx + 1].league)
                     match_ids.append(match.id)
+                    performances.append(player.match_performance)
 
         rating_differences = np.array(pre_match_team_rating_values) - (
+            pre_match_opponent_rating_values)
+        rating_means = np.array(pre_match_team_rating_values) * 0.5 + 0.5 * np.array(
             pre_match_opponent_rating_values)
 
         if self.store_game_ratings:
@@ -69,6 +73,8 @@ class RatingGenerator():
                     RatingColumnNames.PLAYER_RATING_CHANGE: player_rating_changes,
                     RatingColumnNames.TEAM_RATING: pre_match_team_rating_values,
                     RatingColumnNames.OPPONENT_RATING: pre_match_opponent_rating_values,
+                    RatingColumnNames.PERFORMANCE: performances,
+                    RatingColumnNames.RATING_MEAN: rating_means,
 
                 })
 
@@ -80,7 +86,8 @@ class RatingGenerator():
             RatingColumnNames.PLAYER_RATING_CHANGE: player_rating_changes,
             RatingColumnNames.MATCH_ID: match_ids,
             RatingColumnNames.TEAM_RATING: pre_match_team_rating_values,
-            RatingColumnNames.OPPONENT_RATING: pre_match_opponent_rating_values
+            RatingColumnNames.OPPONENT_RATING: pre_match_opponent_rating_values,
+            RatingColumnNames.RATING_MEAN: rating_means,
         }
 
     def _create_match_rating(self, match: Match) -> MatchRating:
