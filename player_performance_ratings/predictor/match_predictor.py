@@ -20,31 +20,26 @@ class MatchPredictor():
                  rating_generator: RatingGenerator,
                  pre_rating_transformers: Optional[List[BaseTransformer]] = None,
                  post_rating_transformers: Optional[List[BaseTransformer]] = None,
-                 target: Optional[str] = None,
                  predictor: [Optional[BaseMLWrapper]] = None,
                  train_split_date: Optional[pendulum.datetime] = None,
                  ):
         self.column_names = column_names
         self.pre_rating_transformers = pre_rating_transformers or []
         self.post_rating_transformers = post_rating_transformers or []
-        if predictor is None:
-            logging.warning(
-                f"predictor was not defined. Will use rating-difference as feature and {self.column_names.performance} as target")
-            self.target = target or self.column_names.performance
-            self.predictor = predictor or SKLearnClassifierWrapper(
-                features=[RatingColumnNames.RATING_DIFFERENCE],
-                target=RatingColumnNames.TARGET
-            )
-        else:
-            self.predictor = predictor
-            self.target = predictor.target
-            self.predictor.set_target(RatingColumnNames.TARGET)
+
+        self.predictor = predictor or SKLearnClassifierWrapper(
+            features=[RatingColumnNames.RATING_DIFFERENCE],
+            target=RatingColumnNames.TARGET
+        )
+
+        self.predictor.set_target(RatingColumnNames.TARGET)
         self.train_split_date = train_split_date
         self.rating_generator = rating_generator
 
     def generate(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> pd.DataFrame:
 
-        df[RatingColumnNames.TARGET] = df[self.target]
+        if self.predictor.target not in df.columns:
+            raise ValueError(f"Target {self.predictor.target} not in df columns")
 
         for pre_rating_transformer in self.pre_rating_transformers:
             df = pre_rating_transformer.transform(df)
@@ -68,3 +63,7 @@ class MatchPredictor():
         self.predictor.fit(train_df)
         df = self.predictor.add_prediction(df)
         return df
+
+    @property
+    def classes_(self):
+        return self.predictor.model.classes_

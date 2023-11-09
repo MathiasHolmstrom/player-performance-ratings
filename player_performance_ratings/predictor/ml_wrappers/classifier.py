@@ -21,11 +21,10 @@ class SKLearnClassifierWrapper(BaseMLWrapper):
         self.features = features
         self._target = target
         self.multiclassifier = multiclassifier
-        self.model = model or LogisticRegression()
         self.granularity = granularity
         self.column_names = column_names
 
-        super().__init__(target=self._target, pred_column=pred_column)
+        super().__init__(target=self._target, pred_column=pred_column, model=model or LogisticRegression())
 
     def fit(self, df: pd.DataFrame) -> None:
         if self.granularity:
@@ -36,6 +35,7 @@ class SKLearnClassifierWrapper(BaseMLWrapper):
             self.model.fit(df[self.features], df[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
         if self.granularity:
             grouped = df.groupby(self.granularity)[self.features + [self._target]].mean().reset_index()
             grouped[self._target] = grouped[self._target].astype('int')

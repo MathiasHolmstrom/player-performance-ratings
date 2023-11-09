@@ -3,6 +3,7 @@ from typing import Optional
 
 import pandas as pd
 
+from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
 from player_performance_ratings.ratings.data_prepararer import MatchGenerator
 from player_performance_ratings.ratings.match_rating.team_rating_generator import TeamRatingGenerator
@@ -16,17 +17,22 @@ logging.basicConfig(level=logging.INFO)
 class MatchPredictorTuner():
 
     def __init__(self,
+                 target: str,
                  pre_transformer_tuner: Optional[PreTransformerTuner] = None,
                  start_rating_tuner: Optional[StartRatingTuner] = None,
                  player_rating_tuner: Optional[PlayerRatingTuner] = None,
                  fit_best: bool = True
                  ):
+        self.target = target
         self.pre_transformer_tuner = pre_transformer_tuner
         self.start_rating_tuner = start_rating_tuner
         self.player_rating_tuner = player_rating_tuner
         self.fit_best = fit_best
 
     def tune(self, df: pd.DataFrame) -> MatchPredictor:
+
+        df = df.assign(**{RatingColumnNames.TARGET: df[self.target]})
+
         if self.pre_transformer_tuner:
             column_names = self.pre_transformer_tuner.column_names
             match_predictor = self.pre_transformer_tuner.match_predictor
@@ -72,7 +78,7 @@ class MatchPredictorTuner():
                                            column_names=column_names)
         best_match_predictor = MatchPredictor(column_names=column_names, rating_generator=rating_generator,
                                               pre_rating_transformers=best_pre_transformers,
-                                              predictor=match_predictor.predictor, target=match_predictor.target)
+                                              predictor=match_predictor.predictor)
         if self.fit_best:
             best_match_predictor.generate(df=df, matches=matches)
 

@@ -1,7 +1,6 @@
-from sklearn.metrics import log_loss
 from sklearn.preprocessing import StandardScaler
 
-from estimators.ordinal_classifier import OrdinalClassifier
+from player_performance_ratings.predictor.ml_wrappers.ordinal_classifier import OrdinalClassifier
 from examples.utils import load_data
 from player_performance_ratings import TeamRatingGenerator, PlayerRatingGenerator, MatchPredictor, \
     SKLearnClassifierWrapper, SkLearnTransformerWrapper, RatingColumnNames
@@ -49,17 +48,20 @@ predictor = SKLearnClassifierWrapper(
     model=OrdinalClassifier(),
     features=[RatingColumnNames.RATING_MEAN],
     target='total_kills',
-    multiclassifier=True
+    multiclassifier=True,
+    granularity=[column_names.team_id, column_names.match_id]
 )
 
 match_predictor = MatchPredictor(pre_rating_transformers=pre_rating_transformers, column_names=column_names,
                                  rating_generator=rating_generator, predictor= predictor)
 df = match_predictor.generate(df)
 
-score = OrdinalLossScorer(
+scorer = OrdinalLossScorer(
     pred_column=match_predictor.predictor.pred_column,
     target=match_predictor.predictor.target,
     granularity=[column_names.team_id, column_names.match_id]
 )
-score.score(df=df, classes_=match_predictor.predictor.model.classes_)
+print(scorer.score(df=df, classes_=match_predictor.predictor.model.classes_))
+
+
 

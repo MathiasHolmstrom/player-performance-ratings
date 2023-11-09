@@ -21,8 +21,7 @@ class BaseScorer(ABC):
 
 class LogLossScorer(BaseScorer):
 
-    def __init__(self, target: str, pred_column: str, weight_cross_league: float = 1):
-        self.target = target
+    def __init__(self, pred_column: str, target: Optional[str] = RatingColumnNames.TARGET, weight_cross_league: float = 1):
         self.pred_column_name = pred_column
         self.weight_cross_league = weight_cross_league
         super().__init__(target=target, pred_column=pred_column)
@@ -45,11 +44,11 @@ class LogLossScorer(BaseScorer):
 class OrdinalLossScorer(BaseScorer):
 
     def __init__(self,
-                 target: Union[str, list[str]],
                  pred_column: str,
-                 granularity: Optional[list[str]]
+                 target: Optional[str] = RatingColumnNames.TARGET,
+                 granularity: Optional[list[str]] = None
                  ):
-        self.target = target
+
         self.pred_column_name = pred_column
         self.granularity = granularity
         super().__init__(target=target, pred_column=pred_column)

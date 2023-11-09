@@ -38,8 +38,8 @@ class PlayerRatingTuner():
             player_rating_generator = PlayerRatingGenerator(**params)
             match_predictor = copy.deepcopy(self.match_predictor)
             match_predictor.rating_generator.team_rating_generator.player_rating_generator = player_rating_generator
-            df = match_predictor.generate(df=df)
-            return self.scorer.score(df)
+            df_with_prediction = match_predictor.generate(df=df)
+            return self.scorer.score(df_with_prediction, classes_=match_predictor.predictor.classes_)
 
         direction = "minimize"
         study_name = "optuna_study"
