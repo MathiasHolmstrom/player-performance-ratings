@@ -1,8 +1,10 @@
+import logging
 from typing import Optional
 
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
+from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor.ml_wrappers.base_wrapper import BaseMLWrapper
 from player_performance_ratings.data_structures import ColumnNames
 
@@ -11,7 +13,7 @@ class SKLearnClassifierWrapper(BaseMLWrapper):
 
     def __init__(self,
                  features: list[str],
-                 target: str,
+                 target: Optional[str] = PredictColumnNames.TARGET,
                  model: Optional = None,
                  multiclassifier: bool = False,
                  granularity: Optional[list[str]] = None,
@@ -28,6 +30,9 @@ class SKLearnClassifierWrapper(BaseMLWrapper):
 
     def fit(self, df: pd.DataFrame) -> None:
         if self.granularity:
+            if df[self._target].dtype =='object':
+                df[self._target] = df[self._target].astype('int')
+                logging.warning(f"target {self._target} was converted to int from object")
             grouped = df.groupby(self.granularity)[self.features + [self._target]].mean().reset_index()
             grouped[self._target] = grouped[self._target].astype('int')
             self.model.fit(grouped[self.features], grouped[self._target])
@@ -37,6 +42,8 @@ class SKLearnClassifierWrapper(BaseMLWrapper):
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         if self.granularity:
+            if df[self._target].dtype == 'object':
+                df[self._target] = df[self._target].astype('int')
             grouped = df.groupby(self.granularity)[self.features + [self._target]].mean().reset_index()
             grouped[self._target] = grouped[self._target].astype('int')
             if self.multiclassifier:

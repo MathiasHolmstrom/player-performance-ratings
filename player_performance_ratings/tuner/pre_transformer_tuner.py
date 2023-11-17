@@ -19,13 +19,15 @@ from player_performance_ratings.transformers.common import ColumnWeight
 RC = RatingColumnNames
 
 
-def insert_params_to_common_transformers(object: object, params, parameter_search_range):
+def insert_params_to_common_transformers(object: object, params, parameter_search_range: list[ParameterSearchRange]):
     if object.__class__.__name__ == "ColumnsWeighter":
         sum_weights = sum([params[p.name] for p in parameter_search_range])
         for p in parameter_search_range:
             params[p.name] = params[p.name] / sum_weights
-        column_weights = [ColumnWeight(name=p.name, weight=params[p.name]) for p in
+
+        column_weights = [ColumnWeight(name=p.name, weight=params[p.name], **p.custom_params) for p in
                           parameter_search_range]
+
         for p in parameter_search_range:
             del params[p.name]
         params['column_weights'] = column_weights
@@ -56,7 +58,6 @@ class PreTransformerTuner(TransformerTuner):
         self.n_trials = n_trials
 
         self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target,
-                                              weight_cross_league=3,
                                               pred_column=self.match_predictor.predictor.pred_column
                                               )
 

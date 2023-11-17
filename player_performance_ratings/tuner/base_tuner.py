@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Match, Literal, Union, Any
 
 import pandas as pd
@@ -28,6 +28,7 @@ class ParameterSearchRange:
     low: Optional[Union[float, int]] = None
     high: Optional[Union[float, int]] = None
     choices: Optional[list[Any]] = None
+    custom_params: dict[str, Any] = field(default_factory=dict)
 
 def add_custom_hyperparams(params: dict, trial: BaseTrial,
                            parameter_search_range: list[ParameterSearchRange]) -> dict:

@@ -11,7 +11,6 @@ from .predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
 from .predictor.ml_wrappers.base_wrapper import BaseMLWrapper
 from .tuner.pre_transformer_tuner import PreTransformerTuner
 from .tuner.base_tuner import ParameterSearchRange, BaseTuner
-from .ratings.enums import RatingColumnNames
 from .ratings.match_rating.player_rating.player_rating_generator import PlayerRatingGenerator
 from .ratings.match_rating.team_rating_generator import TeamRatingGenerator
 from .data_structures import ColumnNames

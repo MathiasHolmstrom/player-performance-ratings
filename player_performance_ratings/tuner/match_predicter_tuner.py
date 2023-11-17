@@ -17,21 +17,18 @@ logging.basicConfig(level=logging.INFO)
 class MatchPredictorTuner():
 
     def __init__(self,
-                 target: str,
                  pre_transformer_tuner: Optional[PreTransformerTuner] = None,
                  start_rating_tuner: Optional[StartRatingTuner] = None,
                  player_rating_tuner: Optional[PlayerRatingTuner] = None,
                  fit_best: bool = True
                  ):
-        self.target = target
+      #  self.target = target
         self.pre_transformer_tuner = pre_transformer_tuner
         self.start_rating_tuner = start_rating_tuner
         self.player_rating_tuner = player_rating_tuner
         self.fit_best = fit_best
 
     def tune(self, df: pd.DataFrame) -> MatchPredictor:
-
-        df = df.assign(**{RatingColumnNames.TARGET: df[self.target]})
 
         if self.pre_transformer_tuner:
             column_names = self.pre_transformer_tuner.column_names

@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import log_loss
 
+from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.ratings.enums import RatingColumnNames
 
 
@@ -21,7 +22,7 @@ class BaseScorer(ABC):
 
 class LogLossScorer(BaseScorer):
 
-    def __init__(self, pred_column: str, target: Optional[str] = RatingColumnNames.TARGET, weight_cross_league: float = 1):
+    def __init__(self, pred_column: str, target: Optional[str] = PredictColumnNames.TARGET, weight_cross_league: float = 1):
         self.pred_column_name = pred_column
         self.weight_cross_league = weight_cross_league
         super().__init__(target=target, pred_column=pred_column)
@@ -45,7 +46,7 @@ class OrdinalLossScorer(BaseScorer):
 
     def __init__(self,
                  pred_column: str,
-                 target: Optional[str] = RatingColumnNames.TARGET,
+                 target: Optional[str] = PredictColumnNames.TARGET,
                  granularity: Optional[list[str]] = None
                  ):
 

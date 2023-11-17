@@ -1,9 +1,9 @@
-import logging
 from typing import List, Optional
 
 import pandas as pd
 import pendulum
 
+from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor.ml_wrappers.base_wrapper import BaseMLWrapper
 from player_performance_ratings.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
 from player_performance_ratings.ratings.data_prepararer import MatchGenerator
@@ -29,17 +29,17 @@ class MatchPredictor():
 
         self.predictor = predictor or SKLearnClassifierWrapper(
             features=[RatingColumnNames.RATING_DIFFERENCE],
-            target=RatingColumnNames.TARGET
+            target=PredictColumnNames.TARGET
         )
 
-        self.predictor.set_target(RatingColumnNames.TARGET)
+        self.predictor.set_target(PredictColumnNames.TARGET)
         self.train_split_date = train_split_date
         self.rating_generator = rating_generator
 
     def generate(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> pd.DataFrame:
 
         if self.predictor.target not in df.columns:
-            raise ValueError(f"Target {self.predictor.target} not in df columns")
+            raise ValueError(f"Target {self.predictor.target} not in df columns. Target is always overriden to be set to RatingColumnNames.TARGET")
 
         for pre_rating_transformer in self.pre_rating_transformers:
             df = pre_rating_transformer.transform(df)

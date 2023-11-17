@@ -28,8 +28,10 @@ class RatingColumnNames:
     PLAYER_LEAGUE = "player_league"
     OPPONENT_LEAGUE = "opponent_league"
     MATCH_ID = "match_id"
-    TARGET = "__target"
+
     PERFORMANCE = "performance"
+
+
 
 
 class PredictedRatingMethod(Enum):

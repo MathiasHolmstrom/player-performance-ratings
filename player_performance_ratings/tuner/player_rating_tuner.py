@@ -24,7 +24,6 @@ class PlayerRatingTuner():
         self.search_ranges = search_ranges
         self.match_predictor = match_predictor
         self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target,
-                                              weight_cross_league=3,
                                               pred_column=self.match_predictor.predictor.pred_column
                                               )
         self.n_trials = n_trials

@@ -12,7 +12,7 @@ from player_performance_ratings.transformers.base_transformer import BaseTransfo
 class ColumnWeight:
     name: str
     weight: float
-    is_negative: bool = False
+    lower_is_better: bool = False
 
 
 class ColumnsWeighter(BaseTransformer):
@@ -42,8 +42,8 @@ class ColumnsWeighter(BaseTransformer):
 
         for column_weight in self.column_weights:
 
-            if column_weight.is_negative:
-                df[self.weighted_column_name] += df[f'weight__{column_weight.name}'] * -df[column_weight.name]
+            if column_weight.lower_is_better:
+                df[self.weighted_column_name] += df[f'weight__{column_weight.name}'] * (1-df[column_weight.name])
             else:
                 df[self.weighted_column_name] += df[f'weight__{column_weight.name}'] * df[column_weight.name]
         df = df.drop(columns=drop_cols)
