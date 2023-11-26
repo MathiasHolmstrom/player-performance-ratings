@@ -2,7 +2,7 @@
 
 from player_performance_ratings import MatchPredictor
 from player_performance_ratings import SKLearnClassifierWrapper
-from player_performance_ratings import PlayerRatingGenerator
+from player_performance_ratings import TeamRatingGenerator
 from player_performance_ratings import TeamRatingGenerator
 
 from sklearn.preprocessing import StandardScaler
@@ -83,7 +83,7 @@ if __name__ == '__main__':
     ]
 
     team_rating_generator = TeamRatingGenerator(
-        player_rating_generator=PlayerRatingGenerator(rating_change_multiplier=80))
+        player_rating_generator=TeamRatingGenerator(rating_change_multiplier=80))
     rating_generator = RatingGenerator()
     predictor = SKLearnClassifierWrapper(features=[RatingColumnNames.RATING_DIFFERENCE], target='result')
 

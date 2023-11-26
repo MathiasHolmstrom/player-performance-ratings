@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 from typing import Dict, Any, List, Optional
 
-from player_performance_ratings.data_structures import MatchPlayer, PreMatchPlayerRating
+from player_performance_ratings.data_structures import MatchPlayer, PreMatchPlayerRating, PlayerRatingChange
 
 DEFAULT_START_RATING = 1000
 
@@ -99,17 +99,16 @@ class StartRatingGenerator():
         percentile = np.percentile(entity_ratings, self.league_quantile * 100)
         return percentile
 
-    def update_league_ratings(self, day_number: int, pre_match_player_rating: PreMatchPlayerRating,
-                              rating_value: float):
-        league = pre_match_player_rating.league
-        id = pre_match_player_rating.id
+    def update_league_ratings(self, day_number: int, rating_value: float):
+        league = rating_change.league
+        id = rating_change.id
 
         league_data = self.league_player_ratings.setdefault(league, [])
         league_entity_ids = self.league_to_entity_ids.setdefault(league, [])
         league_last_day_numbers = self.league_to_last_day_number.setdefault(league, [])
 
         if id not in league_entity_ids:
-            league_data.append(rating_value)
+            league_data.append(ra)
             league_entity_ids.append(id)
             league_last_day_numbers.append(day_number)
             self.entity_to_league[id] = league

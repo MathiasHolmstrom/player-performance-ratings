@@ -24,7 +24,7 @@ class BaseTuner(ABC):
 @dataclass
 class ParameterSearchRange:
     name: str
-    type: Literal["uniform", "loguniform", "int", "categorical"]
+    type: Literal["uniform", "loguniform", "int", "categorical", "discrete_uniform"]
     low: Optional[Union[float, int]] = None
     high: Optional[Union[float, int]] = None
     choices: Optional[list[Any]] = None
@@ -41,6 +41,8 @@ def add_custom_hyperparams(params: dict, trial: BaseTrial,
             params[config.name] = trial.suggest_int(config.name, low=config.low, high=config.high)
         elif config.type == "categorical":
             params[config.name] = trial.suggest_categorical(config.name, config.choices)
+        elif config.type == 'discrete_uniform:':
+            params[config.name] = trial.suggest_discrete_uniform(config.name, low=config.low, high=config.high)
 
     return params
 

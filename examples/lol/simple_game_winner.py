@@ -4,7 +4,7 @@ from sklearn.metrics import log_loss
 
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
-from player_performance_ratings import PlayerRatingGenerator
+from player_performance_ratings import TeamRatingGenerator
 from player_performance_ratings import  StartRatingGenerator
 from player_performance_ratings import TeamRatingGenerator
 from player_performance_ratings import RatingGenerator
@@ -49,7 +49,7 @@ rating_generator = RatingGenerator(
     store_game_ratings=True,
     column_names=column_names,
     team_rating_generator=TeamRatingGenerator(
-        player_rating_generator=PlayerRatingGenerator(
+        player_rating_generator=TeamRatingGenerator(
             start_rating_generator=start_rating_generator
         )
     )

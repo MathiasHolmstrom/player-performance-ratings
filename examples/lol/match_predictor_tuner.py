@@ -7,7 +7,7 @@ from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings import MatchPredictor
 from player_performance_ratings import SKLearnClassifierWrapper
 from player_performance_ratings import RatingColumnNames
-from player_performance_ratings import PlayerRatingGenerator
+from player_performance_ratings import TeamRatingGenerator
 from player_performance_ratings import TeamRatingGenerator
 from player_performance_ratings import RatingGenerator
 from player_performance_ratings import PreTransformerTuner, StartRatingTuner
@@ -36,7 +36,7 @@ df = (
 )
 
 team_rating_generator = TeamRatingGenerator(
-    player_rating_generator=PlayerRatingGenerator())
+    player_rating_generator=TeamRatingGenerator())
 rating_generator = RatingGenerator()
 predictor = SKLearnClassifierWrapper(features=[RatingColumnNames.RATING_DIFFERENCE], target='result')
 

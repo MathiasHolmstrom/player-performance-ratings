@@ -7,7 +7,7 @@ from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
 from player_performance_ratings.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
 from player_performance_ratings.ratings.enums import RatingColumnNames
-from player_performance_ratings.ratings.match_rating.player_rating.player_rating_generator import PlayerRatingGenerator
+from player_performance_ratings.ratings.match_rating.player_rating.player_rating_generator import TeamRatingGenerator
 from player_performance_ratings import TeamRatingGenerator
 from player_performance_ratings import RatingGenerator
 from player_performance_ratings import StartRatingTuner
@@ -32,7 +32,7 @@ column_names = ColumnNames(
     league='league'
 )
 team_rating_generator = TeamRatingGenerator(
-    player_rating_generator=PlayerRatingGenerator())
+    player_rating_generator=TeamRatingGenerator())
 rating_generator = RatingGenerator()
 predictor = SKLearnClassifierWrapper(features=[RatingColumnNames.RATING_DIFFERENCE], target='result',
                                      granularity=[column_names.match_id, column_names.team_id])
@@ -42,7 +42,7 @@ match_predictor = MatchPredictor(
     column_names=column_names,
     predictor=predictor,
 )
-search_range = [
+start_rating_search_range = [
     ParameterSearchRange(
         name='team_weight',
         type='uniform',
@@ -69,7 +69,7 @@ start_rating_optimizer = StartLeagueRatingOptimizer(column_names=column_names, m
 start_rating_tuner = StartRatingTuner(column_names=column_names,
                                       match_predictor=match_predictor,
                                       n_trials=1,
-                                      search_ranges=search_range,
+                                      search_ranges=start_rating_search_range,
                                       start_rating_optimizer=start_rating_optimizer
                                       )
 start_rating_tuner.tune(df=df)

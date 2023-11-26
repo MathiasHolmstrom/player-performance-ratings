@@ -57,6 +57,13 @@ class MatchPredictorTuner():
             matches = None
 
         if self.player_rating_tuner:
+
+            if matches is None:
+                for pre_rating_transformer in self.player_rating_tuner.match_predictor.pre_rating_transformers:
+                    df = pre_rating_transformer.transform(df)
+                match_generator = MatchGenerator(column_names=column_names)
+                matches = match_generator.generate(df=df)
+
             logging.info("Tuning Player Rating")
             best_player_rating_generator = self.player_rating_tuner.tune(df, matches=matches)
             if self.start_rating_tuner:
@@ -66,6 +73,13 @@ class MatchPredictorTuner():
 
         if self.start_rating_tuner:
             logging.info("Tuning Start Rating")
+
+            if matches is None:
+                for pre_rating_transformer in self.start_rating_tuner.match_predictor.pre_rating_transformers:
+                    df = pre_rating_transformer.transform(df)
+                match_generator = MatchGenerator(column_names=column_names)
+                matches = match_generator.generate(df=df)
+
             best_start_rating = self.start_rating_tuner.tune(df, matches=matches)
             if best_player_rating_generator:
                 best_player_rating_generator.start_rating_generator = best_start_rating

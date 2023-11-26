@@ -8,7 +8,7 @@ from optuna.trial import BaseTrial
 
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
 from player_performance_ratings.data_structures import Match
-from player_performance_ratings.ratings.match_rating.player_rating.player_rating_generator import PlayerRatingGenerator
+from player_performance_ratings.ratings.match_rating.player_rating.player_rating_generator import TeamRatingGenerator
 from player_performance_ratings.scorer.score import BaseScorer, LogLossScorer
 from player_performance_ratings.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams
 
@@ -28,13 +28,13 @@ class PlayerRatingTuner():
                                               )
         self.n_trials = n_trials
 
-    def tune(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> PlayerRatingGenerator:
+    def tune(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> TeamRatingGenerator:
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
             params = {}
             params = add_custom_hyperparams(params=params,
                                             trial=trial,
                                             parameter_search_range=self.search_ranges)
-            player_rating_generator = PlayerRatingGenerator(**params)
+            player_rating_generator = TeamRatingGenerator(**params)
             match_predictor = copy.deepcopy(self.match_predictor)
             match_predictor.rating_generator.team_rating_generator.player_rating_generator = player_rating_generator
             df_with_prediction = match_predictor.generate(df=df)
@@ -50,4 +50,4 @@ class PlayerRatingTuner():
 
         best_params = study.best_params
 
-        return PlayerRatingGenerator(**best_params)
+        return TeamRatingGenerator(**best_params)

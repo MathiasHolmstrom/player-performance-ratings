@@ -2,7 +2,7 @@ from sklearn.preprocessing import StandardScaler
 
 from player_performance_ratings.predictor.ml_wrappers.ordinal_classifier import OrdinalClassifier
 from examples.utils import load_data
-from player_performance_ratings import TeamRatingGenerator, PlayerRatingGenerator, MatchPredictor, \
+from player_performance_ratings import TeamRatingGenerator, TeamRatingGenerator, MatchPredictor, \
     SKLearnClassifierWrapper, SkLearnTransformerWrapper, RatingColumnNames
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.ratings.data_prepararer import MatchGenerator
@@ -35,7 +35,7 @@ match_generator = MatchGenerator(column_names=column_names)
 matches = match_generator.generate(df=df)
 
 rating_generator = RatingGenerator(team_rating_generator=TeamRatingGenerator(
-    player_rating_generator=PlayerRatingGenerator(performance_predictor=RatingMeanPerformancePredictor())))
+    player_rating_generator=TeamRatingGenerator(performance_predictor=RatingMeanPerformancePredictor())))
 match_ratings = rating_generator.generate(matches=matches)
 
 pre_rating_transformers = [

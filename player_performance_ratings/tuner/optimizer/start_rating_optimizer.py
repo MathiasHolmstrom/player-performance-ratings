@@ -42,7 +42,7 @@ class StartLeagueRatingOptimizer():
         self.verbose = verbose
         self._scores = []
         self._league_ratings_iterations = []
-        self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target, weight_cross_league=3,
+        self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target,
                                               pred_column=self.match_predictor.predictor.pred_column)
 
     def optimize(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> dict[str, float]:

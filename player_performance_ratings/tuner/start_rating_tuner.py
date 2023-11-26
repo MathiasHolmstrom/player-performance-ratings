@@ -36,8 +36,7 @@ class StartRatingTuner():
                  ):
 
         self.start_rating_parameters = start_rating_parameters
-        self.start_rating_optimizer = start_rating_optimizer or StartLeagueRatingOptimizer(column_names=column_names,
-                                                                                           match_predictor=match_predictor)
+        self.start_rating_optimizer = start_rating_optimizer
         self.n_trials = n_trials
         self.match_predictor = match_predictor
         self.search_ranges = search_ranges
@@ -51,6 +50,7 @@ class StartRatingTuner():
         for league, rating in league_start_ratings.items():
             low_start_rating = league_start_ratings[league] - 120
             high_start_rating = league_start_ratings[league] + 120
+
             params['league_ratings'][league] = trial.suggest_int(league, low=low_start_rating, high=high_start_rating)
 
         return params
