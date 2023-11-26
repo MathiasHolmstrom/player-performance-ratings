@@ -1,6 +1,5 @@
 import logging
 import math
-from collections import defaultdict
 from typing import Dict, Optional, Tuple
 
 from player_performance_ratings.data_structures import Match, MatchPlayer, PlayerRating, PreMatchTeamRating, \
@@ -8,7 +7,7 @@ from player_performance_ratings.data_structures import Match, MatchPlayer, Playe
     PlayerRatingChange, Team, MatchTeam, TeamRatingChange
 from player_performance_ratings.ratings.match_rating.performance_predictor import RatingDifferencePerformancePredictor, \
     PerformancePredictor
-from player_performance_ratings.ratings.match_rating.player_rating.start_rating.start_rating_generator import \
+from player_performance_ratings.ratings.match_rating.start_rating.start_rating_generator import \
     StartRatingGenerator
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
@@ -194,7 +193,6 @@ class TeamRatingGenerator():
                 team_rating=pre_team_rating
             )
 
-
             rating_change_multiplier = self._calculate_rating_change_multiplier(entity_id=pre_player_rating.id)
             performance_difference = pre_player_rating.match_performance.performance_value - predicted_performance
             rating_change_value = performance_difference * rating_change_multiplier * pre_player_rating.match_performance.participation_weight
@@ -218,16 +216,19 @@ class TeamRatingGenerator():
             sum_rating_change += player_rating_change.rating_change_value * pre_player_rating.match_performance.participation_weight
             sum_participation_weight += pre_player_rating.match_performance.participation_weight
 
+        rating_change_value = sum_rating_change / sum_participation_weight if sum_participation_weight > 0 else 0
+        predicted_performance = sum_predicted_performance / sum_participation_weight if sum_participation_weight > 0 else 0
+        performance = sum_performance_value / sum_participation_weight if sum_participation_weight > 0 else 0
+
         return TeamRatingChange(
             players=player_rating_changes,
             id=player_rating_changes[0].id,
-            rating_change_value=sum_rating_change / sum_participation_weight,
-            predicted_performance=sum_predicted_performance / sum_participation_weight,
+            rating_change_value=rating_change_value,
+            predicted_performance=predicted_performance,
             pre_match_rating_value=pre_match_team_ratings[team_idx].rating_value,
             league=pre_match_team_ratings[team_idx].league,
-            performance=sum_performance_value/sum_participation_weight
+            performance=performance
         )
-
 
     def update_rating_by_team_rating_change(self,
                                             team_rating_change: TeamRatingChange,
@@ -239,10 +240,10 @@ class TeamRatingGenerator():
             self.player_ratings[id].games_played += player_rating_change.participation_weight
             self.player_ratings[id].last_match_day_number = player_rating_change.day_number
 
-        self.start_rating_generator.update_league_ratings(day_number=player_rating_change.day_number,
-                                                          rating_change=player_rating_change.rating_change_value)
 
-        self._update_league_ratings(rating_change=player_rating_change)
+            self.start_rating_generator.update_league_ratings(rating_change=player_rating_change)
+
+            self._update_league_ratings(rating_change=player_rating_change)
 
     def _update_league_ratings(self,
                                rating_change: PlayerRatingChange

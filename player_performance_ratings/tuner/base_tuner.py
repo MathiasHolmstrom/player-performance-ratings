@@ -30,8 +30,8 @@ class ParameterSearchRange:
     choices: Optional[list[Any]] = None
     custom_params: dict[str, Any] = field(default_factory=dict)
 
-def add_custom_hyperparams(params: dict, trial: BaseTrial,
-                           parameter_search_range: list[ParameterSearchRange]) -> dict:
+def add_params_from_search_range(params: dict, trial: BaseTrial,
+                                 parameter_search_range: list[ParameterSearchRange]) -> dict:
     for config in parameter_search_range:
         if config.type == "uniform":
             params[config.name] = trial.suggest_uniform(config.name, low=config.low, high=config.high)

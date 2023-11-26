@@ -1,0 +1,1 @@
+from .match_team_rating_generator import TeamRatingGenerator

@@ -142,7 +142,7 @@ player_rating_tuner = PlayerRatingTuner(match_predictor=match_predictor,
 
 tuner = MatchPredictorTuner(
     pre_transformer_tuner=pre_transformer_tuner,
-    player_rating_tuner=player_rating_tuner,
+    team_rating_tuner=player_rating_tuner,
     fit_best=True,
     target='total_kills'
 )

@@ -11,7 +11,7 @@ from player_performance_ratings.predictor.match_predictor import MatchPredictor
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.scorer.score import LogLossScorer, BaseScorer
 from player_performance_ratings.transformers.base_transformer import BaseTransformer
-from player_performance_ratings.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams, \
+from player_performance_ratings.tuner.base_tuner import ParameterSearchRange, add_params_from_search_range, \
     TransformerTuner
 
 from player_performance_ratings.transformers.common import ColumnWeight
@@ -38,7 +38,7 @@ def insert_params_to_common_transformers(object: object, params, parameter_searc
 def add_hyperparams_to_common_transformers(object: object, params: dict[str, Union[float, None, bool, int, str]],
                                            trial: BaseTrial,
                                            parameter_search_range: list[ParameterSearchRange]) -> dict:
-    params = add_custom_hyperparams(params=params, trial=trial, parameter_search_range=parameter_search_range)
+    params = add_params_from_search_range(params=params, trial=trial, parameter_search_range=parameter_search_range)
 
     return insert_params_to_common_transformers(object=object, params=params,
                                                 parameter_search_range=parameter_search_range)

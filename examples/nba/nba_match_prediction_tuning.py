@@ -4,30 +4,29 @@ from examples.utils import load_nba_game_player_data, load_nba_game_matchup_data
 from player_performance_ratings import ColumnNames, MatchPredictorTuner, PreTransformerTuner, StartRatingTuner
 from player_performance_ratings import MatchPredictor
 from player_performance_ratings import SKLearnClassifierWrapper
-from player_performance_ratings import TeamRatingGenerator
-from player_performance_ratings import TeamRatingGenerator
 from player_performance_ratings import RatingGenerator
 from player_performance_ratings import ParameterSearchRange
 from player_performance_ratings import PlayerRatingTuner
 from player_performance_ratings.consts import PredictColumnNames
+from player_performance_ratings.predictor.ml_wrappers.classifier import SkLearnGamePredictor
 from player_performance_ratings.ratings.enums import RatingColumnNames
 
 from player_performance_ratings.transformers.common import SkLearnTransformerWrapper, MinMaxTransformer, \
     ColumnsWeighter, ColumnWeight
 
 column_names = ColumnNames(
-    team_id='lineup_id',
-    match_id='matchup_id',
+    team_id='team_id',
+    match_id='game_id',
     start_date="start_date",
     player_id="player_id",
     performance="performance",
     participation_weight="participation_weight",
 
 )
-df = load_nba_game_matchup_data()
+df = load_nba_game_player_data()
 df[PredictColumnNames.TARGET] = df['won']
 df = df.sort_values(by=[column_names.start_date, column_names.match_id, column_names.team_id, column_names.player_id])
-#df['plus_minus_per_minute'] = df['plus_minus'] / df['game_minutes']
+df['plus_minus_per_minute'] = df['plus_minus'] / df['game_minutes']
 
 df = (
     df.assign(team_count=df.groupby('game_id')['team_id'].transform('nunique'))
@@ -117,43 +116,9 @@ pre_transformers = [
     ])
 ]
 
-duration_performance_search_range = []
-column_weigher_search_range = [
-    ParameterSearchRange(
-        name='SCORE',
-        type='uniform',
-        low=0.4,
-        high=0.6
-    ),
-    ParameterSearchRange(
-        name='SCORE',
-        type='uniform',
-        low=0.4,
-        high=0.6
-    ),
-    ParameterSearchRange(
-        name='SCORE_OPPONENT',
-        type='uniform',
-        low=0.4,
-        high=0.6,
-        custom_params={'lower_is_better': True}
-    ),
 
-]
-standard_scaler = SkLearnTransformerWrapper(transformer=StandardScaler(), features=features)
-
-pre_transformer_search_ranges = [
-    (standard_scaler, []),
-    (MinMaxTransformer(features=features), []),
-    (ColumnsWeighter(column_weights=[], weighted_column_name='performance'), column_weigher_search_range),
-
-]
-
-team_rating_generator = TeamRatingGenerator(
-    player_rating_generator=TeamRatingGenerator())
 rating_generator = RatingGenerator()
-predictor = SKLearnClassifierWrapper(features=[RatingColumnNames.RATING_DIFFERENCE],
-                                     granularity=['game_id', 'team_id'])
+predictor = SkLearnGamePredictor(features=[RatingColumnNames.RATING_DIFFERENCE],game_id_colum='game_id', team_id_column='team_id')
 match_predictor = MatchPredictor(
     rating_generator=rating_generator,
     column_names=column_names,
@@ -161,10 +126,6 @@ match_predictor = MatchPredictor(
     pre_rating_transformers=pre_transformers,
 )
 
-pre_transformer_tuner = PreTransformerTuner(match_predictor=match_predictor,
-                                            pre_transformer_search_ranges=pre_transformer_search_ranges,
-                                            n_trials=55
-                                            )
 
 player_rating_tuner = PlayerRatingTuner(match_predictor=match_predictor,
                                         search_ranges=player_search_ranges,
@@ -179,7 +140,7 @@ start_rating_tuner = StartRatingTuner(column_names=column_names,
 
 tuner = MatchPredictorTuner(
     # pre_transformer_tuner=pre_transformer_tuner,
-    player_rating_tuner=player_rating_tuner,
+    team_rating_tuner=player_rating_tuner,
     start_rating_tuner=start_rating_tuner,
     fit_best=True,
 )

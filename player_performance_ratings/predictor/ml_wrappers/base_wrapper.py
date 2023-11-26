@@ -12,7 +12,7 @@ class BaseMLWrapper(ABC):
         self._pred_column = pred_column
 
     @abstractmethod
-    def fit(self, df: pd.DataFrame) -> None:
+    def train(self, df: pd.DataFrame) -> None:
         pass
 
     @abstractmethod

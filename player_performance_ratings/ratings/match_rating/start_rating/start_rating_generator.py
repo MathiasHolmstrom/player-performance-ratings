@@ -99,16 +99,18 @@ class StartRatingGenerator():
         percentile = np.percentile(entity_ratings, self.league_quantile * 100)
         return percentile
 
-    def update_league_ratings(self, day_number: int, rating_value: float):
+    def update_league_ratings(self, rating_change: PlayerRatingChange):
         league = rating_change.league
         id = rating_change.id
+        day_number = rating_change.day_number
+        rating_value = rating_change.pre_match_rating_value + rating_change.rating_change_value
 
         league_data = self.league_player_ratings.setdefault(league, [])
         league_entity_ids = self.league_to_entity_ids.setdefault(league, [])
         league_last_day_numbers = self.league_to_last_day_number.setdefault(league, [])
 
         if id not in league_entity_ids:
-            league_data.append(ra)
+            league_data.append(rating_value)
             league_entity_ids.append(id)
             league_last_day_numbers.append(day_number)
             self.entity_to_league[id] = league

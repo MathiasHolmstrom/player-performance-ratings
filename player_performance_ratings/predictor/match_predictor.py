@@ -60,7 +60,7 @@ class MatchPredictor():
 
         train_df = df[df[self.column_names.start_date] <= self.train_split_date]
 
-        self.predictor.fit(train_df)
+        self.predictor.train(train_df)
         df = self.predictor.add_prediction(df)
         return df
 

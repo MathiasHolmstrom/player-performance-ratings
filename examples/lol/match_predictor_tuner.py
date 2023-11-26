@@ -177,7 +177,7 @@ start_rating_tuner = StartRatingTuner(column_names=column_names,
 
 tuner = MatchPredictorTuner(
     pre_transformer_tuner=pre_transformer_tuner,
-    player_rating_tuner=player_rating_tuner,
+    team_rating_tuner=player_rating_tuner,
     start_rating_tuner=start_rating_tuner,
     fit_best=True,
 )

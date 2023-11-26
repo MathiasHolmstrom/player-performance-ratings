@@ -9,7 +9,7 @@ import pandas as pd
 from player_performance_ratings.data_structures import ColumnNames, Match
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
 from player_performance_ratings.ratings.enums import RatingColumnNames
-from player_performance_ratings.ratings.match_rating.player_rating.start_rating.start_rating_generator import \
+from player_performance_ratings.ratings.match_rating.start_rating.start_rating_generator import \
     StartRatingGenerator
 from player_performance_ratings.scorer.score import BaseScorer, LogLossScorer
 

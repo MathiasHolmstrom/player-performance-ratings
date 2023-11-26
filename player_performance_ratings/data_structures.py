@@ -17,7 +17,11 @@ class ColumnNames:
     rating_update_id: str = None
 
     def __post_init__(self):
-        self.rating_update_id = self.match_id
+        if self.rating_update_id is None:
+            self.rating_update_id = self.match_id
+
+        if self.projected_participation_weight is None:
+            self.projected_participation_weight = self.participation_weight
 
 
 @dataclass

@@ -12,15 +12,42 @@ from player_performance_ratings.data_structures import ColumnNames, Match
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
 from player_performance_ratings.ratings.data_prepararer import MatchGenerator
 from player_performance_ratings.ratings.enums import RatingColumnNames
-from player_performance_ratings.ratings.match_rating.player_rating.start_rating.start_rating_generator import \
+from player_performance_ratings.ratings.match_rating.start_rating.start_rating_generator import \
     StartRatingGenerator
 from player_performance_ratings.scorer.score import BaseScorer, LogLossScorer
-from player_performance_ratings.tuner.optimizer.start_rating_optimizer import StartLeagueRatingOptimizer, LeagueH2H
-from player_performance_ratings.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams
+from player_performance_ratings.tuner.optimizer.start_rating_optimizer import StartLeagueRatingOptimizer
+from player_performance_ratings.tuner.base_tuner import ParameterSearchRange, add_params_from_search_range
 
 logging.basicConfig(level=logging.INFO)
 
 RC = RatingColumnNames
+
+DEFAULT_START_RATING_SEARCH_RANGE = [
+    ParameterSearchRange(
+        name='league_quantile',
+        type='uniform',
+        low=0.12,
+        high=.4,
+    ),
+    ParameterSearchRange(
+        name='min_count_for_percentiles',
+        type='discrete_uniform',
+        low=50,
+        high=200,
+    ),
+    ParameterSearchRange(
+        name='team_rating_subtract',
+        type='int',
+        low=20,
+        high=300
+    ),
+    ParameterSearchRange(
+        name='team_weight',
+        type='uniform',
+        low=0,
+        high=0.7
+    )
+]
 
 
 class StartRatingTuner():
@@ -39,7 +66,7 @@ class StartRatingTuner():
         self.start_rating_optimizer = start_rating_optimizer
         self.n_trials = n_trials
         self.match_predictor = match_predictor
-        self.search_ranges = search_ranges
+        self.search_ranges = search_ranges or DEFAULT_START_RATING_SEARCH_RANGE
         self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target,
                                               pred_column=self.match_predictor.predictor.pred_column)
 
@@ -62,10 +89,10 @@ class StartRatingTuner():
             if league_start_ratings != {}:
                 params['league_ratings'] = league_start_ratings
 
-            params = add_custom_hyperparams(params=params,
-                                            trial=trial,
-                                            parameter_search_range=self.search_ranges,
-                                            )
+            params = add_params_from_search_range(params=params,
+                                                  trial=trial,
+                                                  parameter_search_range=self.search_ranges,
+                                                  )
             params = self._add_start_rating_hyperparams(params=params, trial=trial,
                                                         league_start_ratings=league_start_ratings)
             start_rating_generator = StartRatingGenerator(**params)

@@ -3,12 +3,11 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from player_performance_ratings import TeamRatingGenerator
+from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
 from player_performance_ratings.ratings.enums import RatingColumnNames
 
-from player_performance_ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PostMatchRatingChange, \
-    MatchRating, \
-    PlayerRating, TeamRating, ColumnNames, TeamRatingChange
+from player_performance_ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PlayerRating, \
+    TeamRating, ColumnNames, TeamRatingChange
 
 
 class RatingGenerator():
@@ -37,14 +36,19 @@ class RatingGenerator():
         player_leagues = []
         performances = []
 
-        for match in matches:
+        team_rating_changes = []
+        for match_idx, match in enumerate(matches):
             self._validate_match(match)
             match_team_rating_changes = self._create_match_team_rating_changes(match=match)
+            team_rating_changes += match_team_rating_changes
+
+            if match_idx < len(matches) - 1 and matches[match_idx + 1].update_id != match.update_id:
+                self.update_ratings(team_rating_changes=team_rating_changes)
+                team_rating_changes = []
 
             for team_idx, team_rating_change in enumerate(match_team_rating_changes):
                 opponent_team = match_team_rating_changes[-team_idx + 1]
                 for player_idx, player_rating_change in enumerate(team_rating_change.players):
-
                     pre_match_player_rating_values.append(player_rating_change.pre_match_rating_value)
                     pre_match_team_rating_values.append(team_rating_change.pre_match_rating_value)
                     pre_match_opponent_rating_values.append(opponent_team.pre_match_rating_value)
@@ -100,10 +104,9 @@ class RatingGenerator():
         )
 
         for team_idx in range(len(pre_match_rating.teams)):
-
             team_rating_change = self.team_rating_generator.generate_rating_change(day_number=match.day_number,
-                                                                                      pre_match_team_ratings=pre_match_rating.teams,
-                                                                                      team_idx=team_idx)
+                                                                                   pre_match_team_ratings=pre_match_rating.teams,
+                                                                                   team_idx=team_idx)
             team_rating_changes.append(team_rating_change)
 
         return team_rating_changes
@@ -120,7 +123,6 @@ class RatingGenerator():
                 match_team=match_team, match=match))
 
         return pre_match_team_ratings
-
 
     def _validate_match(self, match: Match):
         if len(match.teams) < 2:
