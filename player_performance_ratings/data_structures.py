@@ -69,7 +69,7 @@ class PreMatchPlayerRating:
     id: str
     rating_value: float
     games_played: int
-    league: str
+    league:  Optional[str]
     match_performance: MatchPerformance
 
 
@@ -79,7 +79,7 @@ class PreMatchTeamRating:
     id: str
     players: list[PreMatchPlayerRating]
     rating_value: float
-    league: str
+    league: Optional[str]
 
 
 @dataclass
@@ -92,7 +92,7 @@ class PreMatchRating:
 class PlayerRatingChange:
     id: str
     day_number: int
-    league: str
+    league: Optional[str]
     participation_weight: float
     predicted_performance: float
     performance: float
@@ -108,7 +108,7 @@ class TeamRatingChange:
     performance: float
     pre_match_rating_value: float
     rating_change_value: float
-    league: str
+    league: Optional[str]
 
 @dataclass
 class PostMatchTeamRatingChange:

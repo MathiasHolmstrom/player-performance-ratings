@@ -7,8 +7,8 @@ from .scorer.score import LogLossScorer, BaseScorer
 
 from .transformers.base_transformer import BaseTransformer
 from .transformers.common import SkLearnTransformerWrapper, MinMaxTransformer, ColumnsWeighter
-from .predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
-from .predictor.ml_wrappers.base_wrapper import BaseMLWrapper
+from player_performance_ratings.predictor.estimators.classifier import SKLearnClassifierWrapper
+from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
 from .tuner.pre_transformer_tuner import PreTransformerTuner
 from .tuner.base_tuner import ParameterSearchRange, BaseTuner
 from .data_structures import ColumnNames

@@ -85,7 +85,7 @@ class OrdinalLossScorer(BaseScorer):
 
             grouped.loc[grouped['__target'] <= class_, 'log_loss'] = np.log(grouped[p_c])
             grouped.loc[grouped['__target'] > class_, 'log_loss'] = np.log(1 - grouped[p_c])
-            sum_lr += grouped['log_loss'].mean() / (len(self.target) - 1)
+            sum_lr -= grouped['log_loss'].mean() / (len(classes_) - 1)
 
             last_column_name = p_c
 

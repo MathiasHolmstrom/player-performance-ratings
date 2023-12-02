@@ -1,8 +1,8 @@
 from sklearn.preprocessing import StandardScaler
 
-from player_performance_ratings.predictor.ml_wrappers.ordinal_classifier import OrdinalClassifier
+from player_performance_ratings.predictor.estimators.ordinal_classifier import OrdinalClassifier
 from examples.utils import load_data
-from player_performance_ratings import TeamRatingGenerator, TeamRatingGenerator, MatchPredictor, \
+from player_performance_ratings import TeamRatingGenerator, MatchPredictor, \
     SKLearnClassifierWrapper, SkLearnTransformerWrapper, RatingColumnNames
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.ratings.data_prepararer import MatchGenerator

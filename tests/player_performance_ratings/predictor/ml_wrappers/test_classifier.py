@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from player_performance_ratings.consts import PredictColumnNames
-from player_performance_ratings.predictor.ml_wrappers.classifier import SkLearnGameTeamPredictor
+from player_performance_ratings.predictor.estimators.classifier import SkLearnGameTeamPredictor
 
 
 def test_classifier_add_prediction():

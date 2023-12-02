@@ -1,13 +1,8 @@
-import os
-
-import pandas as pd
-
 from examples.utils import load_data
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
-from player_performance_ratings.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
+from player_performance_ratings.predictor.estimators.classifier import SKLearnClassifierWrapper
 from player_performance_ratings.ratings.enums import RatingColumnNames
-from player_performance_ratings.ratings.match_rating.player_rating.player_rating_generator import TeamRatingGenerator
 from player_performance_ratings import TeamRatingGenerator
 from player_performance_ratings import RatingGenerator
 from player_performance_ratings import StartRatingTuner

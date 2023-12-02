@@ -1,13 +1,12 @@
-import logging
-from dataclasses import dataclass
 from typing import Optional
 
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
 from player_performance_ratings.consts import PredictColumnNames
-from player_performance_ratings.predictor.ml_wrappers.base_wrapper import BaseMLWrapper
+
 from player_performance_ratings.data_structures import ColumnNames
+from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
 
 
 class SkLearnGameTeamPredictor(BaseMLWrapper):

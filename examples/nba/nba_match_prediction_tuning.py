@@ -1,17 +1,18 @@
 from sklearn.preprocessing import StandardScaler
 
 from examples.utils import load_nba_game_player_data, load_nba_game_matchup_data
-from player_performance_ratings import ColumnNames, MatchPredictorTuner, PreTransformerTuner, StartRatingTuner, \
+from player_performance_ratings import ColumnNames, MatchPredictorTuner, StartRatingTuner, \
     TeamRatingTuner
 from player_performance_ratings import MatchPredictor
-from player_performance_ratings import SKLearnClassifierWrapper
 from player_performance_ratings import RatingGenerator
 from player_performance_ratings import ParameterSearchRange
 
 from player_performance_ratings.consts import PredictColumnNames
-from player_performance_ratings.predictor.ml_wrappers.classifier import SkLearnGameTeamPredictor
+from player_performance_ratings.predictor.estimators.classifier import SkLearnGameTeamPredictor
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
+from player_performance_ratings.ratings.match_rating.performance_predictor import PerformancePredictor, \
+    RatingDifferencePerformancePredictor
 from player_performance_ratings.ratings.match_rating.start_rating.start_rating_generator import StartRatingGenerator
 
 from player_performance_ratings.transformers.common import SkLearnTransformerWrapper, MinMaxTransformer
@@ -73,6 +74,9 @@ rating_generator = RatingGenerator(
     store_game_ratings=True,
     column_names=column_names,
     team_rating_generator=TeamRatingGenerator(
+        performance_predictor=RatingDifferencePerformancePredictor(
+            team_rating_diff_coef=0,
+        ),
         start_rating_generator=StartRatingGenerator(
             team_weight=0,
         )

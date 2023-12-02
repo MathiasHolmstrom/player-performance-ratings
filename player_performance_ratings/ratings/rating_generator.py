@@ -82,7 +82,6 @@ class RatingGenerator():
                     RatingColumnNames.PERFORMANCE: performances,
                     RatingColumnNames.RATING_MEAN: rating_means,
                     RatingColumnNames.PLAYER_PREDICTED_PERFORMANCE: player_predicted_performances
-
                 })
 
         return {
@@ -107,10 +106,12 @@ class RatingGenerator():
             day_number=match.day_number
         )
 
-        for team_idx in range(len(pre_match_rating.teams)):
+        for team_idx, pre_match_team_rating in enumerate(pre_match_rating.teams):
             team_rating_change = self.team_rating_generator.generate_rating_change(day_number=match.day_number,
-                                                                                   pre_match_team_ratings=pre_match_rating.teams,
-                                                                                   team_idx=team_idx)
+                                                                                   pre_match_team_rating=pre_match_team_rating,
+                                                                                   pre_match_opponent_team_rating=
+                                                                                   pre_match_rating.teams[
+                                                                                       -team_idx + 1])
             team_rating_changes.append(team_rating_change)
 
         return team_rating_changes
@@ -124,7 +125,7 @@ class RatingGenerator():
         pre_match_team_ratings = []
         for match_team in match.teams:
             pre_match_team_ratings.append(self.team_rating_generator.generate_pre_match_team_rating(
-                match_team=match_team, match=match))
+                match_team=match_team, day_number=match.day_number))
 
         return pre_match_team_ratings
 

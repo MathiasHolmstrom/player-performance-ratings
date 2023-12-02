@@ -4,8 +4,9 @@ import pandas as pd
 import pendulum
 
 from player_performance_ratings.consts import PredictColumnNames
-from player_performance_ratings.predictor.ml_wrappers.base_wrapper import BaseMLWrapper
-from player_performance_ratings.predictor.ml_wrappers.classifier import SKLearnClassifierWrapper
+from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
+
+from player_performance_ratings.predictor.estimators.classifier import SKLearnClassifierWrapper
 from player_performance_ratings.ratings.data_prepararer import MatchGenerator
 from player_performance_ratings.data_structures import ColumnNames, Match
 from player_performance_ratings.ratings.enums import RatingColumnNames

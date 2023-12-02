@@ -57,11 +57,11 @@ class TeamRatingGenerator():
 
         self._teams: dict[str, Team] = {}
 
-    def generate_pre_match_team_rating(self, match: Match, match_team: MatchTeam) -> PreMatchTeamRating:
+    def generate_pre_match_team_rating(self, day_number: int, match_team: MatchTeam) -> PreMatchTeamRating:
 
         self._teams[match_team.id] = Team(
             id=match_team.id,
-            last_match_day_number=match.day_number,
+            last_match_day_number=day_number,
             player_ids=[p.id for p in match_team.players]
         )
 
@@ -69,10 +69,12 @@ class TeamRatingGenerator():
             team=match_team)
         tot_player_game_count = sum([p.games_played for p in pre_match_player_ratings])
         if len(new_players) == 0:
+            pre_match_team_rating_value = self._generate_pre_match_team_rating_value(
+                pre_match_player_ratings=pre_match_player_ratings)
             return PreMatchTeamRating(
                 id=match_team.id,
                 players=pre_match_player_ratings,
-                rating_value=sum(pre_match_player_rating_values) / len(pre_match_player_rating_values),
+                rating_value=pre_match_team_rating_value,
                 league=match_team.league
             )
 
@@ -81,14 +83,15 @@ class TeamRatingGenerator():
         else:
             existing_team_rating = sum(pre_match_player_rating_values) / len(pre_match_player_rating_values)
 
-        new_player_pre_match_ratings = self._generate_new_player_pre_match_ratings(match=match, new_players=new_players,
+        new_player_pre_match_ratings = self._generate_new_player_pre_match_ratings(day_number=day_number, new_players=new_players,
                                                                                    existing_team_rating=existing_team_rating)
         pre_match_player_ratings += new_player_pre_match_ratings
+        pre_match_team_rating_value = self._generate_pre_match_team_rating_value(pre_match_player_ratings=pre_match_player_ratings)
 
         return PreMatchTeamRating(
             id=match_team.id,
             players=pre_match_player_ratings,
-            rating_value=sum([p.rating_value for p in pre_match_player_ratings]) / len(pre_match_player_ratings),
+            rating_value=pre_match_team_rating_value,
             league=match_team.league
         )
 
@@ -125,13 +128,13 @@ class TeamRatingGenerator():
 
         return pre_match_player_ratings, pre_match_player_ratings_values, new_match_entities
 
-    def _generate_new_player_pre_match_ratings(self, match: Match, new_players: list[MatchPlayer],
+    def _generate_new_player_pre_match_ratings(self, day_number: int, new_players: list[MatchPlayer],
                                                existing_team_rating: Optional[float]) -> list[PreMatchPlayerRating]:
 
         pre_match_player_ratings = []
 
         for match_player in new_players:
-            pre_match_player_rating = self._generate_new_player_rating(match=match,
+            pre_match_player_rating = self._generate_new_player_rating(day_number=day_number,
                                                                        match_player=match_player,
                                                                        existing_team_rating=existing_team_rating)
 
@@ -139,12 +142,12 @@ class TeamRatingGenerator():
 
         return pre_match_player_ratings
 
-    def _generate_new_player_rating(self, match: Match, match_player: MatchPlayer,
+    def _generate_new_player_rating(self, day_number: int, match_player: MatchPlayer,
                                     existing_team_rating: Optional[float]) -> PreMatchPlayerRating:
         id = match_player.id
 
         rating_value = self.start_rating_generator.generate_rating_value(
-            day_number=match.day_number,
+            day_number=day_number,
             match_entity=match_player,
             team_rating=existing_team_rating,
         )
@@ -162,26 +165,36 @@ class TeamRatingGenerator():
             league=match_player.league
         )
 
+
+    def _generate_pre_match_team_rating_value(self, pre_match_player_ratings: list[PreMatchPlayerRating]) -> float:
+        team_rating = 0
+        sum_participation_weight = 0
+        for pre_match_player_rating in pre_match_player_ratings:
+            team_rating += pre_match_player_rating.rating_value * pre_match_player_rating.match_performance.participation_weight
+            sum_participation_weight += pre_match_player_rating.match_performance.participation_weight
+
+        return team_rating / sum_participation_weight if sum_participation_weight > 0 else 0
+
+
     def generate_rating_change(self,
                                day_number: int,
-                               pre_match_team_ratings: list[PreMatchTeamRating],
-                               team_idx: int
+                               pre_match_team_rating: PreMatchTeamRating,
+                               pre_match_opponent_team_rating: PreMatchTeamRating,
                                ) -> TeamRatingChange:
 
-        pre_opponent_team_rating = pre_match_team_ratings[-team_idx + 1]
-        pre_team_rating = pre_match_team_ratings[team_idx]
+
         player_rating_changes = []
         sum_participation_weight = 0
         sum_predicted_performance = 0
         sum_performance_value = 0
         sum_rating_change = 0
 
-        for pre_player_rating in pre_match_team_ratings[team_idx].players:
+        for pre_player_rating in pre_match_team_rating.players:
 
             predicted_performance = self.performance_predictor.predict_performance(
                 player_rating=pre_player_rating,
-                opponent_team_rating=pre_opponent_team_rating,
-                team_rating=pre_team_rating
+                opponent_team_rating=pre_match_opponent_team_rating,
+                team_rating=pre_match_team_rating
             )
 
             rating_change_multiplier = self._calculate_rating_change_multiplier(entity_id=pre_player_rating.id)
@@ -213,11 +226,11 @@ class TeamRatingGenerator():
 
         return TeamRatingChange(
             players=player_rating_changes,
-            id=pre_match_team_ratings[0].id,
+            id=pre_match_team_rating.id,
             rating_change_value=rating_change_value,
             predicted_performance=predicted_performance,
-            pre_match_rating_value=pre_match_team_ratings[team_idx].rating_value,
-            league=pre_match_team_ratings[team_idx].league,
+            pre_match_rating_value=pre_match_team_rating.rating_value,
+            league=pre_match_team_rating.league,
             performance=performance
         )
 
@@ -265,13 +278,13 @@ class TeamRatingGenerator():
     def _calculate_rating_change_multiplier(self,
                                             entity_id: str,
                                             ) -> float:
-        certain_multiplier = self._calculate_certain_multiplier(entity_rating=self.player_ratings[entity_id])
-        multiplier = certain_multiplier * self.certain_weight + (
+        certain_change_multiplier = self._calculate_certain_change_multiplier(entity_rating=self.player_ratings[entity_id])
+        multiplier = certain_change_multiplier * self.certain_weight + (
                 1 - self.certain_weight) * self.rating_change_multiplier
         min_rating_change_multiplier = self.rating_change_multiplier * self.min_rating_change_multiplier_ratio
         return max(min_rating_change_multiplier, multiplier)
 
-    def _calculate_certain_multiplier(self, entity_rating: PlayerRating) -> float:
+    def _calculate_certain_change_multiplier(self, entity_rating: PlayerRating) -> float:
         net_certain_sum_value = entity_rating.certain_sum - self.reference_certain_sum_value
         certain_factor = -sigmoid_subtract_half_and_multiply2(net_certain_sum_value,
                                                               self.certain_value_denom) + MODIFIED_RATING_CHANGE_CONSTANT
