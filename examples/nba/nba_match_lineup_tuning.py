@@ -35,6 +35,7 @@ max_lineup = np.maximum(df['lineup_id'], df['lineup_id_opponent'])
 
 # Combine the min and max values into a tuple
 df['sorted_lineup'] = list(zip(min_lineup, max_lineup))
+df = df[df['game_minutes'] > 46]
 
 df[column_names.match_id] = df['game_id'].astype(str) + '_' + df['sorted_lineup'].astype(str)
 df = df.drop(columns=['sorted_lineup'])
@@ -57,10 +58,61 @@ pre_transformer_search_ranges = [
     (MinMaxTransformer(features=features), [])
 ]
 
+team_rating_search_ranges = [
+    ParameterSearchRange(
+        name='certain_weight',
+        type='uniform',
+        low=0.7,
+        high=0.95
+    ),
+    ParameterSearchRange(
+        name='certain_days_ago_multiplier',
+        type='uniform',
+        low=0.02,
+        high=.12,
+    ),
+    ParameterSearchRange(
+        name='max_days_ago',
+        type='uniform',
+        low=40,
+        high=200,
+    ),
+    ParameterSearchRange(
+        name='max_certain_sum',
+        type='uniform',
+        low=20,
+        high=70,
+    ),
+    ParameterSearchRange(
+        name='certain_value_denom',
+        type='uniform',
+        low=10,
+        high=50
+    ),
+    ParameterSearchRange(
+        name='reference_certain_sum_value',
+        type='uniform',
+        low=0.4,
+        high=5
+    ),
+    ParameterSearchRange(
+        name='rating_change_multiplier',
+        type='uniform',
+        low=25,
+        high=140
+    ),
+    ParameterSearchRange(
+        name='participation_weight_coef',
+        type='uniform',
+        low=0,
+        high=5
+    ),
+]
+
 performance_predictor = RatingDifferencePerformancePredictor(
     team_rating_diff_coef=0,
     rating_diff_coef=0.005757,
-    participation_weight_coef=0.5,
+    participation_weight_coef=1,
     mean_participation_weight=mean_participation_weight
 
 )
@@ -98,13 +150,15 @@ start_rating_search_range = [
 
 predictor = SkLearnGameTeamPredictor(features=[RatingColumnNames.RATING_DIFFERENCE],
                                      weight_column='participation_weight',
-                                     team_id_column='team_id', game_id_colum=column_names.rating_update_id, target='won')
+                                     team_id_column='team_id', game_id_colum=column_names.rating_update_id,
+                                     target='won')
 
 match_predictor = MatchPredictor(column_names=column_names, rating_generator=rating_generator, predictor=predictor,
                                  pre_rating_transformers=pre_transformers, train_split_date="2022-05-01")
 
 team_rating_tuner = TeamRatingTuner(match_predictor=match_predictor,
                                     n_trials=35,
+                                    search_ranges=team_rating_search_ranges
                                     )
 
 start_rating_tuner = StartRatingTuner(column_names=column_names,

@@ -1,4 +1,5 @@
 import copy
+import inspect
 from typing import Optional
 
 import optuna
@@ -53,7 +54,7 @@ DEFAULT_TEAM_SEARCH_RANGES = [
         name='rating_change_multiplier',
         type='uniform',
         low=25,
-        high=170
+        high=140
     ),
 ]
 
@@ -79,8 +80,18 @@ class TeamRatingTuner():
             params = add_params_from_search_range(params=params,
                                                   trial=trial,
                                                   parameter_search_range=self.search_ranges)
+
+            performance_predictor = self.match_predictor.rating_generator.team_rating_generator.performance_predictor
+            performance_predictor_params =list(
+            inspect.signature(performance_predictor.__class__.__init__).parameters.keys())[1:]
+
+            for param in params.copy():
+                if param in performance_predictor_params:
+                    performance_predictor.__setattr__(param, params[param])
+                    params.pop(param)
+
             team_rating_generator = TeamRatingGenerator(**params,
-                                   performance_predictor=self.match_predictor.rating_generator.team_rating_generator.performance_predictor)
+                                   performance_predictor=performance_predictor)
             match_predictor = copy.deepcopy(self.match_predictor)
             match_predictor.rating_generator.team_rating_generator = team_rating_generator
             df_with_prediction = match_predictor.generate(df=df, matches=matches)
@@ -96,5 +107,14 @@ class TeamRatingTuner():
 
         best_params = study.best_params
 
+        performance_predictor = self.match_predictor.rating_generator.team_rating_generator.performance_predictor
+        performance_predictor_params = list(
+            inspect.signature(performance_predictor.__class__.__init__).parameters.keys())[1:]
+
+        for param in best_params.copy():
+            if param in performance_predictor_params:
+                performance_predictor.__setattr__(param, best_params[param])
+                best_params.pop(param)
+
         return TeamRatingGenerator(**best_params,
-                                   performance_predictor=self.match_predictor.rating_generator.team_rating_generator.performance_predictor)
+                                   performance_predictor=performance_predictor)

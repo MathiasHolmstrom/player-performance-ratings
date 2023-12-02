@@ -201,7 +201,7 @@ class TeamRatingGenerator():
             performance_difference = pre_player_rating.match_performance.performance_value - predicted_performance
             rating_change_value = performance_difference * rating_change_multiplier * pre_player_rating.match_performance.participation_weight
             if math.isnan(rating_change_value):
-                logging.warning(f"rating change is nan return 0 entity id {id}")
+                logging.warning(f"rating_change_value is nan for {pre_player_rating.id}")
                 raise ValueError
 
             player_rating_change = PlayerRatingChange(
@@ -220,14 +220,14 @@ class TeamRatingGenerator():
             sum_rating_change += player_rating_change.rating_change_value * pre_player_rating.match_performance.participation_weight
             sum_participation_weight += pre_player_rating.match_performance.participation_weight
 
-        rating_change_value = sum_rating_change / sum_participation_weight if sum_participation_weight > 0 else 0
+
         predicted_performance = sum_predicted_performance / sum_participation_weight if sum_participation_weight > 0 else 0
         performance = sum_performance_value / sum_participation_weight if sum_participation_weight > 0 else 0
 
         return TeamRatingChange(
             players=player_rating_changes,
             id=pre_match_team_rating.id,
-            rating_change_value=rating_change_value,
+            rating_change_value=sum_rating_change,
             predicted_performance=predicted_performance,
             pre_match_rating_value=pre_match_team_rating.rating_value,
             league=pre_match_team_rating.league,

@@ -100,7 +100,7 @@ start_rating_search_range = [
     ),
 ]
 
-predictor = SkLearnGameTeamPredictor(features=[RatingColumnNames.RATING_DIFFERENCE],
+predictor = SkLearnGameTeamPredictor(features=[RatingColumnNames.RATING_MEAN],
                                      weight_column='participation_weight',
                                      model=OrdinalClassifier(),
                                      team_id_column='team_id', game_id_colum=column_names.rating_update_id,

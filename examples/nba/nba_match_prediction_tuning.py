@@ -36,6 +36,7 @@ df = df[df['game_id'].isin(gm['game_id'].unique().tolist())]
 print(len(df['game_id'].unique()))
 df[PredictColumnNames.TARGET] = df['won']
 df = df.sort_values(by=[column_names.start_date, column_names.match_id, column_names.team_id, column_names.player_id])
+df = df[df['game_minutes']>46]
 df['plus_minus_per_minute'] = df['plus_minus'] / df['game_minutes']
 df['participation_weight'] = df['minutes'] / df['game_minutes']
 
