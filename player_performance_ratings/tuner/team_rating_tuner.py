@@ -12,7 +12,7 @@ from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
 from player_performance_ratings.scorer.score import BaseScorer, LogLossScorer
 from player_performance_ratings.tuner.base_tuner import ParameterSearchRange, add_params_from_search_range
 
-DEFAULT_PLAYER_SEARCH_RANGES = [
+DEFAULT_TEAM_SEARCH_RANGES = [
     ParameterSearchRange(
         name='certain_weight',
         type='uniform',
@@ -29,7 +29,7 @@ DEFAULT_PLAYER_SEARCH_RANGES = [
         name='max_days_ago',
         type='uniform',
         low=40,
-        high=150,
+        high=200,
     ),
     ParameterSearchRange(
         name='max_certain_sum',
@@ -40,20 +40,20 @@ DEFAULT_PLAYER_SEARCH_RANGES = [
     ParameterSearchRange(
         name='certain_value_denom',
         type='uniform',
-        low=15,
+        low=10,
         high=50
     ),
     ParameterSearchRange(
         name='reference_certain_sum_value',
         type='uniform',
-        low=0.5,
+        low=0.4,
         high=5
     ),
     ParameterSearchRange(
         name='rating_change_multiplier',
         type='uniform',
-        low=40,
-        high=240
+        low=25,
+        high=170
     ),
 ]
 
@@ -66,7 +66,7 @@ class TeamRatingTuner():
                  scorer: Optional[BaseScorer] = None,
                  n_trials: int = 30,
                  ):
-        self.search_ranges = search_ranges or DEFAULT_PLAYER_SEARCH_RANGES
+        self.search_ranges = search_ranges or DEFAULT_TEAM_SEARCH_RANGES
         self.match_predictor = match_predictor
         self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target,
                                               pred_column=self.match_predictor.predictor.pred_column
@@ -79,7 +79,8 @@ class TeamRatingTuner():
             params = add_params_from_search_range(params=params,
                                                   trial=trial,
                                                   parameter_search_range=self.search_ranges)
-            team_rating_generator = TeamRatingGenerator(**params)
+            team_rating_generator = TeamRatingGenerator(**params,
+                                   performance_predictor=self.match_predictor.rating_generator.team_rating_generator.performance_predictor)
             match_predictor = copy.deepcopy(self.match_predictor)
             match_predictor.rating_generator.team_rating_generator = team_rating_generator
             df_with_prediction = match_predictor.generate(df=df, matches=matches)
@@ -95,4 +96,5 @@ class TeamRatingTuner():
 
         best_params = study.best_params
 
-        return TeamRatingGenerator(**best_params)
+        return TeamRatingGenerator(**best_params,
+                                   performance_predictor=self.match_predictor.rating_generator.team_rating_generator.performance_predictor)

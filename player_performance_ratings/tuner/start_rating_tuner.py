@@ -31,7 +31,7 @@ DEFAULT_START_RATING_SEARCH_RANGE = [
     ),
     ParameterSearchRange(
         name='min_count_for_percentiles',
-        type='discrete_uniform',
+        type='int',
         low=50,
         high=200,
     ),
@@ -97,7 +97,7 @@ class StartRatingTuner():
                                                         league_start_ratings=league_start_ratings)
             start_rating_generator = StartRatingGenerator(**params)
             match_predictor = copy.deepcopy(self.match_predictor)
-            match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator = start_rating_generator
+            match_predictor.rating_generator.team_rating_generator.start_rating_generator = start_rating_generator
             df_with_prediction = match_predictor.generate(df=df)
             return self.scorer.score(df_with_prediction, classes_=match_predictor.predictor.classes_)
 
@@ -110,7 +110,7 @@ class StartRatingTuner():
                                                                             matches=matches)
         else:
 
-            optimized_league_ratings = self.match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator.league_ratings
+            optimized_league_ratings = self.match_predictor.rating_generator.team_rating_generator.start_rating_generator.league_ratings
 
         direction = "minimize"
         study_name = "optuna_study"

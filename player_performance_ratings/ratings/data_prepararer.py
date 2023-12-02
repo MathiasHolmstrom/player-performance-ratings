@@ -40,13 +40,7 @@ class MatchGenerator():
         if col_names.league in df.columns.tolist():
             league_in_df = True
 
-        participation_weight_in_df = False
-        if col_names.participation_weight in df.columns.tolist():
-            participation_weight_in_df = True
 
-        projected_participation_weight_in_df = False
-        if col_names.projected_participation_weight in df.columns.tolist():
-            projected_participation_weight_in_df = True
 
         team_players_percentage_playing_time_in_df = False
         if col_names.team_players_percentage_playing_time in df.columns.tolist():
@@ -80,19 +74,8 @@ class MatchGenerator():
                 match_teams = []
 
             participation_weight = 1.0
-            if col_names.participation_weight is not None and participation_weight_in_df:
+            if col_names.participation_weight:
                 participation_weight = row[col_names.participation_weight]
-
-            projected_participation_weight = 1
-            if col_names.projected_participation_weight is not None and projected_participation_weight_in_df:
-                projected_participation_weight = row[col_names.projected_participation_weight]
-
-            team_players_percentage_playing_time: Dict[str, float] = {}
-            if col_names.team_players_percentage_playing_time is not None \
-                    and isinstance(row[col_names.team_players_percentage_playing_time],
-                                   Dict) and team_players_percentage_playing_time_in_df:
-                team_players_percentage_playing_time: Dict[str, float] = row[
-                    col_names.team_players_percentage_playing_time]
 
             player_id = row[col_names.team_id]
             if col_names.player_id is not None:
@@ -114,8 +97,7 @@ class MatchGenerator():
             performance = MatchPerformance(
                 performance_value=row[col_names.performance],
                 participation_weight=participation_weight,
-                projected_participation_weight=projected_participation_weight,
-                ratio=team_players_percentage_playing_time,
+               # ratio=team_players_percentage_playing_time,
             )
 
             match_player = MatchPlayer(

@@ -1,5 +1,6 @@
 import math
 from abc import ABC, abstractmethod
+from typing import Optional
 
 from player_performance_ratings.data_structures import PreMatchPlayerRating, PreMatchTeamRating
 
@@ -31,11 +32,17 @@ class RatingDifferencePerformancePredictor(PerformancePredictor):
                  rating_diff_team_from_entity_coef: float = 0.0,
                  team_rating_diff_coef: float = 0.0,
                  max_predict_value: float = 1,
+                 participation_weight_coef: Optional[float] = None,
+                 mean_participation_weight: Optional[float] = None,
                  ):
         self.rating_diff_coef = rating_diff_coef
         self.rating_diff_team_from_entity_coef = rating_diff_team_from_entity_coef
         self.team_rating_diff_coef = team_rating_diff_coef
         self.max_predict_value = max_predict_value
+        self.mean_participation_weight = mean_participation_weight
+        self.participation_weight_coef = participation_weight_coef
+        if self.participation_weight_coef and mean_participation_weight is None:
+            raise ValueError("mean_duration must be passed if duration_column_name is passed")
 
     def predict_performance(self,
                             player_rating: PreMatchPlayerRating,
@@ -43,15 +50,16 @@ class RatingDifferencePerformancePredictor(PerformancePredictor):
                             team_rating: PreMatchTeamRating
                             ) -> float:
         rating_difference = player_rating.rating_value - opponent_team_rating.rating_value
-        if team_rating is not None:
-            rating_diff_team_from_entity = team_rating.rating_value - player_rating.rating_value
-            team_rating_diff = team_rating.rating_value - opponent_team_rating.rating_value
-        else:
-            rating_diff_team_from_entity = 0
-            team_rating_diff = 0
+
+        rating_diff_team_from_entity = team_rating.rating_value - player_rating.rating_value
+        team_rating_diff = team_rating.rating_value - opponent_team_rating.rating_value
+
 
         value = self.rating_diff_coef * rating_difference + \
                 self.rating_diff_team_from_entity_coef * rating_diff_team_from_entity + team_rating_diff * self.team_rating_diff_coef
+        if self.participation_weight_coef:
+            value += value  * self.participation_weight_coef * (player_rating.match_performance.participation_weight - self.mean_participation_weight)
+
         prediction = (math.exp(value)) / (1 + math.exp(value))
         if prediction > self.max_predict_value:
             return self.max_predict_value

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 from dataclasses_json import DataClassJsonMixin
 
 
@@ -12,7 +12,6 @@ class ColumnNames:
     performance: str = "performance"
     league: str = None
     participation_weight: str = None
-    projected_participation_weight: str = None
     team_players_percentage_playing_time: str = None
     rating_update_id: str = None
 
@@ -20,8 +19,6 @@ class ColumnNames:
         if self.rating_update_id is None:
             self.rating_update_id = self.match_id
 
-        if self.projected_participation_weight is None:
-            self.projected_participation_weight = self.participation_weight
 
 
 @dataclass
@@ -36,8 +33,6 @@ class StartRatingParameters:
 class MatchPerformance:
     performance_value: float
     participation_weight: float
-    projected_participation_weight: float
-    ratio: Dict[str, float]
 
 
 @dataclass
@@ -45,9 +40,8 @@ class PlayerRating(DataClassJsonMixin):
     id: str
     rating_value: float
     name: Optional[str] = None
-    games_played: int = 0
+    games_played: Union[float,int] = 0
     last_match_day_number: int = None
-    certain_ratio: float = 0
     certain_sum: float = 0
     prev_rating_changes: List[float] = None
 
@@ -75,8 +69,6 @@ class PreMatchPlayerRating:
     id: str
     rating_value: float
     games_played: int
-    projected_rating_value: float
-    certain_ratio: float
     league: str
     match_performance: MatchPerformance
 
@@ -88,7 +80,6 @@ class PreMatchTeamRating:
     players: list[PreMatchPlayerRating]
     rating_value: float
     league: str
-    projected_rating_value: float
 
 
 @dataclass

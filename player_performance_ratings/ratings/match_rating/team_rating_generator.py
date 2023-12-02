@@ -73,8 +73,6 @@ class TeamRatingGenerator():
                 id=match_team.id,
                 players=pre_match_player_ratings,
                 rating_value=sum(pre_match_player_rating_values) / len(pre_match_player_rating_values),
-                projected_rating_value=sum([p.projected_rating_value for p in pre_match_player_ratings]) / len(
-                    pre_match_player_ratings),
                 league=match_team.league
             )
 
@@ -91,8 +89,6 @@ class TeamRatingGenerator():
             id=match_team.id,
             players=pre_match_player_ratings,
             rating_value=sum([p.rating_value for p in pre_match_player_ratings]) / len(pre_match_player_ratings),
-            projected_rating_value=sum([p.projected_rating_value for p in pre_match_player_ratings]) / len(
-                pre_match_player_ratings),
             league=match_team.league
         )
 
@@ -109,14 +105,11 @@ class TeamRatingGenerator():
             if match_player.id in self.player_ratings:
 
                 player_rating = self._get_rating_by_id(id=match_player.id)
-                projected_rating_value = match_player.performance.projected_participation_weight * \
-                                         player_rating.rating_value
+
                 pre_match_player_rating = PreMatchPlayerRating(
                     id=match_player.id,
                     rating_value=player_rating.rating_value,
-                    projected_rating_value=projected_rating_value,
                     match_performance=match_player.performance,
-                    certain_ratio=player_rating.certain_ratio,
                     games_played=player_rating.games_played,
                     league=match_player.league
                 )
@@ -164,9 +157,7 @@ class TeamRatingGenerator():
         return PreMatchPlayerRating(
             id=id,
             rating_value=rating_value,
-            projected_rating_value=match_player.performance.projected_participation_weight * rating_value,
             match_performance=match_player.performance,
-            certain_ratio=self.player_ratings[match_player.id].certain_ratio,
             games_played=self.player_ratings[match_player.id].games_played,
             league=match_player.league
         )
@@ -222,7 +213,7 @@ class TeamRatingGenerator():
 
         return TeamRatingChange(
             players=player_rating_changes,
-            id=player_rating_changes[0].id,
+            id=pre_match_team_ratings[0].id,
             rating_change_value=rating_change_value,
             predicted_performance=predicted_performance,
             pre_match_rating_value=pre_match_team_ratings[team_idx].rating_value,
@@ -236,13 +227,17 @@ class TeamRatingGenerator():
 
         for player_rating_change in team_rating_change.players:
             id = player_rating_change.id
+            self.player_ratings[id].certain_sum = self._calculate_post_match_certain_sum(
+                entity_rating=self.player_ratings[id],
+                day_number=player_rating_change.day_number,
+                particpation_weight=player_rating_change.participation_weight
+            )
+
             self.player_ratings[id].rating_value += player_rating_change.rating_change_value
             self.player_ratings[id].games_played += player_rating_change.participation_weight
             self.player_ratings[id].last_match_day_number = player_rating_change.day_number
 
-
             self.start_rating_generator.update_league_ratings(rating_change=player_rating_change)
-
             self._update_league_ratings(rating_change=player_rating_change)
 
     def _update_league_ratings(self,
@@ -284,18 +279,19 @@ class TeamRatingGenerator():
 
     def _calculate_post_match_certain_sum(self,
                                           entity_rating: PlayerRating,
-                                          match: Match,
+                                          day_number: int,
                                           particpation_weight: float
                                           ) -> float:
-        days_ago = self._calculate_days_ago_since_last_match(entity_rating.last_match_day_number, match)
+        days_ago = self._calculate_days_ago_since_last_match(last_match_day_number=entity_rating.last_match_day_number,
+                                                             day_number=day_number)
         certain_sum_value = -min(days_ago,
                                  self.max_days_ago) * self.certain_days_ago_multiplier + entity_rating.certain_sum + \
                             MATCH_CONTRIBUTION_TO_SUM_VALUE * particpation_weight
 
         return max(0.0, min(certain_sum_value, self.max_certain_sum))
 
-    def _calculate_days_ago_since_last_match(self, last_match_day_number, match: Match) -> float:
-        match_day_number = match.day_number
+    def _calculate_days_ago_since_last_match(self, last_match_day_number, day_number: int) -> float:
+        match_day_number = day_number
         if last_match_day_number is None:
             return 0.0
 
