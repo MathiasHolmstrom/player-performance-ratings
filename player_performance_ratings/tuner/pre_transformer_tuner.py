@@ -10,22 +10,24 @@ from optuna.trial import BaseTrial
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.scorer.score import LogLossScorer, BaseScorer
-from player_performance_ratings.transformers.base_transformer import BaseTransformer
-from player_performance_ratings.tuner.base_tuner import ParameterSearchRange, add_custom_hyperparams, \
+from player_performance_ratings.preprocessing.base_transformer import BaseTransformer
+from player_performance_ratings.tuner.base_tuner import ParameterSearchRange, add_params_from_search_range, \
     TransformerTuner
 
-from player_performance_ratings.transformers.common import ColumnWeight
+from player_performance_ratings.preprocessing.common import ColumnWeight
 
 RC = RatingColumnNames
 
 
-def insert_params_to_common_transformers(object: object, params, parameter_search_range):
+def insert_params_to_common_transformers(object: object, params, parameter_search_range: list[ParameterSearchRange]):
     if object.__class__.__name__ == "ColumnsWeighter":
         sum_weights = sum([params[p.name] for p in parameter_search_range])
         for p in parameter_search_range:
             params[p.name] = params[p.name] / sum_weights
-        column_weights = [ColumnWeight(name=p.name, weight=params[p.name]) for p in
+
+        column_weights = [ColumnWeight(name=p.name, weight=params[p.name], **p.custom_params) for p in
                           parameter_search_range]
+
         for p in parameter_search_range:
             del params[p.name]
         params['column_weights'] = column_weights
@@ -36,7 +38,7 @@ def insert_params_to_common_transformers(object: object, params, parameter_searc
 def add_hyperparams_to_common_transformers(object: object, params: dict[str, Union[float, None, bool, int, str]],
                                            trial: BaseTrial,
                                            parameter_search_range: list[ParameterSearchRange]) -> dict:
-    params = add_custom_hyperparams(params=params, trial=trial, parameter_search_range=parameter_search_range)
+    params = add_params_from_search_range(params=params, trial=trial, parameter_search_range=parameter_search_range)
 
     return insert_params_to_common_transformers(object=object, params=params,
                                                 parameter_search_range=parameter_search_range)
@@ -56,7 +58,6 @@ class PreTransformerTuner(TransformerTuner):
         self.n_trials = n_trials
 
         self.scorer = scorer or LogLossScorer(target=self.match_predictor.predictor.target,
-                                              weight_cross_league=3,
                                               pred_column=self.match_predictor.predictor.pred_column
                                               )
 
@@ -87,8 +88,8 @@ class PreTransformerTuner(TransformerTuner):
             match_predictor = copy.deepcopy(match_predictor)
             match_predictor.pre_rating_transformers = pre_rating_transformers
 
-            df = match_predictor.generate(df=df)
-            return scorer.score(df)
+            df_with_prediction = match_predictor.generate(df=df)
+            return scorer.score(df_with_prediction, classes_=match_predictor.classes_)
 
         best_transformers = []
         direction = "minimize"

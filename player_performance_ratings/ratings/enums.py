@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
 
+
 @dataclass
 class InputColumnNames:
     hour = 'hour'
@@ -27,7 +28,12 @@ class RatingColumnNames:
     PLAYER_LEAGUE = "player_league"
     OPPONENT_LEAGUE = "opponent_league"
     MATCH_ID = "match_id"
-    TARGET = "__target"
+    PLAYER_PREDICTED_PERFORMANCE = "player_predicted_performance"
+
+    PERFORMANCE = "performance"
+
+
+
 
 class PredictedRatingMethod(Enum):
     DEFAULT = 'default'

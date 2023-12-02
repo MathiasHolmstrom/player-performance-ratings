@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 from dataclasses_json import DataClassJsonMixin
 
 
@@ -12,8 +12,13 @@ class ColumnNames:
     performance: str = "performance"
     league: str = None
     participation_weight: str = None
-    projected_participation_weight: str = None
     team_players_percentage_playing_time: str = None
+    rating_update_id: str = None
+
+    def __post_init__(self):
+        if self.rating_update_id is None:
+            self.rating_update_id = self.match_id
+
 
 
 @dataclass
@@ -28,8 +33,6 @@ class StartRatingParameters:
 class MatchPerformance:
     performance_value: float
     participation_weight: float
-    projected_participation_weight: float
-    ratio: Dict[str, float]
 
 
 @dataclass
@@ -37,11 +40,11 @@ class PlayerRating(DataClassJsonMixin):
     id: str
     rating_value: float
     name: Optional[str] = None
-    games_played: int = 0
+    games_played: Union[float,int] = 0
     last_match_day_number: int = None
-    certain_ratio: float = 0
     certain_sum: float = 0
     prev_rating_changes: List[float] = None
+
 
 @dataclass
 class Team:
@@ -66,10 +69,9 @@ class PreMatchPlayerRating:
     id: str
     rating_value: float
     games_played: int
-    projected_rating_value: float
-    certain_ratio: float
-    league: str
+    league:  Optional[str]
     match_performance: MatchPerformance
+
 
 
 @dataclass
@@ -77,8 +79,7 @@ class PreMatchTeamRating:
     id: str
     players: list[PreMatchPlayerRating]
     rating_value: float
-    league: str
-    projected_rating_value: float
+    league: Optional[str]
 
 
 @dataclass
@@ -87,33 +88,47 @@ class PreMatchRating:
     teams: list[PreMatchTeamRating]
     day_number: int
 
+@dataclass
+class PlayerRatingChange:
+    id: str
+    day_number: int
+    league: Optional[str]
+    participation_weight: float
+    predicted_performance: float
+    performance: float
+    pre_match_rating_value: float
+    rating_change_value: float
+
 
 @dataclass
-class PostMatchPlayerRating:
+class TeamRatingChange:
     id: str
+    players: list[PlayerRatingChange]
+    predicted_performance: float
+    performance: float
+    pre_match_rating_value: float
+    rating_change_value: float
+    league: Optional[str]
+
+@dataclass
+class PostMatchTeamRatingChange:
+    id: str
+    players: list[PlayerRatingChange]
     rating_value: float
     predicted_performance: float
 
 
 @dataclass
-class PostMatchTeamRating:
+class PostMatchRatingChange:
     id: str
-    players: list[PostMatchPlayerRating]
-    rating_value: float
-    predicted_performance: float
-
-
-@dataclass
-class PostMatchRating:
-    id: str
-    teams: list[PostMatchTeamRating]
+    teams: list[PostMatchTeamRatingChange]
 
 
 @dataclass
 class MatchRating:
     id: str
     pre_match_rating: PreMatchRating
-    post_match_rating: PostMatchRating
+    post_match_rating: PostMatchRatingChange
 
 
 @dataclass
@@ -144,6 +159,8 @@ class MatchTeam:
 @dataclass
 class Match:
     id: str
+    update_id: str
     teams: List[MatchTeam]
     day_number: int
     league: str = None
+

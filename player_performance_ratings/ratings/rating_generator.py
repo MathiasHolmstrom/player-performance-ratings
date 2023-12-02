@@ -3,11 +3,11 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
 from player_performance_ratings.ratings.enums import RatingColumnNames
-from player_performance_ratings.ratings.match_rating.team_rating_generator import TeamRatingGenerator
-from player_performance_ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PostMatchRating, \
-    MatchRating, \
-    PostMatchTeamRating, PlayerRating, TeamRating, ColumnNames
+
+from player_performance_ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PlayerRating, \
+    TeamRating, ColumnNames, TeamRatingChange
 
 
 class RatingGenerator():
@@ -34,25 +34,35 @@ class RatingGenerator():
         match_ids = []
         player_rating_changes = []
         player_leagues = []
+        player_predicted_performances = []
+        performances = []
 
-        for match in matches:
+        team_rating_changes = []
+        for match_idx, match in enumerate(matches):
             self._validate_match(match)
+            match_team_rating_changes = self._create_match_team_rating_changes(match=match)
+            team_rating_changes += match_team_rating_changes
 
-            match_rating = self._create_match_rating(match=match)
+            if match_idx == len(matches) - 1 or matches[match_idx + 1].update_id != match.update_id:
+                self._update_ratings(team_rating_changes=team_rating_changes)
+                team_rating_changes = []
 
-            for team_idx, team in enumerate(match_rating.pre_match_rating.teams):
-                opponent_team = match_rating.pre_match_rating.teams[-team_idx + 1]
-                for player_idx, player in enumerate(team.players):
-                    pre_match_player_rating_values.append(player.rating_value)
-                    pre_match_team_rating_values.append(team.rating_value)
-                    pre_match_opponent_rating_values.append(opponent_team.rating_value)
-                    player_rating_changes.append(match_rating.post_match_rating.teams[team_idx].players[
-                                                     player_idx].rating_value - player.rating_value)
-                    player_leagues.append(player.league)
-                    team_opponent_leagues.append(match_rating.pre_match_rating.teams[-team_idx + 1].league)
+            for team_idx, team_rating_change in enumerate(match_team_rating_changes):
+                opponent_team = match_team_rating_changes[-team_idx + 1]
+                for player_idx, player_rating_change in enumerate(team_rating_change.players):
+                    pre_match_player_rating_values.append(player_rating_change.pre_match_rating_value)
+                    pre_match_team_rating_values.append(team_rating_change.pre_match_rating_value)
+                    player_predicted_performances.append(player_rating_change.predicted_performance)
+                    pre_match_opponent_rating_values.append(opponent_team.pre_match_rating_value)
+                    player_rating_changes.append(player_rating_change.rating_change_value)
+                    player_leagues.append(player_rating_change.league)
+                    team_opponent_leagues.append(match_team_rating_changes[-team_idx + 1].league)
                     match_ids.append(match.id)
+                    performances.append(player_rating_change.performance)
 
         rating_differences = np.array(pre_match_team_rating_values) - (
+            pre_match_opponent_rating_values)
+        rating_means = np.array(pre_match_team_rating_values) * 0.5 + 0.5 * np.array(
             pre_match_opponent_rating_values)
 
         if self.store_game_ratings:
@@ -69,7 +79,9 @@ class RatingGenerator():
                     RatingColumnNames.PLAYER_RATING_CHANGE: player_rating_changes,
                     RatingColumnNames.TEAM_RATING: pre_match_team_rating_values,
                     RatingColumnNames.OPPONENT_RATING: pre_match_opponent_rating_values,
-
+                    RatingColumnNames.PERFORMANCE: performances,
+                    RatingColumnNames.RATING_MEAN: rating_means,
+                    RatingColumnNames.PLAYER_PREDICTED_PERFORMANCE: player_predicted_performances
                 })
 
         return {
@@ -80,44 +92,42 @@ class RatingGenerator():
             RatingColumnNames.PLAYER_RATING_CHANGE: player_rating_changes,
             RatingColumnNames.MATCH_ID: match_ids,
             RatingColumnNames.TEAM_RATING: pre_match_team_rating_values,
-            RatingColumnNames.OPPONENT_RATING: pre_match_opponent_rating_values
+            RatingColumnNames.OPPONENT_RATING: pre_match_opponent_rating_values,
+            RatingColumnNames.RATING_MEAN: rating_means,
+            RatingColumnNames.PLAYER_PREDICTED_PERFORMANCE: player_predicted_performances
         }
 
-    def _create_match_rating(self, match: Match) -> MatchRating:
+    def _create_match_team_rating_changes(self, match: Match) -> list[TeamRatingChange]:
 
+        team_rating_changes = []
         pre_match_rating = PreMatchRating(
             id=match.id,
             teams=self._get_pre_match_team_ratings(match=match),
             day_number=match.day_number
         )
 
-        post_match_rating = PostMatchRating(
-            id=match.id,
-            teams=self._get_post_match_team_ratings(pre_match_rating=pre_match_rating)
-        )
+        for team_idx, pre_match_team_rating in enumerate(pre_match_rating.teams):
+            team_rating_change = self.team_rating_generator.generate_rating_change(day_number=match.day_number,
+                                                                                   pre_match_team_rating=pre_match_team_rating,
+                                                                                   pre_match_opponent_team_rating=
+                                                                                   pre_match_rating.teams[
+                                                                                       -team_idx + 1])
+            team_rating_changes.append(team_rating_change)
 
-        return MatchRating(
-            id=match.id,
-            pre_match_rating=pre_match_rating,
-            post_match_rating=post_match_rating
-        )
+        return team_rating_changes
+
+    def _update_ratings(self, team_rating_changes: list[TeamRatingChange]):
+
+        for team_rating_change in team_rating_changes:
+            self.team_rating_generator.update_rating_by_team_rating_change(team_rating_change=team_rating_change)
 
     def _get_pre_match_team_ratings(self, match: Match) -> list[PreMatchTeamRating]:
         pre_match_team_ratings = []
         for match_team in match.teams:
-            pre_match_team_ratings.append(self.team_rating_generator.pre_match_rating(
-                match_team=match_team, match=match))
+            pre_match_team_ratings.append(self.team_rating_generator.generate_pre_match_team_rating(
+                match_team=match_team, day_number=match.day_number))
 
         return pre_match_team_ratings
-
-    def _get_post_match_team_ratings(self, pre_match_rating: PreMatchRating) -> list[PostMatchTeamRating]:
-        post_match_team_ratings = []
-        for team_idx, _ in enumerate(pre_match_rating.teams):
-            post_match_team_ratings.append(self.team_rating_generator.generate_post_match_rating(
-                pre_match_team_ratings=pre_match_rating.teams, team_idx=team_idx,
-                day_number=pre_match_rating.day_number))
-
-        return post_match_team_ratings
 
     def _validate_match(self, match: Match):
         if len(match.teams) < 2:
@@ -126,7 +136,7 @@ class RatingGenerator():
 
     @property
     def player_ratings(self) -> dict[str, PlayerRating]:
-        return dict(sorted(self.team_rating_generator.player_rating_generator.player_ratings.items(),
+        return dict(sorted(self.team_rating_generator.player_ratings.items(),
                            key=lambda item: item[1].rating_value, reverse=True))
 
     @property
