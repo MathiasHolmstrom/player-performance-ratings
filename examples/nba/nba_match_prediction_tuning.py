@@ -83,7 +83,10 @@ rating_generator = RatingGenerator(
         )
     )
 )
-predictor = SkLearnGameTeamPredictor(features=[RatingColumnNames.RATING_DIFFERENCE], game_id_colum='game_id',
+
+estimator = VennAbersCalibrator(estimator=clf, inductive=True, cal_size=0.2, random_state=101)
+
+predictor = SkLearnGameTeamPredictor(estimator,features=[RatingColumnNames.RATING_DIFFERENCE], game_id_colum='game_id',
                                      team_id_column='team_id', weight_column='participation_weight')
 match_predictor = MatchPredictor(
     rating_generator=rating_generator,

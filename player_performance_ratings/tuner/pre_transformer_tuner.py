@@ -10,11 +10,11 @@ from optuna.trial import BaseTrial
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.scorer.score import LogLossScorer, BaseScorer
-from player_performance_ratings.transformers.base_transformer import BaseTransformer
+from player_performance_ratings.preprocessing.base_transformer import BaseTransformer
 from player_performance_ratings.tuner.base_tuner import ParameterSearchRange, add_params_from_search_range, \
     TransformerTuner
 
-from player_performance_ratings.transformers.common import ColumnWeight
+from player_performance_ratings.preprocessing.common import ColumnWeight
 
 RC = RatingColumnNames
 

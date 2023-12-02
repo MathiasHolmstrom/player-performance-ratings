@@ -6,7 +6,7 @@ from typing import Optional, Match, Literal, Union, Any
 import pandas as pd
 from optuna.trial import BaseTrial
 
-from player_performance_ratings.transformers.base_transformer import BaseTransformer
+from player_performance_ratings.preprocessing.base_transformer import BaseTransformer
 
 
 class TransformerTuner(ABC):

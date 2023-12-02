@@ -11,7 +11,7 @@ from player_performance_ratings.ratings.data_prepararer import MatchGenerator
 from player_performance_ratings.data_structures import ColumnNames, Match
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
-from player_performance_ratings.transformers.base_transformer import BaseTransformer
+from player_performance_ratings.preprocessing.base_transformer import BaseTransformer
 
 
 class MatchPredictor():
