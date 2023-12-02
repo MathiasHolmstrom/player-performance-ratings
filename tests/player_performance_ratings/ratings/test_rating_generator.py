@@ -172,7 +172,7 @@ def test_rating_generator_update_id_different_from_match_id():
 def test_rating_generator_1_match():
     """
     When 1 match where the weighted performance is equal to the prior example with 2 matches per update_id and the sum of particiaption_weight is the same
-     --> should give the same
+     --> should return same values as previous test
 
     """
 
@@ -188,15 +188,15 @@ def test_rating_generator_1_match():
                         MatchPlayer(
                             id="1",
                             performance=MatchPerformance(
-                                performance_value=0.7*1/3,
-                                participation_weight=0.3,
+                                performance_value=0.7,
+                                participation_weight=0.1,
                             )
                         ),
                         MatchPlayer(
                             id="2",
                             performance=MatchPerformance(
-                                performance_value=1*1/3+0.3*2/3,
-                                participation_weight=0.3,
+                                performance_value=1,
+                                participation_weight=0.1,
                             )
                         )
                     ]
@@ -237,29 +237,29 @@ def test_rating_generator_1_match():
 
     ratings = rating_generator.generate(matches=matches)
 
-    expected_player_game_1_player1 = (0.7 - 0.5) * rating_change_multiplier * 0.1
-    expected_player_game_1_player2 = (1 - 0.5) * rating_change_multiplier * 0.1
-    expected_player_game_1_player3 = (0.3 - 0.5) * rating_change_multiplier * 0.1
-    expected_player_game_1_player4 = (0 - 0.5) * rating_change_multiplier * 0.1
+    expected_rating_change_game_1_player1 = (0.7 - 0.5) * rating_change_multiplier * 0.1
+    expected_rating_change_game_1_player2 = (1 - 0.5) * rating_change_multiplier * 0.1
+    expected_rating_change_game_1_player3 = (0.3 - 0.5) * rating_change_multiplier * 0.1
+    expected_rating_change_game_1_player4 = (0 - 0.5) * rating_change_multiplier * 0.1
 
 
     assert ratings[RatingColumnNames.PLAYER_RATING_CHANGE] == [
-        expected_player_game_1_player1,
-        expected_player_game_1_player2,
-        expected_player_game_1_player3,
-        expected_player_game_1_player4,
+        expected_rating_change_game_1_player1,
+        expected_rating_change_game_1_player2,
+        expected_rating_change_game_1_player3,
+        expected_rating_change_game_1_player4,
 
     ]
-    new_certain_sum = MATCH_CONTRIBUTION_TO_SUM_VALUE * 0.3
+    new_certain_sum = MATCH_CONTRIBUTION_TO_SUM_VALUE * 0.1
     expected_player_ratings = {
-        "1": PlayerRating(id="1", rating_value=1000 + expected_player_game_1_player1,
-                          games_played=0.3, certain_sum=new_certain_sum),
-        "2": PlayerRating(id="2", rating_value=1000 + expected_player_game_1_player2,
-                          games_played=0.3, certain_sum=new_certain_sum),
-        "3": PlayerRating(id="3", rating_value=1000 + expected_player_game_1_player3,
-                          games_played=0.3, certain_sum=new_certain_sum),
-        "4": PlayerRating(id="4", rating_value=1000 + expected_player_game_1_player4,
-                          games_played=0.3, certain_sum=new_certain_sum),
+        "1": PlayerRating(id="1", rating_value=1000 + expected_rating_change_game_1_player1,
+                          games_played=0.1, certain_sum=new_certain_sum),
+        "2": PlayerRating(id="2", rating_value=1000 + expected_rating_change_game_1_player2,
+                          games_played=0.1, certain_sum=new_certain_sum),
+        "3": PlayerRating(id="3", rating_value=1000 + expected_rating_change_game_1_player3,
+                          games_played=0.1, certain_sum=new_certain_sum),
+        "4": PlayerRating(id="4", rating_value=1000 + expected_rating_change_game_1_player4,
+                          games_played=0.1, certain_sum=new_certain_sum),
 
     }
 

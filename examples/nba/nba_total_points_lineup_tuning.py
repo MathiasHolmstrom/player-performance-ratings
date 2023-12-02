@@ -31,11 +31,10 @@ column_names = ColumnNames(
 df = load_nba_game_matchup_data()
 df['total_score'] = df['score'] + df['score_opponent']
 
-df = df[df['game_minutes']>46]
+df = df[df['game_minutes'] > 46]
 
-df.loc[df['total_score'] > 250, 'total_score'] = 250
-df.loc[df['total_score'] < 205, 'total_score'] = 205
-
+df.loc[df['total_score'] > 248, 'total_score'] = 248
+df.loc[df['total_score'] < 207, 'total_score'] = 207
 
 df[PredictColumnNames.TARGET] = df['total_score']
 

@@ -98,14 +98,20 @@ team_rating_search_ranges = [
     ParameterSearchRange(
         name='rating_change_multiplier',
         type='uniform',
-        low=25,
+        low=35,
         high=140
     ),
     ParameterSearchRange(
         name='participation_weight_coef',
         type='uniform',
         low=0,
-        high=5
+        high=10
+    ),
+    ParameterSearchRange(
+        name='team_rating_diff_coef',
+        type='uniform',
+        low=0,
+        high=0.002
     ),
 ]
 
@@ -157,7 +163,7 @@ match_predictor = MatchPredictor(column_names=column_names, rating_generator=rat
                                  pre_rating_transformers=pre_transformers, train_split_date="2022-05-01")
 
 team_rating_tuner = TeamRatingTuner(match_predictor=match_predictor,
-                                    n_trials=35,
+                                    n_trials=70,
                                     search_ranges=team_rating_search_ranges
                                     )
 

@@ -35,7 +35,7 @@ class TeamRatingGenerator():
                  reference_certain_sum_value: float = 3,
                  rating_change_multiplier: float = 50,
                  league_rating_adjustor_multiplier: float = 5,
-                 league_rating_change_sum_count: int = 250
+                 league_rating_change_update_threshold: int = 250
                  ):
         self.certain_weight = certain_weight
         self.certain_days_ago_multiplier = certain_days_ago_multiplier
@@ -47,10 +47,10 @@ class TeamRatingGenerator():
         self.rating_change_multiplier = rating_change_multiplier
         self.max_certain_sum = max_certain_sum
         self.league_rating_adjustor_multiplier = league_rating_adjustor_multiplier
-        self.league_rating_change_sum_count = league_rating_change_sum_count
+        self.league_rating_change_update_threshold = league_rating_change_update_threshold
         self.max_days_ago = max_days_ago
         self.player_ratings: Dict[str, PlayerRating] = {}
-        self._league_rating_changes: dict[str, float] = {}
+        self._league_rating_changes: dict[Optional[str], float] = {}
         self._league_rating_changes_count: dict[str, float] = {}
         self.performance_predictor = performance_predictor or RatingDifferencePerformancePredictor()
         self.start_rating_generator = start_rating_generator or StartRatingGenerator()
@@ -267,7 +267,7 @@ class TeamRatingGenerator():
         self._league_rating_changes[rating_change.league] += rating_change_value
         self._league_rating_changes_count[league] += 1
 
-        if self._league_rating_changes[league] > abs(self.league_rating_change_sum_count):
+        if self._league_rating_changes[league] > abs(self.league_rating_change_update_threshold):
             for player_id in self.start_rating_generator.league_to_entity_ids[league]:
                 mean_rating_change = self._league_rating_changes[league] / self._league_rating_changes_count[league]
                 self.player_ratings[

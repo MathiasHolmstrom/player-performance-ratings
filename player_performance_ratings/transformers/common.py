@@ -1,3 +1,5 @@
+import logging
+import math
 from dataclasses import dataclass
 from typing import Optional, Any, List
 
@@ -43,7 +45,7 @@ class ColumnsWeighter(BaseTransformer):
         for column_weight in self.column_weights:
 
             if column_weight.lower_is_better:
-                df[self.weighted_column_name] += df[f'weight__{column_weight.name}'] * (1-df[column_weight.name])
+                df[self.weighted_column_name] += df[f'weight__{column_weight.name}'] * (1 - df[column_weight.name])
             else:
                 df[self.weighted_column_name] += df[f'weight__{column_weight.name}'] * df[column_weight.name]
         df = df.drop(columns=drop_cols)
@@ -80,9 +82,15 @@ class SkLearnTransformerWrapper(BaseTransformer):
 
 class MinMaxTransformer(BaseTransformer):
 
-    def __init__(self, features: list[str], quantile: float = 0.99, prefix: str = ""):
+    def __init__(self,
+                 features: list[str],
+                 quantile: float = 0.99,
+                 allowed_mean_diff: Optional[float] = 0.01,
+                 prefix: str = ""
+                 ):
         self.features = features
         self.quantile = quantile
+        self.allowed_mean_diff = allowed_mean_diff
         self.prefix = prefix
         if self.quantile < 0 or self.quantile > 1:
             raise ValueError("quantile must be between 0 and 1")
@@ -95,6 +103,24 @@ class MinMaxTransformer(BaseTransformer):
 
             df[self.prefix + feature] = (df[feature] - min_value) / (max_value - min_value)
             df[self.prefix + feature].clip(0, 1, inplace=True)
+
+            if self.allowed_mean_diff:
+                reps = 0
+                mean_value = df[self.prefix + feature].mean()
+                while abs(0.5 - mean_value) > self.allowed_mean_diff:
+
+                    if mean_value > 0.5:
+                        df[self.prefix + feature] = df[self.prefix + feature] * (1- self.allowed_mean_diff)
+                    else:
+                        df[self.prefix + feature] = df[self.prefix + feature] * (1+ self.allowed_mean_diff)
+
+                    df[self.prefix + feature].clip(0, 1, inplace=True)
+                    mean_value = df[self.prefix + feature].mean()
+
+                    reps +=1
+                    if reps > 100:
+                        logging.warning(f"MinMaxTransformer: {feature} mean value is {mean_value} after {reps} repetitions")
+                        continue
 
         return df
 

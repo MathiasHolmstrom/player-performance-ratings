@@ -93,10 +93,10 @@ class RatingMeanPerformancePredictor(PerformancePredictor):
         start_index = max(0, len(self.sum_ratings) - self.last_sample_count)
         self.sum_ratings = self.sum_ratings[start_index:]
         #  average_rating = sum(self.sum_ratings) / len(self.sum_ratings)
-        average_rating = self.sum_rating / self.rating_count
-        mean_rating = player_rating.rating_value * 0.5 + opponent_team_rating.rating_value * 0.5 - average_rating
+        historical_average_rating = self.sum_rating / self.rating_count
+        net_mean_rating_over_historical_average = player_rating.rating_value * 0.5 + opponent_team_rating.rating_value * 0.5 - historical_average_rating
 
-        value = self.coef * mean_rating
+        value = self.coef * net_mean_rating_over_historical_average
         prediction = (math.exp(value)) / (1 + math.exp(value))
         if prediction > self.max_predict_value:
             return self.max_predict_value

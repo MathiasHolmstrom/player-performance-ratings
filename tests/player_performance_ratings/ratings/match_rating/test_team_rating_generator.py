@@ -1,5 +1,7 @@
 import copy
 
+import mock
+
 from player_performance_ratings.data_structures import Match, MatchTeam, PreMatchPlayerRating, MatchPerformance, \
     MatchPlayer, PreMatchTeamRating, PlayerRating, TeamRatingChange, PlayerRatingChange
 from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
@@ -183,10 +185,10 @@ def test_generate_rating_change():
                                                                  pre_match_opponent_team_rating=pre_match_team_ratings[
                                                                      1])
 
-    net_certain_sum_value = (0.5-team_rating_generator.reference_certain_sum_value)
+    net_certain_sum_value = (0.5 - team_rating_generator.reference_certain_sum_value)
     certain_factor = -sigmoid_subtract_half_and_multiply2(net_certain_sum_value,
                                                           team_rating_generator.certain_value_denom) + MODIFIED_RATING_CHANGE_CONSTANT
-    expected_rating_change_multiplier =  certain_factor * team_rating_generator.rating_change_multiplier
+    expected_rating_change_multiplier = certain_factor * team_rating_generator.rating_change_multiplier
 
     expected_player1_predicted_performance = performance_predictor.predict_performance(
         player_rating=pre_match_team_ratings[0].players[0],
@@ -203,22 +205,22 @@ def test_generate_rating_change():
     expected_player1_rating_change_value = (pre_match_team_ratings[0].players[
                                                 0].match_performance.performance_value - expected_player1_predicted_performance) * \
                                            expected_rating_change_multiplier * pre_match_team_ratings[0].players[
-                                                0].match_performance.participation_weight
+                                               0].match_performance.participation_weight
 
     expected_player2_rating_change_value = (pre_match_team_ratings[0].players[
                                                 1].match_performance.performance_value - expected_player2_predicted_performance) * \
                                            expected_rating_change_multiplier * pre_match_team_ratings[0].players[
-                                                1].match_performance.participation_weight
+                                               1].match_performance.participation_weight
 
     expected_rating_change = TeamRatingChange(
         id="1",
         league=None,
-        performance=(1 * 0.5 + 0.8 * 0.3)/(0.5 + 0.3),
+        performance=(1 * 0.5 + 0.8 * 0.3) / (0.5 + 0.3),
         pre_match_rating_value=(1100 * 0.5 + 900 * 0.3) / (0.5 + 0.3),
         predicted_performance=(
                                       expected_player1_predicted_performance * 0.5 + expected_player2_predicted_performance * 0.3) / (
                                       0.5 + 0.3),
-        rating_change_value= expected_player1_rating_change_value * 0.5 + expected_player2_rating_change_value * 0.3,
+        rating_change_value=expected_player1_rating_change_value * 0.5 + expected_player2_rating_change_value * 0.3,
         players=[
             PlayerRatingChange(
                 id="1",
@@ -244,14 +246,13 @@ def test_generate_rating_change():
     )
     assert rating_change == expected_rating_change
 
-def test_update_by_team_rating_change():
 
+def test_update_by_team_rating_change():
     """
     Player Ratings should be updated by the passed in rating_change_value.
     certain_sum and games_played should also be updated accordingly to performance_weight
 
     """
-
 
     team_rating_change = TeamRatingChange(
         id="1",
@@ -306,10 +307,12 @@ def test_update_by_team_rating_change():
     team_rating_generator.player_ratings = copy.deepcopy(original_player_ratings)
     team_rating_generator.update_rating_by_team_rating_change(team_rating_change=team_rating_change)
 
-    expected_player1_certain_sum = original_player_ratings["1"].certain_sum -1 * team_rating_generator.certain_days_ago_multiplier + \
-                            MATCH_CONTRIBUTION_TO_SUM_VALUE * team_rating_change.players[0].participation_weight
-    expected_player2_certain_sum = original_player_ratings["2"].certain_sum -1 * team_rating_generator.certain_days_ago_multiplier + \
-                            MATCH_CONTRIBUTION_TO_SUM_VALUE * team_rating_change.players[1].participation_weight
+    expected_player1_certain_sum = original_player_ratings[
+                                       "1"].certain_sum - 1 * team_rating_generator.certain_days_ago_multiplier + \
+                                   MATCH_CONTRIBUTION_TO_SUM_VALUE * team_rating_change.players[0].participation_weight
+    expected_player2_certain_sum = original_player_ratings[
+                                       "2"].certain_sum - 1 * team_rating_generator.certain_days_ago_multiplier + \
+                                   MATCH_CONTRIBUTION_TO_SUM_VALUE * team_rating_change.players[1].participation_weight
 
     expected_player_ratings = {
         "1": PlayerRating(
@@ -334,7 +337,6 @@ def test_update_by_team_rating_change():
 
 
 def test_league_ratings_are_updated_when_player_ratings_are_updated():
-
     """
     When player ratings are updated, league_ratings should also be updated accordingly
 
@@ -371,7 +373,11 @@ def test_league_ratings_are_updated_when_player_ratings_are_updated():
         ]
     )
 
-    team_rating_generator = TeamRatingGenerator()
+    start_rating_mock = mock.Mock()
+
+    team_rating_generator = TeamRatingGenerator(
+        start_rating_generator=start_rating_mock
+    )
     original_player_ratings = {
         "1": PlayerRating(
             id="1",
@@ -393,14 +399,63 @@ def test_league_ratings_are_updated_when_player_ratings_are_updated():
     team_rating_generator.player_ratings = copy.deepcopy(original_player_ratings)
     team_rating_generator.update_rating_by_team_rating_change(team_rating_change=team_rating_change)
 
-    expected_player1_certain_sum = original_player_ratings["1"].certain_sum -1 * team_rating_generator.certain_days_ago_multiplier + \
-                            MATCH_CONTRIBUTION_TO_SUM_VALUE * team_rating_change.players[0].participation_weight
-    expected_player2_certain_sum = original_player_ratings["2"].certain_sum -1 * team_rating_generator.certain_days_ago_multiplier + \
-                            MATCH_CONTRIBUTION_TO_SUM_VALUE * team_rating_change.players[1].participation_weight
+    assert start_rating_mock.update_league_ratings.call_count == 2
 
-    expected_player_ratings = {
+    assert team_rating_generator._league_rating_changes["league1"] == team_rating_change.players[
+        0].rating_change_value + team_rating_change.players[1].rating_change_value
+
+
+def test_player_ratings_are_updated_when_league_ratings_reaches_threshold():
+    """
+
+
+    """
+
+    team_rating_change = TeamRatingChange(
+        id="1",
+        league="league1",
+        performance=1,
+        pre_match_rating_value=1100,
+        predicted_performance=1,
+        rating_change_value=10,
+        players=[
+            PlayerRatingChange(
+                id="1",
+                day_number=1,
+                league="league1",
+                participation_weight=0.5,
+                predicted_performance=1,
+                performance=1,
+                pre_match_rating_value=1100,
+                rating_change_value=5,
+            ),
+        ]
+    )
+
+    team_rating_generator = TeamRatingGenerator(
+    )
+    original_player_ratings = {
         "1": PlayerRating(
             id="1",
-            rating_value=team_rating_change.players[0].rating_change_value + original_player_ratings["1"].rating_value,
-            games_played=team_rating_change.players[0].participation
+            last_match_day_number=0,
+            rating_value=1100,
+            games_played=1,
+            certain_sum=1,
+            prev_rating_changes=[],
+        ),
+    }
+    team_rating_generator._league_rating_changes = {
+        "league1": team_rating_generator.league_rating_change_update_threshold - 4}
+    team_rating_generator._league_rating_changes_count = {"league1": 1}
+
+    team_rating_generator.player_ratings = copy.deepcopy(original_player_ratings)
+
+    expected_new_player_rating = original_player_ratings["1"].rating_value + team_rating_change.players[
+        0].rating_change_value + (team_rating_generator.league_rating_change_update_threshold-4+team_rating_change.players[
+        0].rating_change_value)/2*team_rating_generator.league_rating_adjustor_multiplier
+
+    team_rating_generator.update_rating_by_team_rating_change(team_rating_change=team_rating_change)
+
+    assert team_rating_generator._league_rating_changes["league1"] == 0
+    assert team_rating_generator.player_ratings["1"].rating_value == expected_new_player_rating
 

@@ -1,6 +1,11 @@
+import warnings
+import pandas as pd
+from pandas.errors import SettingWithCopyWarning
+
+warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
+
 from typing import Optional
 
-import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
 from player_performance_ratings.consts import PredictColumnNames
@@ -87,16 +92,25 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
             for feature in self.features:
                 df = df.assign(**{feature: df[self.weight_column] * df[feature]})
 
-
-        grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
-            **{feature: 'sum' for feature in self.features},
-            self._target: 'mean',
-            self.weight_column: 'sum',
+        if self.weight_column:
+            grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
+                **{feature: 'sum' for feature in self.features},
+                self._target: 'mean',
+                self.weight_column: 'sum',
         }).reset_index()
-        for feature in self.features:
-            grouped[feature] = grouped[feature] / grouped[self.weight_column]
+            for feature in self.features:
+                grouped[feature] = grouped[feature] / grouped[self.weight_column]
 
-        grouped.drop(columns=[self.weight_column],inplace=True)
+            grouped.drop(columns=[self.weight_column], inplace=True)
+
+        else:
+            grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
+                **{feature: 'sum' for feature in self.features},
+                self._target: 'mean',
+        }).reset_index()
+
+
+
         grouped[self._target] = grouped[self._target].astype('int')
         return grouped
 
