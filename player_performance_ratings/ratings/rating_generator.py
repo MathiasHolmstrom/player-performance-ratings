@@ -1,7 +1,9 @@
+from abc import ABC, abstractmethod
 from typing import Optional
 
 import numpy as np
 import pandas as pd
+
 
 from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
 from player_performance_ratings.ratings.enums import RatingColumnNames
@@ -9,8 +11,17 @@ from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PlayerRating, \
     TeamRating, ColumnNames, TeamRatingChange
 
+class RatingGenerator(ABC):
 
-class RatingGenerator():
+    def __init__(self, column_names: ColumnNames):
+        self.column_names = column_names
+
+    @abstractmethod
+    def generate(self, matches: list[Match], df: Optional[pd.DataFrame] = None) -> dict[RatingColumnNames, list[float]]:
+        pass
+
+
+class OpponentAdjustedRatingGenerator(RatingGenerator):
 
     def __init__(self,
                  team_rating_generator: Optional[TeamRatingGenerator] = None,
@@ -21,7 +32,7 @@ class RatingGenerator():
         self.team_rating_generator = team_rating_generator or TeamRatingGenerator()
         self.store_game_ratings = store_game_ratings
         self.ratings_df = None
-        self.column_names = column_names
+        super().__init__(column_names=column_names)
         if self.store_game_ratings and not self.column_names:
             raise ValueError("in order to store ratings, column_names must be passed to constructor")
 

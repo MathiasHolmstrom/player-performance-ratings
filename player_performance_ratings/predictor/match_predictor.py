@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import pandas as pd
 import pendulum
@@ -18,7 +18,7 @@ class MatchPredictor():
 
     def __init__(self,
                  column_names: ColumnNames,
-                 rating_generator: RatingGenerator,
+                 rating_generators: Union[RatingGenerator, list[RatingGenerator]],
                  pre_rating_transformers: Optional[List[BaseTransformer]] = None,
                  post_rating_transformers: Optional[List[BaseTransformer]] = None,
                  predictor: [Optional[BaseMLWrapper]] = None,
@@ -35,7 +35,7 @@ class MatchPredictor():
 
         self.predictor.set_target(PredictColumnNames.TARGET)
         self.train_split_date = train_split_date
-        self.rating_generator = rating_generator
+        self.rating_generators = rating_generators if isinstance(rating_generators, list) else [rating_generators]
 
     def generate(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> pd.DataFrame:
 
@@ -52,9 +52,10 @@ class MatchPredictor():
             match_generator = MatchGenerator(column_names=self.column_names)
             matches = match_generator.generate(df=df)
 
-        match_ratings = self.rating_generator.generate(matches, df=df)
-        for rating_feature, values in match_ratings.items():
-            df[rating_feature] = values
+        for rating_generator in self.rating_generators:
+            match_ratings = rating_generator.generate(matches, df=df)
+            for rating_feature, values in match_ratings.items():
+                df[rating_feature] = values
 
         for post_rating_transformer in self.post_rating_transformers:
             df = post_rating_transformer.transform(df)

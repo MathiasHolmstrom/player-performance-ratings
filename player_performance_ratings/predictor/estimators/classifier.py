@@ -1,6 +1,7 @@
 import warnings
 import pandas as pd
 from pandas.errors import SettingWithCopyWarning
+from venn_abers import VennAbersCalibrator
 
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 
@@ -12,7 +13,6 @@ from player_performance_ratings.consts import PredictColumnNames
 
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
-
 
 class SkLearnGameTeamPredictor(BaseMLWrapper):
 
@@ -97,7 +97,7 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
                 **{feature: 'sum' for feature in self.features},
                 self._target: 'mean',
                 self.weight_column: 'sum',
-        }).reset_index()
+            }).reset_index()
             for feature in self.features:
                 grouped[feature] = grouped[feature] / grouped[self.weight_column]
 
@@ -107,9 +107,7 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
             grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
                 **{feature: 'sum' for feature in self.features},
                 self._target: 'mean',
-        }).reset_index()
-
-
+            }).reset_index()
 
         grouped[self._target] = grouped[self._target].astype('int')
         return grouped

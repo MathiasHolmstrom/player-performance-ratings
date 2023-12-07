@@ -1,4 +1,5 @@
 from .ratings.rating_generator import RatingGenerator
+from .ratings.rating_generator import TeamRatingGenerator
 from .predictor.match_predictor import MatchPredictor
 from .tuner.match_predicter_tuner import MatchPredictorTuner
 from .tuner.start_rating_tuner import StartRatingTuner

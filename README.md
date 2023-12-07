@@ -1,9 +1,20 @@
 # player-performance-ratings
 
-## Description
-
 Framework designed to predict outcomes in sports games using player-based ratings.
 Ratings can be used to predict game-winner, but also other outcomes such as total points scored, total yards gained, etc.
+
+## Installation
+
+```
+pip install player-performance-ratings
+```
+
+
+## Example Useage
+
+## Description
+
+
 The flexibility of the rating model grants the potential for significantly higher accuracy than other models, such as Elo,Glicko and Trueskill which are based on team performance.
 Both team and player outcomes can be predicted.
 The user has freedom to combine the ratings with other features, such as home/away, weather, etc.

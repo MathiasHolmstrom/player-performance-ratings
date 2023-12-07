@@ -1,10 +1,31 @@
-from typing import Optional
+from typing import Optional, Any
 
 import numpy as np
+import pandas as pd
 from skbase.base import BaseEstimator
 from sklearn import clone
 from sklearn.base import ClassifierMixin
 from sklearn.linear_model import LogisticRegression
+
+
+
+
+class SkLearnWrapper(BaseEstimator, ClassifierMixin):
+
+    def __init__(self,
+                  model: Any,
+                 ):
+
+        self.model = model
+        self.classes_ = []
+        super().__init__()
+
+    def fit(self, X: pd.DataFrame, y: pd.Series):
+        self.classes_ = np.sort(np.unique(y))
+        self.model.fit(X, y)
+
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
+        return self.model.predict_proba(X)
 
 
 class OrdinalClassifier(BaseEstimator, ClassifierMixin):
