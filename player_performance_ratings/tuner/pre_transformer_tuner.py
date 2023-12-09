@@ -88,7 +88,7 @@ class PreTransformerTuner(TransformerTuner):
             match_predictor = copy.deepcopy(match_predictor)
             match_predictor.pre_rating_transformers = pre_rating_transformers
 
-            df_with_prediction = match_predictor.generate(df=df)
+            df_with_prediction = match_predictor.generate_historical(df=df, store_ratings=False)
             return scorer.score(df_with_prediction, classes_=match_predictor.classes_)
 
         best_transformers = []

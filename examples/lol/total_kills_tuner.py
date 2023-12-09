@@ -34,7 +34,7 @@ column_names = ColumnNames(
 )
 
 match_generator = MatchGenerator(column_names=column_names)
-matches = match_generator.generate(df=df)
+matches = match_generator.convert_df_to_matches(df=df)
 
 rating_generator = RatingGenerator(team_rating_generator=TeamRatingGenerator(
     player_rating_generator=TeamRatingGenerator(performance_predictor=RatingMeanPerformancePredictor())))

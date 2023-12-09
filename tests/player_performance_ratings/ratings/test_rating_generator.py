@@ -165,7 +165,7 @@ def test_rating_generator_update_id_different_from_match_id():
         assert rating.id == expected_rating.id
         assert rating.rating_value == expected_rating.rating_value
         assert is_close(rating.games_played, expected_rating.games_played)
-        assert is_close(rating.certain_sum, expected_rating.certain_sum)
+        assert is_close(rating.confidence_sum, expected_rating.confidence_sum)
 
 
 
@@ -272,5 +272,5 @@ def test_rating_generator_1_match():
         assert rating.id == expected_rating.id
         assert rating.rating_value == expected_rating.rating_value
         assert is_close(rating.games_played, expected_rating.games_played)
-        assert is_close(rating.certain_sum, expected_rating.certain_sum)
+        assert is_close(rating.confidence_sum, expected_rating.confidence_sum)
 

@@ -107,7 +107,7 @@ def test_generate_rating_change():
         certain_weight=1,
         reference_certain_sum_value=3,
         max_certain_sum=50,
-        max_days_ago=100,
+        confidence_max_days=100,
         rating_change_multiplier=10,
         certain_days_ago_multiplier=0.06,
         performance_predictor=performance_predictor
@@ -308,10 +308,10 @@ def test_update_by_team_rating_change():
     team_rating_generator.update_rating_by_team_rating_change(team_rating_change=team_rating_change)
 
     expected_player1_certain_sum = original_player_ratings[
-                                       "1"].certain_sum - 1 * team_rating_generator.certain_days_ago_multiplier + \
+                                       "1"].confidence_sum - 1 * team_rating_generator.certain_days_ago_multiplier + \
                                    MATCH_CONTRIBUTION_TO_SUM_VALUE * team_rating_change.players[0].participation_weight
     expected_player2_certain_sum = original_player_ratings[
-                                       "2"].certain_sum - 1 * team_rating_generator.certain_days_ago_multiplier + \
+                                       "2"].confidence_sum - 1 * team_rating_generator.certain_days_ago_multiplier + \
                                    MATCH_CONTRIBUTION_TO_SUM_VALUE * team_rating_change.players[1].participation_weight
 
     expected_player_ratings = {

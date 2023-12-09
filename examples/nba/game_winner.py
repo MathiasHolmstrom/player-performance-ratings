@@ -38,6 +38,6 @@ rating_generator = RatingGenerator(
 predictor = SKLearnClassifierWrapper(features=[RatingColumnNames.RATING_DIFFERENCE], granularity=[column_names.match_id, column_names.team_id])
 
 match_predictor = MatchPredictor(column_names=column_names, rating_generator=rating_generator, predictor=predictor)
-df = match_predictor.generate(df)
+df = match_predictor.generate_historical(df)
 
 print(log_loss(df[PredictColumnNames.TARGET], df[match_predictor.predictor.pred_column]))

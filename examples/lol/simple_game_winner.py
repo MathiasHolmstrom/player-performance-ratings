@@ -56,6 +56,6 @@ rating_generator = RatingGenerator(
 )
 
 match_predictor = MatchPredictor(column_names=column_names, rating_generator=rating_generator)
-df = match_predictor.generate(df)
+df = match_predictor.generate_historical(df)
 
 print(log_loss(df['result'], df[match_predictor.predictor.pred_column]))

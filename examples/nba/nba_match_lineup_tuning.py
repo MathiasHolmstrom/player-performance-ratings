@@ -7,15 +7,22 @@ from examples.utils import load_nba_game_matchup_data
 
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.data_structures import ColumnNames
-from player_performance_ratings.predictor.match_predictor import MatchPredictor
-from player_performance_ratings import RatingGenerator, TeamRatingTuner, StartRatingTuner, MatchPredictorTuner, \
-    ParameterSearchRange, MinMaxTransformer
+
+from player_performance_ratings import RatingGenerator, MinMaxTransformer, LogLossScorer
 from player_performance_ratings.predictor.estimators.classifier import SkLearnGameTeamPredictor
 from player_performance_ratings.preprocessing.common import SkLearnTransformerWrapper
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
 from player_performance_ratings.ratings.match_rating.performance_predictor import RatingDifferencePerformancePredictor
 from player_performance_ratings.ratings.match_rating.start_rating.start_rating_generator import StartRatingGenerator
+from player_performance_ratings.ratings.rating_generator import OpponentAdjustedRatingGenerator
+from player_performance_ratings.tuner import MatchPredictorTuner
+from player_performance_ratings.tuner.rating_generator_tuner import TeamRatingTuner, StartRatingTuner
+
+from player_performance_ratings.tuner.base_tuner import ParameterSearchRange
+from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+from player_performance_ratings.tuner.rating_generator_tuner.rating_generator_tuner import RatingGeneratorTuner, \
+    OpponentAdjustedRatingGeneratorTuner
 
 column_names = ColumnNames(
     team_id='lineup_id',
@@ -126,9 +133,7 @@ performance_predictor = RatingDifferencePerformancePredictor(
 
 )
 
-rating_generator = RatingGenerator(
-    store_game_ratings=True,
-    column_names=column_names,
+rating_generator = OpponentAdjustedRatingGenerator(
     team_rating_generator=TeamRatingGenerator(
         performance_predictor=performance_predictor,
         start_rating_generator=StartRatingGenerator(
@@ -162,24 +167,36 @@ predictor = SkLearnGameTeamPredictor(features=[RatingColumnNames.RATING_DIFFEREN
                                      team_id_column='team_id', game_id_colum=column_names.rating_update_id,
                                      target='won')
 
-match_predictor = MatchPredictor(column_names=column_names, rating_generator=rating_generator, predictor=predictor,
-                                 pre_rating_transformers=pre_transformers, train_split_date="2022-05-01")
+match_predictor_factory = MatchPredictorFactory(
+    column_names=column_names,
+    rating_generators=rating_generator,
+    pre_transformers=pre_transformers,
+    predictor=predictor,
+    train_split_date="2022-05-01"
+)
 
-team_rating_tuner = TeamRatingTuner(match_predictor=match_predictor,
-                                    n_trials=70,
-                                    search_ranges=team_rating_search_ranges
-                                    )
+team_rating_tuner = TeamRatingTuner(
+    n_trials=3,
+    search_ranges=team_rating_search_ranges,
+)
 
-start_rating_tuner = StartRatingTuner(column_names=column_names,
-                                      match_predictor=match_predictor,
-                                      search_ranges=start_rating_search_range,
-                                      n_trials=9,
-                                      )
+start_rating_tuner = StartRatingTuner(
 
-tuner = MatchPredictorTuner(
+    search_ranges=start_rating_search_range,
+    n_trials=3,
+)
+
+rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
+    rating_generator=rating_generator,
     team_rating_tuner=team_rating_tuner,
     start_rating_tuner=start_rating_tuner,
+)
+
+tuner = MatchPredictorTuner(
+    match_predictor_factory=match_predictor_factory,
     fit_best=True,
+    scorer=LogLossScorer(pred_column=predictor.pred_column),
+    rating_generator_tuners=rating_generator_tuner,
 
 )
 best_match_predictor = tuner.tune(df=df)

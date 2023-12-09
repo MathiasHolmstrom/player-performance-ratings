@@ -42,7 +42,7 @@ class PlayerRating(DataClassJsonMixin):
     name: Optional[str] = None
     games_played: Union[float,int] = 0
     last_match_day_number: int = None
-    certain_sum: float = 0
+    confidence_sum: float = 0
     prev_rating_changes: List[float] = None
 
 

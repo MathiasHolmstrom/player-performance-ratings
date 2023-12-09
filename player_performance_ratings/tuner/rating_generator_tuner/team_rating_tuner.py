@@ -7,12 +7,11 @@ import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
-from player_performance_ratings import StartLeagueRatingOptimizer
-from player_performance_ratings.predictor.match_predictor import MatchPredictor
-from player_performance_ratings.data_structures import Match, ColumnNames
+from player_performance_ratings import BaseTransformer
+from player_performance_ratings.data_structures import Match
 from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
 from player_performance_ratings.ratings.rating_generator import OpponentAdjustedRatingGenerator
-from player_performance_ratings.scorer.score import BaseScorer, LogLossScorer
+from player_performance_ratings.scorer.score import BaseScorer
 from player_performance_ratings.tuner.base_tuner import ParameterSearchRange, add_params_from_search_range
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 
@@ -65,14 +64,10 @@ DEFAULT_TEAM_SEARCH_RANGES = [
 class TeamRatingTuner():
 
     def __init__(self,
-                 column_names: ColumnNames,
-                 match_predictor_factory: MatchPredictorFactory,
                  search_ranges: Optional[list[ParameterSearchRange]] = None,
                  n_trials: int = 30,
                  ):
         self.search_ranges = search_ranges or DEFAULT_TEAM_SEARCH_RANGES
-        self.match_predictor_factory = match_predictor_factory
-        self.column_names = column_names
 
         self.n_trials = n_trials
 
@@ -81,7 +76,8 @@ class TeamRatingTuner():
              rating_generator: OpponentAdjustedRatingGenerator,
              rating_index: int,
              scorer: BaseScorer,
-             matches: Optional[list[Match]] = None,
+             match_predictor_factory: MatchPredictorFactory,
+             matches: list[Match] = None,
              ) -> TeamRatingGenerator:
 
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
@@ -105,11 +101,11 @@ class TeamRatingTuner():
             rating_g = copy.deepcopy(rating_generator)
             rating_g.team_rating_generator = team_rating_generator
 
-            match_predictor = self.match_predictor_factory.create(
+            match_predictor = match_predictor_factory.create(
                 idx_rating_generator=(rating_index, rating_g),
             )
 
-            df_with_prediction = match_predictor.generate(df=df, matches=matches)
+            df_with_prediction = match_predictor.generate_historical(df=df, store_ratings=False)
             return scorer.score(df_with_prediction, classes_=match_predictor.predictor.classes_)
 
         direction = "minimize"

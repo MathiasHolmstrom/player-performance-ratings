@@ -32,7 +32,7 @@ column_names = ColumnNames(
 )
 
 match_generator = MatchGenerator(column_names=column_names)
-matches = match_generator.generate(df=df)
+matches = match_generator.convert_df_to_matches(df=df)
 
 rating_generator = RatingGenerator(team_rating_generator=TeamRatingGenerator(
     player_rating_generator=TeamRatingGenerator(performance_predictor=RatingMeanPerformancePredictor())))
@@ -54,7 +54,7 @@ predictor = SKLearnClassifierWrapper(
 
 match_predictor = MatchPredictor(pre_rating_transformers=pre_rating_transformers, column_names=column_names,
                                  rating_generator=rating_generator, predictor= predictor)
-df = match_predictor.generate(df)
+df = match_predictor.generate_historical(df)
 
 scorer = OrdinalLossScorer(
     pred_column=match_predictor.predictor.pred_column,
