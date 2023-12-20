@@ -12,6 +12,11 @@ from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
 class BayesianMovingAverage(RatingGenerator):
 
+    """
+    Generates ratings for players and teams by watching past performances higher using a combination of prior, evidence and likelihood.
+    """
+
+
     def __init__(self,
                  evidence_exponential_weight: float = 0.96,
                  likelihood_exponential_weight: float = 0.98,
@@ -20,6 +25,40 @@ class BayesianMovingAverage(RatingGenerator):
                  prior_by_league: bool = True,
                  prior_by_position: bool = True,
                  ):
+
+        """
+
+        :param evidence_exponential_weight:
+            The weight of the evidence. Value should be between 0 and 1.
+            A value closer to 0 makes performances further in the past less important.
+
+        :param likelihood_exponential_weight:
+            Determines how the likelihood_ratio is calculated. The likelihood ratio determines how much the prior and evidence are weighted.
+            A likelihood_exponential_weight closer to 0 makes the prior have a larger weight relative to the evidence.
+
+        :param likelihood_denom:
+            The denominator of the likelihood_ratio.
+            An increase in the likelihood_denom makes the player require more data (and with higher recency) for the likelihood_ratio to approach 1.
+            Thus a higher likelihood_denom makes the prior have a larger weight relative to the evidence.
+
+        :param prior_granularity_count_max:
+            In calculating the prior-rating, past ratings of players in similar groups/granularity are used.
+            If no players exist in the group at the time the prior of a player is detemrined, the player will receive the mean of all performances as his rating
+            The more players exist in the group, the more the prior-rating will be based on the past performances of players in the group.
+            A higher prior_granularity_count_max results in a lower weight of the within-group-players-rating relative to the mean of all performances across all players in the dataset.
+
+
+        :param prior_by_league:
+            If True, the prior-rating will be based on ratings of players within the same league
+        :param prior_by_position:
+            If True, the prior-rating will be based on ratings of players within the same position
+        """
+
+
+        if evidence_exponential_weight < 0 or evidence_exponential_weight > 1:
+            raise ValueError("evidence_exponential_weight must be between 0 and 1")
+        if likelihood_exponential_weight < 0 or likelihood_exponential_weight > 1:
+            raise ValueError("likelihood_exponential_weight must be between 0 and 1")
 
         self._player_ratings: dict[str, PlayerRating] = {}
         self.evidence_exponential_weight = evidence_exponential_weight
