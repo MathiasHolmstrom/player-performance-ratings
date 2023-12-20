@@ -1,5 +1,4 @@
-from player_performance_ratings import RatingGenerator
-from player_performance_ratings.data_structures import Match, Team, MatchPlayer, MatchPerformance, MatchTeam, \
+from player_performance_ratings.data_structures import Match, MatchPlayer, MatchPerformance, MatchTeam, \
     PlayerRating
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.match_rating import TeamRatingGenerator

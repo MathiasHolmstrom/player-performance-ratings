@@ -1,14 +1,14 @@
 import copy
 import inspect
-from typing import Optional, Match, Tuple, Union, Literal
+from typing import Optional,  Tuple, Union, Literal
 
 import optuna
 import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
-from player_performance_ratings import RatingGenerator
 from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.scorer.score import BaseScorer
 from player_performance_ratings.transformations.base_transformer import BaseTransformer
 from player_performance_ratings.transformations.pre_transformers import ColumnWeight

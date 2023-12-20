@@ -75,10 +75,10 @@ def test_transformer_tuner():
     assert match_predictor_factory.rating_generators == rating_generators
 
     #assert best model belongs in search range
-    assert tuned_model[0].column_weights[0].evidence_exponential_weight >= 0.1
-    assert tuned_model[0].column_weights[0].evidence_exponential_weight <= 0.3
+    assert tuned_model[0].column_weights[0].weight >= 0.1
+    assert tuned_model[0].column_weights[0].weight <= 0.3
 
-    assert tuned_model[0].column_weights[1].evidence_exponential_weight >= 0.25
-    assert tuned_model[0].column_weights[1].evidence_exponential_weight <= 0.85
+    assert tuned_model[0].column_weights[1].weight >= 0.25
+    assert tuned_model[0].column_weights[1].weight <= 0.85
 
 

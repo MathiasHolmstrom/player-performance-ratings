@@ -75,6 +75,7 @@ def test_generate_pre_match_team_rating():
                     performance_value=1,
                     participation_weight=0.5,
                 ),
+                position=None
             ),
             PreMatchPlayerRating(
                 id="2",
@@ -85,6 +86,7 @@ def test_generate_pre_match_team_rating():
                     performance_value=1,
                     participation_weight=0.3,
                 ),
+                position=None
             ),
         ],
         rating_value=(1100 * 0.5 + 900 * 0.3) / (0.5 + 0.3),
@@ -160,6 +162,7 @@ def test_generate_rating_change(confidence_sum):
                         performance_value=1,
                         participation_weight=0.5,
                     ),
+                    position=None
                 ),
                 PreMatchPlayerRating(
                     id="2",
@@ -170,6 +173,7 @@ def test_generate_rating_change(confidence_sum):
                         performance_value=0.8,
                         participation_weight=0.3,
                     ),
+                    position=None
                 ),
             ],
             rating_value=(1100 * 0.5 + 900 * 0.3) / (0.5 + 0.3),
