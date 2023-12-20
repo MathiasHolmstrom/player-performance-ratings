@@ -2,21 +2,15 @@ import pickle
 
 from sklearn.preprocessing import StandardScaler
 
-from examples.utils import load_data
+from player_performance_ratings.examples.utils import load_lol_data
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings import MatchPredictor
 from player_performance_ratings import SKLearnClassifierWrapper
-from player_performance_ratings import RatingColumnNames
-from player_performance_ratings import TeamRatingGenerator
-from player_performance_ratings import TeamRatingGenerator
-from player_performance_ratings import RatingGenerator
-from player_performance_ratings import PreTransformerTuner, StartRatingTuner
 
-from player_performance_ratings import ParameterSearchRange
-from player_performance_ratings import MatchPredictorTuner
-from player_performance_ratings import PlayerRatingTuner
+from player_performance_ratings import TeamRatingGenerator
 
-from player_performance_ratings import SkLearnTransformerWrapper, MinMaxTransformer, ColumnsWeighter
+from player_performance_ratings import SkLearnTransformerWrapper, MinMaxTransformer
+from player_performance_ratings.tuner import TransformerTuner
 
 column_names = ColumnNames(
     team_id='teamname',
@@ -26,7 +20,7 @@ column_names = ColumnNames(
     performance='performance',
     league='league'
 )
-df = load_data()
+df = load_lol_data()
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 
 df = (
@@ -160,7 +154,7 @@ start_rating_search_range = [
     )
 ]
 
-pre_transformer_tuner = PreTransformerTuner(match_predictor=match_predictor,
+pre_transformer_tuner = TransformerTuner(match_predictor=match_predictor,
                                             pre_transformer_search_ranges=pre_transformer_search_ranges,
                                             n_trials=15
                                             )

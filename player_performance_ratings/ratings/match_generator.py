@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import warnings
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -54,7 +55,10 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
 
     league_in_df = False
     if col_names.league in df.columns.tolist():
-        league_in_df = True
+        if league_identifier is None:
+            logging.warning("League column passed but no league_identifier passed. league will be set to None")
+        else:
+            league_in_df = True
 
     prev_match_id = None
 
@@ -92,6 +96,12 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
         if col_names.player_id is not None:
             player_id = row[col_names.player_id]
 
+
+        if col_names.position is not None:
+            position = row[col_names.position]
+        else:
+            position = None
+
         if league_in_df:
             match_league = row[column_names.league]
             if team_id not in team_league_counts:
@@ -114,6 +124,7 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
             id=player_id,
             league=player_league,
             performance=performance,
+            position=position,
         )
         match_team_players.append(match_player)
 

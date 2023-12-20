@@ -1,7 +1,7 @@
 from sklearn.preprocessing import StandardScaler
 
 from player_performance_ratings.predictor.estimators.ordinal_classifier import OrdinalClassifier
-from examples.utils import load_data
+from player_performance_ratings.examples.utils import load_lol_data
 from player_performance_ratings import TeamRatingGenerator, MatchPredictor, \
     SKLearnClassifierWrapper, SkLearnTransformerWrapper, RatingColumnNames
 from player_performance_ratings.data_structures import ColumnNames
@@ -11,7 +11,7 @@ from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.scorer.score import OrdinalLossScorer
 from player_performance_ratings.transformers.common import DiminishingValueTransformer, MinMaxTransformer
 
-df = load_data()
+df = load_lol_data()
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 
 df['minutes_played'] = df['gamelength'] / 60

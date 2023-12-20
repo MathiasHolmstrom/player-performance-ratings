@@ -1,15 +1,14 @@
-from examples.utils import load_data
+from player_performance_ratings.examples.utils import load_lol_data
 
 from sklearn.metrics import log_loss
 
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
-from player_performance_ratings import TeamRatingGenerator
 from player_performance_ratings import  StartRatingGenerator
 from player_performance_ratings import TeamRatingGenerator
 from player_performance_ratings import RatingGenerator
 
-df = load_data()
+df = load_lol_data()
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 
 df = (

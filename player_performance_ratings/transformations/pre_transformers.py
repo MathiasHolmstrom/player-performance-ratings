@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
 
-from player_performance_ratings.preprocessing.base_transformer import BaseTransformer
+from player_performance_ratings.transformations.base_transformer import BaseTransformer
 
 
 @dataclass

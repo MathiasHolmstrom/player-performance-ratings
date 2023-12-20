@@ -2,24 +2,25 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from venn_abers import VennAbersCalibrator
 
-from examples.utils import load_nba_game_player_data, load_nba_game_matchup_data
-from player_performance_ratings import ColumnNames, MatchPredictorTuner, StartRatingTuner, \
-    TeamRatingTuner
-from player_performance_ratings import MatchPredictor
-from player_performance_ratings import RatingGenerator
-from player_performance_ratings import ParameterSearchRange
+from player_performance_ratings.examples.utils import load_nba_game_player_data, load_nba_game_matchup_data
+
+from player_performance_ratings import ColumnNames, LogLossScorer
 
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor.estimators.classifier import SkLearnGameTeamPredictor
 from player_performance_ratings.predictor.estimators.sklearn_models import SkLearnWrapper
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
-from player_performance_ratings.ratings.match_rating.performance_predictor import PerformancePredictor, \
-    RatingDifferencePerformancePredictor
 from player_performance_ratings.ratings.match_rating.start_rating.start_rating_generator import StartRatingGenerator
 
-from player_performance_ratings.preprocessing.common import SkLearnTransformerWrapper, MinMaxTransformer
-
+from player_performance_ratings.transformations.pre_transformers import SkLearnTransformerWrapper, MinMaxTransformer
+from player_performance_ratings.ratings.rating_generator import OpponentAdjustedRatingGenerator
+from player_performance_ratings.tuner import MatchPredictorTuner
+from player_performance_ratings.tuner.base_tuner import ParameterSearchRange
+from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+from player_performance_ratings.tuner.rating_generator_tuner import StartRatingTuner, TeamRatingTuner
+from player_performance_ratings.tuner.rating_generator_tuner import \
+    OpponentAdjustedRatingGeneratorTuner
 
 column_names = ColumnNames(
     team_id='team_id',
@@ -73,48 +74,44 @@ start_rating_search_range = [
     ),
 ]
 
+estimator = SkLearnWrapper(VennAbersCalibrator(estimator=LogisticRegression(), inductive=True, cal_size=0.2, random_state=101))
 
-rating_generator = RatingGenerator(
-    store_game_ratings=True,
-    column_names=column_names,
+predictor = SkLearnGameTeamPredictor(model=estimator,features=[RatingColumnNames.RATING_DIFFERENCE], game_id_colum='game_id',
+                                     team_id_column='team_id', weight_column='participation_weight')
+
+
+
+rating_generator = OpponentAdjustedRatingGenerator(
     team_rating_generator=TeamRatingGenerator(
-        performance_predictor=RatingDifferencePerformancePredictor(
-            team_rating_diff_coef=0,
-        ),
         start_rating_generator=StartRatingGenerator(
             team_weight=0,
         )
     )
 )
 
-estimator = SkLearnWrapper(VennAbersCalibrator(estimator=LogisticRegression(), inductive=True, cal_size=0.2, random_state=101))
 
-predictor = SkLearnGameTeamPredictor(model=estimator,features=[RatingColumnNames.RATING_DIFFERENCE], game_id_colum='game_id',
-                                     team_id_column='team_id', weight_column='participation_weight')
-match_predictor = MatchPredictor(
-    rating_generator=rating_generator,
+
+match_predictor_factory = MatchPredictorFactory(
     column_names=column_names,
+    rating_generators=rating_generator,
+    pre_transformers=pre_transformers,
     predictor=predictor,
-    pre_rating_transformers=pre_transformers,
     train_split_date="2022-05-01"
 )
 
 
-player_rating_tuner = TeamRatingTuner(match_predictor=match_predictor,
-                                        n_trials=25
-                                        )
-
-start_rating_tuner = StartRatingTuner(column_names=column_names,
-                                      match_predictor=match_predictor,
-                                      n_trials=8,
-                                      search_ranges=start_rating_search_range,
-                                      )
+rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
+    rating_generator=rating_generator,
+    team_rating_tuner=TeamRatingTuner(n_trials=1),
+    start_rating_tuner=StartRatingTuner(),
+)
 
 tuner = MatchPredictorTuner(
-    # pre_transformer_tuner=pre_transformer_tuner,
-    team_rating_tuner=player_rating_tuner,
-    start_rating_tuner=start_rating_tuner,
+    match_predictor_factory=match_predictor_factory,
     fit_best=True,
+    scorer=LogLossScorer(pred_column=predictor.pred_column),
+    rating_generator_tuners=rating_generator_tuner,
+
 )
 best_match_predictor = tuner.tune(df=df)
 tuner.tune(df=df)

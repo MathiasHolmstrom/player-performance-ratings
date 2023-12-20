@@ -1,16 +1,14 @@
 import numpy as np
-from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
-from venn_abers import VennAbersCalibrator
 
-from examples.utils import load_nba_game_matchup_data
+from player_performance_ratings.examples.utils import load_nba_game_matchup_data
 
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.data_structures import ColumnNames
 
-from player_performance_ratings import RatingGenerator, MinMaxTransformer, LogLossScorer
+from player_performance_ratings import MinMaxTransformer, LogLossScorer
 from player_performance_ratings.predictor.estimators.classifier import SkLearnGameTeamPredictor
-from player_performance_ratings.preprocessing.common import SkLearnTransformerWrapper
+from player_performance_ratings.transformations.common import SkLearnTransformerWrapper
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
 from player_performance_ratings.ratings.match_rating.performance_predictor import RatingDifferencePerformancePredictor
@@ -21,8 +19,7 @@ from player_performance_ratings.tuner.rating_generator_tuner import TeamRatingTu
 
 from player_performance_ratings.tuner.base_tuner import ParameterSearchRange
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
-from player_performance_ratings.tuner.rating_generator_tuner.rating_generator_tuner import RatingGeneratorTuner, \
-    OpponentAdjustedRatingGeneratorTuner
+from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 
 column_names = ColumnNames(
     team_id='lineup_id',

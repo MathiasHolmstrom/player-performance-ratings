@@ -9,9 +9,10 @@ from player_performance_ratings.predictor.estimators.base_estimator import BaseM
 from player_performance_ratings.predictor.estimators.classifier import SKLearnClassifierWrapper
 from player_performance_ratings.data_structures import ColumnNames, Match
 from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
-from player_performance_ratings.preprocessing.base_transformer import BaseTransformer
+from player_performance_ratings.transformations.base_transformer import BaseTransformer
 
 
 class MatchPredictor():
@@ -24,6 +25,21 @@ class MatchPredictor():
                  predictor: [Optional[BaseMLWrapper]] = None,
                  train_split_date: Optional[pendulum.datetime] = None,
                  ):
+
+        """
+
+        :param column_names:
+        :param rating_generators: A single or a list of RatingGenerators.
+        :param
+            pre_rating_transformers: An optional list of transformations that take place rating generation.
+            This is generally recommended if a more complex performance-value is used to update ratings.
+            Although any type of feature engineering that isn't dependant upon the output of the ratings can be performed here.
+        :param post_rating_transformers:
+            After rating-generation, additional feature engineering can be performed.
+        :param predictor:
+        :param train_split_date:
+        """
+
         self.column_names = column_names
         self.pre_rating_transformers = pre_rating_transformers or []
         self.post_rating_transformers = post_rating_transformers or []
@@ -37,7 +53,7 @@ class MatchPredictor():
         self.train_split_date = train_split_date
         self.rating_generators = rating_generators if isinstance(rating_generators, list) else [rating_generators]
 
-    def generate_historical(self, df: pd.DataFrame, store_ratings: bool = True) -> pd.DataFrame:
+    def generate_historical(self, df: pd.DataFrame, matches: list[Match] = None, store_ratings: bool = True) -> pd.DataFrame:
 
         if self.predictor.target not in df.columns:
             raise ValueError(
@@ -49,11 +65,12 @@ class MatchPredictor():
         if self.train_split_date is None:
             self.train_split_date = df.iloc[int(len(df) / 1.3)][self.column_names.start_date]
 
-        matches = convert_df_to_matches(column_names=self.column_names, df=df)
+        if matches is None:
+            matches = convert_df_to_matches(column_names=self.column_names, df=df, league_identifier=LeagueIdentifier())
 
         for rating_generator in self.rating_generators:
             if store_ratings:
-                match_ratings = rating_generator.generate(matches, df=df)
+                match_ratings = rating_generator.generate(matches, df=df, column_names=self.column_names)
             else:
                 match_ratings = rating_generator.generate(matches)
             for rating_feature, values in match_ratings.items():
@@ -72,7 +89,7 @@ class MatchPredictor():
         for pre_rating_transformer in self.pre_rating_transformers:
             df = pre_rating_transformer.transform(df)
 
-        matches = convert_df_to_matches(column_names=self.column_names, df=df)
+        matches = convert_df_to_matches(column_names=self.column_names, df=df, league_identifier=LeagueIdentifier())
 
         for rating_generator in self.rating_generators:
             match_ratings = rating_generator.generate(matches, df=df)

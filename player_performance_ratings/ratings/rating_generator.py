@@ -15,7 +15,8 @@ from player_performance_ratings.data_structures import Match, PreMatchRating, Pr
 class RatingGenerator(ABC):
 
     @abstractmethod
-    def generate(self, matches: list[Match], df: Optional[pd.DataFrame] = None) -> dict[RatingColumnNames, list[float]]:
+    def generate(self, matches: list[Match], df: Optional[pd.DataFrame] = None,
+                 column_names: Optional[ColumnNames] = None) -> dict[RatingColumnNames, list[float]]:
         pass
 
     @property
@@ -61,16 +62,13 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
          These ratings can easily be added as new columns to the original dataframe for later model training or exploration
         """
 
-        if df and column_names:
+        if df is not None and column_names:
             logging.info(
                 "both df and column names are passed, and match-ratings will therefore be stored in the class object")
 
-        elif df and not column_names:
+        elif column_names and df is None:
             logging.warning(
-                "Df is passed but column names not - so match-ratings will not be stored in the class object")
-        elif column_names and not df:
-            logging.warning(
-                "Column names is passed but df not - so match-ratings will not be stored in the class object")
+                "Column names is passed but df not - this match-ratings will not be stored in the class object")
 
         pre_match_player_rating_values = []
         pre_match_team_rating_values = []
@@ -110,7 +108,7 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
         rating_means = np.array(pre_match_team_rating_values) * 0.5 + 0.5 * np.array(
             pre_match_opponent_rating_values)
 
-        if df and column_names:
+        if df is not None and column_names:
             self.ratings_df = df[
                 [column_names.team_id, column_names.player_id, column_names.match_id]].assign(
                 **{

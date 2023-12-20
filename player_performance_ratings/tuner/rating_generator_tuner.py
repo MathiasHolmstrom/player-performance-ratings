@@ -1,0 +1,273 @@
+import copy
+import inspect
+import logging
+from abc import abstractmethod, ABC
+from typing import Optional, Match
+
+import optuna
+import pandas as pd
+from optuna.samplers import TPESampler
+from optuna.trial import BaseTrial
+
+from player_performance_ratings import RatingGenerator, BaseScorer, \
+    TeamRatingGenerator
+from player_performance_ratings.ratings.match_rating.start_rating.start_rating_generator import StartRatingGenerator
+from player_performance_ratings.ratings.rating_generator import OpponentAdjustedRatingGenerator
+
+from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+from player_performance_ratings.tuner.utils import ParameterSearchRange, add_params_from_search_range
+
+DEFAULT_TEAM_SEARCH_RANGES = [
+    ParameterSearchRange(
+        name='confidence_weight',
+        type='uniform',
+        low=0.6,
+        high=0.95
+    ),
+    ParameterSearchRange(
+        name='confidence_days_ago_multiplier',
+        type='uniform',
+        low=0.02,
+        high=.12,
+    ),
+    ParameterSearchRange(
+        name='confidence_max_days',
+        type='uniform',
+        low=40,
+        high=200,
+    ),
+    ParameterSearchRange(
+        name='confidence_max_sum',
+        type='uniform',
+        low=20,
+        high=180,
+    ),
+    ParameterSearchRange(
+        name='confidence_value_denom',
+        type='uniform',
+        low=20,
+        high=180,
+    ),
+    ParameterSearchRange(
+        name='rating_change_multiplier',
+        type='uniform',
+        low=25,
+        high=140
+    ),
+    ParameterSearchRange(
+        name='min_rating_change_multiplier_ratio',
+        type='uniform',
+        low=0.05,
+        high=0.2,
+    ),
+]
+
+DEFAULT_START_RATING_SEARCH_RANGE = [
+    ParameterSearchRange(
+        name='league_quantile',
+        type='uniform',
+        low=0.12,
+        high=.4,
+    ),
+    ParameterSearchRange(
+        name='min_count_for_percentiles',
+        type='int',
+        low=50,
+        high=200,
+    ),
+    ParameterSearchRange(
+        name='team_rating_subtract',
+        type='int',
+        low=20,
+        high=300
+    ),
+    ParameterSearchRange(
+        name='team_weight',
+        type='uniform',
+        low=0,
+        high=0.7
+    )
+]
+
+
+class RatingGeneratorTuner(ABC):
+
+    @abstractmethod
+    def tune(self, df: pd.DataFrame, rating_idx: int, scorer: BaseScorer,
+             match_predictor_factory: MatchPredictorFactory,
+             matches: list[Match]) -> RatingGenerator:
+        pass
+
+
+class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
+
+    def __init__(self,
+                 team_rating_search_ranges: Optional[list[ParameterSearchRange]] = None,
+                 team_rating_n_trials: int = 30,
+                 start_rating_search_ranges: Optional[list[ParameterSearchRange]] = None,
+                 start_rating_n_trials: int = 8,
+                 ):
+        self.team_rating_search_ranges = team_rating_search_ranges or DEFAULT_TEAM_SEARCH_RANGES
+        self.start_rating_search_ranges = start_rating_search_ranges or DEFAULT_START_RATING_SEARCH_RANGE
+        self.team_rating_n_trials = team_rating_n_trials
+        self.start_rating_n_trials = start_rating_n_trials
+
+    def tune(self,
+             df: pd.DataFrame,
+             rating_idx: int,
+             scorer: BaseScorer,
+             match_predictor_factory: MatchPredictorFactory,
+             matches: list[Match]) -> OpponentAdjustedRatingGenerator:
+
+        best_rating_generator = copy.deepcopy(match_predictor_factory.rating_generators[rating_idx])
+
+        if self.team_rating_n_trials > 0:
+            logging.info("Tuning Team Rating")
+            best_team_rating_generator = self._tune_team_rating(df=df,
+                                                                rating_generator=best_rating_generator,
+                                                                rating_index=rating_idx,
+                                                                scorer=scorer,
+                                                                matches=matches,
+                                                                match_predictor_factory=match_predictor_factory)
+
+            best_rating_generator.team_rating_generator = best_team_rating_generator
+
+        if self.start_rating_n_trials > 0:
+            logging.info("Tuning Start Rating")
+
+            best_start_rating = self._tune_start_rating(df=df,
+                                                        matches=matches,
+                                                        rating_generator=best_rating_generator,
+                                                        rating_index=rating_idx, scorer=scorer,
+                                                        match_predictor_factory=match_predictor_factory
+                                                        )
+            best_rating_generator.team_rating_generator.start_rating_generator = best_start_rating
+
+        return OpponentAdjustedRatingGenerator(team_rating_generator=best_rating_generator.team_rating_generator)
+
+    def _tune_team_rating(self,
+                          df: pd.DataFrame,
+                          rating_generator: OpponentAdjustedRatingGenerator,
+                          rating_index: int,
+                          matches: list[Match],
+                          scorer: BaseScorer,
+                          match_predictor_factory: MatchPredictorFactory,
+                          ) -> TeamRatingGenerator:
+
+        def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
+
+            team_rating_generator_params = list(
+                inspect.signature(rating_generator.team_rating_generator.__class__.__init__).parameters.keys())[1:]
+
+            params = {attr: getattr(rating_generator.team_rating_generator, attr) for attr in
+                      team_rating_generator_params if attr not in ('performance_predictor')}
+            params = add_params_from_search_range(params=params,
+                                                  trial=trial,
+                                                  parameter_search_range=self.team_rating_search_ranges)
+
+            performance_predictor = rating_generator.team_rating_generator.performance_predictor
+            performance_predictor_params = list(
+                inspect.signature(performance_predictor.__class__.__init__).parameters.keys())[1:]
+
+            for param in params.copy():
+                if param in performance_predictor_params:
+                    performance_predictor.__setattr__(param, params[param])
+                    params.pop(param)
+
+            team_rating_generator = TeamRatingGenerator(**params,
+                                                        performance_predictor=performance_predictor)
+
+            rating_g = copy.deepcopy(rating_generator)
+            rating_g.team_rating_generator = team_rating_generator
+            rating_generators = copy.deepcopy(match_predictor_factory.rating_generators)
+            rating_generators[rating_index] = rating_g
+            match_predictor = match_predictor_factory.create(
+                rating_generators=rating_generators,
+                pre_rating_transformers=[],
+            )
+
+            df_with_prediction = match_predictor.generate_historical(df=df, matches=matches, store_ratings=False)
+            return scorer.score(df_with_prediction, classes_=match_predictor.predictor.classes_)
+
+        direction = "minimize"
+        study_name = "optuna_study"
+        optuna_seed = 12
+        sampler = TPESampler(seed=optuna_seed)
+        study = optuna.create_study(direction=direction, study_name=study_name, sampler=sampler)
+        callbacks = []
+        study.optimize(lambda trial: objective(trial, df), n_trials=self.team_rating_n_trials, callbacks=callbacks)
+
+        best_params = study.best_params
+        team_rating_generator_params = list(
+            inspect.signature(rating_generator.team_rating_generator.__class__.__init__).parameters.keys())[1:]
+        other_params = {attr: getattr(rating_generator.team_rating_generator, attr) for attr in
+                        team_rating_generator_params
+                        if attr not in ('performance_predictor')}
+        for param in other_params:
+            if param not in best_params:
+                best_params[param] = other_params[param]
+
+        performance_predictor = rating_generator.team_rating_generator.performance_predictor
+        performance_predictor_params = list(
+            inspect.signature(performance_predictor.__class__.__init__).parameters.keys())[1:]
+
+        for param in best_params.copy():
+            if param in performance_predictor_params:
+                performance_predictor.__setattr__(param, best_params[param])
+                best_params.pop(param)
+
+        return TeamRatingGenerator(**best_params,
+                                   performance_predictor=performance_predictor)
+
+    def _tune_start_rating(self,
+                           df: pd.DataFrame,
+                           rating_generator: OpponentAdjustedRatingGenerator,
+                           rating_index: int,
+                           matches: list[Match],
+                           scorer: BaseScorer,
+                           match_predictor_factory: MatchPredictorFactory):
+        def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
+            start_rating_generator_params = list(
+                inspect.signature(rating_generator.team_rating_generator.start_rating_generator.__class__.__init__).parameters.keys())[1:]
+
+            params = {attr: getattr(rating_generator.team_rating_generator.start_rating_generator, attr) for attr in
+                      start_rating_generator_params }
+
+            params = add_params_from_search_range(params=params,
+                                                  trial=trial,
+                                                  parameter_search_range=self.start_rating_search_ranges)
+
+
+
+            start_rating_generator = StartRatingGenerator(**params)
+            rating_g = copy.deepcopy(rating_generator)
+            rating_g.team_rating_generator.start_rating_generator = start_rating_generator
+            rating_generators = copy.deepcopy(match_predictor_factory.rating_generators)
+            rating_generators[rating_index] = rating_g
+            match_predictor = match_predictor_factory.create(
+                rating_generators=rating_generators,
+                pre_rating_transformers=[],
+            )
+
+            df_with_prediction = match_predictor.generate_historical(df=df, matches=matches, store_ratings=False)
+            return scorer.score(df_with_prediction, classes_=match_predictor.predictor.classes_)
+
+        direction = "minimize"
+        study_name = "optuna_study"
+        optuna_seed = 12
+        sampler = TPESampler(seed=optuna_seed)
+        study = optuna.create_study(direction=direction, study_name=study_name, sampler=sampler)
+        callbacks = []
+        study.optimize(lambda trial: objective(trial, df), n_trials=self.start_rating_n_trials, callbacks=callbacks)
+        start_rating_generator_params = list(
+                inspect.signature(rating_generator.team_rating_generator.start_rating_generator.__class__.__init__).parameters.keys())[1:]
+
+        other_params = {attr: getattr(rating_generator.team_rating_generator.start_rating_generator, attr) for attr in
+                        start_rating_generator_params}
+
+        best_params = study.best_params
+        for param in other_params:
+            if param not in best_params:
+                best_params[param] = other_params[param]
+
+        return StartRatingGenerator(**best_params)

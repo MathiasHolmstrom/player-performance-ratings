@@ -20,15 +20,14 @@ class TeamRatingGenerator():
                  start_rating_generator: Optional[StartRatingGenerator] = None,
                  performance_predictor: Optional[PerformancePredictor] = None,
                  rating_change_multiplier: float = 50,
-                 confidence_weight: float = 0.9,
                  confidence_days_ago_multiplier: float = 0.06,
                  confidence_max_days: int = 90,
                  confidence_value_denom: float = 140,
                  confidence_max_sum: float = 150,
+                 confidence_weight: float = 0.9,
                  min_rating_change_multiplier_ratio: float = 0.1,
-                 league_min_rating_update: float = 4,
+                 league_rating_change_update_threshold: int = 250,
                  league_rating_adjustor_multiplier: float = 5,
-                 league_rating_change_update_threshold: int = 250
                  ):
 
         """
@@ -43,12 +42,6 @@ class TeamRatingGenerator():
             The base multiplier for how much a player's rating changes after a match.
             Equivalent of the K-factor in Elo.
 
-        :param confidence_weight:
-            Determines how much the applied rating change multiplier is affected by the confidence_sum.
-            The confidence_sum being how much data (and how recent) we have on a player.
-            If the confidence_ratio is 0, the applied rating_change_multipler is equal to the rating_change_multiplier.
-            The higher ratio it is, the more volatile the applied rating_change_multiplier is based on the data we have on a player.
-            Recommended is between 0.7 and 1.0
 
         :param confidence_days_ago_multiplier:
             Determinutes how much the confidence_sum is affected by how long ago the last match was.
@@ -61,35 +54,44 @@ class TeamRatingGenerator():
             This ensures a non-linear relationship between inactivity and our confidence in a players rating.
 
         :param confidence_value_denom:
-
+            Higher confidence_value_denom results in a lower applied_rating_change_multiplier.
 
         :param confidence_max_sum:
             The maximum confidence_sum a player can have.
              If confidence_max_sum is very high, a player with many historical games, can be inactive for a while and still have a high confidence_sum.
              Thus a lower confidence_max_sum increases the speed at which a players confidence_sum decreases when inactive.
-             
+
 
         :param min_rating_change_multiplier_ratio:
-        :param reference_confidence_sum_value:
-    
+            To ensure that a player's rating changes at least a little bit after a match,
+            min_rating_change_multiplier_ratio ensures that the applied_rating_change_multiplier is at least a certain ratio of the rating_change_multiplier.
 
-        :param league_min_rating_update:
-            A 
+        :param confidence_weight:
+            Determines how much the applied rating change multiplier is affected by the confidence_sum.
+            The confidence_sum being how much data (and how recent) we have on a player.
+            If the confidence_ratio is 0, the applied rating_change_multipler is equal to the rating_change_multiplier.
+            The higher ratio it is, the more volatile the applied rating_change_multiplier is based on the data we have on a player.
+            Recommended is between 0.7 and 1.0
+
+        :param league_rating_change_update_threshold:
+            All players within a league gets their rating updated when the sum of all rating changes within a league exceeds this threshold.
+            A lower value means that the ratings within a league are updated more often but is more computationally expensive.
 
         :param league_rating_adjustor_multiplier:
-        :param league_rating_change_update_threshold:
+            The amount of which the players within a league gets their rating updated with, is league_rating_adjustor_multiplier * mean_rating_change.
+            A higher value makes the performance of other players within a league have a larger impact on a players rating - even if the player hasn't played a match.
+
         """
 
         self.confidence_weight = confidence_weight
         self.confidence_days_ago_multiplier = confidence_days_ago_multiplier
-        self.min_rating_change_for_league = league_min_rating_update
         self.confidence_value_denom = confidence_value_denom
         self.min_rating_change_multiplier_ratio = min_rating_change_multiplier_ratio
         self.rating_change_multiplier = rating_change_multiplier
-        self.max_confidence_sum = confidence_max_sum
+        self.confidence_max_sum = confidence_max_sum
         self.league_rating_adjustor_multiplier = league_rating_adjustor_multiplier
         self.league_rating_change_update_threshold = league_rating_change_update_threshold
-        self.max_days_ago = confidence_max_days
+        self.confidence_max_days = confidence_max_days
         self.player_ratings: Dict[str, PlayerRating] = {}
         self._league_rating_changes: dict[Optional[str], float] = {}
         self._league_rating_changes_count: dict[str, float] = {}
@@ -299,7 +301,7 @@ class TeamRatingGenerator():
     def _calculate_applied_rating_change_multiplier(self,
                                                     player_id: str,
                                                     ) -> float:
-        confidence_change_multiplier = (self.player_ratings[player_id].confidence_sum- EXPECTED_MEAN_CONFIDENCE_SUM) / self.confidence_value_denom
+        confidence_change_multiplier = self.rating_change_multiplier * ((EXPECTED_MEAN_CONFIDENCE_SUM - self.player_ratings[player_id].confidence_sum) / self.confidence_value_denom +1 )
         applied_rating_change_multiplier = confidence_change_multiplier * self.confidence_weight + (
                 1 - self.confidence_weight) * self.rating_change_multiplier
         return max(self._min_applied_rating_change_multiplier, applied_rating_change_multiplier)
@@ -314,10 +316,10 @@ class TeamRatingGenerator():
         days_ago = self._calculate_days_ago_since_last_match(last_match_day_number=entity_rating.last_match_day_number,
                                                              day_number=day_number)
         confidence_sum_value = -min(days_ago,
-                                 self.max_days_ago) * self.confidence_days_ago_multiplier + entity_rating.confidence_sum + \
-                            MATCH_CONTRIBUTION_TO_SUM_VALUE * particpation_weight
+                                    self.confidence_max_days) * self.confidence_days_ago_multiplier + entity_rating.confidence_sum + \
+                               MATCH_CONTRIBUTION_TO_SUM_VALUE * particpation_weight
 
-        return max(0.0, min(confidence_sum_value, self.max_confidence_sum))
+        return max(0.0, min(confidence_sum_value, self.confidence_max_sum))
 
     def _calculate_days_ago_since_last_match(self, last_match_day_number, day_number: int) -> float:
         match_day_number = day_number

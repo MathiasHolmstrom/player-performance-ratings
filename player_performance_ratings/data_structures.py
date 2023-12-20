@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union
+from typing import List, Optional, Union
 from dataclasses_json import DataClassJsonMixin
 
 
@@ -9,8 +9,9 @@ class ColumnNames:
     match_id: str
     start_date: str
     player_id: str
-    performance: str = "performance"
-    league: str = None
+    performance: str
+    league: Optional[str] = None
+    position: Optional[str] = None
     participation_weight: str = None
     team_players_percentage_playing_time: str = None
     rating_update_id: str = None
@@ -18,7 +19,6 @@ class ColumnNames:
     def __post_init__(self):
         if self.rating_update_id is None:
             self.rating_update_id = self.match_id
-
 
 
 @dataclass
@@ -40,7 +40,7 @@ class PlayerRating(DataClassJsonMixin):
     id: str
     rating_value: float
     name: Optional[str] = None
-    games_played: Union[float,int] = 0
+    games_played: Union[float, int] = 0
     last_match_day_number: int = None
     confidence_sum: float = 0
     prev_rating_changes: List[float] = None
@@ -69,9 +69,9 @@ class PreMatchPlayerRating:
     id: str
     rating_value: float
     games_played: int
-    league:  Optional[str]
+    league: Optional[str]
+    position: Optional[str]
     match_performance: MatchPerformance
-
 
 
 @dataclass
@@ -87,6 +87,7 @@ class PreMatchRating:
     id: str
     teams: list[PreMatchTeamRating]
     day_number: int
+
 
 @dataclass
 class PlayerRatingChange:
@@ -109,6 +110,7 @@ class TeamRatingChange:
     pre_match_rating_value: float
     rating_change_value: float
     league: Optional[str]
+
 
 @dataclass
 class PostMatchTeamRatingChange:
@@ -147,6 +149,7 @@ class MatchPlayer:
     id: str
     performance: MatchPerformance
     league: Optional[str] = None
+    position: Optional[str] = None
 
 
 @dataclass
@@ -163,4 +166,3 @@ class Match:
     teams: List[MatchTeam]
     day_number: int
     league: str = None
-

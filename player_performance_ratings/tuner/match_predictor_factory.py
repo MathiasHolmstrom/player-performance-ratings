@@ -12,7 +12,7 @@ class MatchPredictorFactory():
                  rating_generators: Union[RatingGenerator, list[RatingGenerator]],
                  pre_transformers: Optional[List[BaseTransformer]] = None,
                  post_transformers: Optional[List[BaseTransformer]] = None,
-                 predictor: [Optional[BaseMLWrapper]] = None,
+                 predictor: BaseMLWrapper = None,
                  train_split_date: Optional[pendulum.datetime] = None
                  ):
         self.rating_generators = rating_generators
@@ -25,17 +25,13 @@ class MatchPredictorFactory():
         self.train_split_date = train_split_date
 
     def create(self,
-               idx_rating_generator: Optional[Tuple[int, RatingGenerator]] = None,
                pre_rating_transformers: Optional[List[BaseTransformer]] = None,
-               post_rating_transformers: Optional[List[BaseTransformer]] = None, ) -> MatchPredictor:
+               rating_generators: Optional[list[RatingGenerator]] = None,
+               post_rating_transformers: Optional[List[BaseTransformer]] = None) -> MatchPredictor:
 
-        rating_generators = self.rating_generators
-        if idx_rating_generator:
-            rating_generators[idx_rating_generator[0]] = idx_rating_generator[1]
-
-        pre_rating_transformers = pre_rating_transformers or self.pre_transformers
-        post_rating_transformers = post_rating_transformers or self.post_transformers
-
+        rating_generators = rating_generators if rating_generators is not None else self.rating_generators
+        pre_rating_transformers = pre_rating_transformers if pre_rating_transformers is not None else self.pre_transformers
+        post_rating_transformers = post_rating_transformers if post_rating_transformers is not None else self.post_transformers
 
         return MatchPredictor(column_names=self.column_names, rating_generators=rating_generators,
                               pre_rating_transformers=pre_rating_transformers,
