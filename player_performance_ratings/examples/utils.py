@@ -1,7 +1,7 @@
 import pandas as pd
 
 
-def load_data():
+def load_lol_data():
     return pd.read_parquet("data/subsample_lol_data")
 
 

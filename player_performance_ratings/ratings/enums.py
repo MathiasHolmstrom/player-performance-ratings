@@ -29,6 +29,9 @@ class RatingColumnNames:
     OPPONENT_LEAGUE = "opponent_league"
     MATCH_ID = "match_id"
     PLAYER_PREDICTED_PERFORMANCE = "player_predicted_performance"
+    TIME_WEIGHTED_RATING = "time_weighted_rating"
+    TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO = "time_weighted_rating_likelihood_ratio"
+    TIME_WEIGHTED_RATING_EVIDENCE = "time_weighted_rating_evidence"
 
     PERFORMANCE = "performance"
 

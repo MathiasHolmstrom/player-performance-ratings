@@ -31,7 +31,8 @@ def test_rating_difference_performance_predictor(team_rating_value: float, playe
         ),
         games_played=1,
         league='league',
-        id="1"
+        id="1",
+        position='position'
     )
 
     team_rating = PreMatchTeamRating(

@@ -1,9 +1,9 @@
+import logging
 from abc import ABC, abstractmethod
 from typing import Optional
 
 import numpy as np
 import pandas as pd
-
 
 from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
 from player_performance_ratings.ratings.enums import RatingColumnNames
@@ -11,32 +11,64 @@ from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PlayerRating, \
     TeamRating, ColumnNames, TeamRatingChange
 
+
 class RatingGenerator(ABC):
 
-    def __init__(self, column_names: ColumnNames):
-        self.column_names = column_names
-
     @abstractmethod
-    def generate(self, matches: list[Match], df: Optional[pd.DataFrame] = None) -> dict[RatingColumnNames, list[float]]:
+    def generate(self, matches: list[Match], df: Optional[pd.DataFrame] = None,
+                 column_names: Optional[ColumnNames] = None) -> dict[RatingColumnNames, list[float]]:
+        pass
+
+    @property
+    @abstractmethod
+    def player_ratings(self) -> dict[str, PlayerRating]:
+        pass
+
+    @property
+    @abstractmethod
+    def team_ratings(self) -> list[TeamRating]:
         pass
 
 
 class OpponentAdjustedRatingGenerator(RatingGenerator):
+    """
+    Generates ratings for players and teams based on the match-performance of the player and the ratings of the players and teams.
+    Ratings are updated after a match is finished
+    """
 
     def __init__(self,
-                 team_rating_generator: Optional[TeamRatingGenerator] = None,
-                 store_game_ratings: bool = False,
-                 column_names: Optional[ColumnNames] = None
-
+                 team_rating_generator: TeamRatingGenerator = TeamRatingGenerator(),
                  ):
-        self.team_rating_generator = team_rating_generator or TeamRatingGenerator()
-        self.store_game_ratings = store_game_ratings
-        self.ratings_df = None
-        super().__init__(column_names=column_names)
-        if self.store_game_ratings and not self.column_names:
-            raise ValueError("in order to store ratings, column_names must be passed to constructor")
 
-    def generate(self, matches: list[Match], df: Optional[pd.DataFrame] = None) -> dict[RatingColumnNames, list[float]]:
+        """
+
+        :param team_rating_generator: The class contains the logic for generating and updating team ratings and contains many parameters that can be tuned.
+
+        """
+        self.team_rating_generator = team_rating_generator
+        self.ratings_df = None
+
+    def generate(self, matches: list[Match], df: Optional[pd.DataFrame] = None,
+                 column_names: Optional[ColumnNames] = None) -> dict[RatingColumnNames, list[float]]:
+
+        """
+        Generate ratings by iterating over each match, calculate predicted performance and update ratings after the match is finished.
+        Default settin
+
+        :param matches: list of matches. Each match must contain two teams.
+        :param df: The dataframe from which the matches were generated. Only needed if you want to store the ratings in the class object in which case the column names must also be passed.
+        :param column_names: The column names of the dataframe. Only needed if you want to store the ratings in the class object in which case the df must also be passed.
+        :return: A dictionary containing historical match-rating values.
+         These ratings can easily be added as new columns to the original dataframe for later model training or exploration
+        """
+
+        if df is not None and column_names:
+            logging.info(
+                "both df and column names are passed, and match-ratings will therefore be stored in the class object")
+
+        elif column_names and df is None:
+            logging.warning(
+                "Column names is passed but df not - this match-ratings will not be stored in the class object")
 
         pre_match_player_rating_values = []
         pre_match_team_rating_values = []
@@ -76,12 +108,9 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
         rating_means = np.array(pre_match_team_rating_values) * 0.5 + 0.5 * np.array(
             pre_match_opponent_rating_values)
 
-        if self.store_game_ratings:
-            if df is None:
-                raise ValueError(
-                    "df must be passed in order to store ratings. Set store_ratings to False or pass df to method")
+        if df is not None and column_names:
             self.ratings_df = df[
-                [self.column_names.team_id, self.column_names.player_id, self.column_names.match_id]].assign(
+                [column_names.team_id, column_names.player_id, column_names.match_id]].assign(
                 **{
                     RatingColumnNames.RATING_DIFFERENCE: rating_differences,
                     RatingColumnNames.PLAYER_LEAGUE: player_leagues,

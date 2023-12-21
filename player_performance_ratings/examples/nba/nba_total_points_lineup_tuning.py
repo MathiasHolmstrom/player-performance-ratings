@@ -1,7 +1,7 @@
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 
-from examples.utils import load_nba_game_matchup_data, load_nba_game_player_data
+from player_performance_ratings.examples.utils import load_nba_game_matchup_data
 
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.data_structures import ColumnNames
@@ -12,8 +12,7 @@ from player_performance_ratings.predictor.estimators.classifier import SkLearnGa
 from player_performance_ratings.predictor.estimators.ordinal_classifier import OrdinalClassifier
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
-from player_performance_ratings.ratings.match_rating.performance_predictor import RatingDifferencePerformancePredictor, \
-    RatingMeanPerformancePredictor
+from player_performance_ratings.ratings.match_rating.performance_predictor import RatingMeanPerformancePredictor
 from player_performance_ratings.ratings.match_rating.start_rating.start_rating_generator import StartRatingGenerator
 from player_performance_ratings.scorer.score import OrdinalLossScorer
 

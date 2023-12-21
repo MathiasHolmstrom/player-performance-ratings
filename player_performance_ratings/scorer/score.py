@@ -47,7 +47,7 @@ class OrdinalLossScorer(BaseScorer):
     def __init__(self,
                  pred_column: str,
                  target: Optional[str] = PredictColumnNames.TARGET,
-                 granularity: Optional[list[str]] = None
+                 granularity: Optional[list[str]] = None,
                  ):
 
         self.pred_column_name = pred_column
@@ -55,6 +55,7 @@ class OrdinalLossScorer(BaseScorer):
         super().__init__(target=target, pred_column=pred_column)
 
     def score(self, df: pd.DataFrame, classes_: Optional[list[str]] = None) -> float:
+
 
         if classes_ is None:
             raise ValueError("classes_ must be passed to OrdinalLossScorer")
@@ -72,6 +73,9 @@ class OrdinalLossScorer(BaseScorer):
             p_c = 'prob_under_' + str(class_ + 0.5)
             df[p_c] = probs.apply(lambda x: x[class_index]) + df[last_column_name]
 
+            count_exact = len(df[df['__target'] == class_])
+            weight_class = count_exact / len(df)
+
             if self.granularity:
                 grouped = df.groupby(self.granularity  +['__target'])[p_c].mean().reset_index()
             else:
@@ -85,7 +89,7 @@ class OrdinalLossScorer(BaseScorer):
 
             grouped.loc[grouped['__target'] <= class_, 'log_loss'] = np.log(grouped[p_c])
             grouped.loc[grouped['__target'] > class_, 'log_loss'] = np.log(1 - grouped[p_c])
-            sum_lr -= grouped['log_loss'].mean() / (len(classes_) - 1)
+            sum_lr -= grouped['log_loss'].mean() * weight_class
 
             last_column_name = p_c
 

@@ -65,7 +65,7 @@ class StartLeagueRatingOptimizer():
 
             match_predictor = copy.deepcopy(self.match_predictor)
             match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator = start_rating_generator
-            df = match_predictor.generate(df=df, matches=matches)
+            df = match_predictor.generate_historical(df=df, store_ratings=False)
             score = self.scorer.score(df)
 
             if not league_ratings:
