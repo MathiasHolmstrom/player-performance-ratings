@@ -4,13 +4,16 @@ from sklearn.preprocessing import StandardScaler
 
 from player_performance_ratings.examples.utils import load_lol_data
 from player_performance_ratings.data_structures import ColumnNames
-from player_performance_ratings import MatchPredictor
+from player_performance_ratings import MatchPredictor, OpponentAdjustedRatingGenerator
 from player_performance_ratings import SKLearnClassifierWrapper
 
 from player_performance_ratings import TeamRatingGenerator
 
 from player_performance_ratings import SkLearnTransformerWrapper, MinMaxTransformer
+from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.transformations.pre_transformers import ColumnsWeighter
 from player_performance_ratings.tuner import TransformerTuner
+from player_performance_ratings.tuner.utils import ParameterSearchRange
 
 column_names = ColumnNames(
     team_id='teamname',
@@ -29,9 +32,8 @@ df = (
     .loc[lambda x: x.team_count == 2]
 )
 
-team_rating_generator = TeamRatingGenerator(
-    player_rating_generator=TeamRatingGenerator())
-rating_generator = RatingGenerator()
+team_rating_generator = TeamRatingGenerator()
+rating_generator = OpponentAdjustedRatingGenerator()
 predictor = SKLearnClassifierWrapper(features=[RatingColumnNames.RATING_DIFFERENCE], target='result')
 
 player_search_ranges = [
@@ -127,7 +129,6 @@ pre_transformer_search_ranges = [
 ]
 
 match_predictor = MatchPredictor(
-    rating_generator=rating_generator,
     column_names=column_names,
     predictor=predictor,
     pre_rating_transformers=pre_transformers,

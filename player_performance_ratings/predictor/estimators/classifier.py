@@ -1,3 +1,4 @@
+import logging
 import warnings
 import pandas as pd
 from pandas.errors import SettingWithCopyWarning
@@ -13,6 +14,7 @@ from player_performance_ratings.consts import PredictColumnNames
 
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
+
 
 class SkLearnGameTeamPredictor(BaseMLWrapper):
 
@@ -121,20 +123,40 @@ class SKLearnClassifierWrapper(BaseMLWrapper):
                  model: Optional = None,
                  multiclassifier: bool = False,
                  pred_column: Optional[str] = "prob",
-                 column_names: Optional[ColumnNames] = None
+                 column_names: Optional[ColumnNames] = None,
+                 categorical_features: Optional[list[str]] = None
                  ):
         self.features = features
         self._target = target
         self.multiclassifier = multiclassifier
         self.column_names = column_names
+        self.categorical_features = categorical_features
 
         super().__init__(target=self._target, pred_column=pred_column, model=model or LogisticRegression())
 
     def train(self, df: pd.DataFrame) -> None:
+
+        if self.categorical_features is None:
+            self.categorical_features = []
+            for feature in self.features:
+                self.categorical_features.append(feature)
+                if df[feature].dtype == "object" or len(df[feature].unique() < 50):
+                    logging.warning(
+                        f"feature {feature} has been converted to category. To override default behaviour, pass categorical_features into constructor")
+                    df.loc[:, feature] = df[feature].astype('category')
+
+        if self.multiclassifier is False and len(df[self._target].unique()) > 2:
+            logging.warning("target has more than 2 unique values, multiclassifier has therefore been set to True")
+            self.multiclassifier = True
+
         self.model.fit(df[self.features], df[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
+
         df = df.copy()
+
+        for categorical_feature in self.categorical_features:
+            df.loc[:, categorical_feature] = df[categorical_feature].astype('category')
         if self.multiclassifier:
             df[self._pred_column] = self.model.predict_proba(df[self.features]).tolist()
         else:

@@ -9,7 +9,7 @@ from player_performance_ratings.ratings.rating_generator import RatingGenerator
 class MatchPredictorFactory():
 
     def __init__(self,
-                 column_names: ColumnNames,
+                 column_names: Union[ColumnNames, list[ColumnNames]],
                  rating_generators: Union[RatingGenerator, list[RatingGenerator]],
                  pre_transformers: Optional[List[BaseTransformer]] = None,
                  post_transformers: Optional[List[BaseTransformer]] = None,

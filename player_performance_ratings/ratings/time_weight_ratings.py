@@ -10,12 +10,10 @@ from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
 
-class BayesianMovingAverage(RatingGenerator):
-
+class BayesianTimeWeightedRating(RatingGenerator):
     """
     Generates ratings for players and teams by watching past performances higher using a combination of prior, evidence and likelihood.
     """
-
 
     def __init__(self,
                  evidence_exponential_weight: float = 0.96,
@@ -53,7 +51,6 @@ class BayesianMovingAverage(RatingGenerator):
         :param prior_by_position:
             If True, the prior-rating will be based on ratings of players within the same position
         """
-
 
         if evidence_exponential_weight < 0 or evidence_exponential_weight > 1:
             raise ValueError("evidence_exponential_weight must be between 0 and 1")
@@ -132,10 +129,6 @@ class BayesianMovingAverage(RatingGenerator):
 
     def _generate_base_prior(self, player_id: str, base_prior_value: float, league: Optional[str],
                              position: Optional[str]) -> float:
-
-        if player_id in self._player_prior_ratings:
-            return self._player_prior_ratings[player_id]
-
         granularity_id = ""
         if self.by_league:
             league = league if league is not None else ""
@@ -143,6 +136,9 @@ class BayesianMovingAverage(RatingGenerator):
         if self.by_position:
             position = position if position is not None else ""
             granularity_id += position
+
+        if player_id in self._player_prior_ratings and granularity_id in self._granularity_players and player_id in self._granularity_players[granularity_id]:
+            return self._player_prior_ratings[player_id]
 
         self._granularity_ratings.setdefault(granularity_id, [])
         self._granularity_players.setdefault(granularity_id, [])

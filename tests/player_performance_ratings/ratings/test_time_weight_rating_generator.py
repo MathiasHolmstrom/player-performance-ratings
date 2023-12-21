@@ -4,7 +4,7 @@ import pandas as pd
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
-from player_performance_ratings.ratings.time_weight_ratings import BayesianMovingAverage
+from player_performance_ratings.ratings.time_weight_ratings import BayesianTimeWeightedRating
 
 
 def test_time_weight_rating_generator():
@@ -30,7 +30,7 @@ def test_time_weight_rating_generator():
 
     matches = convert_df_to_matches(df=df, column_names=column_names)
 
-    m = BayesianMovingAverage()
+    m = BayesianTimeWeightedRating()
 
     ratings = m.generate(matches=matches, df=df, column_names=column_names)
 
@@ -87,7 +87,7 @@ def test_time_weight_rating_generator_with_league_and_position_priors():
 
     matches = convert_df_to_matches(df=df, column_names=column_names)
 
-    m = BayesianMovingAverage(prior_by_league=True, prior_by_position=True)
+    m = BayesianTimeWeightedRating(prior_by_league=True, prior_by_position=True)
     ratings = m.generate(matches=matches, df=df, column_names=column_names)
 
 
