@@ -72,7 +72,11 @@ class LagTransformation(BaseTransformer):
         self.weight_column = weight_column
         self.df = df
         self.prefix = prefix
-        self._output_feature_names = []
+        self._features_created = []
+        for feature_name in self.feature_names:
+            for lag in range(1, self.lag_length + 1):
+                self._features_created.append(f'{self.prefix}{lag}_{feature_name}')
+
 
         if self.df is not None and self.game_id is None:
             raise ValueError('If passing in a dataframe to calculate the lag on, you need to set game_id')
@@ -84,15 +88,12 @@ class LagTransformation(BaseTransformer):
         else:
             data = df
 
-
         for feature_name in self.feature_names:
             for lag in range(1, self.lag_length + 1):
                 output_column_name = f'{self.prefix}{lag}_{feature_name}'
                 if output_column_name in data.columns:
-                    output_column_name += '_1'
-                    logging.warning(f'Column {output_column_name} already exists, renaming to {output_column_name}')
-
-                self._output_feature_names.append(output_column_name)
+                    raise ValueError(
+                        f'Column {output_column_name} already exists. Choose different prefix or ensure no duplication was performed')
 
                 if self.game_id:
                     data = create_output_column_by_game_group(data=data, feature_name=feature_name,
@@ -102,7 +103,7 @@ class LagTransformation(BaseTransformer):
                 data = data.assign(**{output_column_name: data.groupby(self.granularity)[feature_name].shift(lag)})
 
         if self.game_id is not None:
-            df = df.merge(data[ self._output_feature_names + self.granularity + [self.game_id]],
+            df = df.merge(data[self._features_created + self.granularity + [self.game_id]],
                           on=self.granularity + [self.game_id], how='left')
         else:
             df = data
@@ -111,7 +112,8 @@ class LagTransformation(BaseTransformer):
 
     @property
     def features_created(self) -> list[str]:
-        return self._output_feature_names
+        return self._features_created
+
 
 class RollingMeanTransformation(BaseTransformer):
 
@@ -166,7 +168,7 @@ class RollingMeanTransformation(BaseTransformer):
         self.game_id = game_id
         self.df = df
         self.prefix = prefix
-        self._output_feature_names = []
+        self._features_created = [f'{self.prefix}{self.window}_{c}' for c in self.feature_names]
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
@@ -175,14 +177,11 @@ class RollingMeanTransformation(BaseTransformer):
         else:
             data = df
 
-
         for feature_name in self.feature_names:
             output_column_name = f'{self.prefix}{self.window}_{feature_name}'
             if output_column_name in df.columns:
-                output_column_name += '_1'
-                logging.warning(f'Column {output_column_name} already exists, renaming to {output_column_name}')
-
-            self._output_feature_names.append(output_column_name)
+                raise ValueError(
+                    f'Column {output_column_name} already exists. Choose different prefix or ensure no duplication was performed')
 
             if self.game_id:
                 data = create_output_column_by_game_group(data=data, feature_name=feature_name,
@@ -193,7 +192,7 @@ class RollingMeanTransformation(BaseTransformer):
                 lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())})
 
             if self.game_id is not None:
-                df = df.merge(data[self._output_feature_names + self.granularity + [self.game_id]],
+                df = df.merge(data[self._features_created + self.granularity + [self.game_id]],
                               on=self.granularity + [self.game_id], how='left')
             else:
                 df = data
@@ -202,4 +201,4 @@ class RollingMeanTransformation(BaseTransformer):
 
     @property
     def features_created(self) -> list[str]:
-        return self._output_feature_names
+        return self._features_created

@@ -1,6 +1,7 @@
 import logging
 import warnings
 import pandas as pd
+from lightgbm import LGBMClassifier
 from pandas.errors import SettingWithCopyWarning
 from venn_abers import VennAbersCalibrator
 
@@ -139,15 +140,20 @@ class SKLearnClassifierWrapper(BaseMLWrapper):
         self.column_names = column_names
         self.categorical_features = categorical_features
 
-        super().__init__(target=self._target, pred_column=pred_column, model=model or LogisticRegression())
+        if model is None:
+            logging.warning(
+                "model is not set. Will use LGBMClassifier(max_depth=2, n_estimators=400, learning_rate=0.05)")
+
+        super().__init__(target=self._target, pred_column=pred_column,
+                         model=model or LGBMClassifier(max_depth=2, n_estimators=300, learning_rate=0.05, verbose=-100))
 
     def train(self, df: pd.DataFrame) -> None:
 
         if self.categorical_features is None:
             self.categorical_features = []
             for feature in self.features:
-                self.categorical_features.append(feature)
-                if df[feature].dtype == "object" or len(df[feature].unique() < 50):
+                if df[feature].dtype == "object" or len(df[feature].unique()) < 30:
+                    self.categorical_features.append(feature)
                     logging.warning(
                         f"feature {feature} has been converted to category. To override default behaviour, pass categorical_features into constructor")
                     df.loc[:, feature] = df[feature].astype('category')
