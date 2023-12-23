@@ -24,7 +24,7 @@ class LagTransformation(BaseTransformer):
 
     def __init__(self,
                  feature_names: list[str],
-                 lags: int,
+                 lag_length: int,
                  granularity: Union[list[str], str],
                  game_id: Optional[str] = None,
                  weight_column: Optional[str] = None,
@@ -36,7 +36,7 @@ class LagTransformation(BaseTransformer):
         :param
             feature_names: Which features to lag
 
-        :param lags:
+        :param lag_length:
             Number of lags
 
         :param granularity:
@@ -68,7 +68,7 @@ class LagTransformation(BaseTransformer):
         self.granularity = granularity or []
         if isinstance(self.granularity, str):
             self.granularity = [self.granularity]
-        self.lags = lags
+        self.lag_length = lag_length
         self.weight_column = weight_column
         self.df = df
         self.prefix = prefix
@@ -86,7 +86,7 @@ class LagTransformation(BaseTransformer):
 
 
         for feature_name in self.feature_names:
-            output_column_name = f'{self.prefix}{self.lags}_{feature_name}'
+            output_column_name = f'{self.prefix}{self.lag_length}_{feature_name}'
             if output_column_name in data.columns:
                 output_column_name += '_1'
                 logging.warning(f'Column {output_column_name} already exists, renaming to {output_column_name}')
@@ -98,7 +98,7 @@ class LagTransformation(BaseTransformer):
                                                           weight_column=self.weight_column, game_id=self.game_id,
                                                           granularity=self.granularity)
 
-            data = data.assign(**{output_column_name: data.groupby(self.granularity)[feature_name].shift(self.lags)})
+            data = data.assign(**{output_column_name: data.groupby(self.granularity)[feature_name].shift(self.lag_length)})
 
         if self.game_id is not None:
             df = df.merge(data[ self._output_feature_names + self.granularity + [self.game_id]],

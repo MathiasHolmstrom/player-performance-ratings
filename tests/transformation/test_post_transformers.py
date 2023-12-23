@@ -16,7 +16,7 @@ def test_lag_transformation():
 
     lag_transformation = LagTransformation(
         feature_names=['points'],
-        lags=1,
+        lag_length=1,
         granularity=['player']
     )
 
@@ -40,7 +40,7 @@ def test_lag_transformation_with_game_id():
 
     lag_transformation = LagTransformation(
         feature_names=['points'],
-        lags=1,
+        lag_length=1,
         granularity=['player'],
         game_id='game'
     )
@@ -67,7 +67,7 @@ def test_lag_transformation_with_game_id_and_weights():
 
     lag_transformation = LagTransformation(
         feature_names=['points'],
-        lags=1,
+        lag_length=1,
         granularity=['player'],
         game_id='game',
         weight_column='weight'
