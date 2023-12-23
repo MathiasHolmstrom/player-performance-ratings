@@ -8,10 +8,10 @@ from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
 from player_performance_ratings.ratings.enums import RatingColumnNames
-from player_performance_ratings.ratings.rating_generator import RatingGenerator
+from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
 from player_performance_ratings.scorer.score import BaseScorer
-from player_performance_ratings.transformations.base_transformer import BaseTransformer
-from player_performance_ratings.transformations.pre_transformers import ColumnWeight
+from player_performance_ratings.transformation import ColumnWeight
+from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 

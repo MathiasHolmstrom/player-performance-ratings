@@ -1,7 +1,7 @@
 import pytest
 
 from player_performance_ratings.data_structures import PreMatchPlayerRating, MatchPerformance, PreMatchTeamRating
-from player_performance_ratings.ratings.match_rating.performance_predictor import RatingDifferencePerformancePredictor
+from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import RatingDifferencePerformancePredictor
 
 
 @pytest.mark.parametrize("team_rating_value", [0, 1000])

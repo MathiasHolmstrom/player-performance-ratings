@@ -1,9 +1,9 @@
 from player_performance_ratings.data_structures import Match, MatchPlayer, MatchPerformance, MatchTeam, \
     PlayerRating
 from player_performance_ratings.ratings.enums import RatingColumnNames
-from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
-from player_performance_ratings.ratings.match_rating.performance_predictor import MATCH_CONTRIBUTION_TO_SUM_VALUE
-from player_performance_ratings.ratings.rating_generator import OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings import TeamRatingGenerator
+from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import MATCH_CONTRIBUTION_TO_SUM_VALUE
+from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import OpponentAdjustedRatingGenerator
 
 
 def test_rating_generator_update_id_different_from_match_id():

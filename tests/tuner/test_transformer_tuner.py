@@ -4,8 +4,8 @@ from unittest import mock
 import pandas as pd
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.ratings.rating_generator import OpponentAdjustedRatingGenerator
-from player_performance_ratings.transformations.pre_transformers import ColumnsWeighter
+from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import OpponentAdjustedRatingGenerator
+from player_performance_ratings.transformation.pre_transformers import ColumnsWeighter
 from player_performance_ratings.tuner import TransformerTuner
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 from player_performance_ratings.tuner.utils import ParameterSearchRange

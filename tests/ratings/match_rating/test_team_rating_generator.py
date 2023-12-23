@@ -3,12 +3,12 @@ import copy
 import mock
 import pytest
 
-from player_performance_ratings.data_structures import Match, MatchTeam, PreMatchPlayerRating, MatchPerformance, \
+from player_performance_ratings.data_structures import MatchTeam, PreMatchPlayerRating, MatchPerformance, \
     MatchPlayer, PreMatchTeamRating, PlayerRating, TeamRatingChange, PlayerRatingChange
-from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
-from player_performance_ratings.ratings.match_rating.performance_predictor import RatingDifferencePerformancePredictor, \
-    sigmoid_subtract_half_and_multiply2, MODIFIED_RATING_CHANGE_CONSTANT, MATCH_CONTRIBUTION_TO_SUM_VALUE
-from player_performance_ratings.ratings.match_rating.team_rating_generator import EXPECTED_MEAN_CONFIDENCE_SUM
+from player_performance_ratings.ratings.opponent_adjusted_rating.team_rating_generator import TeamRatingGenerator
+from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import RatingDifferencePerformancePredictor, \
+    MATCH_CONTRIBUTION_TO_SUM_VALUE
+from player_performance_ratings.ratings.opponent_adjusted_rating.team_rating_generator import EXPECTED_MEAN_CONFIDENCE_SUM
 
 
 def test_generate_pre_match_team_rating():

@@ -2,12 +2,12 @@ import logging
 import math
 from typing import Dict, Optional, Tuple
 
-from player_performance_ratings.data_structures import Match, MatchPlayer, PlayerRating, PreMatchTeamRating, \
+from player_performance_ratings.data_structures import MatchPlayer, PlayerRating, PreMatchTeamRating, \
     PreMatchPlayerRating, \
     PlayerRatingChange, Team, MatchTeam, TeamRatingChange
-from player_performance_ratings.ratings.match_rating.performance_predictor import RatingDifferencePerformancePredictor, \
+from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import RatingDifferencePerformancePredictor, \
     PerformancePredictor
-from player_performance_ratings.ratings.match_rating.start_rating.start_rating_generator import \
+from player_performance_ratings.ratings.opponent_adjusted_rating.start_rating_generator import \
     StartRatingGenerator
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1

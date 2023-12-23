@@ -12,8 +12,8 @@ from player_performance_ratings.data_structures import ColumnNames, Match
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
-from player_performance_ratings.ratings.rating_generator import RatingGenerator
-from player_performance_ratings.transformations.base_transformer import BaseTransformer
+from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
+from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 
 class MatchPredictor():
@@ -40,9 +40,9 @@ class MatchPredictor():
         :param predictor:
         :param train_split_date:
         """
-
+        self.rating_generators = rating_generators if isinstance(rating_generators, list) else [rating_generators]
         self.column_names = column_names if isinstance(column_names, list) else [column_names for _ in
-                                                                                 range(rating_generators)]
+                                                                                 self.rating_generators]
         self.pre_rating_transformers = pre_rating_transformers or []
         self.post_rating_transformers = post_rating_transformers or []
 
@@ -55,7 +55,6 @@ class MatchPredictor():
 
         self.predictor.set_target(PredictColumnNames.TARGET)
         self.train_split_date = train_split_date
-        self.rating_generators = rating_generators if isinstance(rating_generators, list) else [rating_generators]
 
     def generate_historical(self, df: pd.DataFrame, matches: list[Match] = None,
                             store_ratings: bool = True) -> pd.DataFrame:
@@ -83,7 +82,7 @@ class MatchPredictor():
             else:
                 match_ratings = rating_generator.generate(matches)
             for rating_feature, values in match_ratings.items():
-                if len(self.rating_generators) > 0:
+                if len(self.rating_generators) > 1:
                     rating_feature_str = rating_feature + str(rating_idx)
                 else:
                     rating_feature_str = rating_feature
@@ -111,7 +110,7 @@ class MatchPredictor():
             match_ratings = rating_generator.generate(matches, df=df)
             for rating_feature, values in match_ratings.items():
 
-                if len(self.rating_generators) > 0:
+                if len(self.rating_generators) > 1:
                     rating_feature_str = rating_feature + str(rating_idx)
                 else:
                     rating_feature_str = rating_feature

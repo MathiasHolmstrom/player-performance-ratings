@@ -5,8 +5,9 @@ import pandas as pd
 from skbase.testing.utils.deep_equals import deep_equals
 from sklearn.preprocessing import StandardScaler
 
-from player_performance_ratings import LogLossScorer, ColumnNames, SkLearnTransformerWrapper
-from player_performance_ratings.ratings.rating_generator import OpponentAdjustedRatingGenerator
+from player_performance_ratings import ColumnNames
+from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import OpponentAdjustedRatingGenerator
+from player_performance_ratings.transformation import SkLearnTransformerWrapper
 from player_performance_ratings.tuner import MatchPredictorTuner, TransformerTuner
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner

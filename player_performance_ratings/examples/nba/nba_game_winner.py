@@ -9,9 +9,9 @@ from player_performance_ratings import PredictColumnNames
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.predictor.estimators.classifier import SkLearnGameTeamPredictor
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
-from player_performance_ratings import TeamRatingGenerator
+
 from player_performance_ratings.ratings.enums import RatingColumnNames
-from player_performance_ratings.ratings.rating_generator import OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import OpponentAdjustedRatingGenerator
 
 column_names = ColumnNames(
     team_id='team_id',
@@ -31,10 +31,7 @@ df = (
 )
 
 
-rating_generator = OpponentAdjustedRatingGenerator(
-    team_rating_generator=TeamRatingGenerator(
-    )
-)
+rating_generator = OpponentAdjustedRatingGenerator()
 
 predictor = SkLearnGameTeamPredictor(features=[RatingColumnNames.RATING_DIFFERENCE], game_id_colum=column_names.match_id, team_id_column=column_names.team_id)
 

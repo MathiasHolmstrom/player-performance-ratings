@@ -59,6 +59,13 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
         super().__init__(target=self._target, pred_column=pred_column, model=model or LogisticRegression())
 
     def train(self, df: pd.DataFrame) -> None:
+
+        if len(df[self._target].unique()) > 2:
+            logging.warning("target has more than 2 unique values, multiclassifier has therefore been set to True")
+            self.multiclassifier = True
+
+        if self._target not in df.columns:
+            raise ValueError(f"target {self._target} not in df")
         grouped = self._create_grouped(df)
         self.model.fit(grouped[self.features], grouped[self._target])
 

@@ -1,9 +1,12 @@
-from typing import Optional, List, Union, Tuple
+from typing import Optional, List, Union
 
 import pendulum
 
-from player_performance_ratings import MatchPredictor, ColumnNames, BaseMLWrapper, BaseTransformer
-from player_performance_ratings.ratings.rating_generator import RatingGenerator
+from player_performance_ratings import ColumnNames
+from player_performance_ratings.predictor import MatchPredictor
+from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
+from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
+from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 
 class MatchPredictorFactory():

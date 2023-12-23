@@ -1,5 +1,4 @@
 import logging
-import math
 from dataclasses import dataclass
 from typing import Optional,  List
 
@@ -7,7 +6,7 @@ import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
 
-from player_performance_ratings.transformations.base_transformer import BaseTransformer
+from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 
 @dataclass

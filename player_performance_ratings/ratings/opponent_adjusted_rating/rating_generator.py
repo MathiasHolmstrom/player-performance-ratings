@@ -5,7 +5,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
+from player_performance_ratings.ratings.opponent_adjusted_rating.team_rating_generator import TeamRatingGenerator
 from player_performance_ratings.ratings.enums import RatingColumnNames
 
 from player_performance_ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PlayerRating, \

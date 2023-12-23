@@ -1,5 +1,4 @@
 import math
-from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -7,7 +6,7 @@ import pandas as pd
 
 from player_performance_ratings.data_structures import Match, ColumnNames, TeamRating, PlayerRating
 from player_performance_ratings.ratings.enums import RatingColumnNames
-from player_performance_ratings.ratings.rating_generator import RatingGenerator
+from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
 
 
 class BayesianTimeWeightedRating(RatingGenerator):

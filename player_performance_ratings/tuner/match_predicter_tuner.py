@@ -4,9 +4,9 @@ from typing import Optional, Union
 
 import pandas as pd
 
-from player_performance_ratings import BaseScorer
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
+from player_performance_ratings.scorer import BaseScorer
 
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 from player_performance_ratings.tuner.rating_generator_tuner import RatingGeneratorTuner
