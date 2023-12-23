@@ -18,22 +18,29 @@ Even if the concept of a player doesn't exist in the dataset, you can use team_i
 Utilizing a rating model can be as simple as:
 
 ```
-from player_performance_ratings ColumnNames
-from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator
+from player_performance_ratings import ColumnNames, PredictColumnNames
+from player_performance_ratings.examples.internal_utils import load_nba_game_player_data
 
-# define configuration wiht the column names mapping to your dataframe
+
+from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator
 column_names = ColumnNames(
     team_id='team_id',
     match_id='game_id',
     start_date="start_date",
-    player_id="player_name",
+    player_id="player_id",
     performance="won",
 )
+
+#Below assumes you have loaded your data into a pandas dataframe
+df[PredictColumnNames.TARGET] = df['won']
+
+# define configuration wiht the column names mapping to your dataframe
+
 df = df.sort_values(by=[column_names.start_date, column_names.match_id, column_names.team_id, column_names.player_id])
 rating_generator = OpponentAdjustedRatingGenerator()
 
 #below returns all historical match-by-match ratings for each player
-generated_ratings = rating_generator.generate(df)
+generated_ratings = rating_generator.generate(df=df, column_names=column_names)
 
 #below returns the most up-to-date ratings for each player
 player_ratings = rating_generator.player_ratings

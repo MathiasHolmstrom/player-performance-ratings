@@ -70,6 +70,10 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
          These ratings can easily be added as new columns to the original dataframe for later model training or exploration
         """
 
+
+        if matches is not None and len(matches) > 0 and not isinstance(matches[0], Match):
+            raise ValueError("matches must be a list of Match objects")
+
         if matches is None and df is None or matches is None and column_names is None:
             raise ValueError("If matches is not passed, df and column names must be massed")
 
