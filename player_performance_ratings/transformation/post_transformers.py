@@ -109,6 +109,7 @@ class LagTransformation(BaseTransformer):
 
         return df
 
+    @property
     def features_created(self) -> list[str]:
         return self._output_feature_names
 
@@ -199,5 +200,6 @@ class RollingMeanTransformation(BaseTransformer):
 
         return df
 
+    @property
     def features_created(self) -> list[str]:
         return self._output_feature_names
