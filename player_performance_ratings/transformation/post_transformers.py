@@ -24,7 +24,7 @@ class LagTransformation(BaseTransformer):
 
     def __init__(self,
                  feature_names: list[str],
-                 lag: int,
+                 lags: int,
                  granularity: Union[list[str], str],
                  game_id: Optional[str] = None,
                  weight_column: Optional[str] = None,
@@ -36,7 +36,7 @@ class LagTransformation(BaseTransformer):
         :param
             feature_names: Which features to lag
 
-        :param lag:
+        :param lags:
             Number of lags
 
         :param granularity:
@@ -68,7 +68,7 @@ class LagTransformation(BaseTransformer):
         self.granularity = granularity or []
         if isinstance(self.granularity, str):
             self.granularity = [self.granularity]
-        self.lag = lag
+        self.lags = lags
         self.weight_column = weight_column
         self.df = df
         self.prefix = prefix
@@ -86,7 +86,7 @@ class LagTransformation(BaseTransformer):
 
 
         for feature_name in self.feature_names:
-            output_column_name = f'{self.prefix}{self.lag}_{feature_name}'
+            output_column_name = f'{self.prefix}{self.lags}_{feature_name}'
             if output_column_name in data.columns:
                 output_column_name += '_1'
                 logging.warning(f'Column {output_column_name} already exists, renaming to {output_column_name}')
@@ -98,7 +98,7 @@ class LagTransformation(BaseTransformer):
                                                           weight_column=self.weight_column, game_id=self.game_id,
                                                           granularity=self.granularity)
 
-            data = data.assign(**{output_column_name: data.groupby(self.granularity)[feature_name].shift(self.lag)})
+            data = data.assign(**{output_column_name: data.groupby(self.granularity)[feature_name].shift(self.lags)})
 
         if self.game_id is not None:
             df = df.merge(data[ self._output_feature_names + self.granularity + [self.game_id]],
@@ -124,10 +124,34 @@ class RollingMeanTransformation(BaseTransformer):
                  prefix: str = 'rolling_mean_'):
         """
 
-        :param feature_names: Features to create rolling mean for
+        :param feature_names:
+            Features to create rolling mean for
+
         :param granularity:
+            Columns to group by before rolling mean. E.g. player_id or [player_id, position].
+             In the latter case it will get the rolling mean for each player_id and position combination.
+
         :param window:
+            Window size for rolling mean, if 10 will calculate rolling mean over the prior 10 observations
+
+        :param game_id:
+            Column name of game_id.
+            If there are more multiple rows per granularity per game_id and you want to add the rolling mean per game_id, set game_id
+            This will calculate the mean of the features per game and the rolling mean will be calculated on that.
+
+        :param weight_column:
+            Only used if game_id is set.
+            Will calculate weighted mean of the features per game and the rolling mean will be the prior weighted means.
+            This is useful when working with partial game-data of different lengths.
+            In that case it can beneficial to set the game-length as weight_colum.
+
+        :param df: Optional parameter to pass in a dataframe to calculate the rolling mean on.
+            If not passed in, it will use the dataframe passed in the transform method.
+            This is useful if you want to calculate the rolling mean on a different dataframe than the one you want to transform.
+            Will merge the two dataframes on game_id and granularity.
+
         :param prefix:
+            Prefix for the new rolling mean columns
         """
 
         self.feature_names = feature_names
