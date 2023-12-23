@@ -10,4 +10,9 @@ class BaseTransformer(ABC):
         pass
 
 
+    @abstractmethod
+    @property
+    def features_created(self) -> list[str]:
+        pass
+
 

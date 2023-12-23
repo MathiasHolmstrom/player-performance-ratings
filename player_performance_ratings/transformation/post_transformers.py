@@ -72,6 +72,7 @@ class LagTransformation(BaseTransformer):
         self.weight_column = weight_column
         self.df = df
         self.prefix = prefix
+        self._output_feature_names = []
 
         if self.df is not None and self.game_id is None:
             raise ValueError('If passing in a dataframe to calculate the lag on, you need to set game_id')
@@ -83,14 +84,14 @@ class LagTransformation(BaseTransformer):
         else:
             data = df
 
-        output_feature_names = []
+
         for feature_name in self.feature_names:
             output_column_name = f'{self.prefix}{self.lag}_{feature_name}'
             if output_column_name in data.columns:
                 output_column_name += '_1'
                 logging.warning(f'Column {output_column_name} already exists, renaming to {output_column_name}')
 
-            output_feature_names.append(output_column_name)
+            self._output_feature_names.append(output_column_name)
 
             if self.game_id:
                 data = create_output_column_by_game_group(data=data, feature_name=feature_name,
@@ -100,13 +101,15 @@ class LagTransformation(BaseTransformer):
             data = data.assign(**{output_column_name: data.groupby(self.granularity)[feature_name].shift(self.lag)})
 
         if self.game_id is not None:
-            df = df.merge(data[output_feature_names + self.granularity + [self.game_id]],
+            df = df.merge(data[ self._output_feature_names + self.granularity + [self.game_id]],
                           on=self.granularity + [self.game_id], how='left')
         else:
             df = data
 
         return df
 
+    def features_created(self) -> list[str]:
+        return self._output_feature_names
 
 class RollingMeanTransformation(BaseTransformer):
 
@@ -137,6 +140,7 @@ class RollingMeanTransformation(BaseTransformer):
         self.game_id = game_id
         self.df = df
         self.prefix = prefix
+        self._output_feature_names = []
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
@@ -145,14 +149,14 @@ class RollingMeanTransformation(BaseTransformer):
         else:
             data = df
 
-        output_feature_names = []
+
         for feature_name in self.feature_names:
             output_column_name = f'{self.prefix}{self.window}_{feature_name}'
             if output_column_name in df.columns:
                 output_column_name += '_1'
                 logging.warning(f'Column {output_column_name} already exists, renaming to {output_column_name}')
 
-            output_feature_names.append(output_column_name)
+            self._output_feature_names.append(output_column_name)
 
             if self.game_id:
                 data = create_output_column_by_game_group(data=data, feature_name=feature_name,
@@ -163,9 +167,12 @@ class RollingMeanTransformation(BaseTransformer):
                 lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())})
 
             if self.game_id is not None:
-                df = df.merge(data[output_feature_names + self.granularity + [self.game_id]],
+                df = df.merge(data[self._output_feature_names + self.granularity + [self.game_id]],
                               on=self.granularity + [self.game_id], how='left')
             else:
                 df = data
 
         return df
+
+    def features_created(self) -> list[str]:
+        return self._output_feature_names

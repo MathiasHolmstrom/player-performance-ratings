@@ -21,7 +21,6 @@ from player_performance_ratings.tuner import MatchPredictorTuner
 from player_performance_ratings.scorer import LogLossScorer
 
 
-
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 

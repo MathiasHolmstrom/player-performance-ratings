@@ -50,6 +50,10 @@ class ColumnsWeighter(BaseTransformer):
         df = df.drop(columns=drop_cols)
         return df
 
+    @property
+    def features_created(self) -> list[str]:
+        return [self.weighted_column_name]
+
 
 class SklearnEstimatorImputer(BaseTransformer):
 
@@ -66,6 +70,10 @@ class SklearnEstimatorImputer(BaseTransformer):
         df[self.target_name] = df[self.target_name].fillna(df[f'imputed_col_{self.target_name}'])
         return df.drop(columns=[f'imputed_col_{self.target_name}'])
 
+    @property
+    def features_created(self) -> list[str]:
+        return [self.target_name]
+
 
 class SkLearnTransformerWrapper(BaseTransformer):
 
@@ -77,6 +85,10 @@ class SkLearnTransformerWrapper(BaseTransformer):
         df = df.copy()
         df[self.features] = self.transformer.fit_transform(df[self.features])
         return df
+
+    @property
+    def features_created(self) -> list[str]:
+        return self.features
 
 
 class MinMaxTransformer(BaseTransformer):
@@ -94,6 +106,8 @@ class MinMaxTransformer(BaseTransformer):
         if self.quantile < 0 or self.quantile > 1:
             raise ValueError("quantile must be between 0 and 1")
 
+        self._feature_names_created = []
+
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         for feature in self.features:
@@ -102,6 +116,7 @@ class MinMaxTransformer(BaseTransformer):
 
             df[self.prefix + feature] = (df[feature] - min_value) / (max_value - min_value)
             df[self.prefix + feature].clip(0, 1, inplace=True)
+            self._feature_names_created.append(self.prefix + feature)
 
             if self.allowed_mean_diff:
                 reps = 0
@@ -122,6 +137,10 @@ class MinMaxTransformer(BaseTransformer):
                         continue
 
         return df
+
+    @property
+    def features_created(self) -> list[str]:
+        return self._feature_names_created
 
 
 class DiminishingValueTransformer(BaseTransformer):
@@ -160,3 +179,7 @@ class DiminishingValueTransformer(BaseTransformer):
         df[self.features] = df[self.features].fillna(df[self.features])
 
         return df
+
+    @property
+    def features_created(self) -> list[str]:
+        return self.features
