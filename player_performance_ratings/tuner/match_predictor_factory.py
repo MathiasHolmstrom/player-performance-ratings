@@ -19,9 +19,16 @@ class MatchPredictorFactory():
                  predictor: BaseMLWrapper = None,
                  train_split_date: Optional[pendulum.datetime] = None
                  ):
+
         self.rating_generators = rating_generators
         if isinstance(self.rating_generators, RatingGenerator):
             self.rating_generators = [self.rating_generators]
+
+        if len(self.rating_generators) > 1 and predictor is None:
+            raise ValueError(
+                "If multiple rating generators are used, a predictor must be specified."
+                " Otherwise it is not clear which features from which rating-model is used ")
+
         self.pre_transformers = pre_transformers or []
         self.post_transformers = post_transformers or []
         self.column_names = column_names
