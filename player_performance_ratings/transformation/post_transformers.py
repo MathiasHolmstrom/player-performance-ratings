@@ -86,19 +86,20 @@ class LagTransformation(BaseTransformer):
 
 
         for feature_name in self.feature_names:
-            output_column_name = f'{self.prefix}{self.lag_length}_{feature_name}'
-            if output_column_name in data.columns:
-                output_column_name += '_1'
-                logging.warning(f'Column {output_column_name} already exists, renaming to {output_column_name}')
+            for lag in range(1, self.lag_length + 1):
+                output_column_name = f'{self.prefix}{lag}_{feature_name}'
+                if output_column_name in data.columns:
+                    output_column_name += '_1'
+                    logging.warning(f'Column {output_column_name} already exists, renaming to {output_column_name}')
 
-            self._output_feature_names.append(output_column_name)
+                self._output_feature_names.append(output_column_name)
 
-            if self.game_id:
-                data = create_output_column_by_game_group(data=data, feature_name=feature_name,
-                                                          weight_column=self.weight_column, game_id=self.game_id,
-                                                          granularity=self.granularity)
+                if self.game_id:
+                    data = create_output_column_by_game_group(data=data, feature_name=feature_name,
+                                                              weight_column=self.weight_column, game_id=self.game_id,
+                                                              granularity=self.granularity)
 
-            data = data.assign(**{output_column_name: data.groupby(self.granularity)[feature_name].shift(self.lag_length)})
+                data = data.assign(**{output_column_name: data.groupby(self.granularity)[feature_name].shift(lag)})
 
         if self.game_id is not None:
             df = df.merge(data[ self._output_feature_names + self.granularity + [self.game_id]],

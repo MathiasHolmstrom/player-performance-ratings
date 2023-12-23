@@ -28,6 +28,34 @@ def test_lag_transformation():
 
     pd.testing.assert_frame_equal(df_with_lags, expected_df, check_like=True)
 
+
+def test_lag_transformation_lag_length_2():
+    df = pd.DataFrame(
+        {
+            'player': ['a', 'b', 'a', "a"],
+            'game': [1, 1, 2, 3],
+            'points': [1, 2, 3, 4]
+        }
+    )
+    original_df = df.copy()
+
+    lag_transformation = LagTransformation(
+        feature_names=['points'],
+        lag_length=2,
+        granularity=['player']
+    )
+
+    df_with_lags = lag_transformation.transform(df)
+
+    expected_df = original_df.assign(**{
+        "lag_1_points": [None, None, 1, 3],
+        "lag_2_points": [None, None, None, 1]
+    })
+
+    pd.testing.assert_frame_equal(df_with_lags, expected_df, check_like=True)
+
+
+
 def test_lag_transformation_with_game_id():
     df = pd.DataFrame(
         {
