@@ -5,6 +5,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from player_performance_ratings.ratings import convert_df_to_matches
 from player_performance_ratings.ratings.opponent_adjusted_rating.team_rating_generator import TeamRatingGenerator
 from player_performance_ratings.ratings.enums import RatingColumnNames
 
@@ -15,7 +16,7 @@ from player_performance_ratings.data_structures import Match, PreMatchRating, Pr
 class RatingGenerator(ABC):
 
     @abstractmethod
-    def generate(self, matches: list[Match], df: Optional[pd.DataFrame] = None,
+    def generate(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None,
                  column_names: Optional[ColumnNames] = None) -> dict[RatingColumnNames, list[float]]:
         pass
 
@@ -48,7 +49,7 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
         self.team_rating_generator = team_rating_generator
         self.ratings_df = None
 
-    def generate(self, matches: list[Match], df: Optional[pd.DataFrame] = None,
+    def generate(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None,
                  column_names: Optional[ColumnNames] = None) -> dict[RatingColumnNames, list[float]]:
 
         """
@@ -61,6 +62,12 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
         :return: A dictionary containing historical match-rating values.
          These ratings can easily be added as new columns to the original dataframe for later model training or exploration
         """
+
+        if matches is None and df is None or matches is None and column_names is None:
+            raise ValueError("If matches is not passed, df and column names must be massed")
+
+        if matches is None:
+            matches = convert_df_to_matches(df=df, column_names=column_names)
 
         if df is not None and column_names:
             logging.info(

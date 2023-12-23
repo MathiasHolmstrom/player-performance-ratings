@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 
 from player_performance_ratings import ColumnNames
@@ -7,7 +6,7 @@ from player_performance_ratings.ratings.match_generator import convert_df_to_mat
 from player_performance_ratings.ratings.time_weight_ratings import BayesianTimeWeightedRating
 
 
-def test_time_weight_rating_generator():
+def test_bayesian_time_weight_rating_generator():
     # When a player has played 3 matches and prior is the mean of all his performances,
     # his rating should be be before every match by multiplying his time-weighted moving average with the likelihood ratio + (1-likelihood_ratio) * prior
     # The first match should be equal to the prior and ratings should be graudally updated afterwards based on past performances and recency

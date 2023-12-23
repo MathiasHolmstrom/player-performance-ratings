@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from player_performance_ratings.data_structures import Match, ColumnNames, TeamRating, PlayerRating
+from player_performance_ratings.ratings import convert_df_to_matches
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
 
@@ -69,8 +70,15 @@ class BayesianTimeWeightedRating(RatingGenerator):
         self._granularity_ratings: dict[str, list[float]] = {}
         self._granularity_players: dict[str, list[str]] = {}
 
-    def generate(self, matches: list[Match], df: Optional[pd.DataFrame] = None,
+    def generate(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None,
                  column_names: ColumnNames = None) -> dict[RatingColumnNames, list[float]]:
+
+        if matches is None and df is None or matches is None and column_names is None:
+            raise ValueError("If matches is not passed, df and column names must be massed")
+
+        if matches is None:
+            matches = convert_df_to_matches(df=df, column_names=column_names)
+
 
         if df is not None and column_names is not None:
             mean_performance_value = df[column_names.performance].mean()
