@@ -2,7 +2,7 @@ import pickle
 
 from sklearn.preprocessing import StandardScaler
 
-from player_performance_ratings.examples.utils import load_lol_data
+from player_performance_ratings.examples.utils import load_lol_subsampled_data
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings import MatchPredictor, OpponentAdjustedRatingGenerator
 from player_performance_ratings import SKLearnClassifierWrapper
@@ -23,7 +23,7 @@ column_names = ColumnNames(
     performance='performance',
     league='league'
 )
-df = load_lol_data()
+df = load_lol_subsampled_data()
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 
 df = (
