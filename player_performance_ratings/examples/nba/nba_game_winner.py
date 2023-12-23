@@ -9,8 +9,7 @@ from player_performance_ratings import PredictColumnNames
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
 
-from player_performance_ratings.ratings.enums import RatingColumnNames
-from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator
 
 column_names = ColumnNames(
     team_id='team_id',
@@ -30,7 +29,7 @@ df = (
 )
 
 
-rating_generator = OpponentAdjustedRatingGenerator(features_created=[RatingColumnNames.RATING_DIFFERENCE])
+rating_generator = OpponentAdjustedRatingGenerator()
 
 match_predictor = MatchPredictor(column_names=column_names, rating_generators=rating_generator)
 df = match_predictor.generate_historical(df)

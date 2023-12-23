@@ -53,8 +53,7 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
         :param features_names_created: If called by match_predictor, feature_names_created determines which features will be used for prediction.
         """
         self.team_rating_generator = team_rating_generator
-        self._features_created = features_created or [RatingColumnNames.RATING_DIFFERENCE, RatingColumnNames.PLAYER_RATING, RatingColumnNames.TEAM_RATING,
-                RatingColumnNames.OPPONENT_RATING]
+        self._features_created = features_created or [RatingColumnNames.RATING_DIFFERENCE]
         self.ratings_df = None
 
     def generate(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None,

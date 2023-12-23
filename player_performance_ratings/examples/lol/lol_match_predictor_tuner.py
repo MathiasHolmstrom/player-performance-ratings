@@ -2,16 +2,11 @@ import pickle
 
 from sklearn.preprocessing import StandardScaler
 
-from player_performance_ratings.examples.utils import load_lol_subsampled_data
+
 from player_performance_ratings.data_structures import ColumnNames
-from player_performance_ratings import MatchPredictor, OpponentAdjustedRatingGenerator
-from player_performance_ratings import SKLearnClassifierWrapper
 
-from player_performance_ratings import TeamRatingGenerator
-
-from player_performance_ratings import SkLearnTransformerWrapper, MinMaxTransformer
 from player_performance_ratings.ratings.enums import RatingColumnNames
-from player_performance_ratings.transformations.pre_transformers import ColumnsWeighter
+
 from player_performance_ratings.tuner import TransformerTuner
 from player_performance_ratings.tuner.utils import ParameterSearchRange
 
