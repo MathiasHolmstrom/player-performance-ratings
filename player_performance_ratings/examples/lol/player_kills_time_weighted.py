@@ -1,8 +1,9 @@
 from lightgbm import LGBMClassifier
+from player_performance_ratings.predictor.estimators import SKLearnClassifierWrapper
 
-from player_performance_ratings import ColumnNames, MatchPredictor, SKLearnClassifierWrapper, PredictColumnNames, \
-    LogLossScorer
+from player_performance_ratings import ColumnNames, PredictColumnNames
 from player_performance_ratings.examples.utils import load_lol_data
+from player_performance_ratings.predictor import MatchPredictor
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.time_weight_ratings import BayesianTimeWeightedRating
 from player_performance_ratings.scorer.score import OrdinalLossScorer

@@ -22,6 +22,7 @@ class BayesianTimeWeightedRating(RatingGenerator):
                  prior_granularity_count_max: int = 200,
                  prior_by_league: bool = True,
                  prior_by_position: bool = True,
+                 features_created: Optional[list[str]] = None,
                  ):
 
         """
@@ -64,6 +65,10 @@ class BayesianTimeWeightedRating(RatingGenerator):
         self.prior_granularity_count_max = prior_granularity_count_max
         self.by_league = prior_by_league
         self.by_position = prior_by_position
+        self._features_created = features_created or [RatingColumnNames.TIME_WEIGHTED_RATING,
+                                                      RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE,
+                                                      RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO]
+
         self.player_performances: dict[str, list[float]] = {}
         self.player_days: dict[str, list[int]] = {}
         self._player_prior_ratings: dict[str, float] = {}
@@ -78,7 +83,6 @@ class BayesianTimeWeightedRating(RatingGenerator):
 
         if matches is None:
             matches = convert_df_to_matches(df=df, column_names=column_names)
-
 
         if df is not None and column_names is not None:
             mean_performance_value = df[column_names.performance].mean()
@@ -144,7 +148,8 @@ class BayesianTimeWeightedRating(RatingGenerator):
             position = position if position is not None else ""
             granularity_id += position
 
-        if player_id in self._player_prior_ratings and granularity_id in self._granularity_players and player_id in self._granularity_players[granularity_id]:
+        if player_id in self._player_prior_ratings and granularity_id in self._granularity_players and player_id in \
+                self._granularity_players[granularity_id]:
             return self._player_prior_ratings[player_id]
 
         self._granularity_ratings.setdefault(granularity_id, [])
@@ -185,3 +190,7 @@ class BayesianTimeWeightedRating(RatingGenerator):
     @property
     def team_ratings(self) -> list[TeamRating]:
         return self.team_ratings
+
+    @property
+    def features_created(self) -> list[str]:
+        return self._features_created

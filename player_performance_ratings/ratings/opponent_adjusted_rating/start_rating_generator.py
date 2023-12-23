@@ -21,7 +21,7 @@ class StartRatingGenerator():
                  league_quantile: float = 0.2,
                  min_count_for_percentiles: int = 100,
                  team_rating_subtract: float = 80,
-                 team_weight: float = 0.2,
+                 team_weight: float = 0,
                  max_days_ago_league_entities: int = 120,
                  min_match_count_team_rating: int = 2
                  ):

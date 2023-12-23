@@ -30,6 +30,11 @@ class RatingGenerator(ABC):
     def team_ratings(self) -> list[TeamRating]:
         pass
 
+    @property
+    @abstractmethod
+    def features_created(self) -> list[str]:
+        pass
+
 
 class OpponentAdjustedRatingGenerator(RatingGenerator):
     """
@@ -39,14 +44,17 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
 
     def __init__(self,
                  team_rating_generator: TeamRatingGenerator = TeamRatingGenerator(),
+                 features_created: Optional[list[str]] = None,
                  ):
 
         """
 
         :param team_rating_generator: The class contains the logic for generating and updating team ratings and contains many parameters that can be tuned.
-
+        :param features_names_created: If called by match_predictor, feature_names_created determines which features will be used for prediction.
         """
         self.team_rating_generator = team_rating_generator
+        self._features_created = features_created or [RatingColumnNames.RATING_DIFFERENCE, RatingColumnNames.PLAYER_RATING, RatingColumnNames.TEAM_RATING,
+                RatingColumnNames.OPPONENT_RATING]
         self.ratings_df = None
 
     def generate(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None,
@@ -200,3 +208,7 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
 
         return list(sorted(team_id_ratings,
                            key=lambda team: team.rating_value, reverse=True))
+
+    @property
+    def features_created(self) -> list[str]:
+        return self._features_created

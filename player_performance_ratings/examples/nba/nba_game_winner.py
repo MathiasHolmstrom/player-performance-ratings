@@ -7,7 +7,6 @@ from sklearn.metrics import log_loss
 
 from player_performance_ratings import PredictColumnNames
 from player_performance_ratings.data_structures import ColumnNames
-from player_performance_ratings.predictor.estimators.classifier import SkLearnGameTeamPredictor
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
 
 from player_performance_ratings.ratings.enums import RatingColumnNames
@@ -31,11 +30,9 @@ df = (
 )
 
 
-rating_generator = OpponentAdjustedRatingGenerator()
+rating_generator = OpponentAdjustedRatingGenerator(features_created=[RatingColumnNames.RATING_DIFFERENCE])
 
-predictor = SkLearnGameTeamPredictor(features=[RatingColumnNames.RATING_DIFFERENCE], game_id_colum=column_names.match_id, team_id_column=column_names.team_id)
-
-match_predictor = MatchPredictor(column_names=column_names, rating_generators=rating_generator, predictor=predictor)
+match_predictor = MatchPredictor(column_names=column_names, rating_generators=rating_generator)
 df = match_predictor.generate_historical(df)
 
 print(log_loss(df[PredictColumnNames.TARGET], df[match_predictor.predictor.pred_column]))

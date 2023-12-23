@@ -48,10 +48,17 @@ class MatchPredictor():
 
         if predictor is None:
             logging.warning(f"predictor is not set. Will use {RatingColumnNames.RATING_DIFFERENCE} as only feature")
-        self.predictor = predictor or SKLearnClassifierWrapper(
-            features=[RatingColumnNames.RATING_DIFFERENCE],
-            target=PredictColumnNames.TARGET
-        )
+
+        self.predictor = predictor
+        if self.predictor is None:
+            features = [c.features_created for c in self.pre_rating_transformers][0] if len(self.pre_rating_transformers) > 0 else [] + \
+                       [c.features_created for c in self.post_rating_transformers][0] if len(self.post_rating_transformers) > 0 else [] + \
+                       [c.features_created for c in self.rating_generators][0]
+
+            self.predictor = SKLearnClassifierWrapper(
+                features=features,
+                target=PredictColumnNames.TARGET
+            )
 
         self.predictor.set_target(PredictColumnNames.TARGET)
         self.train_split_date = train_split_date
