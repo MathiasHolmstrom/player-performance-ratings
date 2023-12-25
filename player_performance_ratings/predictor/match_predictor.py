@@ -7,9 +7,8 @@ import pendulum
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
 
-from player_performance_ratings.predictor.estimators.classifier import SKLearnClassifierWrapper
+from player_performance_ratings.predictor.estimators import SKLearnWrapper
 from player_performance_ratings.data_structures import ColumnNames, Match
-from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
@@ -49,8 +48,7 @@ class MatchPredictor():
         self.predictor = predictor
         if self.predictor is None:
             features = []
-            for c in self.pre_rating_transformers:
-                features += c.features_created
+
             for c in self.post_rating_transformers:
                 features += c.features_created
             for c in self.rating_generators:
@@ -59,7 +57,7 @@ class MatchPredictor():
             logging.warning(f"predictor is not set. Will use {features} as features")
 
 
-            self.predictor = SKLearnClassifierWrapper(
+            self.predictor = SKLearnWrapper(
                 features=features,
                 target=PredictColumnNames.TARGET
             )

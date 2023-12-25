@@ -61,7 +61,7 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
 
     def train(self, df: pd.DataFrame) -> None:
 
-        if len(df[self._target].unique()) > 2:
+        if len(df[self._target].unique()) > 2 and hasattr(self.model, "predict_proba"):
             logging.warning("target has more than 2 unique values, multiclassifier has therefore been set to True")
             self.multiclassifier = True
 
@@ -82,6 +82,8 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
 
         if self.multiclassifier:
             grouped[self._pred_column] = self.model.predict_proba(grouped[self.features]).tolist()
+        elif not hasattr(self.model, "predict_proba"):
+            grouped[self._pred_column] = self.model.predict(grouped[self.features])
         else:
             grouped[self._pred_column] = self.model.predict_proba(grouped[self.features])[:, 1]
 
@@ -123,7 +125,7 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
         return grouped
 
 
-class SKLearnClassifierWrapper(BaseMLWrapper):
+class SKLearnWrapper(BaseMLWrapper):
 
     def __init__(self,
                  features: list[str],
@@ -149,16 +151,8 @@ class SKLearnClassifierWrapper(BaseMLWrapper):
 
     def train(self, df: pd.DataFrame) -> None:
 
-        if self.categorical_features is None:
-            self.categorical_features = []
-            for feature in self.features:
-                if df[feature].dtype == "object" or len(df[feature].unique()) < 30:
-                    self.categorical_features.append(feature)
-                    logging.warning(
-                        f"feature {feature} has been converted to category. To override default behaviour, pass categorical_features into constructor")
-                    df.loc[:, feature] = df[feature].astype('category')
-
-        if self.multiclassifier is False and len(df[self._target].unique()) > 2:
+        if self.multiclassifier is False and len(df[self._target].unique()) > 2 and hasattr(self.model,
+                                                                                            "predict_proba"):
             logging.warning("target has more than 2 unique values, multiclassifier has therefore been set to True")
             self.multiclassifier = True
 
@@ -168,10 +162,10 @@ class SKLearnClassifierWrapper(BaseMLWrapper):
 
         df = df.copy()
 
-        for categorical_feature in self.categorical_features:
-            df.loc[:, categorical_feature] = df[categorical_feature].astype('category')
         if self.multiclassifier:
             df[self._pred_column] = self.model.predict_proba(df[self.features]).tolist()
+        elif not hasattr(self.model, "predict_proba"):
+            df[self._pred_column] = self.model.predict(df[self.features])
         else:
             df[self._pred_column] = self.model.predict_proba(df[self.features])[:, 1]
         return df
