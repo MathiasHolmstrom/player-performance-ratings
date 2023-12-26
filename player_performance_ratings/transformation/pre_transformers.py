@@ -16,8 +16,6 @@ class ColumnWeight:
     lower_is_better: bool = False
 
 
-
-
 class ColumnsWeighter(BaseTransformer):
 
     def __init__(self,
@@ -199,6 +197,70 @@ class DiminishingValueTransformer(BaseTransformer):
         return self.features
 
 
+class SymmetricDistributionTransformer(BaseTransformer):
+
+    def __init__(self, features: List[str], granularity: Optional[list[str]] = None, skewness_allowed: float = 0.1,
+                 max_iterations: int = 15):
+        self.features = features
+        self.granularity = granularity
+        self.skewness_allowed = skewness_allowed
+        self.max_iterations = max_iterations
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        df = df.copy()
+
+        for feature in self.features:
+            if self.granularity:
+                for column_granularity in self.granularity:
+                    unique_values = df[column_granularity].unique()
+                    for unique_value in unique_values:
+                        rows = df[df[column_granularity] == unique_value]
+
+                        rows = self._transform_rows(rows=rows, feature=feature)
+
+                        condition = df[column_granularity] == unique_value
+                        if isinstance(rows[feature], (list, np.ndarray, pd.Series)):
+                            assert len(rows[
+                                           feature]) == condition.sum(), "Length of rows[feature] must match the number of rows in condition"
+
+                        df.loc[df[column_granularity] == unique_value, feature] = rows[feature]
+
+            else:
+                df = self._transform_rows(rows=df, feature=feature)
+        return df
+
+    def _transform_rows(self, rows: pd.DataFrame, feature: str) -> pd.DataFrame:
+        skewness = rows[feature].skew()
+
+        excessive_multiplier = 0.8
+        quantile_cutoff = 0.95
+
+        iteration = 0
+        while abs(skewness) > self.skewness_allowed and len(
+                rows) > 10 and iteration < self.max_iterations:
+
+            if skewness < 0:
+                reverse = True
+            else:
+                reverse = False
+            diminishing_value_transformer = DiminishingValueTransformer(features=[feature],
+                                                                        reverse=reverse,
+                                                                        excessive_multiplier=excessive_multiplier,
+                                                                        quantile_cutoff=quantile_cutoff)
+            rows = diminishing_value_transformer.transform(rows)
+            excessive_multiplier *= 0.96
+            quantile_cutoff *= 0.993
+            iteration += 1
+            skewness = rows[feature].skew()
+
+        return rows
+
+    @property
+    def features_created(self) -> list[str]:
+        return self.features
+
+
 class GroupByTransformer(BaseTransformer):
 
     def __init__(self,
@@ -212,11 +274,48 @@ class GroupByTransformer(BaseTransformer):
         self.agg_func = agg_func
         self.prefix = prefix
         self._feature_names_created = []
+        for feature in self.features:
+            self._feature_names_created.append(self.prefix + feature)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        for feature in self.features:
-            df = df.assign(**{self.prefix + feature: df.groupby(self.granularity)[feature].transform(self.agg_func)})
-            self._feature_names_created.append(self.prefix + feature)
+        for idx, feature in enumerate(self.features):
+            df = df.assign(
+                **{self._feature_names_created[idx]: df.groupby(self.granularity)[feature].transform(self.agg_func)})
+        return df
+
+    @property
+    def features_created(self) -> list[str]:
+        return self._feature_names_created
+
+
+class NetOverPredictedTransformer(BaseTransformer):
+
+    def __init__(self,
+                 features: list[str],
+                 granularity: list[str],
+                 predict_transformer: Optional[BaseTransformer] = None,
+                 prefix: str = "mean_",
+                 ):
+        self.granularity = granularity
+        self.predict_transformer = predict_transformer or GroupByTransformer(features=features, granularity=granularity,
+                                                                             agg_func='mean')
+        self.prefix = prefix
+        self.features = features
+        self._feature_names_created = []
+        for idx, predicted_feature in enumerate(self.predict_transformer.features_created):
+            new_feature_name = f'{self.prefix}{self.features[idx]}'
+            self._feature_names_created.append(new_feature_name)
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        df = df.assign(__id=range(1, len(df) + 1))
+        predicted_df = self.predict_transformer.transform(df)
+        df = df.merge(predicted_df[self.predict_transformer.features_created + ['__id']], on="__id").drop(
+            columns=["__id"])
+
+        for idx, predicted_feature in enumerate(self.predict_transformer.features_created):
+            new_feature_name = self._feature_names_created[idx]
+            df = df.assign(**{new_feature_name: df[self.features[idx]] - df[predicted_feature]})
 
         return df
 

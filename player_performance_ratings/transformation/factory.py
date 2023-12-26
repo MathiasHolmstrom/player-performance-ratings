@@ -8,6 +8,8 @@ from player_performance_ratings.transformation import ColumnWeight, DiminishingV
     SkLearnTransformerWrapper, MinMaxTransformer, ColumnsWeighter
 
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
+from player_performance_ratings.transformation.pre_transformers import GroupByTransformer, NetOverPredictedTransformer, \
+    SymmetricDistributionTransformer
 
 
 def auto_create_pre_transformers(df: pd.DataFrame, column_weights: list[list[ColumnWeight]],
@@ -32,6 +34,10 @@ def auto_create_pre_transformers(df: pd.DataFrame, column_weights: list[list[Col
 
     for idx, col_weights in enumerate(column_weights):
 
+        if column_names[idx].position is not None:
+            feats = [c.name for c in column_weights[idx]]
+            grouped_transformer = NetOverPredictedTransformer(features=feats, granularity=[column_names[idx].position])
+
         for column_weight in col_weights:
 
             feature = column_weight.name
@@ -40,25 +46,12 @@ def auto_create_pre_transformers(df: pd.DataFrame, column_weights: list[list[Col
                 continue
 
             feature_names.append(feature)
-            skewness = df[feature].skew()
-            if skewness > 0.1:
-                if skewness > 0.5 and skewness < 1:
-                    excessive_multiplier = 0.7
-                    quantile_cutoff = 0.9
-                elif skewness > 1:
-                    excessive_multiplier = 0.5
-                    quantile_cutoff = 0.85
-                else:
-                    excessive_multiplier = 0.8
-                    quantile_cutoff = 0.95
-
-                diminishing_value_transformer = DiminishingValueTransformer(features=[feature],
-                                                                            excessive_multiplier=excessive_multiplier,
-                                                                            quantile_cutoff=quantile_cutoff)
-                steps.append(diminishing_value_transformer)
-            elif skewness < -0.1:
-                diminishing_value_transformer = DiminishingValueTransformer(features=[feature], reverse=True)
-                steps.append(diminishing_value_transformer)
+            if column_names[idx].position is None:
+                granularity = []
+            else:
+                granularity = [column_names[idx].position]
+            distribution_transformer = SymmetricDistributionTransformer(features=[feature], granularity=granularity)
+            steps.append(distribution_transformer)
 
     steps.append(
         SkLearnTransformerWrapper(transformer=StandardScaler(), features=all_feature_names))
