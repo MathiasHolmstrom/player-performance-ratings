@@ -22,14 +22,6 @@ class ColumnNames:
 
 
 @dataclass
-class StartRatingParameters:
-    start_league_ratings: Optional[dict[str, float]] = None
-    league_quantile: float = 0.2
-    team_rating_subtract: float = 80
-    team_weight: float = 0.2
-
-
-@dataclass
 class MatchPerformance:
     performance_value: float
     participation_weight: float
