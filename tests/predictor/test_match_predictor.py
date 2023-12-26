@@ -35,7 +35,7 @@ def test_match_predictor_auto_pre_transformers():
 
     match_predictor = MatchPredictor(
         train_split_date=pd.to_datetime("2023-01-02"),
-        auto_create_pre_transformers=True,
+        use_auto_pre_transformers=True,
         column_weights=column_weights,
         predictor=predictor_mock,
         column_names=ColumnNames(
@@ -91,7 +91,7 @@ def test_match_predictor_multiple_rating_generators():
 
     match_predictor = MatchPredictor(
         train_split_date=pd.to_datetime("2023-01-02"),
-        auto_create_pre_transformers=False,
+        use_auto_pre_transformers=False,
         column_weights=column_weights,
         rating_generators=[OpponentAdjustedRatingGenerator(features_created=[RatingColumnNames.RATING_DIFFERENCE]),
                            BayesianTimeWeightedRating()],
@@ -143,7 +143,7 @@ def test_match_predictor_0_rating_generators():
 
     match_predictor = MatchPredictor(
         train_split_date=2,
-        auto_create_pre_transformers=False,
+        use_auto_pre_transformers=False,
         column_weights=column_weights,
         rating_generators=[],
         post_rating_transformers=[

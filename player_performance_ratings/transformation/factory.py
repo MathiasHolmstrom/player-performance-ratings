@@ -12,7 +12,7 @@ from player_performance_ratings.transformation.pre_transformers import GroupByTr
     SymmetricDistributionTransformer
 
 
-def auto_create_pre_transformers(df: pd.DataFrame, column_weights: list[list[ColumnWeight]],
+def auto_create_pre_transformers(column_weights: list[list[ColumnWeight]],
                                  column_names: list[ColumnNames]) -> list[
     BaseTransformer]:
     """
@@ -33,10 +33,19 @@ def auto_create_pre_transformers(df: pd.DataFrame, column_weights: list[list[Col
     feature_names = []
 
     for idx, col_weights in enumerate(column_weights):
+        if column_names[idx].position is None:
+            granularity = []
+        else:
+            granularity = [column_names[idx].position]
 
+        if idx == 0 or column_names[idx].position != column_names[idx - 1].position:
+            distribution_transformer = SymmetricDistributionTransformer(features=feature_names, granularity=granularity)
+            steps.append(distribution_transformer)
         if column_names[idx].position is not None:
             feats = [c.name for c in column_weights[idx]]
-            grouped_transformer = NetOverPredictedTransformer(features=feats, granularity=[column_names[idx].position])
+            position_predicted_transformer = NetOverPredictedTransformer(features=feats,
+                                                                         granularity=[column_names[idx].position])
+            steps.append(position_predicted_transformer)
 
         for column_weight in col_weights:
 
@@ -46,12 +55,6 @@ def auto_create_pre_transformers(df: pd.DataFrame, column_weights: list[list[Col
                 continue
 
             feature_names.append(feature)
-            if column_names[idx].position is None:
-                granularity = []
-            else:
-                granularity = [column_names[idx].position]
-            distribution_transformer = SymmetricDistributionTransformer(features=[feature], granularity=granularity)
-            steps.append(distribution_transformer)
 
     steps.append(
         SkLearnTransformerWrapper(transformer=StandardScaler(), features=all_feature_names))
