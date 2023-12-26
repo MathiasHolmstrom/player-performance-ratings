@@ -70,7 +70,6 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
          These ratings can easily be added as new columns to the original dataframe for later model training or exploration
         """
 
-
         if matches is not None and len(matches) > 0 and not isinstance(matches[0], Match):
             raise ValueError("matches must be a list of Match objects")
 
@@ -87,6 +86,7 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
         elif column_names and df is None:
             logging.warning(
                 "Column names is passed but df not - this match-ratings will not be stored in the class object")
+
 
         pre_match_player_rating_values = []
         pre_match_team_rating_values = []

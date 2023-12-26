@@ -37,6 +37,19 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
     If not the  league of the match will be equal to the league of the current match
     """
 
+    if max(df[column_names.performance]) > 1 or min(df[column_names.performance]) < 0:
+        raise ValueError("performance column must be between 0 and 1")
+
+    mean_performance = df[column_names.performance].mean()
+    median_performance = df[column_names.performance].median()
+
+    if abs(mean_performance - 0.5) > 0.05:
+        logging.warning(
+            f"mean performance is {mean_performance} which is far from 0.5. It is recommended to do further pre_transformations of the performance column")
+    if abs(median_performance - 0.5) > 0.05:
+        logging.warning(
+            f"median performance is {median_performance} which is far from 0.5. It is recommended to do further pre_transformations of the performance column")
+
     df_sorted = df.sort_values(
         by=[column_names.start_date, column_names.match_id,
             column_names.team_id, column_names.player_id])
@@ -95,7 +108,6 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
         player_id = row[col_names.team_id]
         if col_names.player_id is not None:
             player_id = row[col_names.player_id]
-
 
         if col_names.position is not None:
             position = row[col_names.position]

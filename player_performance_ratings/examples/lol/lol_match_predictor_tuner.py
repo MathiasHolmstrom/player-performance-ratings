@@ -23,7 +23,7 @@ df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 
 df = (
     df.loc[lambda x: x.position != 'team']
-    .assign(team_count=df.groupby('gameid')['teamname'].transform('nunique'))
+    .assign(team_count=df.granularity('gameid')['teamname'].transform('nunique'))
     .loc[lambda x: x.team_count == 2]
 )
 

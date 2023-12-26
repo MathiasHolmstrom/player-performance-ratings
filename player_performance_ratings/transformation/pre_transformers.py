@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from typing import Optional,  List
+from typing import Optional, List
 
 import numpy as np
 import pandas as pd
@@ -14,6 +14,8 @@ class ColumnWeight:
     name: str
     weight: float
     lower_is_better: bool = False
+
+
 
 
 class ColumnsWeighter(BaseTransformer):
@@ -124,16 +126,17 @@ class MinMaxTransformer(BaseTransformer):
                 while abs(0.5 - mean_value) > self.allowed_mean_diff:
 
                     if mean_value > 0.5:
-                        df[self.prefix + feature] = df[self.prefix + feature] * (1- self.allowed_mean_diff)
+                        df[self.prefix + feature] = df[self.prefix + feature] * (1 - self.allowed_mean_diff)
                     else:
-                        df[self.prefix + feature] = df[self.prefix + feature] * (1+ self.allowed_mean_diff)
+                        df[self.prefix + feature] = df[self.prefix + feature] * (1 + self.allowed_mean_diff)
 
                     df[self.prefix + feature].clip(0, 1, inplace=True)
                     mean_value = df[self.prefix + feature].mean()
 
-                    reps +=1
+                    reps += 1
                     if reps > 100:
-                        logging.warning(f"MinMaxTransformer: {feature} mean value is {mean_value} after {reps} repetitions")
+                        logging.warning(
+                            f"MinMaxTransformer: {feature} mean value is {mean_value} after {reps} repetitions")
                         continue
 
         return df
@@ -150,13 +153,14 @@ class DiminishingValueTransformer(BaseTransformer):
                  cutoff_value: Optional[float] = None,
                  quantile_cutoff: float = 0.95,
                  excessive_multiplier: float = 0.8,
-
+                 reverse: bool = False,
                  ):
         self.features = features
         self.cutoff_value = cutoff_value
         self.excessive_multiplier = excessive_multiplier
         self.trained_count: int = 0
         self.quantile_cutoff = quantile_cutoff
+        self.reverse = reverse
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
@@ -166,15 +170,25 @@ class DiminishingValueTransformer(BaseTransformer):
             else:
                 cutoff_value = self.cutoff_value
 
-            df = df.assign(feature_name=lambda x: np.where(
-                x[feature_name] >= cutoff_value,
-                (x[feature_name] - cutoff_value).clip(lower=0) * self.excessive_multiplier + cutoff_value,
-                np.where(
-                    x[feature_name] < -cutoff_value,
-                    (-x[feature_name] - cutoff_value).clip(upper=0) * self.excessive_multiplier - cutoff_value,
-                    x[feature_name]
-                )
-            ))
+            if self.reverse:
+                cutoff_value = 1 - cutoff_value
+                df = df.assign(**{
+                    feature_name: lambda x: np.where(
+                        x[feature_name] <= cutoff_value,
+                        - (cutoff_value - df[feature_name]) * self.excessive_multiplier + cutoff_value,
+                        x[feature_name]
+
+                    )
+                })
+            else:
+
+                df = df.assign(**{
+                    feature_name: lambda x: np.where(
+                        x[feature_name] >= cutoff_value,
+                        (x[feature_name] - cutoff_value).clip(lower=0) * self.excessive_multiplier + cutoff_value,
+                        x[feature_name]
+                    )
+                })
 
         df[self.features] = df[self.features].fillna(df[self.features])
 
@@ -183,3 +197,29 @@ class DiminishingValueTransformer(BaseTransformer):
     @property
     def features_created(self) -> list[str]:
         return self.features
+
+
+class GroupByTransformer(BaseTransformer):
+
+    def __init__(self,
+                 features: list[str],
+                 granularity: list[str],
+                 agg_func: str = "mean",
+                 prefix: str = "mean_",
+                 ):
+        self.features = features
+        self.granularity = granularity
+        self.agg_func = agg_func
+        self.prefix = prefix
+        self._feature_names_created = []
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        for feature in self.features:
+            df = df.assign(**{self.prefix + feature: df.groupby(self.granularity)[feature].transform(self.agg_func)})
+            self._feature_names_created.append(self.prefix + feature)
+
+        return df
+
+    @property
+    def features_created(self) -> list[str]:
+        return self._feature_names_created

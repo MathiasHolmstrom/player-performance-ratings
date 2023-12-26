@@ -3,6 +3,7 @@ from typing import List, Optional, Union
 
 import pandas as pd
 import pendulum
+from player_performance_ratings.transformation import ColumnWeight
 
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
@@ -11,41 +12,77 @@ from player_performance_ratings.predictor.estimators import SKLearnWrapper
 from player_performance_ratings.data_structures import ColumnNames, Match
 from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
-from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
+from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator, \
+    OpponentAdjustedRatingGenerator
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
+from player_performance_ratings.transformation.factory import create_pre_transformers
 
 
 class MatchPredictor():
 
     def __init__(self,
                  column_names: Union[ColumnNames, list[ColumnNames]],
-                 rating_generators: Union[RatingGenerator, list[RatingGenerator]],
+                 rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  pre_rating_transformers: Optional[List[BaseTransformer]] = None,
                  post_rating_transformers: Optional[List[BaseTransformer]] = None,
                  predictor: [Optional[BaseMLWrapper]] = None,
                  train_split_date: Optional[pendulum.datetime] = None,
+                 auto_create_pre_transformers: bool = False,
+                 column_weights: Optional[list[ColumnWeight]] = None
                  ):
 
         """
 
         :param column_names:
         :param rating_generators: A single or a list of RatingGenerators.
-        :param
-            pre_rating_transformers: An optional list of transformations that take place rating generation.
+        :param pre_rating_transformers: An optional list of transformations that take place rating generation.
             This is generally recommended if a more complex performance-value is used to update ratings.
             Although any type of feature engineering that isn't dependant upon the output of the ratings can be performed here.
         :param post_rating_transformers:
             After rating-generation, additional feature engineering can be performed.
         :param predictor:
         :param train_split_date:
+        :param auto_create_pre_transformers:
+            If true, the pre_rating_transformers will be automatically generated to ensure the performance-value is done according to good practices.
+            For new users, this is recommended.
+        :param column_weights:
+            If auto_create_pre_transformers is True, column_weights must be set.
+            It is generally used when multiple columns are used to calculate ratings and the columns need to be weighted when converting it to a performance_value.
+            Even if only 1  feature is used but auto_create_pre_transformers is used,
+             then it must still be created in order for auto_create_pre_transformers to know which columns needs to be transformed.
+
+
         """
+
+        if rating_generators is None:
+            rating_generators = OpponentAdjustedRatingGenerator()
+            logging.warning(
+                "rating generator not set. Uses OpponentAdjustedRatingGenerator. To run match_predictor without rating_generator set rating_generator to []")
+
         self.rating_generators = rating_generators if isinstance(rating_generators, list) else [rating_generators]
         self.column_names = column_names if isinstance(column_names, list) else [column_names for _ in
                                                                                  self.rating_generators]
+        if len(rating_generators) == 0:
+            if isinstance(column_names, list):
+                self.column_names = column_names
+            else:
+                self.column_names = [column_names]
+
+        self.auto_create_pre_transformers = auto_create_pre_transformers
+        if self.auto_create_pre_transformers and not column_weights:
+            raise ValueError("column_weights must be set if auto_create_pre_transformers is True")
+
+        if not self.auto_create_pre_transformers and column_weights:
+            logging.warning(
+                "column_weights is set but auto_create_pre_transformers is False. column_weights will be ignored")
+
+        self.column_weights = column_weights
+
         self.pre_rating_transformers = pre_rating_transformers or []
         self.post_rating_transformers = post_rating_transformers or []
 
         self.predictor = predictor
+
         if self.predictor is None:
             features = []
 
@@ -55,7 +92,6 @@ class MatchPredictor():
                 features += c.features_created
 
             logging.warning(f"predictor is not set. Will use {features} as features")
-
 
             self.predictor = SKLearnWrapper(
                 features=features,
@@ -71,6 +107,9 @@ class MatchPredictor():
         if self.predictor.target not in df.columns:
             raise ValueError(
                 f"Target {self.predictor.target} not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
+
+        if self.auto_create_pre_transformers:
+            self.pre_rating_transformers = create_pre_transformers(df=df, column_weights=self.column_weights)
 
         for pre_rating_transformer in self.pre_rating_transformers:
             df = pre_rating_transformer.transform(df)
