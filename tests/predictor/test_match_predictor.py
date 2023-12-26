@@ -13,7 +13,7 @@ def test_match_predictor_auto_pre_transformers():
         "team_id": [1, 1, 2, 2, 3, 3],
         "start_date": [1, 1, 2, 2, 3, 3],
         'deaths': [1, 1, 1, 2, 2, 2],
-        "kills": [0.2, 0.3, 0.4, 0.5, 0.6, 0.2],
+        "kills": [0.2, 0.3, 0.4, 0.5, 2, 0.2],
         "__target": [1, 0, 1, 0, 1, 0],
     })
 

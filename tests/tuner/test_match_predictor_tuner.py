@@ -3,7 +3,7 @@ import copy
 import mock
 import pandas as pd
 from skbase.testing.utils.deep_equals import deep_equals
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import OpponentAdjustedRatingGenerator
@@ -18,8 +18,6 @@ def test_match_predictor_tuner():
     Tests to ensure no mutation of the original match_predictor_factory
     When rating-generator-tuning is used, best rating-generator should not be the same as the one in the factory
      (probability should be extremely low at least, likely less than one in 10000)
-
-
 
 
     """
@@ -40,7 +38,7 @@ def test_match_predictor_tuner():
 
     original_match_predictor_factory = copy.deepcopy(match_predictor_factory)
 
-    standard_scaler = SkLearnTransformerWrapper(transformer=StandardScaler(), features=["won"])
+    standard_scaler = SkLearnTransformerWrapper(transformer=MinMaxScaler(), features=["won"])
     pre_transformer_search_ranges = [
         (standard_scaler, []),
     ]
@@ -52,7 +50,7 @@ def test_match_predictor_tuner():
     )
 
     rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
-        team_rating_n_trials = 1,
+        team_rating_n_trials=1,
         start_rating_n_trials=0,
     )
 
@@ -92,8 +90,6 @@ def test_match_predictor_tuner():
 
 
 def test_match_predictor_uses_rating_generator_from_factory_if_no_rating_generator_tuning():
-
-
     match_predictor_factory = MatchPredictorFactory(
         column_names=ColumnNames(
             match_id="game_id",
@@ -108,7 +104,7 @@ def test_match_predictor_uses_rating_generator_from_factory_if_no_rating_generat
     scorer_mock = mock.Mock()
     scorer_mock.score.side_effect = [0.5, 0.2, 0.3]
 
-    standard_scaler = SkLearnTransformerWrapper(transformer=StandardScaler(), features=["won"])
+    standard_scaler = SkLearnTransformerWrapper(transformer=MinMaxScaler(), features=["won"])
     pre_transformer_search_ranges = [
         (standard_scaler, []),
     ]
@@ -148,5 +144,3 @@ def test_match_predictor_uses_rating_generator_from_factory_if_no_rating_generat
 
     best_match_predictor = match_predictor_tuner.tune(df=df)
     deep_equals(best_match_predictor.rating_generators, original_match_predictor_factory.rating_generators)
-
-

@@ -7,9 +7,8 @@ from player_performance_ratings.transformation import ColumnWeight, DiminishingV
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 
-def create_pre_transformers(df: pd.DataFrame, column_weights: list[ColumnWeight]) -> list[
+def auto_create_pre_transformers(df: pd.DataFrame, column_weights: list[ColumnWeight]) -> list[
     BaseTransformer]:
-
     """
     Creates a list of transformers that ensure the performance column is generated in a way that makes sense for the rating model.
     Ensures columns aren't too skewed, scales them to similar ranges, ensure values are between 0 and 1,
@@ -17,14 +16,26 @@ def create_pre_transformers(df: pd.DataFrame, column_weights: list[ColumnWeight]
     """
     steps = []
 
-    feature_names =[]
+    feature_names = []
     for column_weight in column_weights:
 
         feature = column_weight.name
         feature_names.append(feature)
         skewness = df[feature].skew()
         if skewness > 0.1:
-            diminishing_value_transformer = DiminishingValueTransformer(features=[feature])
+            if skewness > 0.5 and skewness < 1:
+                excessive_multiplier = 0.7
+                quantile_cutoff = 0.9
+            elif skewness > 1:
+                excessive_multiplier = 0.5
+                quantile_cutoff = 0.85
+            else:
+                excessive_multiplier = 0.8
+                quantile_cutoff = 0.95
+
+            diminishing_value_transformer = DiminishingValueTransformer(features=[feature],
+                                                                        excessive_multiplier=excessive_multiplier,
+                                                                        quantile_cutoff=quantile_cutoff)
             steps.append(diminishing_value_transformer)
         elif skewness < -0.1:
             diminishing_value_transformer = DiminishingValueTransformer(features=[feature], reverse=True)

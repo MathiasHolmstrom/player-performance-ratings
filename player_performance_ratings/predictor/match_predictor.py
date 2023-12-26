@@ -15,7 +15,7 @@ from player_performance_ratings.ratings.match_generator import convert_df_to_mat
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator, \
     OpponentAdjustedRatingGenerator
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
-from player_performance_ratings.transformation.factory import create_pre_transformers
+from player_performance_ratings.transformation.factory import auto_create_pre_transformers
 
 
 class MatchPredictor():
@@ -109,7 +109,7 @@ class MatchPredictor():
                 f"Target {self.predictor.target} not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
 
         if self.auto_create_pre_transformers:
-            self.pre_rating_transformers = create_pre_transformers(df=df, column_weights=self.column_weights)
+            self.pre_rating_transformers = auto_create_pre_transformers(df=df, column_weights=self.column_weights)
 
         for pre_rating_transformer in self.pre_rating_transformers:
             df = pre_rating_transformer.transform(df)

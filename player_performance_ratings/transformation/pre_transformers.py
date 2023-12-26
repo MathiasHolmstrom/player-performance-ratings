@@ -151,7 +151,7 @@ class DiminishingValueTransformer(BaseTransformer):
     def __init__(self,
                  features: List[str],
                  cutoff_value: Optional[float] = None,
-                 quantile_cutoff: float = 0.95,
+                 quantile_cutoff: float = 0.93,
                  excessive_multiplier: float = 0.8,
                  reverse: bool = False,
                  ):
