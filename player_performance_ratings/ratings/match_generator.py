@@ -55,7 +55,7 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
             column_names.team_id, column_names.player_id])
 
     if not df.equals(df_sorted):
-        raise ValueError("df needs to be sorted by date, game_id, team_id in ascending order")
+        raise ValueError("df needs to be sorted by date, game_id, team_id, player_id in ascending order")
 
     col_names = column_names
     df[col_names.start_date] = pd.to_datetime(df[col_names.start_date], format='%Y-%m-%d %H:%M:%S')

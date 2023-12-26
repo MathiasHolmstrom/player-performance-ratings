@@ -28,7 +28,7 @@ class MatchPredictor():
                  predictor: [Optional[BaseMLWrapper]] = None,
                  train_split_date: Optional[pendulum.datetime] = None,
                  auto_create_pre_transformers: bool = False,
-                 column_weights: Optional[list[ColumnWeight]] = None
+                 column_weights: Optional[Union[list[list[ColumnWeight]], list[ColumnWeight]]] = None
                  ):
 
         """
@@ -54,8 +54,9 @@ class MatchPredictor():
 
         """
 
+
         if rating_generators is None:
-            rating_generators = OpponentAdjustedRatingGenerator()
+            rating_generators = [OpponentAdjustedRatingGenerator()]
             logging.warning(
                 "rating generator not set. Uses OpponentAdjustedRatingGenerator. To run match_predictor without rating_generator set rating_generator to []")
 
@@ -72,11 +73,15 @@ class MatchPredictor():
         if self.auto_create_pre_transformers and not column_weights:
             raise ValueError("column_weights must be set if auto_create_pre_transformers is True")
 
+        self.column_weights = column_weights
+        if self.column_weights and isinstance(self.column_weights[0], ColumnWeight):
+            self.column_weights = [self.column_weights]
+
         if not self.auto_create_pre_transformers and column_weights:
             logging.warning(
                 "column_weights is set but auto_create_pre_transformers is False. column_weights will be ignored")
 
-        self.column_weights = column_weights
+
 
         self.pre_rating_transformers = pre_rating_transformers or []
         self.post_rating_transformers = post_rating_transformers or []
@@ -109,7 +114,9 @@ class MatchPredictor():
                 f"Target {self.predictor.target} not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
 
         if self.auto_create_pre_transformers:
-            self.pre_rating_transformers = auto_create_pre_transformers(df=df, column_weights=self.column_weights)
+
+            self.pre_rating_transformers = auto_create_pre_transformers(df=df, column_weights=self.column_weights,
+                                                                        column_names=self.column_names)
 
         for pre_rating_transformer in self.pre_rating_transformers:
             df = pre_rating_transformer.transform(df)
