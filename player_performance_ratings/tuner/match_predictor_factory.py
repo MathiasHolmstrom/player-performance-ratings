@@ -13,14 +13,14 @@ class MatchPredictorFactory():
 
     def __init__(self,
                  column_names: Union[ColumnNames, list[ColumnNames]],
-                 rating_generators: Union[RatingGenerator, list[RatingGenerator]],
+                 rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  pre_transformers: Optional[List[BaseTransformer]] = None,
                  post_transformers: Optional[List[BaseTransformer]] = None,
                  predictor: BaseMLWrapper = None,
                  train_split_date: Optional[pendulum.datetime] = None
                  ):
 
-        self.rating_generators = rating_generators
+        self.rating_generators = rating_generators or []
         if isinstance(self.rating_generators, RatingGenerator):
             self.rating_generators = [self.rating_generators]
 
@@ -38,14 +38,17 @@ class MatchPredictorFactory():
     def create(self,
                pre_rating_transformers: Optional[List[BaseTransformer]] = None,
                rating_generators: Optional[list[RatingGenerator]] = None,
-               post_rating_transformers: Optional[List[BaseTransformer]] = None) -> MatchPredictor:
+               post_rating_transformers: Optional[List[BaseTransformer]] = None,
+               predictor: Optional[BaseMLWrapper] = None,
+               ) -> MatchPredictor:
 
         rating_generators = rating_generators if rating_generators is not None else self.rating_generators
         pre_rating_transformers = pre_rating_transformers if pre_rating_transformers is not None else self.pre_transformers
         post_rating_transformers = post_rating_transformers if post_rating_transformers is not None else self.post_transformers
+        predictor = predictor if predictor is not None else self.predictor
 
         return MatchPredictor(column_names=self.column_names, rating_generators=rating_generators,
                               pre_rating_transformers=pre_rating_transformers,
                               post_rating_transformers=post_rating_transformers,
-                              predictor=self.predictor,
+                              predictor=predictor,
                               train_split_date=self.train_split_date)

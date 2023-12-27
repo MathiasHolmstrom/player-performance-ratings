@@ -1,13 +1,20 @@
 import pickle
 
-from sklearn.preprocessing import StandardScaler
+import pandas as pd
 
+from player_performance_ratings.scorer import LogLossScorer
+from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+
+from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
+
+from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator
+
+from player_performance_ratings.transformation import SkLearnTransformerWrapper, ColumnsWeighter, MinMaxTransformer
+from sklearn.preprocessing import StandardScaler
 
 from player_performance_ratings.data_structures import ColumnNames
 
-from player_performance_ratings.ratings.enums import RatingColumnNames
-
-from player_performance_ratings.tuner import TransformerTuner
+from player_performance_ratings.tuner import TransformerTuner, MatchPredictorTuner
 from player_performance_ratings.tuner.utils import ParameterSearchRange
 
 column_names = ColumnNames(
@@ -18,61 +25,61 @@ column_names = ColumnNames(
     performance='performance',
     league='league'
 )
-df = load_lol_subsampled_data()
+df = pd.read_parquet("data/subsample_lol_data")
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
+
+df['__target'] = df['result']
 
 df = (
     df.loc[lambda x: x.position != 'team']
-    .assign(team_count=df.granularity('gameid')['teamname'].transform('nunique'))
+    .assign(team_count=df.groupby('gameid')['teamname'].transform('nunique'))
     .loc[lambda x: x.team_count == 2]
 )
 
-team_rating_generator = TeamRatingGenerator()
 rating_generator = OpponentAdjustedRatingGenerator()
-predictor = SKLearnClassifierWrapper(features=[RatingColumnNames.RATING_DIFFERENCE], target='result')
 
-player_search_ranges = [
+team_rating_search_ranges = [
     ParameterSearchRange(
-        name='certain_weight',
+        name='confidence_weight',
         type='uniform',
         low=0.7,
         high=0.95
     ),
     ParameterSearchRange(
-        name='certain_days_ago_multiplier',
+        name='confidence_days_ago_multiplier',
         type='uniform',
         low=0.02,
         high=.12,
     ),
     ParameterSearchRange(
-        name='max_days_ago',
+        name='confidence_max_days',
         type='uniform',
         low=40,
         high=150,
     ),
     ParameterSearchRange(
-        name='max_certain_sum',
+        name='confidence_max_sum',
         type='uniform',
-        low=20,
-        high=70,
+        low=60,
+        high=300,
     ),
     ParameterSearchRange(
-        name='certain_value_denom',
+        name='confidence_value_denom',
         type='uniform',
-        low=15,
-        high=50
-    ),
-    ParameterSearchRange(
-        name='reference_certain_sum_value',
-        type='uniform',
-        low=0.5,
-        high=5
+        low=50,
+        high=350
     ),
     ParameterSearchRange(
         name='rating_change_multiplier',
         type='uniform',
         low=30,
         high=100
+    ),
+    ParameterSearchRange(
+        name='min_rating_change_multiplier_ratio',
+        type='uniform',
+        low=0.02,
+        high=0.2,
     )
 ]
 
@@ -123,12 +130,6 @@ pre_transformer_search_ranges = [
         column_weigher_search_range),
 ]
 
-match_predictor = MatchPredictor(
-    column_names=column_names,
-    predictor=predictor,
-    pre_rating_transformers=pre_transformers,
-)
-
 start_rating_search_range = [
     ParameterSearchRange(
         name='team_weight',
@@ -150,26 +151,29 @@ start_rating_search_range = [
     )
 ]
 
-pre_transformer_tuner = TransformerTuner(match_predictor=match_predictor,
-                                            pre_transformer_search_ranges=pre_transformer_search_ranges,
-                                            n_trials=15
-                                            )
+pre_transformer_tuner = TransformerTuner(transformer_search_ranges=pre_transformer_search_ranges,
+                                         pre_or_post="pre_rating",
+                                         n_trials=15
+                                         )
 
-player_rating_tuner = PlayerRatingTuner(match_predictor=match_predictor,
-                                        search_ranges=player_search_ranges,
-                                        n_trials=20
-                                        )
+rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
+    team_rating_search_ranges=team_rating_search_ranges,
+    start_rating_search_ranges=start_rating_search_range,
+)
 
-start_rating_tuner = StartRatingTuner(column_names=column_names,
-                                      match_predictor=match_predictor,
-                                      n_trials=15,
-                                      search_ranges=start_rating_search_range)
+match_predictor_factory = MatchPredictorFactory(
+    column_names=column_names,
+    rating_generators=rating_generator,
+)
+
+scorer = LogLossScorer(pred_column="prob")
 
 tuner = MatchPredictorTuner(
     pre_transformer_tuner=pre_transformer_tuner,
-    team_rating_tuner=player_rating_tuner,
-    start_rating_tuner=start_rating_tuner,
+    rating_generator_tuners=rating_generator_tuner,
     fit_best=True,
+    match_predictor_factory=match_predictor_factory,
+    scorer=scorer
 )
 best_match_predictor = tuner.tune(df=df)
 pickle.dump(best_match_predictor, open("models/lol_match_predictor", 'wb'))

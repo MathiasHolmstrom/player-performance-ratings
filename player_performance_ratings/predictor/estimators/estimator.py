@@ -3,7 +3,6 @@ import warnings
 import pandas as pd
 from lightgbm import LGBMClassifier
 from pandas.errors import SettingWithCopyWarning
-from venn_abers import VennAbersCalibrator
 
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 
@@ -125,7 +124,7 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
         return grouped
 
 
-class SKLearnWrapper(BaseMLWrapper):
+class SklearnPredictor(BaseMLWrapper):
 
     def __init__(self,
                  features: list[str],

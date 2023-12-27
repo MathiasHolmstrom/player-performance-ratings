@@ -9,6 +9,7 @@ from player_performance_ratings.ratings.match_generator import convert_df_to_mat
 from player_performance_ratings.scorer import BaseScorer
 
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 from player_performance_ratings.tuner.rating_generator_tuner import RatingGeneratorTuner
 from player_performance_ratings.tuner.transformer_tuner import TransformerTuner
 
@@ -29,6 +30,7 @@ class MatchPredictorTuner():
                  pre_transformer_tuner: Optional[TransformerTuner] = None,
                  rating_generator_tuners: Optional[Union[list[RatingGeneratorTuner], RatingGeneratorTuner]] = None,
                  post_transformer_tuner: Optional[TransformerTuner] = None,
+                 predictor_tuner: Optional[PredictorTuner] = None,
                  fit_best: bool = True
                  ):
 
@@ -48,6 +50,9 @@ class MatchPredictorTuner():
         :param post_transformer_tuner:
             The tuner that tunes the hyperparameters of the post_transformers.
             If left none or as [], the post_transformers in the match_predictor_factory will be used.
+        :param predictor_tuner:
+            The tuner that tunes the hyperparameters of the predictor.
+
         :param fit_best: Whether to refit the match_predictor with the entire training use data using best hyperparameters
         """
 
@@ -56,6 +61,7 @@ class MatchPredictorTuner():
         self.pre_transformer_tuner = pre_transformer_tuner or []
         self.rating_generator_tuners = rating_generator_tuners or []
         self.post_transformer_tuner = post_transformer_tuner or []
+        self.predictor_tuner = predictor_tuner
         if isinstance(self.rating_generator_tuners, RatingGeneratorTuner):
             self.rating_generator_tuners = [self.rating_generator_tuners]
         self.fit_best = fit_best
@@ -98,11 +104,19 @@ class MatchPredictorTuner():
             for post_rating_transformer in best_post_transformers:
                 df = post_rating_transformer.transform(df)
 
+        if self.predictor_tuner:
+            logging.info("Tuning Predictor")
+            best_predictor = self.predictor_tuner.tune(df=df, matches=matches, scorer=self.scorer,
+                                                       match_predictor_factory=self.match_predictor_factory)
+        else:
+            best_predictor = self.match_predictor_factory.predictor
+
+
         best_match_predictor = MatchPredictor(column_names=column_names,
                                               rating_generators=best_rating_generators,
                                               pre_rating_transformers=best_pre_transformers,
                                               post_rating_transformers=best_post_transformers,
-                                              predictor=self.match_predictor_factory.predictor)
+                                              predictor=best_predictor)
         if self.fit_best:
             best_match_predictor.generate_historical(df=df, matches=matches, store_ratings=True)
 

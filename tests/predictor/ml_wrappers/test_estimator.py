@@ -5,7 +5,7 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 
 from player_performance_ratings.consts import PredictColumnNames
-from player_performance_ratings.predictor.estimators.estimator import SkLearnGameTeamPredictor, SKLearnWrapper
+from player_performance_ratings.predictor.estimators.estimator import SkLearnGameTeamPredictor, SklearnPredictor
 
 
 def test_sklearn_game_team_predictor_add_prediction():
@@ -129,7 +129,7 @@ def test_sklearn_game_team_predictor_regressor():
 def test_sklearn_wrapper_regressor():
     "should identify it's a regressor and train and predict works as intended"
 
-    predictor = SKLearnWrapper(
+    predictor = SklearnPredictor(
                                          features=['feature1'], model=LinearRegression())
 
     df = pd.DataFrame(

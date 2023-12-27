@@ -8,7 +8,7 @@ from player_performance_ratings.transformation import ColumnWeight
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
 
-from player_performance_ratings.predictor.estimators import SKLearnWrapper
+from player_performance_ratings.predictor.estimators import SklearnPredictor
 from player_performance_ratings.data_structures import ColumnNames, Match
 from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
@@ -102,7 +102,7 @@ class MatchPredictor():
 
             logging.warning(f"predictor is not set. Will use {features} as features")
 
-            self.predictor = SKLearnWrapper(
+            self.predictor = SklearnPredictor(
                 features=features,
                 target=PredictColumnNames.TARGET
             )

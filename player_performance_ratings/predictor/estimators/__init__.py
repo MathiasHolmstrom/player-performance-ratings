@@ -1,2 +1,2 @@
-from .estimator import SKLearnWrapper, SkLearnGameTeamPredictor
+from .estimator import SklearnPredictor, SkLearnGameTeamPredictor
 from .sklearn_models import SkLearnWrapper, OrdinalClassifier

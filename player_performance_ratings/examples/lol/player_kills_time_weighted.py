@@ -1,5 +1,5 @@
 from lightgbm import LGBMClassifier
-from player_performance_ratings.predictor.estimators import SKLearnWrapper
+from player_performance_ratings.predictor.estimators import SklearnPredictor
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
 from player_performance_ratings.examples.utils import load_lol_subsampled_data
@@ -46,7 +46,7 @@ time_weighed_rating_kills = BayesianTimeWeightedRating()
 match_predictor = MatchPredictor(
     rating_generators=[time_weighed_rating_kills_per_minute, time_weighed_rating_kills],
     column_names=[column_names_kpm, column_names_kills],
-    predictor=SKLearnWrapper(
+    predictor=SklearnPredictor(
         model=LGBMClassifier(),
         features=[
             RatingColumnNames.TIME_WEIGHTED_RATING + "0",

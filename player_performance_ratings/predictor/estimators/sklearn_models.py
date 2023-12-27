@@ -8,14 +8,11 @@ from sklearn.base import ClassifierMixin
 from sklearn.linear_model import LogisticRegression
 
 
-
-
 class SkLearnWrapper(BaseEstimator, ClassifierMixin):
 
     def __init__(self,
-                  model: Any,
+                 model: Any,
                  ):
-
         self.model = model
         self.classes_ = []
         super().__init__()

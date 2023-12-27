@@ -48,7 +48,6 @@ def test_transformer_tuner():
     match_predictor_factory = MatchPredictorFactory(
         rating_generators=rating_generators,
         column_names=column_names,
-        #   predictor = mock.Mock()
     )
 
     transformer_tuner = TransformerTuner(pre_or_post="pre_rating", transformer_search_ranges=pre_transformer_search_ranges, n_trials=2)
