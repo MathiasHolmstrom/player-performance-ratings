@@ -53,10 +53,9 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
         self.weight_column = weight_column
         self.game_id_colum = game_id_colum
         self.team_id_column = team_id_column
-        self.features = features
         self._target = target
         self.multiclassifier = multiclassifier
-        super().__init__(target=self._target, pred_column=pred_column, model=model or LogisticRegression())
+        super().__init__(target=self._target, features=features,pred_column=pred_column, model=model or LogisticRegression())
 
     def train(self, df: pd.DataFrame) -> None:
 
@@ -135,7 +134,6 @@ class SklearnPredictor(BaseMLWrapper):
                  column_names: Optional[ColumnNames] = None,
                  categorical_features: Optional[list[str]] = None
                  ):
-        self.features = features
         self._target = target
         self.multiclassifier = multiclassifier
         self.column_names = column_names
@@ -145,7 +143,7 @@ class SklearnPredictor(BaseMLWrapper):
             logging.warning(
                 "model is not set. Will use LGBMClassifier(max_depth=2, n_estimators=400, learning_rate=0.05)")
 
-        super().__init__(target=self._target, pred_column=pred_column,
+        super().__init__(target=self._target,features=features ,pred_column=pred_column,
                          model=model or LGBMClassifier(max_depth=2, n_estimators=300, learning_rate=0.05, verbose=-100))
 
     def train(self, df: pd.DataFrame) -> None:

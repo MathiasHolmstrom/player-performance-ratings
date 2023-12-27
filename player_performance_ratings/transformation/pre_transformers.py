@@ -27,7 +27,7 @@ class ColumnsWeighter(BaseTransformer):
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
-        df[self.weighted_column_name] = 0
+        df[f"__{self.weighted_column_name}"] = 0
 
         df['sum_cols_weights'] = 0
         for column_weight in self.column_weights:
@@ -36,7 +36,7 @@ class ColumnsWeighter(BaseTransformer):
             df.loc[df[column_weight.name].isna(), column_weight.name] = 0
             df['sum_cols_weights'] = df['sum_cols_weights'] + df[f'weight__{column_weight.name}']
 
-        drop_cols = ['sum_cols_weights']
+        drop_cols = ['sum_cols_weights', f"__{self.weighted_column_name}"]
         for column_weight in self.column_weights:
             df[f'weight__{column_weight.name}'] / df['sum_cols_weights']
             drop_cols.append(f'weight__{column_weight.name}')
@@ -44,9 +44,12 @@ class ColumnsWeighter(BaseTransformer):
         for column_weight in self.column_weights:
 
             if column_weight.lower_is_better:
-                df[self.weighted_column_name] += df[f'weight__{column_weight.name}'] * (1 - df[column_weight.name])
+                df[f"__{self.weighted_column_name}"] += df[f'weight__{column_weight.name}'] * (
+                            1 - df[column_weight.name])
             else:
-                df[self.weighted_column_name] += df[f'weight__{column_weight.name}'] * df[column_weight.name]
+                df[f"__{self.weighted_column_name}"] += df[f'weight__{column_weight.name}'] * df[column_weight.name]
+
+        df[self.weighted_column_name] = df[f"__{self.weighted_column_name}"]
         df = df.drop(columns=drop_cols)
         return df
 

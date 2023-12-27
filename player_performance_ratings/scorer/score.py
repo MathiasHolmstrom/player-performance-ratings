@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import  Optional
+from typing import Optional, Callable
 
 import numpy as np
 import pandas as pd
@@ -18,6 +18,17 @@ class BaseScorer(ABC):
     @abstractmethod
     def score(self, df: pd.DataFrame, classes_: Optional[list[str]] = None) -> float:
         pass
+
+
+class SklearnScorer(BaseScorer):
+
+    def __init__(self, pred_column: str, scorer_function: Callable, target: Optional[str] = PredictColumnNames.TARGET):
+        self.pred_column_name = pred_column
+        self.scorer_function = scorer_function
+        super().__init__(target=target, pred_column=pred_column)
+
+    def score(self, df: pd.DataFrame, classes_: Optional[list[str]] = None) -> float:
+        return self.scorer_function(df[self.target], df[self.pred_column_name])
 
 
 class LogLossScorer(BaseScorer):

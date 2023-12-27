@@ -54,7 +54,6 @@ class MatchPredictor():
 
         """
 
-
         if rating_generators is None:
             rating_generators = [OpponentAdjustedRatingGenerator()]
             logging.warning(
@@ -81,12 +80,10 @@ class MatchPredictor():
             logging.warning(
                 "column_weights is set but auto_create_pre_transformers is False. column_weights will be ignored")
 
-
-
         self.pre_rating_transformers = pre_rating_transformers or []
         if self.use_auto_pre_transformers:
             self.pre_rating_transformers = auto_create_pre_transformers(column_weights=self.column_weights,
-                                                                     column_names=self.column_names)
+                                                                        column_names=self.column_names)
 
         self.post_rating_transformers = post_rating_transformers or []
 
@@ -116,7 +113,6 @@ class MatchPredictor():
         if self.predictor.target not in df.columns:
             raise ValueError(
                 f"Target {self.predictor.target} not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
-
 
         for pre_rating_transformer in self.pre_rating_transformers:
             df = pre_rating_transformer.transform(df)
@@ -178,5 +174,7 @@ class MatchPredictor():
         return df
 
     @property
-    def classes_(self):
+    def classes_(self) -> Optional[list[str]]:
+        if 'classes_' not in dir(self.predictor.model):
+            return None
         return self.predictor.model.classes_

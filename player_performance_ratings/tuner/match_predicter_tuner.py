@@ -77,10 +77,8 @@ class MatchPredictorTuner():
             best_pre_transformers = self.pre_transformer_tuner.tune(df,
                                                                     match_predictor_factory=self.match_predictor_factory,
                                                                     scorer=self.scorer)
-            for pre_rating_transformer in best_pre_transformers:
-                df = pre_rating_transformer.transform(df)
-
-
+        for pre_rating_transformer in best_pre_transformers:
+            df = pre_rating_transformer.transform(df)
 
         best_rating_generators = copy.deepcopy(self.match_predictor_factory.rating_generators)
         for rating_idx, rating_generator_tuner in enumerate(self.rating_generator_tuners):

@@ -9,7 +9,7 @@ import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
-from player_performance_ratings.ratings import TeamRatingGenerator
+from player_performance_ratings.ratings import TeamRatingGenerator, RatingColumnNames
 from player_performance_ratings.ratings.opponent_adjusted_rating.start_rating_generator import StartRatingGenerator
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import OpponentAdjustedRatingGenerator, RatingGenerator
 from player_performance_ratings.scorer import BaseScorer
@@ -119,7 +119,13 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
              match_predictor_factory: MatchPredictorFactory,
              matches: list[Match]) -> OpponentAdjustedRatingGenerator:
 
-        best_rating_generator = copy.deepcopy(match_predictor_factory.rating_generators[rating_idx])
+        if match_predictor_factory.rating_generators:
+            best_rating_generator = copy.deepcopy(match_predictor_factory.rating_generators[rating_idx])
+        else:
+            potential_rating_features = [v for k, v in RatingColumnNames.__dict__.items() if isinstance(v, str)]
+            best_rating_generator = OpponentAdjustedRatingGenerator(
+                features_created=[f for f in match_predictor_factory.predictor.features if f in potential_rating_features]
+            )
 
         if self.team_rating_n_trials > 0:
             logging.info("Tuning Team Rating")
@@ -179,8 +185,15 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
 
             rating_g = copy.deepcopy(rating_generator)
             rating_g.team_rating_generator = team_rating_generator
+            if match_predictor_factory.rating_generators:
+                rating_generators = copy.deepcopy(match_predictor_factory.rating_generators)
+            else:
+                potential_rating_features = [v for k, v in RatingColumnNames.__dict__.items() if isinstance(v, str)]
+                rating_generators = [OpponentAdjustedRatingGenerator(
+                    features_created=[f for f in match_predictor_factory.predictor.features if
+                                      f in potential_rating_features]
+                )]
 
-            rating_generators = copy.deepcopy(match_predictor_factory.rating_generators)
             rating_generators[rating_index] = rating_g
             match_predictor = match_predictor_factory.create(
                 rating_generators=rating_generators,

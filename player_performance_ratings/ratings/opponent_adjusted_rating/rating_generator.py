@@ -49,8 +49,11 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
 
         """
 
-        :param team_rating_generator: The class contains the logic for generating and updating team ratings and contains many parameters that can be tuned.
-        :param features_names_created: If called by match_predictor, feature_names_created determines which features will be used for prediction.
+        :param team_rating_generator:
+            The class contains the logic for generating and updating team ratings and contains many parameters that can be tuned.
+        :param features_names_created:
+            If called by match_predictor, feature_names_created determines which features will be used for prediction.
+            If other features such as player_rating_difference is used, it must be added to this list.
         """
         self.team_rating_generator = team_rating_generator
         self._features_created = features_created or [RatingColumnNames.RATING_DIFFERENCE]
@@ -87,7 +90,6 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
             logging.warning(
                 "Column names is passed but df not - this match-ratings will not be stored in the class object")
 
-
         pre_match_player_rating_values = []
         pre_match_team_rating_values = []
         pre_match_opponent_rating_values = []
@@ -96,6 +98,7 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
         player_rating_changes = []
         player_leagues = []
         player_predicted_performances = []
+        player_rating_differences = []
         performances = []
 
         team_rating_changes = []
@@ -120,6 +123,8 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
                     team_opponent_leagues.append(match_team_rating_changes[-team_idx + 1].league)
                     match_ids.append(match.id)
                     performances.append(player_rating_change.performance)
+                    player_rating_differences.append(
+                        player_rating_change.pre_match_rating_value - opponent_team.pre_match_rating_value)
 
         rating_differences = np.array(pre_match_team_rating_values) - (
             pre_match_opponent_rating_values)
@@ -143,6 +148,7 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
                 })
 
         return {
+            RatingColumnNames.PLAYER_RATING_DIFFERENCE: player_rating_differences,
             RatingColumnNames.RATING_DIFFERENCE: rating_differences,
             RatingColumnNames.PLAYER_LEAGUE: player_leagues,
             RatingColumnNames.OPPONENT_LEAGUE: team_opponent_leagues,

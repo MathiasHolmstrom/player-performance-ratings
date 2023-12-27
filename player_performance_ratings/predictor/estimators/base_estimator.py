@@ -6,8 +6,9 @@ import pandas as pd
 
 class BaseMLWrapper(ABC):
 
-    def __init__(self, model, target: str, pred_column: Optional[str] = "prob"):
+    def __init__(self, model, features: list[str] ,target: str, pred_column: Optional[str] = "prob"):
         self.model = model
+        self.features = features
         self._target = target
         self._pred_column = pred_column
 
@@ -28,7 +29,9 @@ class BaseMLWrapper(ABC):
         return self._target
 
     @property
-    def classes_(self) -> list[str]:
+    def classes_(self) -> Optional[list[str]]:
+        if 'classes_' not in dir(self.model):
+            return None
         return self.model.classes_
 
     def set_target(self, new_target_name: str):

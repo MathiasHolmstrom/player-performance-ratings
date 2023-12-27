@@ -40,7 +40,8 @@ def add_params_from_search_range(trial: BaseTrial, parameter_search_range: list[
 
 
 def create_pre_rating_search_range_for_auto(feature_names: Union[list[str], list[list[str]]],
-                                            column_names: list[ColumnNames], lower_is_better_features: Optional[list[str]] = None) -> list[
+                                            column_names: list[ColumnNames],
+                                            lower_is_better_features: Optional[list[str]] = None) -> list[
     Tuple[BaseTransformer, list[ParameterSearchRange]]]:
     lower_is_better_features = lower_is_better_features or []
 
@@ -92,6 +93,55 @@ def create_pre_rating_search_range_for_auto(feature_names: Union[list[str], list
                 )
             )
 
-        pre_transformer_search_ranges.append((ColumnsWeighter(column_weights=None, weighted_column_name=column_name.performance), column_weighter_search_range))
+        pre_transformer_search_ranges.append((ColumnsWeighter(column_weights=None,
+                                                              weighted_column_name=column_name.performance),
+                                              column_weighter_search_range))
 
     return pre_transformer_search_ranges
+
+
+def get_default_team_rating_search_range() -> list[ParameterSearchRange]:
+    return [
+        ParameterSearchRange(
+            name='confidence_weight',
+            type='uniform',
+            low=0.7,
+            high=0.95
+        ),
+        ParameterSearchRange(
+            name='confidence_days_ago_multiplier',
+            type='uniform',
+            low=0.02,
+            high=.12,
+        ),
+        ParameterSearchRange(
+            name='confidence_max_days',
+            type='uniform',
+            low=40,
+            high=150,
+        ),
+        ParameterSearchRange(
+            name='confidence_max_sum',
+            type='uniform',
+            low=60,
+            high=300,
+        ),
+        ParameterSearchRange(
+            name='confidence_value_denom',
+            type='uniform',
+            low=50,
+            high=350
+        ),
+        ParameterSearchRange(
+            name='rating_change_multiplier',
+            type='uniform',
+            low=30,
+            high=100
+        ),
+        ParameterSearchRange(
+            name='min_rating_change_multiplier_ratio',
+            type='uniform',
+            low=0.02,
+            high=0.2,
+        )
+    ]

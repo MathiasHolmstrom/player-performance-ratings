@@ -61,6 +61,9 @@ class PredictorTuner():
         other_predictor_params = list(
             inspect.signature(match_predictor_factory.predictor.__class__.__init__).parameters.keys())[1:]
 
+        if '_other_params' in match_predictor_factory.predictor.model.__dict__:
+            best_model_params.update(match_predictor_factory.predictor.model._other_params)
+
         other_predictor_params = {attr: getattr(match_predictor_factory.predictor, attr) for attr in
                                   other_predictor_params if attr not in ('model')}
 
