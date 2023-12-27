@@ -32,6 +32,8 @@ class MatchPredictorFactory():
         self.pre_transformers = pre_transformers or []
         self.post_transformers = post_transformers or []
         self.column_names = column_names
+        if isinstance(self.column_names, ColumnNames):
+            self.column_names = [self.column_names]
         self.predictor = predictor
         self.train_split_date = train_split_date
 
@@ -47,7 +49,8 @@ class MatchPredictorFactory():
         post_rating_transformers = post_rating_transformers if post_rating_transformers is not None else self.post_transformers
         predictor = predictor if predictor is not None else self.predictor
 
-        return MatchPredictor(column_names=self.column_names, rating_generators=rating_generators,
+        return MatchPredictor(column_names=self.column_names,
+                              rating_generators=rating_generators,
                               pre_rating_transformers=pre_rating_transformers,
                               post_rating_transformers=post_rating_transformers,
                               predictor=predictor,

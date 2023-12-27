@@ -293,7 +293,7 @@ class TeamRatingGenerator():
         self._league_rating_changes_count[league] += 1
 
         if self._league_rating_changes[league] > abs(self.league_rating_change_update_threshold):
-            for player_id in self.start_rating_generator.league_to_entity_ids[league]:
+            for player_id in self.start_rating_generator._league_to_entity_ids[league]:
                 mean_rating_change = self._league_rating_changes[league] / self._league_rating_changes_count[league]
                 self.player_ratings[
                     player_id].rating_value += mean_rating_change * self.league_rating_adjustor_multiplier

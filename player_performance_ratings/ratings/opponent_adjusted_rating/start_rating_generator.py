@@ -41,10 +41,10 @@ class StartRatingGenerator():
                 f"Hardcoded ratings are used. This will usually result in worse accuracy."
                 f"Although can come with computational benefits if there are many different players in the dataset")
 
-        self.league_to_last_day_number: Dict[str, List[Any]] = {}
-        self.league_to_entity_ids: Dict[str, List[str]] = {}
-        self.league_player_ratings: dict[str, list] = {}
-        self.entity_to_league: Dict[str, str] = {}
+        self._league_to_last_day_number: Dict[str, List[Any]] = {}
+        self._league_to_entity_ids: Dict[str, List[str]] = {}
+        self._league_player_ratings: dict[str, list] = {}
+        self._entity_to_league: Dict[str, str] = {}
 
     def generate_rating_value(self,
                               day_number: int,
@@ -59,12 +59,12 @@ class StartRatingGenerator():
         if league not in self.league_ratings:
             self.league_ratings[league] = DEFAULT_START_RATING
 
-        if league not in self.league_to_entity_ids:
-            self.league_to_entity_ids[league] = []
-            self.league_to_last_day_number[league] = []
+        if league not in self._league_to_entity_ids:
+            self._league_to_entity_ids[league] = []
+            self._league_to_last_day_number[league] = []
 
-        if league not in self.league_player_ratings:
-            self.league_player_ratings[league] = []
+        if league not in self._league_player_ratings:
+            self._league_player_ratings[league] = []
 
         existing_team_rating = None
         if self.team_weight > 0:
@@ -110,11 +110,11 @@ class StartRatingGenerator():
                                   ) -> List[float]:
         entity_ratings: List[float] = []
 
-        for index, last_day_number in enumerate(self.league_to_last_day_number[league]):
+        for index, last_day_number in enumerate(self._league_to_last_day_number[league]):
             days_ago = match_day_number - last_day_number
 
             if days_ago <= self.max_days_ago_league_entities:
-                entity_ratings.append(self.league_player_ratings[
+                entity_ratings.append(self._league_player_ratings[
                                           league][index])
 
         return entity_ratings
@@ -129,28 +129,32 @@ class StartRatingGenerator():
         day_number = rating_change.day_number
         rating_value = rating_change.pre_match_rating_value + rating_change.rating_change_value
 
-        league_data = self.league_player_ratings.setdefault(league, [])
-        league_entity_ids = self.league_to_entity_ids.setdefault(league, [])
-        league_last_day_numbers = self.league_to_last_day_number.setdefault(league, [])
+        league_data = self._league_player_ratings.setdefault(league, [])
+        league_entity_ids = self._league_to_entity_ids.setdefault(league, [])
+        league_last_day_numbers = self._league_to_last_day_number.setdefault(league, [])
 
         if id not in league_entity_ids:
             league_data.append(rating_value)
             league_entity_ids.append(id)
             league_last_day_numbers.append(day_number)
-            self.entity_to_league[id] = league
+            self._entity_to_league[id] = league
         else:
 
             index = league_entity_ids.index(id)
             league_last_day_numbers[index] = day_number
             league_data[index] = rating_value
 
-        current_entity_league = self.entity_to_league.get(id, league)
+        current_entity_league = self._entity_to_league.get(id, league)
         if league != current_entity_league:
-            entity_index = self.league_to_entity_ids[current_entity_league].index(id)
+            entity_index = self._league_to_entity_ids[current_entity_league].index(id)
 
-            for data_structure in (self.league_player_ratings[current_entity_league],
-                                   self.league_to_last_day_number[current_entity_league],
-                                   self.league_to_entity_ids[current_entity_league]):
+            for data_structure in (self._league_player_ratings[current_entity_league],
+                                   self._league_to_last_day_number[current_entity_league],
+                                   self._league_to_entity_ids[current_entity_league]):
                 del data_structure[entity_index]
 
-            self.entity_to_league[id] = league
+            self._entity_to_league[id] = league
+
+    @property
+    def league_player_ratings(self) -> dict[str, list]:
+        return self._league_player_ratings

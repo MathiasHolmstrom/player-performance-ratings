@@ -160,7 +160,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                 inspect.signature(rating_generator.team_rating_generator.__class__.__init__).parameters.keys())[1:]
 
             params = {attr: getattr(rating_generator.team_rating_generator, attr) for attr in
-                      team_rating_generator_params if attr not in ('performance_predictor')}
+                      team_rating_generator_params if attr not in ('performance_predictor', 'start_rating_generator')}
             params = add_params_from_search_range(params=params,
                                                   trial=trial,
                                                   parameter_search_range=self.team_rating_search_ranges)
@@ -179,6 +179,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
 
             rating_g = copy.deepcopy(rating_generator)
             rating_g.team_rating_generator = team_rating_generator
+
             rating_generators = copy.deepcopy(match_predictor_factory.rating_generators)
             rating_generators[rating_index] = rating_g
             match_predictor = match_predictor_factory.create(
@@ -202,7 +203,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
             inspect.signature(rating_generator.team_rating_generator.__class__.__init__).parameters.keys())[1:]
         other_params = {attr: getattr(rating_generator.team_rating_generator, attr) for attr in
                         team_rating_generator_params
-                        if attr not in ('performance_predictor')}
+                        if attr not in ('performance_predictor', 'start_rating_generator')}
         for param in other_params:
             if param not in best_params:
                 best_params[param] = other_params[param]

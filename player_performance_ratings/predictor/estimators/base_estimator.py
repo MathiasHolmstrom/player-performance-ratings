@@ -31,8 +31,8 @@ class BaseMLWrapper(ABC):
     def classes_(self) -> list[str]:
         return self.model.classes_
 
-
     def set_target(self, new_target_name: str):
         self._target = new_target_name
+
 
 

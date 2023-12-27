@@ -1,5 +1,6 @@
 import copy
 import inspect
+import logging
 from typing import Optional,  Tuple, Union, Literal
 
 import optuna
@@ -15,7 +16,8 @@ from player_performance_ratings.transformation.base_transformer import BaseTrans
 
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 
-from player_performance_ratings.tuner.utils import add_params_from_search_range, ParameterSearchRange
+from player_performance_ratings.tuner.utils import add_params_from_search_range, ParameterSearchRange, \
+    create_pre_rating_search_range_for_auto
 
 RC = RatingColumnNames
 
@@ -48,12 +50,21 @@ def add_hyperparams_to_common_transformers(object: object, params: dict[str, Uni
 class TransformerTuner:
 
     def __init__(self,
-                 transformer_search_ranges: list[Tuple[BaseTransformer, list[ParameterSearchRange]]],
                  pre_or_post: Literal["pre_rating", "post_rating"],
+                 transformer_search_ranges: Optional[list[Tuple[BaseTransformer, list[ParameterSearchRange]]]] = None,
+                 feature_names: Optional[Union[list[str], list[list[str]]]] = None,
+                 lower_is_better_features: Optional[list[str]] = None,
                  n_trials: int = 30,
                  ):
+
+        if transformer_search_ranges is None and feature_names is None:
+            raise ValueError("Either transformer_search_ranges or feature_names must be provided")
+
         self.transformer_search_ranges = transformer_search_ranges
         self.pre_or_post = pre_or_post
+        self.feature_names = feature_names
+        self.lower_is_better_features = lower_is_better_features
+
         self.n_trials = n_trials
         self._scores = []
 
@@ -63,6 +74,15 @@ class TransformerTuner:
              pre_rating_transformers: Optional[list[BaseTransformer]] = None,
              rating_generators: Optional[list[RatingGenerator]] = None,
              ) -> list[BaseTransformer]:
+
+        if self.transformer_search_ranges is None:
+            logging.info("Creating transformer search ranges")
+            self.transformer_search_ranges = create_pre_rating_search_range_for_auto(
+                feature_names=self.feature_names,
+                column_names=match_predictor_factory.column_names,
+                lower_is_better_features=self.lower_is_better_features
+            )
+
 
         match_predictor_factory = copy.deepcopy(match_predictor_factory)
 

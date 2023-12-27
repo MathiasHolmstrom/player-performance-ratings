@@ -17,12 +17,10 @@ logging.basicConfig(level=logging.INFO)
 
 
 class MatchPredictorTuner():
-
     """
     Given a search range, it will identify the best combination of pre_transformers, rating_generators and post_transformers.
     Using optuna, it will tune the hyperparameters of each transformer.
     """
-
 
     def __init__(self,
                  scorer: BaseScorer,
@@ -51,7 +49,7 @@ class MatchPredictorTuner():
             The tuner that tunes the hyperparameters of the post_transformers.
             If left none or as [], the post_transformers in the match_predictor_factory will be used.
         :param predictor_tuner:
-            The tuner that tunes the hyperparameters of the predictor.
+            The tuner that tunes the hyperparameters of the predictor model.
 
         :param fit_best: Whether to refit the match_predictor with the entire training use data using best hyperparameters
         """
@@ -66,8 +64,8 @@ class MatchPredictorTuner():
             self.rating_generator_tuners = [self.rating_generator_tuners]
         self.fit_best = fit_best
 
-        if not self.pre_transformer_tuner and not self.rating_generator_tuners:
-            raise ValueError("If no pre_transformer_tuner is provided, rating_generator_tuners must be provided")
+        if not self.pre_transformer_tuner and not self.rating_generator_tuners and not self.post_transformer_tuner:
+            raise ValueError("No tuning has been provided in config")
 
     def tune(self, df: pd.DataFrame) -> MatchPredictor:
 
@@ -83,10 +81,10 @@ class MatchPredictorTuner():
                 df = pre_rating_transformer.transform(df)
 
 
-        matches = convert_df_to_matches(df=df, column_names=column_names)
 
         best_rating_generators = copy.deepcopy(self.match_predictor_factory.rating_generators)
         for rating_idx, rating_generator_tuner in enumerate(self.rating_generator_tuners):
+            matches = convert_df_to_matches(df=df, column_names=column_names[rating_idx])
             tuned_rating_generator = rating_generator_tuner.tune(df=df, matches=matches, rating_idx=rating_idx,
                                                                  scorer=self.scorer,
                                                                  match_predictor_factory=self.match_predictor_factory)
@@ -110,7 +108,6 @@ class MatchPredictorTuner():
                                                        match_predictor_factory=self.match_predictor_factory)
         else:
             best_predictor = self.match_predictor_factory.predictor
-
 
         best_match_predictor = MatchPredictor(column_names=column_names,
                                               rating_generators=best_rating_generators,

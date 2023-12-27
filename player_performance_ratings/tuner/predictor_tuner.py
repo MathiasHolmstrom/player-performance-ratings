@@ -32,7 +32,9 @@ class PredictorTuner():
             predictor = copy.deepcopy(match_predictor_factory.predictor)
             param_names = list(
                 inspect.signature(predictor.model.__class__.__init__).parameters.keys())[1:]
-            params = {attr: getattr(predictor.model, attr) for attr in param_names}
+            params = {attr: getattr(predictor.model, attr) for attr in param_names if attr != 'kwargs'}
+            if '_other_params' in predictor.model.__dict__:
+                params.update(predictor.model._other_params)
             params = add_params_from_search_range(params=params,
                                                   trial=trial,
                                                   parameter_search_range=self.search_ranges)
@@ -60,7 +62,7 @@ class PredictorTuner():
             inspect.signature(match_predictor_factory.predictor.__class__.__init__).parameters.keys())[1:]
 
         other_predictor_params = {attr: getattr(match_predictor_factory.predictor, attr) for attr in
-                  other_predictor_params if attr not in ('model')}
+                                  other_predictor_params if attr not in ('model')}
 
         predictor_class = match_predictor_factory.predictor.__class__
         model_class = match_predictor_factory.predictor.model.__class__

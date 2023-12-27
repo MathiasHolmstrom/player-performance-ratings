@@ -1,13 +1,16 @@
 import pickle
 
 import pandas as pd
+from lightgbm import LGBMClassifier
 
+from player_performance_ratings.predictor.estimators import SklearnPredictor
 from player_performance_ratings.scorer import LogLossScorer
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 
-from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator, RatingColumnNames
 
 from player_performance_ratings.transformation import SkLearnTransformerWrapper, ColumnsWeighter, MinMaxTransformer
 from sklearn.preprocessing import StandardScaler
@@ -122,13 +125,6 @@ features = ["damagetochampions", "result",
             "kills", "deaths"]
 standard_scaler = SkLearnTransformerWrapper(transformer=StandardScaler(), features=features)
 
-pre_transformer_search_ranges = [
-    (standard_scaler, []),
-    (MinMaxTransformer(features=features), []),
-    (
-        ColumnsWeighter(weighted_column_name=column_names.performance, column_weights=[]),
-        column_weigher_search_range),
-]
 
 start_rating_search_range = [
     ParameterSearchRange(
@@ -151,9 +147,10 @@ start_rating_search_range = [
     )
 ]
 
-pre_transformer_tuner = TransformerTuner(transformer_search_ranges=pre_transformer_search_ranges,
+pre_transformer_tuner = TransformerTuner(feature_names=["damagetochampions", "result", "kills", "deaths"],
+                                         lower_is_better_features=["deaths"],
                                          pre_or_post="pre_rating",
-                                         n_trials=15
+                                         n_trials=20
                                          )
 
 rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
@@ -161,9 +158,48 @@ rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
     start_rating_search_ranges=start_rating_search_range,
 )
 
+predictor_tuner = PredictorTuner(
+    search_ranges=[
+        ParameterSearchRange(
+            name='n_estimators',
+            type='int',
+            low=50,
+            high=250,
+        ),
+        ParameterSearchRange(
+            name='num_leaves',
+            type='int',
+            low=10,
+            high=100,
+        ),
+        ParameterSearchRange(
+            name='max_depth',
+            type='int',
+            low=2,
+            high=7,
+        ),
+        ParameterSearchRange(
+            name='min_child_samples',
+            type='int',
+            low=10,
+            high=100,
+        ),
+        ParameterSearchRange(
+            name='reg_alpha',
+            type='uniform',
+            low=0,
+            high=5,
+        ),
+    ],
+)
+
 match_predictor_factory = MatchPredictorFactory(
     column_names=column_names,
     rating_generators=rating_generator,
+    predictor=SklearnPredictor(
+        model=LGBMClassifier(verbose=-100),
+        features=[RatingColumnNames.RATING_DIFFERENCE],
+    )
 )
 
 scorer = LogLossScorer(pred_column="prob")
@@ -171,6 +207,7 @@ scorer = LogLossScorer(pred_column="prob")
 tuner = MatchPredictorTuner(
     pre_transformer_tuner=pre_transformer_tuner,
     rating_generator_tuners=rating_generator_tuner,
+    predictor_tuner=predictor_tuner,
     fit_best=True,
     match_predictor_factory=match_predictor_factory,
     scorer=scorer

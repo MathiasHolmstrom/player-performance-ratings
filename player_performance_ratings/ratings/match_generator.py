@@ -37,7 +37,7 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
     If not the  league of the match will be equal to the league of the current match
     """
 
-    if max(df[column_names.performance]) > 1 or min(df[column_names.performance]) < 0:
+    if max(df[column_names.performance]) > 1.001 or min(df[column_names.performance]) < -0.001:
         raise ValueError("performance column must be between 0 and 1")
 
     mean_performance = df[column_names.performance].mean()
