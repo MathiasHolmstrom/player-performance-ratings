@@ -46,7 +46,7 @@ def test_transformer_tuner():
         team_id="team_id",
         player_id="player_id",
         start_date="start_date",
-        performance="performance"
+        performance="kills"
     )
 
     match_predictor_factory = MatchPredictorFactory(
@@ -117,7 +117,7 @@ def test_transformer_tuner_regressor(estimator):
         team_id="team_id",
         player_id="player_id",
         start_date="start_date",
-        performance="performance"
+        performance="kills"
     )
 
     match_predictor_factory = MatchPredictorFactory(
@@ -146,6 +146,7 @@ def test_transformer_tuner_regressor(estimator):
 
     scorer = mock.Mock()
     scorer.score.side_effect = [0.5, 0.3]
+
 
     tuned_model = transformer_tuner.tune(match_predictor_factory=copy.deepcopy(match_predictor_factory),
                                          df=df, scorer=scorer)

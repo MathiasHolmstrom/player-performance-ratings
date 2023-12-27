@@ -1,8 +1,11 @@
+import pandas as pd
 from lightgbm import LGBMClassifier
+from player_performance_ratings.transformation import ColumnWeight
+
 from player_performance_ratings.predictor.estimators import SklearnPredictor
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
-from player_performance_ratings.examples.utils import load_lol_subsampled_data
+
 from player_performance_ratings.predictor import MatchPredictor
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.time_weight_ratings import BayesianTimeWeightedRating
@@ -28,15 +31,16 @@ column_names_kills = ColumnNames(
     position='position'
 )
 
-df = load_lol_subsampled_data()
+df = pd.read_parquet("data/subsample_lol_data")
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 df['__target'] = df['kills']
+df["__target"] = df["__target"].clip(0, 8)
 
 df['kills_per_minute'] = df['kills'] / df['gamelength'] * 60
 
 df = (
     df.loc[lambda x: x.position != 'team']
-    .assign(team_count=df.granularity('gameid')['teamname'].transform('nunique'))
+    .assign(team_count=df.groupby('gameid')['teamname'].transform('nunique'))
     .loc[lambda x: x.team_count == 2]
 )
 
@@ -46,8 +50,10 @@ time_weighed_rating_kills = BayesianTimeWeightedRating()
 match_predictor = MatchPredictor(
     rating_generators=[time_weighed_rating_kills_per_minute, time_weighed_rating_kills],
     column_names=[column_names_kpm, column_names_kills],
+    use_auto_pre_transformers=True,
+    column_weights=[[ColumnWeight(name='kills_per_minute', weight=1)], [ColumnWeight(name='kills', weight=1)]],
     predictor=SklearnPredictor(
-        model=LGBMClassifier(),
+        model=LGBMClassifier(verbose=-100),
         features=[
             RatingColumnNames.TIME_WEIGHTED_RATING + "0",
             RatingColumnNames.TIME_WEIGHTED_RATING + "1",
@@ -55,16 +61,18 @@ match_predictor = MatchPredictor(
             RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO + "1",
             RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE + "0",
             RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE + "1",
-                  column_names_kills.position
+            "position"
         ],
         target=PredictColumnNames.TARGET,
+        categorical_features=["position"]
     )
 )
 
 df_predictions = match_predictor.generate_historical(df=df)
 
 for idx, kills in enumerate(match_predictor.predictor.model.classes_):
-    print(df_predictions.iloc[500]['playername'], kills, df_predictions.iloc[500][match_predictor.predictor.pred_column][idx])
+    print(df_predictions.iloc[500]['playername'], kills,
+          df_predictions.iloc[500][match_predictor.predictor.pred_column][idx])
 
 print(match_predictor.predictor.model.feature_importances_)
 
@@ -73,4 +81,3 @@ scorer = OrdinalLossScorer(
 )
 
 print(scorer.score(df_predictions, classes_=match_predictor.predictor.model.classes_))
-

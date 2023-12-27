@@ -88,8 +88,8 @@ def test_auto_create_pre_transformers_with_position():
     )])
 
     expected_pre_transformers = [
-        SymmetricDistributionTransformer(features=["kills", "deaths"], granularity=["position"]),
         NetOverPredictedTransformer(features=["kills", "deaths"], granularity=["position"]),
+        SymmetricDistributionTransformer(features=["kills", "deaths"], granularity=["position"]),
         SkLearnTransformerWrapper(transformer=StandardScaler(), features=["kills", "deaths"]),
         MinMaxTransformer(features=["kills", "deaths"]),
         ColumnsWeighter(weighted_column_name="weighted_performance", column_weights=column_weights)

@@ -62,11 +62,16 @@ class MatchPredictor():
         self.rating_generators = rating_generators if isinstance(rating_generators, list) else [rating_generators]
         self.column_names = column_names if isinstance(column_names, list) else [column_names for _ in
                                                                                  self.rating_generators]
+
         if len(rating_generators) == 0:
             if isinstance(column_names, list):
                 self.column_names = column_names
             else:
                 self.column_names = [column_names]
+
+        if len(self.column_names) < len(self.rating_generators):
+            while len(self.column_names) < len(self.rating_generators):
+                self.column_names.append(self.column_names[0])
 
         self.use_auto_pre_transformers = use_auto_pre_transformers
         if self.use_auto_pre_transformers and not column_weights:
@@ -107,8 +112,12 @@ class MatchPredictor():
         self.predictor.set_target(PredictColumnNames.TARGET)
         self.train_split_date = train_split_date
 
-    def generate_historical(self, df: pd.DataFrame, matches: list[Match] = None,
+    def generate_historical(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
                             store_ratings: bool = True) -> pd.DataFrame:
+
+        if matches:
+            if isinstance(matches[0], Match):
+                matches = [matches for _ in self.rating_generators]
 
         if self.predictor.target not in df.columns:
             raise ValueError(
@@ -125,13 +134,15 @@ class MatchPredictor():
             rating_column_names = self.column_names[rating_idx]
 
             if matches is None:
-                matches = convert_df_to_matches(column_names=rating_column_names, df=df,
+                rating_matches = convert_df_to_matches(column_names=rating_column_names, df=df,
                                                 league_identifier=LeagueIdentifier())
+            else:
+                rating_matches = matches[rating_idx]
 
             if store_ratings:
-                match_ratings = rating_generator.generate(matches, df=df, column_names=rating_column_names)
+                match_ratings = rating_generator.generate(matches=rating_matches, df=df, column_names=rating_column_names)
             else:
-                match_ratings = rating_generator.generate(matches)
+                match_ratings = rating_generator.generate(matches=rating_matches)
             for rating_feature, values in match_ratings.items():
                 if len(self.rating_generators) > 1:
                     rating_feature_str = rating_feature + str(rating_idx)

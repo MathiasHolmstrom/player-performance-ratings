@@ -203,11 +203,13 @@ class DiminishingValueTransformer(BaseTransformer):
 class SymmetricDistributionTransformer(BaseTransformer):
 
     def __init__(self, features: List[str], granularity: Optional[list[str]] = None, skewness_allowed: float = 0.1,
-                 max_iterations: int = 15):
+                 max_iterations: int = 20):
         self.features = features
         self.granularity = granularity
         self.skewness_allowed = skewness_allowed
         self.max_iterations = max_iterations
+        self._excessive_multiplier = 0.8
+        self._quantile_cutoff = 0.95
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
@@ -236,8 +238,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
     def _transform_rows(self, rows: pd.DataFrame, feature: str) -> pd.DataFrame:
         skewness = rows[feature].skew()
 
-        excessive_multiplier = 0.8
-        quantile_cutoff = 0.95
+
 
         iteration = 0
         while abs(skewness) > self.skewness_allowed and len(
@@ -249,11 +250,11 @@ class SymmetricDistributionTransformer(BaseTransformer):
                 reverse = False
             diminishing_value_transformer = DiminishingValueTransformer(features=[feature],
                                                                         reverse=reverse,
-                                                                        excessive_multiplier=excessive_multiplier,
-                                                                        quantile_cutoff=quantile_cutoff)
+                                                                        excessive_multiplier=self._excessive_multiplier,
+                                                                        quantile_cutoff=self._quantile_cutoff)
             rows = diminishing_value_transformer.transform(rows)
-            excessive_multiplier *= 0.96
-            quantile_cutoff *= 0.993
+            self._excessive_multiplier *= 0.96
+            self._quantile_cutoff *= 0.993
             iteration += 1
             skewness = rows[feature].skew()
 
@@ -297,7 +298,7 @@ class NetOverPredictedTransformer(BaseTransformer):
                  features: list[str],
                  granularity: list[str],
                  predict_transformer: Optional[BaseTransformer] = None,
-                 prefix: str = "mean_",
+                 prefix: str = "",
                  ):
         self.granularity = granularity
         self.predict_transformer = predict_transformer or GroupByTransformer(features=features, granularity=granularity,
@@ -319,6 +320,7 @@ class NetOverPredictedTransformer(BaseTransformer):
         for idx, predicted_feature in enumerate(self.predict_transformer.features_created):
             new_feature_name = self._feature_names_created[idx]
             df = df.assign(**{new_feature_name: df[self.features[idx]] - df[predicted_feature]})
+            df = df.drop(columns=[predicted_feature])
 
         return df
 

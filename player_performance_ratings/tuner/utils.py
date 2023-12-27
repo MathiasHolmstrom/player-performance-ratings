@@ -145,3 +145,4 @@ def get_default_team_rating_search_range() -> list[ParameterSearchRange]:
             high=0.2,
         )
     ]
+

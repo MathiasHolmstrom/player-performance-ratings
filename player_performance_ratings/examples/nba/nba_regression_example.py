@@ -11,7 +11,7 @@ from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdju
 from player_performance_ratings import ColumnNames, PredictColumnNames
 from player_performance_ratings.predictor.estimators import SklearnPredictor
 from player_performance_ratings.ratings import RatingColumnNames
-from player_performance_ratings.tuner import MatchPredictorTuner, TransformerTuner
+from player_performance_ratings.tuner import MatchPredictorTuner
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 from player_performance_ratings.tuner.utils import get_default_team_rating_search_range
 
@@ -48,7 +48,6 @@ match_predictor_tuner = MatchPredictorTuner(
     match_predictor_factory=match_predictor_factory,
     rating_generator_tuners=rating_generator_tuner,
     scorer=SklearnScorer(pred_column=match_predictor_factory.predictor.pred_column, scorer_function=mean_absolute_error),
-
 )
 
 match_predictor_tuner.tune(df)

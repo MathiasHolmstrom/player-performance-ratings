@@ -38,14 +38,17 @@ def auto_create_pre_transformers(column_weights: list[list[ColumnWeight]],
         else:
             granularity = [column_names[idx].position]
 
-        if idx == 0 or column_names[idx].position != column_names[idx - 1].position:
-            distribution_transformer = SymmetricDistributionTransformer(features=feature_names, granularity=granularity)
-            steps.append(distribution_transformer)
+
         if column_names[idx].position is not None:
             feats = [c.name for c in column_weights[idx]]
             position_predicted_transformer = NetOverPredictedTransformer(features=feats,
                                                                          granularity=[column_names[idx].position])
             steps.append(position_predicted_transformer)
+
+        if idx == 0 or column_names[idx].position != column_names[idx - 1].position:
+            distribution_transformer = SymmetricDistributionTransformer(features=feature_names,
+                                                                        granularity=granularity)
+            steps.append(distribution_transformer)
 
         for column_weight in col_weights:
 

@@ -25,7 +25,7 @@ class PredictorTuner():
         self.search_ranges = search_ranges
         self.n_trials = n_trials
 
-    def tune(self, df: pd.DataFrame, matches: list[Match], scorer: BaseScorer,
+    def tune(self, df: pd.DataFrame, matches: list[list[Match]], scorer: BaseScorer,
              match_predictor_factory: MatchPredictorFactory) -> BaseMLWrapper:
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
 

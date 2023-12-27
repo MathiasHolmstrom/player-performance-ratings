@@ -1,13 +1,14 @@
 import copy
 import inspect
 import logging
-from typing import Optional,  Tuple, Union, Literal
+from typing import Optional, Tuple, Union, Literal
 
 import optuna
 import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
+from player_performance_ratings.data_structures import Match
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
 from player_performance_ratings.scorer.score import BaseScorer
@@ -72,8 +73,12 @@ class TransformerTuner:
              scorer: BaseScorer,
              match_predictor_factory: MatchPredictorFactory,
              pre_rating_transformers: Optional[list[BaseTransformer]] = None,
+             matches: Optional[list[list[Match]]] = None,
              rating_generators: Optional[list[RatingGenerator]] = None,
              ) -> list[BaseTransformer]:
+
+        if not matches:
+            matches = None
 
         if self.transformer_search_ranges is None:
             logging.info("Creating transformer search ranges")
@@ -82,7 +87,6 @@ class TransformerTuner:
                 column_names=match_predictor_factory.column_names,
                 lower_is_better_features=self.lower_is_better_features
             )
-
 
         match_predictor_factory = copy.deepcopy(match_predictor_factory)
 
@@ -113,7 +117,7 @@ class TransformerTuner:
                                                                  rating_generators=rating_generators,
                                                                  post_rating_transformers=transformers)
 
-            df_with_prediction = match_predictor.generate_historical(df=df, store_ratings=False)
+            df_with_prediction = match_predictor.generate_historical(df=df, matches=matches, store_ratings=False)
             return scorer.score(df_with_prediction, classes_=match_predictor.classes_)
 
         best_transformers = []

@@ -55,7 +55,8 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
         self.team_id_column = team_id_column
         self._target = target
         self.multiclassifier = multiclassifier
-        super().__init__(target=self._target, features=features,pred_column=pred_column, model=model or LogisticRegression())
+        super().__init__(target=self._target, features=features, pred_column=pred_column,
+                         model=model or LogisticRegression())
 
     def train(self, df: pd.DataFrame) -> None:
 
@@ -137,30 +138,42 @@ class SklearnPredictor(BaseMLWrapper):
         self._target = target
         self.multiclassifier = multiclassifier
         self.column_names = column_names
-        self.categorical_features = categorical_features
+        self.categorical_features = categorical_features or []
 
         if model is None:
             logging.warning(
                 "model is not set. Will use LGBMClassifier(max_depth=2, n_estimators=400, learning_rate=0.05)")
 
-        super().__init__(target=self._target,features=features ,pred_column=pred_column,
+        super().__init__(target=self._target, features=features, pred_column=pred_column,
                          model=model or LGBMClassifier(max_depth=2, n_estimators=300, learning_rate=0.05, verbose=-100))
 
     def train(self, df: pd.DataFrame) -> None:
+        for cat_feature in self.categorical_features:
+            df = df.assign(**{cat_feature: df[cat_feature].astype('category')})
 
         if self.multiclassifier is False and len(df[self._target].unique()) > 2 and hasattr(self.model,
                                                                                             "predict_proba"):
             logging.warning("target has more than 2 unique values, multiclassifier has therefore been set to True")
             self.multiclassifier = True
+            if len(df[self._target].unique()) > 50:
+                logging.warning(
+                    f"target has {len(df[self._target].unique())} unique values. This may machine-learning model to not function properly."
+                    f" It is recommended to limit max and min values to ensure less than 50 unique targets")
 
         self.model.fit(df[self.features], df[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
 
         df = df.copy()
+        for cat_feature in self.categorical_features:
+            df[cat_feature] = df[cat_feature].astype('category')
 
         if self.multiclassifier:
             df[self._pred_column] = self.model.predict_proba(df[self.features]).tolist()
+            if len(set(df[self.pred_column].iloc[0])) == 2:
+                raise ValueError(
+                    "Too many unique values in relation to rows in the training dataset causes multiclassifier to not train properly")
+
         elif not hasattr(self.model, "predict_proba"):
             df[self._pred_column] = self.model.predict(df[self.features])
         else:

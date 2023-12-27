@@ -72,21 +72,33 @@ class MatchPredictorTuner():
         column_names = self.match_predictor_factory.column_names
 
         best_pre_transformers = copy.deepcopy(self.match_predictor_factory.pre_transformers)
+
+
         if self.pre_transformer_tuner:
             logging.info("Tuning PreTransformers")
-            best_pre_transformers = self.pre_transformer_tuner.tune(df,
+            best_pre_transformers = self.pre_transformer_tuner.tune(df=df,
                                                                     match_predictor_factory=self.match_predictor_factory,
                                                                     scorer=self.scorer)
         for pre_rating_transformer in best_pre_transformers:
             df = pre_rating_transformer.transform(df)
 
         best_rating_generators = copy.deepcopy(self.match_predictor_factory.rating_generators)
+
+        matches = []
+        for col_name in column_names:
+            rating_matches = convert_df_to_matches(df=df, column_names=col_name)
+            matches.append(rating_matches)
+
         for rating_idx, rating_generator_tuner in enumerate(self.rating_generator_tuners):
-            matches = convert_df_to_matches(df=df, column_names=column_names[rating_idx])
-            tuned_rating_generator = rating_generator_tuner.tune(df=df, matches=matches, rating_idx=rating_idx,
+            rating_matches = convert_df_to_matches(df=df, column_names=column_names[rating_idx])
+            matches.append(rating_matches)
+            tuned_rating_generator = rating_generator_tuner.tune(df=df, matches=matches[rating_idx], rating_idx=rating_idx,
                                                                  scorer=self.scorer,
                                                                  match_predictor_factory=self.match_predictor_factory)
-            best_rating_generators[rating_idx] = tuned_rating_generator
+            if best_rating_generators:
+                best_rating_generators[rating_idx] = tuned_rating_generator
+            else:
+                best_rating_generators = [tuned_rating_generator]
 
         best_post_transformers = copy.deepcopy(self.match_predictor_factory.post_transformers)
         if self.post_transformer_tuner:
@@ -96,6 +108,7 @@ class MatchPredictorTuner():
                                                                       scorer=self.scorer,
                                                                       pre_rating_transformers=best_pre_transformers,
                                                                       rating_generators=best_rating_generators,
+                                                                      matches=matches
                                                                       )
             for post_rating_transformer in best_post_transformers:
                 df = post_rating_transformer.transform(df)
