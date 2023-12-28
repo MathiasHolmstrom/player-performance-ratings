@@ -26,6 +26,7 @@ def test_generate_pre_match_team_rating():
                 performance=MatchPerformance(
                     performance_value=1,
                     participation_weight=0.5,
+                    projected_participation_weight=0.5,
                 ),
             ),
             MatchPlayer(
@@ -33,6 +34,7 @@ def test_generate_pre_match_team_rating():
                 performance=MatchPerformance(
                     performance_value=1,
                     participation_weight=0.3,
+                    projected_participation_weight=0.3,
                 ),
             ),
         ],
@@ -74,6 +76,7 @@ def test_generate_pre_match_team_rating():
                 match_performance=MatchPerformance(
                     performance_value=1,
                     participation_weight=0.5,
+                    projected_participation_weight=0.5,
                 ),
                 position=None
             ),
@@ -85,6 +88,7 @@ def test_generate_pre_match_team_rating():
                 match_performance=MatchPerformance(
                     performance_value=1,
                     participation_weight=0.3,
+                    projected_participation_weight=0.3,
                 ),
                 position=None
             ),
@@ -161,6 +165,7 @@ def test_generate_rating_change(confidence_sum):
                     match_performance=MatchPerformance(
                         performance_value=1,
                         participation_weight=0.5,
+                        projected_participation_weight=0.5,
                     ),
                     position=None
                 ),
@@ -172,6 +177,7 @@ def test_generate_rating_change(confidence_sum):
                     match_performance=MatchPerformance(
                         performance_value=0.8,
                         participation_weight=0.3,
+                        projected_participation_weight=0.3,
                     ),
                     position=None
                 ),

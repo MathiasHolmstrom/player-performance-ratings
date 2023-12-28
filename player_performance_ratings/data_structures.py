@@ -12,9 +12,10 @@ class ColumnNames:
     performance: str
     league: Optional[str] = None
     position: Optional[str] = None
-    participation_weight: str = None
-    team_players_percentage_playing_time: str = None
-    rating_update_id: str = None
+    participation_weight: Optional[str] = None
+    projected_participation_weight: Optional[str] = None
+    team_players_percentage_playing_time: Optional[str] = None
+    rating_update_id: Optional[str] = None
 
     def __post_init__(self):
         if self.rating_update_id is None:
@@ -23,8 +24,10 @@ class ColumnNames:
 
 @dataclass
 class MatchPerformance:
-    performance_value: float
-    participation_weight: float
+    performance_value: Optional[float]
+    participation_weight: Optional[float]
+    projected_participation_weight: float
+
 
 
 @dataclass
@@ -139,7 +142,7 @@ class MatchRatings:
 @dataclass
 class MatchPlayer:
     id: str
-    performance: MatchPerformance
+    performance: Optional[MatchPerformance]
     league: Optional[str] = None
     position: Optional[str] = None
 

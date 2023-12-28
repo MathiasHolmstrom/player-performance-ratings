@@ -55,7 +55,8 @@ def test_convert_df_to_matches():
                             league="league1",
                             performance=MatchPerformance(
                                participation_weight=1,
-                                performance_value=1
+                                performance_value=1,
+                                projected_participation_weight=1
 
                             )
                         ),
@@ -64,7 +65,8 @@ def test_convert_df_to_matches():
                             league="league1",
                             performance=MatchPerformance(
                                 participation_weight=1,
-                                performance_value=1
+                                performance_value=1,
+                                projected_participation_weight=1
 
                             )
                         )
@@ -80,7 +82,8 @@ def test_convert_df_to_matches():
                             id="5",
                             performance=MatchPerformance(
                                 participation_weight=1,
-                                performance_value=0
+                                performance_value=0,
+                                projected_participation_weight=1
 
                             )
                         ),
@@ -89,7 +92,8 @@ def test_convert_df_to_matches():
                             id="6",
                             performance=MatchPerformance(
                                 participation_weight=1,
-                                performance_value=0
+                                performance_value=0,
+                                projected_participation_weight=1
 
                             )
                         )
@@ -112,8 +116,8 @@ def test_convert_df_to_matches():
                             league="league1",
                             performance=MatchPerformance(
                                 participation_weight=1,
-                                performance_value=1
-
+                                performance_value=1,
+                                projected_participation_weight=1
                             )
                         ),
                         MatchPlayer(
@@ -121,8 +125,8 @@ def test_convert_df_to_matches():
                             league="league1",
                             performance=MatchPerformance(
                                 participation_weight=1,
-                                performance_value=1
-
+                                performance_value=1,
+                                projected_participation_weight=1
                             )
                         )
                     ]
@@ -137,8 +141,8 @@ def test_convert_df_to_matches():
                             league="league1",
                             performance=MatchPerformance(
                                 participation_weight=1,
-                                performance_value=0
-
+                                performance_value=0,
+                                projected_participation_weight=1
                             )
                         ),
                         MatchPlayer(
@@ -146,8 +150,8 @@ def test_convert_df_to_matches():
                             league="league1",
                             performance=MatchPerformance(
                                 participation_weight=1,
-                                performance_value=0
-
+                                performance_value=0,
+                                projected_participation_weight=1
                             )
                         )
                     ]

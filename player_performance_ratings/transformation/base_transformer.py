@@ -6,9 +6,12 @@ import pandas as pd
 class BaseTransformer(ABC):
 
     @abstractmethod
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         pass
 
+    @abstractmethod
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        pass
 
     @property
     @abstractmethod

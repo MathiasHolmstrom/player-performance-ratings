@@ -40,7 +40,7 @@ df['kills_per_minute'] = df['kills'] / df['gamelength'] * 60
 
 df = (
     df.loc[lambda x: x.position != 'team']
-    .assign(team_count=df.groupby('gameid')['teamname'].transform('nunique'))
+    .assign(team_count=df.groupby('gameid')['teamname'].fit_transform('nunique'))
     .loc[lambda x: x.team_count == 2]
 )
 

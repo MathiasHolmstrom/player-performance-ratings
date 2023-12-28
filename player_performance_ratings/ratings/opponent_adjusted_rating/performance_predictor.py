@@ -58,7 +58,7 @@ class RatingDifferencePerformancePredictor(PerformancePredictor):
         value = self.rating_diff_coef * rating_difference + \
                 self.rating_diff_team_from_entity_coef * rating_diff_team_from_entity + team_rating_diff * self.team_rating_diff_coef
         if self.participation_weight_coef:
-            value += value  * self.participation_weight_coef * (player_rating.match_performance.participation_weight - self.mean_participation_weight)
+            value += value  * self.participation_weight_coef * (player_rating.match_performance.projected_participation_weight - self.mean_participation_weight)
 
         prediction = (math.exp(value)) / (1 + math.exp(value))
         if prediction > self.max_predict_value:

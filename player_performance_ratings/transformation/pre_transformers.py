@@ -25,7 +25,7 @@ class ColumnsWeighter(BaseTransformer):
         self.weighted_column_name = weighted_column_name
         self.column_weights = column_weights
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         df[f"__{self.weighted_column_name}"] = 0
 
@@ -45,13 +45,16 @@ class ColumnsWeighter(BaseTransformer):
 
             if column_weight.lower_is_better:
                 df[f"__{self.weighted_column_name}"] += df[f'weight__{column_weight.name}'] * (
-                            1 - df[column_weight.name])
+                        1 - df[column_weight.name])
             else:
                 df[f"__{self.weighted_column_name}"] += df[f'weight__{column_weight.name}'] * df[column_weight.name]
 
         df[self.weighted_column_name] = df[f"__{self.weighted_column_name}"]
         df = df.drop(columns=drop_cols)
         return df
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        return self.fit_transform(df)
 
     @property
     def features_created(self) -> list[str]:
@@ -65,8 +68,15 @@ class SklearnEstimatorImputer(BaseTransformer):
         self.features = features
         self.target_name = target_name
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         self.estimator.fit(df[self.features], df[self.target_name])
+        df = df.assign(**{
+            f'imputed_col_{self.target_name}': self.estimator.predict(df[self.features])
+        })
+        df[self.target_name] = df[self.target_name].fillna(df[f'imputed_col_{self.target_name}'])
+        return df.drop(columns=[f'imputed_col_{self.target_name}'])
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.assign(**{
             f'imputed_col_{self.target_name}': self.estimator.predict(df[self.features])
         })
@@ -84,10 +94,11 @@ class SkLearnTransformerWrapper(BaseTransformer):
         self.transformer = transformer
         self.features = features
 
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        return df.assign(**{feature: self.transformer.fit_transform(df[[feature]]) for feature in self.features})
+
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy()
-        df[self.features] = self.transformer.fit_transform(df[self.features])
-        return df
+        return df.assign(**{feature: self.transformer.transform(df[[feature]]) for feature in self.features})
 
     @property
     def features_created(self) -> list[str]:
@@ -106,24 +117,32 @@ class MinMaxTransformer(BaseTransformer):
         self.quantile = quantile
         self.allowed_mean_diff = allowed_mean_diff
         self.prefix = prefix
+        self._original_mean_values = {}
+        self._mean_aligning_iterations = 0
+        self._min_values = {}
+        self._max_values = {}
+
         if self.quantile < 0 or self.quantile > 1:
             raise ValueError("quantile must be between 0 and 1")
 
         self._feature_names_created = []
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         for feature in self.features:
-            max_value = df[feature].quantile(self.quantile)
-            min_value = df[feature].quantile(1 - self.quantile)
+            self._min_values[feature] = df[feature].quantile(self.quantile)
+            self._max_values[feature] = df[feature].quantile(1 - self.quantile)
 
-            df[self.prefix + feature] = (df[feature] - min_value) / (max_value - min_value)
+            df[self.prefix + feature] = (df[feature] - self._min_values[feature]) / (
+                    self._max_values[feature] - self._min_values[feature])
             df[self.prefix + feature].clip(0, 1, inplace=True)
             self._feature_names_created.append(self.prefix + feature)
 
             if self.allowed_mean_diff:
-                reps = 0
+
                 mean_value = df[self.prefix + feature].mean()
+                self._original_mean_values[feature] = mean_value
+
                 while abs(0.5 - mean_value) > self.allowed_mean_diff:
 
                     if mean_value > 0.5:
@@ -134,11 +153,28 @@ class MinMaxTransformer(BaseTransformer):
                     df[self.prefix + feature].clip(0, 1, inplace=True)
                     mean_value = df[self.prefix + feature].mean()
 
-                    reps += 1
-                    if reps > 100:
+                    self._mean_aligning_iterations += 1
+                    if self._mean_aligning_iterations > 100:
                         logging.warning(
                             f"MinMaxTransformer: {feature} mean value is {mean_value} after {reps} repetitions")
                         continue
+
+        return df
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        for feature in self.features:
+            df[self.prefix + feature] = (df[feature] - self._min_values[feature]) / (
+                    self._max_values[feature] - self._min_values[feature])
+            df[self.prefix + feature].clip(0, 1, inplace=True)
+
+            for _ in range(self._mean_aligning_iterations):
+
+                if self._original_mean_values[feature] > 0.5:
+                    df[self.prefix + feature] = df[self.prefix + feature] * (1 - self.allowed_mean_diff)
+                else:
+                    df[self.prefix + feature] = df[self.prefix + feature] * (1 + self.allowed_mean_diff)
+
+                df[self.prefix + feature].clip(0, 1, inplace=True)
 
         return df
 
@@ -159,18 +195,23 @@ class DiminishingValueTransformer(BaseTransformer):
         self.features = features
         self.cutoff_value = cutoff_value
         self.excessive_multiplier = excessive_multiplier
-        self.trained_count: int = 0
         self.quantile_cutoff = quantile_cutoff
         self.reverse = reverse
+        self._feature_cutoff_value = {}
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
         for feature_name in self.features:
             if self.cutoff_value is None:
-                cutoff_value = df[feature_name].quantile(self.quantile_cutoff)
+                self._feature_cutoff_value[feature_name] = df[feature_name].quantile(self.quantile_cutoff)
             else:
-                cutoff_value = self.cutoff_value
+                self._feature_cutoff_value[feature_name] = self.cutoff_value
 
+        return self.transform(df)
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        for feature_name in self.features:
+            cutoff_value = self._feature_cutoff_value[feature_name]
             if self.reverse:
                 cutoff_value = 1 - cutoff_value
                 df = df.assign(**{
@@ -191,8 +232,7 @@ class DiminishingValueTransformer(BaseTransformer):
                     )
                 })
 
-        df[self.features] = df[self.features].fillna(df[self.features])
-
+            df = df.assign(**{feature_name: df[feature_name].fillna(df[feature_name])})
         return df
 
     @property
@@ -202,43 +242,39 @@ class DiminishingValueTransformer(BaseTransformer):
 
 class SymmetricDistributionTransformer(BaseTransformer):
 
-    def __init__(self, features: List[str], granularity: Optional[list[str]] = None, skewness_allowed: float = 0.1,
+    def __init__(self, features: List[str], granularity: Optional[list[str]] = None, skewness_allowed: float = 0.15,
                  max_iterations: int = 20):
         self.features = features
         self.granularity = granularity
         self.skewness_allowed = skewness_allowed
         self.max_iterations = max_iterations
-        self._excessive_multiplier = 0.8
-        self._quantile_cutoff = 0.95
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        self._diminishing_value_transformer = {}
 
-        df = df.copy()
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        if self.granularity:
+            df = df.assign(__concat_granularity=df[self.granularity].apply(lambda x: "_".join(x), axis=1))
 
         for feature in self.features:
+            self._diminishing_value_transformer[feature] = {}
             if self.granularity:
-                for column_granularity in self.granularity:
-                    unique_values = df[column_granularity].unique()
-                    for unique_value in unique_values:
-                        rows = df[df[column_granularity] == unique_value]
 
-                        rows = self._transform_rows(rows=rows, feature=feature)
+                unique_values = df["__concat_granularity"].unique()
+                for unique_value in unique_values:
+                    rows = df[df["__concat_granularity"] == unique_value]
 
-                        condition = df[column_granularity] == unique_value
-                        if isinstance(rows[feature], (list, np.ndarray, pd.Series)):
-                            assert len(rows[
-                                           feature]) == condition.sum(), "Length of rows[feature] must match the number of rows in condition"
-
-                        df.loc[df[column_granularity] == unique_value, feature] = rows[feature]
+                    self._fit(rows=rows, feature=feature, granularity_value=unique_value)
 
             else:
-                df = self._transform_rows(rows=df, feature=feature)
-        return df
+                self._fit(rows=df, feature=feature, granularity_value=None)
 
-    def _transform_rows(self, rows: pd.DataFrame, feature: str) -> pd.DataFrame:
+        return self.transform(df)
+
+    def _fit(self, rows: pd.DataFrame, feature: str, granularity_value: Optional[str]) -> None:
         skewness = rows[feature].skew()
-
-
+        excessive_multiplier = 0.8
+        quantile_cutoff = 0.95
 
         iteration = 0
         while abs(skewness) > self.skewness_allowed and len(
@@ -248,17 +284,37 @@ class SymmetricDistributionTransformer(BaseTransformer):
                 reverse = True
             else:
                 reverse = False
-            diminishing_value_transformer = DiminishingValueTransformer(features=[feature],
-                                                                        reverse=reverse,
-                                                                        excessive_multiplier=self._excessive_multiplier,
-                                                                        quantile_cutoff=self._quantile_cutoff)
-            rows = diminishing_value_transformer.transform(rows)
-            self._excessive_multiplier *= 0.96
-            self._quantile_cutoff *= 0.993
+            self._diminishing_value_transformer[feature][granularity_value] = DiminishingValueTransformer(
+                features=[feature],
+                reverse=reverse,
+                excessive_multiplier=excessive_multiplier,
+                quantile_cutoff=quantile_cutoff)
+            transformed_rows = self._diminishing_value_transformer[feature][granularity_value].fit_transform(rows)
+            excessive_multiplier *= 0.95
+            quantile_cutoff *= 0.99
             iteration += 1
-            skewness = rows[feature].skew()
+            skewness = transformed_rows[feature].skew()
 
-        return rows
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        if self.granularity:
+            df = df.assign(__concat_granularity=df[self.granularity].apply(lambda x: "_".join(x), axis=1))
+
+        for feature in self.features:
+            if self.granularity:
+
+                unique_values = df["__concat_granularity"].unique()
+                for unique_value in unique_values:
+                    rows = df[df["__concat_granularity"] == unique_value]
+                    if unique_value in self._diminishing_value_transformer[feature]:
+                        rows = self._diminishing_value_transformer[feature][unique_value].transform(rows)
+                        df.loc[df["__concat_granularity"] == unique_value, feature] = rows[feature]
+
+            else:
+                if None in self._diminishing_value_transformer[feature]:
+                    df = self._diminishing_value_transformer[feature][None].transform(df)
+
+        return df
 
     @property
     def features_created(self) -> list[str]:
@@ -278,14 +334,22 @@ class GroupByTransformer(BaseTransformer):
         self.agg_func = agg_func
         self.prefix = prefix
         self._feature_names_created = []
+        self._grouped = None
         for feature in self.features:
             self._feature_names_created.append(self.prefix + feature)
 
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        self._grouped = (df
+                         .groupby(self.granularity)[self.features]
+                         .agg(self.agg_func)
+                         .reset_index()
+                         .rename(columns={feature: self.prefix + feature for feature in self.features})
+                         )
+
+        return self.transform(df=df)
+
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        for idx, feature in enumerate(self.features):
-            df = df.assign(
-                **{self._feature_names_created[idx]: df.groupby(self.granularity)[feature].transform(self.agg_func)})
-        return df
+        return df.merge(self._grouped, on=self.granularity, how='left')
 
     @property
     def features_created(self) -> list[str]:
@@ -310,13 +374,20 @@ class NetOverPredictedTransformer(BaseTransformer):
             new_feature_name = f'{self.prefix}{self.features[idx]}'
             self._feature_names_created.append(new_feature_name)
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         df = df.assign(__id=range(1, len(df) + 1))
+        predicted_df = self.predict_transformer.fit_transform(df)
+        return self.transform(df)
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         predicted_df = self.predict_transformer.transform(df)
         df = df.merge(predicted_df[self.predict_transformer.features_created + ['__id']], on="__id").drop(
             columns=["__id"])
 
+        return self._add_net_over_predicted(df=df)
+
+    def _add_net_over_predicted(self, df: pd.DataFrame) -> pd.DataFrame:
         for idx, predicted_feature in enumerate(self.predict_transformer.features_created):
             new_feature_name = self._feature_names_created[idx]
             df = df.assign(**{new_feature_name: df[self.features[idx]] - df[predicted_feature]})

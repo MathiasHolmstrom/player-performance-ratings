@@ -10,7 +10,7 @@ from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdju
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
 from player_performance_ratings.predictor.estimators import SklearnPredictor
-from player_performance_ratings.ratings import RatingColumnNames
+from player_performance_ratings.ratings import RatingColumnNames, OpponentAdjustedRatingGenerator
 from player_performance_ratings.tuner import MatchPredictorTuner
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 from player_performance_ratings.tuner.utils import get_default_team_rating_search_range
@@ -18,7 +18,7 @@ from player_performance_ratings.tuner.utils import get_default_team_rating_searc
 df = pd.read_pickle(r"data/game_player_subsample.pickle")
 
 df = (
-    df.assign(team_count=df.groupby("game_id")["team_id"].transform('nunique'))
+    df.assign(team_count=df.groupby("game_id")["team_id"].fit_transform('nunique'))
     .loc[lambda x: x.team_count == 2]
 )
 
@@ -35,12 +35,12 @@ match_predictor_factory = MatchPredictorFactory(
     ),
     predictor=SklearnPredictor(model=LGBMRegressor(), features=[RatingColumnNames.RATING_DIFFERENCE, RatingColumnNames.PLAYER_RATING_DIFFERENCE], pred_column='pred'),
     use_auto_pre_transformers=True,
-    column_weights=[ColumnWeight(name='points', weight=1)]
+    column_weights=[ColumnWeight(name='points', weight=1)],
 )
 
 rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
     team_rating_n_trials=30,
-    team_rating_search_ranges=get_default_team_rating_search_range()
+    team_rating_search_ranges=get_default_team_rating_search_range(),
 )
 
 

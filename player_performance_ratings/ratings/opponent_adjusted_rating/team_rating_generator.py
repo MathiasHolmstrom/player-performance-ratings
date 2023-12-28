@@ -196,9 +196,9 @@ class TeamRatingGenerator():
 
     def _generate_pre_match_team_rating_value(self, pre_match_player_ratings: list[PreMatchPlayerRating]) -> float:
         team_rating = sum(
-            player.rating_value * player.match_performance.participation_weight for player in pre_match_player_ratings)
+            player.rating_value * player.match_performance.projected_participation_weight for player in pre_match_player_ratings)
         sum_participation_weight = sum(
-            player.match_performance.participation_weight for player in pre_match_player_ratings)
+            player.match_performance.projected_participation_weight for player in pre_match_player_ratings)
 
         return team_rating / sum_participation_weight if sum_participation_weight > 0 else 0
 

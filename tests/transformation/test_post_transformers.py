@@ -20,7 +20,7 @@ def test_lag_transformation():
         granularity=['player']
     )
 
-    df_with_lags = lag_transformation.transform(df)
+    df_with_lags = lag_transformation.fit_transform(df)
 
     expected_df = original_df.assign(**{
         "lag_1_points":  [None, None, 1]
@@ -47,7 +47,7 @@ def test_lag_transformation_2_features():
         granularity=['player']
     )
 
-    df_with_lags = lag_transformation.transform(df)
+    df_with_lags = lag_transformation.fit_transform(df)
 
     expected_df = original_df.assign(**{
         "lag_1_points":  [None, None, 1],
@@ -73,7 +73,7 @@ def test_lag_transformation_lag_length_2():
         granularity=['player']
     )
 
-    df_with_lags = lag_transformation.transform(df)
+    df_with_lags = lag_transformation.fit_transform(df)
 
     expected_df = original_df.assign(**{
         "lag_1_points": [None, None, 1, 3],
@@ -101,7 +101,7 @@ def test_lag_transformation_with_game_id():
         game_id='game'
     )
 
-    df_with_lags = lag_transformation.transform(df)
+    df_with_lags = lag_transformation.fit_transform(df)
 
     expected_df = original_df.assign(**{
         "lag_1_points": [None, None, None, 1.5]
@@ -129,7 +129,7 @@ def test_lag_transformation_with_game_id_and_weights():
         weight_column='weight'
     )
 
-    df_with_lags = lag_transformation.transform(df)
+    df_with_lags = lag_transformation.fit_transform(df)
 
     expected_df = original_df.assign(**{
         "lag_1_points": [None, None, None, 0.9*1 + 2*0.1]
@@ -154,7 +154,7 @@ def test_rolling_mean_transformation():
         granularity=['player']
     )
 
-    df_with_rolling_mean = rolling_mean_transformation.transform(df)
+    df_with_rolling_mean = rolling_mean_transformation.fit_transform(df)
 
     expected_df = original_df.assign(**{
         "rolling_mean_2_points":  [None, None, 1, 2, (4+3)/2]
@@ -180,7 +180,7 @@ def test_rolling_mean_transformation_with_game_id():
         game_id='game'
     )
 
-    df_with_rolling_mean = rolling_mean_transformation.transform(df)
+    df_with_rolling_mean = rolling_mean_transformation.fit_transform(df)
 
     expected_df = original_df.assign(**{
         "rolling_mean_2_points": [None, None, None, 2, 2]
@@ -209,7 +209,7 @@ def test_rolling_mean_transformation_with_game_id_and_weights():
         weight_column='weight'
     )
 
-    df_with_rolling_mean = rolling_mean_transformation.transform(df)
+    df_with_rolling_mean = rolling_mean_transformation.fit_transform(df)
 
     expected_df = original_df.assign(**{
         "rolling_mean_2_points": [None, None, None, 0.9*1+3*0.1, 0.9*1+3*0.1]

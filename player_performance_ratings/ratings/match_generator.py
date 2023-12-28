@@ -36,19 +36,19 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
     If the league_identifier is passed it will identify the league of the match by the players past matches played.
     If not the  league of the match will be equal to the league of the current match
     """
+    if column_names.performance in df.columns:
+        if max(df[column_names.performance]) > 1.001 or min(df[column_names.performance]) < -0.001:
+            raise ValueError("performance column must be between 0 and 1")
 
-    if max(df[column_names.performance]) > 1.001 or min(df[column_names.performance]) < -0.001:
-        raise ValueError("performance column must be between 0 and 1")
+        mean_performance = df[column_names.performance].mean()
+        median_performance = df[column_names.performance].median()
 
-    mean_performance = df[column_names.performance].mean()
-    median_performance = df[column_names.performance].median()
-
-    if abs(mean_performance - 0.5) > 0.05:
-        logging.warning(
-            f"mean performance is {mean_performance} which is far from 0.5. It is recommended to do further pre_transformations of the performance column")
-    if abs(median_performance - 0.5) > 0.05:
-        logging.warning(
-            f"median performance is {median_performance} which is far from 0.5. It is recommended to do further pre_transformations of the performance column")
+        if abs(mean_performance - 0.5) > 0.05:
+            logging.warning(
+                f"mean performance is {mean_performance} which is far from 0.5. It is recommended to do further pre_transformations of the performance column")
+        if abs(median_performance - 0.5) > 0.05:
+            logging.warning(
+                f"median performance is {median_performance} which is far from 0.5. It is recommended to do further pre_transformations of the performance column")
 
     df_sorted = df.sort_values(
         by=[column_names.start_date, column_names.match_id,
@@ -72,6 +72,12 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
             logging.warning("League column passed but no league_identifier passed. league will be set to None")
         else:
             league_in_df = True
+
+    if col_names.projected_participation_weight:
+        if col_names.projected_participation_weight not in df.columns:
+            logging.warning(
+                "projected_participation_weight column passed but not in dataframe."
+                " Will use participation_weight as projected_participation_weight")
 
     prev_match_id = None
 
@@ -127,16 +133,33 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
         else:
             player_league = None
 
-        performance = MatchPerformance(
-            performance_value=row[col_names.performance],
-            participation_weight=participation_weight,
-        )
+        if col_names.projected_participation_weight and col_names.participation_weight in row:
+            projected_participation_weight = row[col_names.projected_participation_weight]
+        elif col_names.participation_weight not in row:
+            projected_participation_weight = 1
+        else:
+            projected_participation_weight = participation_weight
+
+        if col_names.performance in row:
+            performance = MatchPerformance(
+                performance_value=row[col_names.performance],
+                participation_weight=participation_weight,
+                projected_participation_weight=projected_participation_weight
+            )
+
+        else:
+            performance = MatchPerformance(
+                performance_value=None,
+                participation_weight=None,
+                projected_participation_weight=participation_weight
+            )
 
         match_player = MatchPlayer(
             id=player_id,
             league=player_league,
             performance=performance,
             position=position,
+
         )
         match_team_players.append(match_player)
 

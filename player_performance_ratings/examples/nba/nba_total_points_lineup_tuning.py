@@ -47,7 +47,7 @@ df[column_names.match_id] = df['game_id'].astype(str) + '_' + df['sorted_lineup'
 df = df.drop(columns=['sorted_lineup'])
 
 df = (
-    df.assign(team_count=df.granularity(column_names.match_id)[column_names.team_id].transform('nunique'))
+    df.assign(team_count=df.granularity(column_names.match_id)[column_names.team_id].fit_transform('nunique'))
     .loc[lambda x: x.team_count == 2]
 )
 df = df.sort_values(by=[column_names.start_date, column_names.match_id, column_names.team_id, column_names.player_id])

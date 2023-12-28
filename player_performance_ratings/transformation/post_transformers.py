@@ -11,7 +11,7 @@ def create_output_column_by_game_group(data: pd.DataFrame, feature_name: str,
     if weight_column:
         data = data.assign(**{f'weighted_{feature_name}': data[feature_name] * data[weight_column]})
         data = data.assign(
-            **{"sum_weighted": data.groupby(granularity + [game_id])[weight_column].transform("sum")})
+            **{"sum_weighted": data.groupby(granularity + [game_id])[weight_column].fit_transform("sum")})
         data = data.assign(**{feature_name: data[f'weighted_{feature_name}'] / data['sum_weighted']})
         data = data.groupby(granularity + [game_id])[feature_name].sum().reset_index()
 
@@ -81,7 +81,7 @@ class LagTransformation(BaseTransformer):
         if self.df is not None and self.game_id is None:
             raise ValueError('If passing in a dataframe to calculate the lag on, you need to set game_id')
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
         if self.df is not None:
             data = self.df
@@ -170,7 +170,7 @@ class RollingMeanTransformation(BaseTransformer):
         self.prefix = prefix
         self._features_created = [f'{self.prefix}{self.window}_{c}' for c in self.feature_names]
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
         if self.df is not None:
             data = self.df

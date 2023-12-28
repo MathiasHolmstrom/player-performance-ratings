@@ -80,7 +80,7 @@ class MatchPredictorTuner():
                                                                     match_predictor_factory=self.match_predictor_factory,
                                                                     scorer=self.scorer)
         for pre_rating_transformer in best_pre_transformers:
-            df = pre_rating_transformer.transform(df)
+            df = pre_rating_transformer.fit_transform(df)
 
         best_rating_generators = copy.deepcopy(self.match_predictor_factory.rating_generators)
 
@@ -111,7 +111,7 @@ class MatchPredictorTuner():
                                                                       matches=matches
                                                                       )
             for post_rating_transformer in best_post_transformers:
-                df = post_rating_transformer.transform(df)
+                df = post_rating_transformer.fit_transform(df)
 
         if self.predictor_tuner:
             logging.info("Tuning Predictor")

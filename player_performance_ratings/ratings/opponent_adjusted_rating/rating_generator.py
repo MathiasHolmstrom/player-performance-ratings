@@ -102,29 +102,52 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
         performances = []
 
         team_rating_changes = []
+
+        is_past = False if len(matches) > 0 and matches[0].teams[0].players[0].performance.performance_value is None else True
+
         for match_idx, match in enumerate(matches):
             self._validate_match(match)
-            match_team_rating_changes = self._create_match_team_rating_changes(match=match)
-            team_rating_changes += match_team_rating_changes
+            pre_match_rating = PreMatchRating(
+                id=match.id,
+                teams=self._get_pre_match_team_ratings(match=match),
+                day_number=match.day_number
+            )
 
-            if match_idx == len(matches) - 1 or matches[match_idx + 1].update_id != match.update_id:
-                self._update_ratings(team_rating_changes=team_rating_changes)
-                team_rating_changes = []
+            if not is_past:
+                for team_idx, pre_match_team in enumerate(pre_match_rating.teams):
+                    opponent_team = pre_match_rating.teams[-team_idx + 1]
+                    for player_idx, pre_match_player in enumerate(pre_match_team.players):
+                        pre_match_player_rating_values.append(pre_match_player.rating_value)
+                        pre_match_team_rating_values.append(pre_match_team.rating_value)
+                        pre_match_opponent_rating_values.append(opponent_team.rating_value)
+                        player_leagues.append(pre_match_player.league)
+                        team_opponent_leagues.append(opponent_team.league)
+                        match_ids.append(match.id)
 
-            for team_idx, team_rating_change in enumerate(match_team_rating_changes):
-                opponent_team = match_team_rating_changes[-team_idx + 1]
-                for player_idx, player_rating_change in enumerate(team_rating_change.players):
-                    pre_match_player_rating_values.append(player_rating_change.pre_match_rating_value)
-                    pre_match_team_rating_values.append(team_rating_change.pre_match_rating_value)
-                    player_predicted_performances.append(player_rating_change.predicted_performance)
-                    pre_match_opponent_rating_values.append(opponent_team.pre_match_rating_value)
-                    player_rating_changes.append(player_rating_change.rating_change_value)
-                    player_leagues.append(player_rating_change.league)
-                    team_opponent_leagues.append(match_team_rating_changes[-team_idx + 1].league)
-                    match_ids.append(match.id)
-                    performances.append(player_rating_change.performance)
-                    player_rating_differences.append(
-                        player_rating_change.pre_match_rating_value - opponent_team.pre_match_rating_value)
+            else:
+                match_team_rating_changes = self._create_match_team_rating_changes(match=match,
+                                                                                   pre_match_rating=pre_match_rating)
+                team_rating_changes += match_team_rating_changes
+
+                if match_idx == len(matches) - 1 or matches[match_idx + 1].update_id != match.update_id:
+                    self._update_ratings(team_rating_changes=team_rating_changes)
+                    team_rating_changes = []
+
+                for team_idx, team_rating_change in enumerate(match_team_rating_changes):
+                    opponent_team = match_team_rating_changes[-team_idx + 1]
+                    for player_idx, player_rating_change in enumerate(team_rating_change.players):
+                        pre_match_player_rating_values.append(player_rating_change.pre_match_rating_value)
+                        pre_match_team_rating_values.append(player_rating_change.pre_match_rating_value)
+                        pre_match_opponent_rating_values.append(opponent_team.pre_match_rating_value)
+                        player_leagues.append(player_rating_change.league)
+                        team_opponent_leagues.append(opponent_team.league)
+                        match_ids.append(match.id)
+
+                        performances.append(player_rating_change.performance)
+                        player_rating_differences.append(
+                            player_rating_change.pre_match_rating_value - opponent_team.pre_match_rating_value)
+                        player_predicted_performances.append(player_rating_change.predicted_performance)
+                        player_rating_changes.append(player_rating_change.rating_change_value)
 
         rating_differences = np.array(pre_match_team_rating_values) - (
             pre_match_opponent_rating_values)
@@ -161,14 +184,10 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
             RatingColumnNames.PLAYER_PREDICTED_PERFORMANCE: player_predicted_performances
         }
 
-    def _create_match_team_rating_changes(self, match: Match) -> list[TeamRatingChange]:
+    def _create_match_team_rating_changes(self, match: Match, pre_match_rating: PreMatchRating) -> list[
+        TeamRatingChange]:
 
         team_rating_changes = []
-        pre_match_rating = PreMatchRating(
-            id=match.id,
-            teams=self._get_pre_match_team_ratings(match=match),
-            day_number=match.day_number
-        )
 
         for team_idx, pre_match_team_rating in enumerate(pre_match_rating.teams):
             team_rating_change = self.team_rating_generator.generate_rating_change(day_number=match.day_number,

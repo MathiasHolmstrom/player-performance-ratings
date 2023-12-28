@@ -43,7 +43,7 @@ df['plus_minus_per_minute'] = df['plus_minus'] / df['game_minutes']
 df['participation_weight'] = df['minutes'] / df['game_minutes']
 
 df = (
-    df.assign(team_count=df.granularity('game_id')['team_id'].transform('nunique'))
+    df.assign(team_count=df.granularity('game_id')['team_id'].fit_transform('nunique'))
     .loc[lambda x: x.team_count == 2]
     .drop(columns=['team_count'])
 )

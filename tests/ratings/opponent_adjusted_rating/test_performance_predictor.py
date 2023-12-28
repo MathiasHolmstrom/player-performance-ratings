@@ -27,7 +27,8 @@ def test_rating_difference_performance_predictor(team_rating_value: float, playe
         rating_value=player_rating_value,
         match_performance=MatchPerformance(
             participation_weight=0.5,
-            performance_value=0.5
+            performance_value=0.5,
+            projected_participation_weight=0.5
         ),
         games_played=1,
         league='league',
