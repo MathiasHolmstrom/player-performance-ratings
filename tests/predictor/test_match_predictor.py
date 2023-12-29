@@ -3,7 +3,7 @@ import pandas as pd
 from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator, BayesianTimeWeightedRating, \
     RatingColumnNames, convert_df_to_matches
 
-from player_performance_ratings.transformation import ColumnWeight, LagTransformation
+from player_performance_ratings.transformation import ColumnWeight, LagTransformer
 
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.predictor import MatchPredictor
@@ -222,7 +222,7 @@ def test_match_predictor_0_rating_generators():
         column_weights=column_weights,
         rating_generators=[],
         post_rating_transformers=[
-            LagTransformation(feature_names=["kills", "deaths"], lag_length=1, granularity='player_id', prefix='lag_')],
+            LagTransformer(feature_names=["kills", "deaths"], lag_length=1, granularity='player_id', prefix='lag_')],
         predictor=predictor_mock,
         column_names=ColumnNames(
             match_id="game_id",

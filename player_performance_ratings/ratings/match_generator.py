@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 import warnings
 
+from player_performance_ratings.utils import validate_sorting
+
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 from typing import Optional
@@ -50,12 +52,7 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
             logging.warning(
                 f"median performance is {median_performance} which is far from 0.5. It is recommended to do further pre_transformations of the performance column")
 
-    df_sorted = df.sort_values(
-        by=[column_names.start_date, column_names.match_id,
-            column_names.team_id, column_names.player_id])
-
-    if not df.equals(df_sorted):
-        raise ValueError("df needs to be sorted by date, game_id, team_id, player_id in ascending order")
+    validate_sorting(df=df, column_names=column_names)
 
     col_names = column_names
     df[col_names.start_date] = pd.to_datetime(df[col_names.start_date], format='%Y-%m-%d %H:%M:%S')
