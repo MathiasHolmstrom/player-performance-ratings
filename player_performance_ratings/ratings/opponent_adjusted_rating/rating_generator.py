@@ -104,6 +104,7 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
         team_rating_changes = []
 
         is_past = False if len(matches) > 0 and matches[0].teams[0].players[0].performance.performance_value is None else True
+        logging.info("Creating ratings for past matches" if is_past else "Creating ratings for future matches")
 
         for match_idx, match in enumerate(matches):
             self._validate_match(match)

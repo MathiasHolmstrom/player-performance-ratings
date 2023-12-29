@@ -160,6 +160,9 @@ class SklearnPredictor(BaseMLWrapper):
                     f"target has {len(df[self._target].unique())} unique values. This may machine-learning model to not function properly."
                     f" It is recommended to limit max and min values to ensure less than 50 unique targets")
 
+        if hasattr(self.model, "predict_proba"):
+            df = df.assign(**{self._target: df[self._target].astype('int')})
+
         self.model.fit(df[self.features], df[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:

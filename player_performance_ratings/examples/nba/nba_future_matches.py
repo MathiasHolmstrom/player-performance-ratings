@@ -19,7 +19,7 @@ column_names = ColumnNames(
     match_id='game_id',
     start_date="start_date",
     player_id="player_id",
-    performance="plus_minus",
+    performance="won",
 )
 match_predictor = MatchPredictor(
     column_names=column_names
@@ -27,4 +27,5 @@ match_predictor = MatchPredictor(
 
 historical_df[PredictColumnNames.TARGET] = historical_df['won']
 
-match_predictor.predict(historical_df)
+match_predictor.generate_historical(historical_df)
+predicted_future_df = match_predictor.predict(future_df)

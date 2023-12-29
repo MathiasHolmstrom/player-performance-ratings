@@ -1,7 +1,6 @@
 import joblib
 
 
-from player_performance_ratings.examples.utils import load_nba_game_player_data
 
 from sklearn.metrics import log_loss
 

@@ -43,14 +43,10 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
             raise ValueError("performance column must be between 0 and 1")
 
         mean_performance = df[column_names.performance].mean()
-        median_performance = df[column_names.performance].median()
 
         if abs(mean_performance - 0.5) > 0.05:
             logging.warning(
                 f"mean performance is {mean_performance} which is far from 0.5. It is recommended to do further pre_transformations of the performance column")
-        if abs(median_performance - 0.5) > 0.05:
-            logging.warning(
-                f"median performance is {median_performance} which is far from 0.5. It is recommended to do further pre_transformations of the performance column")
 
     validate_sorting(df=df, column_names=column_names)
 
