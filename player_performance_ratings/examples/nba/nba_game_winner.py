@@ -17,7 +17,6 @@ column_names = ColumnNames(
     start_date="start_date",
     player_id="player_name",
     performance="won",
-
 )
 df = load_nba_game_player_data()
 df[PredictColumnNames.TARGET] = df['won']

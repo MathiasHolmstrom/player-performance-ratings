@@ -1,4 +1,3 @@
-# Load subsmapled data.
 import pandas as pd
 from lightgbm import LGBMRegressor
 from sklearn.metrics import mean_absolute_error
@@ -10,7 +9,7 @@ from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdju
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
 from player_performance_ratings.predictor.estimators import SklearnPredictor
-from player_performance_ratings.ratings import RatingColumnNames, OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings import RatingColumnNames
 from player_performance_ratings.tuner import MatchPredictorTuner
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 from player_performance_ratings.tuner.utils import get_default_team_rating_search_range

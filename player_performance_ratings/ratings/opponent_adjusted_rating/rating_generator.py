@@ -122,6 +122,8 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
                         pre_match_opponent_rating_values.append(opponent_team.rating_value)
                         player_leagues.append(pre_match_player.league)
                         team_opponent_leagues.append(opponent_team.league)
+                        player_rating_differences.append(
+                            pre_match_player.rating_value - opponent_team.rating_value)
                         match_ids.append(match.id)
 
             else:
@@ -154,7 +156,7 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
         rating_means = np.array(pre_match_team_rating_values) * 0.5 + 0.5 * np.array(
             pre_match_opponent_rating_values)
 
-        if df is not None and column_names:
+        if df is not None and column_names and is_past:
             self.ratings_df = df[
                 [column_names.team_id, column_names.player_id, column_names.match_id]].assign(
                 **{

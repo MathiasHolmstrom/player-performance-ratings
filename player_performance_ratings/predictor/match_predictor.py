@@ -59,9 +59,8 @@ class MatchPredictor():
             logging.warning(
                 "rating generator not set. Uses OpponentAdjustedRatingGenerator. To run match_predictor without rating_generator set rating_generator to []")
 
-
-
-        self.rating_generators = rating_generators if isinstance(rating_generators, list) else [rating_generators]
+        self.rating_generators: list[RatingGenerator] = rating_generators if isinstance(rating_generators, list) else [
+            rating_generators]
         self.column_names = column_names if isinstance(column_names, list) else [column_names for _ in
                                                                                  self.rating_generators]
 
@@ -117,6 +116,9 @@ class MatchPredictor():
     def generate_historical(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
                             store_ratings: bool = True) -> pd.DataFrame:
 
+        for pre_rating_transformer in self.pre_rating_transformers:
+            df = pre_rating_transformer.fit_transform(df)
+
         if matches:
             if isinstance(matches[0], Match):
                 matches = [matches for _ in self.rating_generators]
@@ -124,9 +126,6 @@ class MatchPredictor():
         if self.predictor.target not in df.columns:
             raise ValueError(
                 f"Target {self.predictor.target} not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
-
-        for pre_rating_transformer in self.pre_rating_transformers:
-            df = pre_rating_transformer.fit_transform(df)
 
         if self.train_split_date is None:
             self.train_split_date = df.iloc[int(len(df) / 1.3)][self.column_names[0].start_date]
@@ -137,12 +136,13 @@ class MatchPredictor():
 
             if matches is None:
                 rating_matches = convert_df_to_matches(column_names=rating_column_names, df=df,
-                                                league_identifier=LeagueIdentifier())
+                                                       league_identifier=LeagueIdentifier())
             else:
                 rating_matches = matches[rating_idx]
 
             if store_ratings:
-                match_ratings = rating_generator.generate(matches=rating_matches, df=df, column_names=rating_column_names)
+                match_ratings = rating_generator.generate(matches=rating_matches, df=df,
+                                                          column_names=rating_column_names)
             else:
                 match_ratings = rating_generator.generate(matches=rating_matches)
             for rating_feature, values in match_ratings.items():
@@ -162,8 +162,6 @@ class MatchPredictor():
         return df
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
-        for pre_rating_transformer in self.pre_rating_transformers:
-            df = pre_rating_transformer.fit_transform(df)
 
         for rating_idx, rating_generator in enumerate(self.rating_generators):
             rating_column_names = self.column_names[rating_idx]
@@ -172,7 +170,8 @@ class MatchPredictor():
                                             league_identifier=LeagueIdentifier())
 
             match_ratings = rating_generator.generate(matches, df=df)
-            for rating_feature, values in match_ratings.items():
+            for rating_feature in rating_generator.features_created:
+                values = match_ratings[rating_feature]
 
                 if len(self.rating_generators) > 1:
                     rating_feature_str = rating_feature + str(rating_idx)
@@ -181,7 +180,7 @@ class MatchPredictor():
                 df[rating_feature_str] = values
 
         for post_rating_transformer in self.post_rating_transformers:
-            df = post_rating_transformer.fit_transform(df)
+            df = post_rating_transformer.transform(df)
 
         df = self.predictor.add_prediction(df)
         return df

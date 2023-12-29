@@ -69,68 +69,58 @@ class LagTransformer(BaseTransformer):
                 self._features_created.append(f'{self.prefix}{lag}_{feature_name}')
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-
-        transformed_df = self.transform(df)
-
-        transformed_df = transformed_df.assign(
-            __id=transformed_df[self.column_names.match_id].astype('str') + "__" + transformed_df[
-                self.column_names.player_id].astype('str'))
-        if len(transformed_df.drop_duplicates(subset=['__id'])) != len(transformed_df):
-            raise ValueError(
-                "game_id, player_id needs to be a unique combination of rows."
-                "Please ensure there are no duplicates in the data or use LagLowerGranularityTransformater to create lags from a lower granularity than game_id, player_id")
-
+        validate_sorting(df=df, column_names=self.column_names)
         if self._df is None:
             self._df = df
         else:
             self._df = pd.concat([self._df, df], axis=0)
 
-        return transformed_df.drop(columns=["__id"])
+        self._df = self._df.assign(
+            __id=self._df[self.column_names.match_id].astype('str') + "__" + self._df[
+                self.column_names.player_id].astype(
+                'str'))
+        self._df = self._df.drop_duplicates(subset=['__id'], keep='last')
+
+        transformed_df = self.transform(pd.DataFrame(df))
+        return transformed_df
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        validate_sorting(df=df, column_names=self.column_names)
+        if self._df is None:
+            raise ValueError("fit_transform needs to be called before transform")
 
         ori_cols = df.columns.tolist()
         ori_index_values = df.index.tolist()
 
+        all_df = pd.concat([self._df, df], axis=0)
+        all_df = all_df.assign(
+            __id=all_df[self.column_names.match_id].astype('str') + "__" + all_df[self.column_names.player_id].astype(
+                'str'))
+        all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
+
+        validate_sorting(df=all_df, column_names=self.column_names)
+
         for feature_name in self.feature_names:
             for lag in range(1, self.lag_length + 1):
                 output_column_name = f'{self.prefix}{lag}_{feature_name}'
-                if output_column_name in df.columns:
+                if output_column_name in all_df.columns:
                     raise ValueError(
                         f'Column {output_column_name} already exists. Choose different prefix or ensure no duplication was performed')
 
-        if self._df is not None:
-            data = pd.concat([self._df, df], axis=0)
-            data = data.assign(
-                __id=data[self.column_names.match_id].astype('str') + "__" + data[self.column_names.player_id].astype(
-                    'str'))
-
-            data = data.drop_duplicates(subset=['__id'], keep='last')
-            try:
-                validate_sorting(df=data, column_names=self.column_names)
-            except ValueError:
-                raise ValueError(
-                    "The dataframe passed into fit_transform needs to be at an earlier date than the the proceeding dataframe passed into transform")
-        else:
-            data = df
-
         for feature_name in self.feature_names:
             for lag in range(1, self.lag_length + 1):
                 output_column_name = f'{self.prefix}{lag}_{feature_name}'
 
-                data = data.assign(
-                    **{output_column_name: data.groupby(self.granularity)[feature_name].shift(lag)})
+                all_df = all_df.assign(
+                    **{output_column_name: all_df.groupby(self.granularity)[feature_name].shift(lag)})
 
-        if self._df is not None:
-            df = df.assign(
-                __id=df[self.column_names.match_id].astype('str') + "__" + df[self.column_names.player_id].astype(
-                    'str'))
-            transformed_df = data[data['__id'].isin(df['__id'].unique().tolist())][ori_cols + self._features_created]
-            transformed_df.index = ori_index_values
-            return transformed_df
+        df = df.assign(
+            __id=df[self.column_names.match_id].astype('str') + "__" + df[
+                self.column_names.player_id].astype(
+                'str'))
 
-        return data
+        transformed_df = all_df[all_df['__id'].isin(df['__id'].unique().tolist())][ori_cols + self._features_created]
+        transformed_df.index = ori_index_values
+        return transformed_df[list(set(ori_cols + self._features_created))]
 
     @property
     def features_created(self) -> list[str]:
@@ -238,12 +228,10 @@ class RollingMeanTransformer(BaseTransformer):
     def __init__(self,
                  feature_names: list[str],
                  window: int,
-                 game_id: str,
-                 player_id: str,
-                 group_to_game_level: bool = False,
+                 column_names: ColumnNames,
                  granularity: Union[list[str], str] = None,
                  min_periods: int = 1,
-                 weight_column: Optional[str] = None,
+
                  prefix: str = 'rolling_mean_'):
         """
 
@@ -283,71 +271,61 @@ class RollingMeanTransformer(BaseTransformer):
             self.granularity = [self.granularity]
         self.window = window
         self.min_periods = min_periods
-        self.weight_column = weight_column
-        self.game_id = game_id
-        self.player_id = player_id
-        self.group_to_game_level = group_to_game_level
+        self.column_names = column_names
         self._df = None
         self.prefix = prefix
         self._features_created = [f'{self.prefix}{self.window}_{c}' for c in self.feature_names]
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        self._df = self.transform(df)
-        self._df = self._df.assign(
-            __id=self._df[self.game_id].astype('str') + "__" + self._df[self.player_id].astype('str'))
-        if len(self._df.drop_duplicates(subset=['__id'])) != len(self._df):
-            raise ValueError(
-                "game_id, player_id needs to be a unique combination of rows. Please ensure there are no duplicates in the data")
-
-        return self._df.drop(columns=["__id"])
-
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        if self._df is None:
+            raise ValueError("fit_transform needs to be called before transform")
 
         ori_cols = df.columns.tolist()
         ori_index_values = df.index.tolist()
 
+        all_df = pd.concat([self._df, df], axis=0).reset_index()
+        all_df = all_df.assign(
+            __id=all_df[self.column_names.match_id].astype('str') + "__" + all_df[self.column_names.player_id].astype(
+                'str'))
+        all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
+
+        validate_sorting(df=all_df, column_names=self.column_names)
+
         for feature_name in self.feature_names:
 
             output_column_name = f'{self.prefix}{self.window}_{feature_name}'
-            if output_column_name in df.columns:
+            if output_column_name in all_df.columns:
                 raise ValueError(
                     f'Column {output_column_name} already exists. Choose different prefix or ensure no duplication was performed')
 
-        if self._df is not None:
-            df = df.assign(__id=df[self.game_id].astype('str') + "__" + df[self.player_id].astype('str'))
-            _ids = df['__id'].unique()
-            data = pd.concat([self._df[~self._df["__id"].isin(_ids)], df], axis=0)
+            all_df = all_df.assign(**{output_column_name: all_df.groupby(self.granularity)[feature_name].apply(
+                lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())})
+
+        df = df.assign(
+            __id=df[self.column_names.match_id].astype('str') + "__" + df[
+                self.column_names.player_id].astype(
+                'str'))
+
+        transformed_df = all_df[all_df['__id'].isin(df['__id'].unique().tolist())][ori_cols + self._features_created]
+        transformed_df.index = ori_index_values
+        return transformed_df[list(set(ori_cols + self._features_created))]
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        validate_sorting(df=df, column_names=self.column_names)
+        if self._df is None:
+            self._df = df
         else:
-            data = df
+            self._df = pd.concat([self._df, df], axis=0)
 
-        for feature_name in self.feature_names:
-            output_column_name = f'{self.prefix}{self.window}_{feature_name}'
+        self._df = self._df.assign(
+            __id=self._df[self.column_names.match_id].astype('str') + "__" + self._df[
+                self.column_names.player_id].astype(
+                'str'))
+        self._df = self._df.drop_duplicates(subset=['__id'], keep='last')
 
-            if self.group_to_game_level:
-                grouped_data = create_output_column_by_game_group(data=data, feature_name=feature_name,
-                                                                  weight_column=self.weight_column,
-                                                                  game_id=self.game_id,
-                                                                  granularity=self.granularity)
-
-                grouped_data = grouped_data.assign(
-                    **{output_column_name: grouped_data.groupby(self.granularity)[feature_name].apply(
-                        lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())})
-
-                data = data[[c for c in data.columns if c != output_column_name]].merge(
-                    grouped_data[[output_column_name, self.game_id] + self.granularity],
-                    on=self.granularity + [self.game_id], how='left')
-
-
-            else:
-
-                data = data.assign(**{output_column_name: data.groupby(self.granularity)[feature_name].apply(
-                    lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())})
-
-        if self._df is not None:
-            transformed_df = data[data['__id'].isin(_ids)][ori_cols + self._features_created]
-            transformed_df.index = ori_index_values
-            return transformed_df
-        return data
+        transformed_df = self.transform(pd.DataFrame(df))
+        return transformed_df
 
     @property
     def features_created(self) -> list[str]:

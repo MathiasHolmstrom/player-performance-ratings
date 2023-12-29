@@ -350,12 +350,15 @@ def test_lag_transformation_transform_2_lags(column_names):
     pd.testing.assert_frame_equal(future_transformed_df, expected_df, check_like=True)
 
 
-def test_rolling_mean_transformation():
+def test_rolling_mean_fit_transform(column_names):
     df = pd.DataFrame(
         {
-            'player': ['a', 'b', 'a', "a", "a"],
-            "game": [1, 1, 1, 2, 2],
-            'points': [1, 2, 3, 4, 4]
+            'player': ['a', 'b', 'a', "a"],
+            "game": [1, 1, 2, 3],
+            'points': [1, 2, 3, 2],
+            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02"),
+                           pd.to_datetime("2023-01-04")],
+            "team": [1, 2, 1, 1],
         }
     )
     original_df = df.copy()
@@ -365,72 +368,52 @@ def test_rolling_mean_transformation():
         window=2,
         min_periods=1,
         granularity=['player'],
-        player_id="player",
-        game_id='game'
+        column_names=column_names
     )
 
     df_with_rolling_mean = rolling_mean_transformation.fit_transform(df)
 
     expected_df = original_df.assign(**{
-        "rolling_mean_2_points": [None, None, 1, 2, (4 + 3) / 2]
+        f"{rolling_mean_transformation.prefix}2_points": [None, None, 1, (3+1)/2]
     })
 
     pd.testing.assert_frame_equal(df_with_rolling_mean, expected_df, check_like=True)
 
 
-def test_rolling_mean_transformation_group_game_level():
-    df = pd.DataFrame(
+def test_rolling_mean_fit_transform_and_transform(column_names):
+    historical_df = pd.DataFrame(
         {
-            'player': ['a', 'b', 'a', "a", "a"],
-            'points': [1, 2, 3, 4, 4],
-            "game": [1, 1, 1, 2, 2]
+            'player': ['a', 'b', 'a', "a"],
+            "game": [1, 1, 2, 3],
+            'points': [1, 2, 3, 2],
+            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02"),
+                           pd.to_datetime("2023-01-04")],
+            "team": [1, 2, 1, 1],
         }
     )
-    original_df = df.copy()
 
+    future_df = pd.DataFrame({
+        "player": ['a', 'b', 'a'],
+        "game": [4, 4, 5],
+        "start_date": [pd.to_datetime("2023-01-05"), pd.to_datetime("2023-01-05"), pd.to_datetime("2023-01-06")],
+        "team": [1, 2, 1],
+    })
+
+    original_future_df = future_df.copy()
     rolling_mean_transformation = RollingMeanTransformer(
         feature_names=['points'],
         window=2,
         min_periods=1,
         granularity=['player'],
-        game_id='game',
-        player_id='player',
+        column_names=column_names
     )
 
-    df_with_rolling_mean = rolling_mean_transformation.fit_transform(df)
+    _ = rolling_mean_transformation.fit_transform(historical_df)
+    transformed_future_df = rolling_mean_transformation.transform(future_df)
 
-    expected_df = original_df.assign(**{
-        "rolling_mean_2_points": [None, None, None, 2, 2]
+    expected_df = original_future_df.assign(**{
+        f"{rolling_mean_transformation.prefix}2_points": [2.5, 2, 2]
     })
 
-    pd.testing.assert_frame_equal(df_with_rolling_mean, expected_df, check_like=True)
+    pd.testing.assert_frame_equal(transformed_future_df, expected_df, check_like=True)
 
-
-def test_rolling_mean_transformation_with_game_id_and_weights():
-    df = pd.DataFrame(
-        {
-            'player': ['a', 'b', 'a', "a", "a"],
-            'points': [1, 2, 3, 4, 4],
-            "game": [1, 1, 1, 2, 2],
-            "weight": [0.9, 1, 0.1, 1, 1]
-        }
-    )
-    original_df = df.copy()
-
-    rolling_mean_transformation = RollingMeanTransformer(
-        feature_names=['points'],
-        window=2,
-        min_periods=1,
-        granularity=['player'],
-        game_id='game',
-        weight_column='weight',
-        player_id='player',
-    )
-
-    df_with_rolling_mean = rolling_mean_transformation.fit_transform(df)
-
-    expected_df = original_df.assign(**{
-        "rolling_mean_2_points": [None, None, None, 0.9 * 1 + 3 * 0.1, 0.9 * 1 + 3 * 0.1]
-    })
-
-    pd.testing.assert_frame_equal(df_with_rolling_mean, expected_df, check_like=True)
