@@ -158,7 +158,7 @@ class MinMaxTransformer(BaseTransformer):
                         logging.warning(
                             f"MinMaxTransformer: {feature} mean value is {mean_value} after {self._mean_aligning_iterations} repetitions."
                             f"This is above the allowed mean difference of {self.allowed_mean_diff}."
-                            f" It is recommended to use DiminishinValueTransformer or SymmetricDistributionTransformer before MinMaxTransformer")
+                            f" It is recommended to use DiminishingValueTransformer or SymmetricDistributionTransformer before MinMaxTransformer")
                         continue
 
         return df
