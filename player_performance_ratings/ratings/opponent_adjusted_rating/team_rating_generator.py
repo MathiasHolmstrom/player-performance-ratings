@@ -267,7 +267,7 @@ class TeamRatingGenerator():
             id=pre_match_team_rating.id,
             rating_change_value=sum_rating_change,
             predicted_performance=predicted_performance,
-            pre_match_rating_value=pre_match_team_rating.projected_rating_value,
+            pre_match_projected_rating_value=pre_match_team_rating.rating_value,
             league=pre_match_team_rating.league,
             performance=performance
         )

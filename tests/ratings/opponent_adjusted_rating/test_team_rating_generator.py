@@ -26,7 +26,7 @@ def test_generate_pre_match_team_rating():
                 performance=MatchPerformance(
                     performance_value=1,
                     participation_weight=0.5,
-                    projected_participation_weight=0.5,
+                    projected_participation_weight=0.2,
                 ),
             ),
             MatchPlayer(
@@ -34,7 +34,7 @@ def test_generate_pre_match_team_rating():
                 performance=MatchPerformance(
                     performance_value=1,
                     participation_weight=0.3,
-                    projected_participation_weight=0.3,
+                    projected_participation_weight=0.8,
                 ),
             ),
         ],
@@ -76,7 +76,7 @@ def test_generate_pre_match_team_rating():
                 match_performance=MatchPerformance(
                     performance_value=1,
                     participation_weight=0.5,
-                    projected_participation_weight=0.5,
+                    projected_participation_weight=0.2,
                 ),
                 position=None
             ),
@@ -88,14 +88,16 @@ def test_generate_pre_match_team_rating():
                 match_performance=MatchPerformance(
                     performance_value=1,
                     participation_weight=0.3,
-                    projected_participation_weight=0.3,
+                    projected_participation_weight=0.8,
                 ),
                 position=None
             ),
         ],
         rating_value=(1100 * 0.5 + 900 * 0.3) / (0.5 + 0.3),
+        projected_rating_value=(1100 * 0.2 + 900 * 0.8) / (0.2 + 0.8)
     )
     assert pre_match_team_rating == expected_pre_match_team_rating
+
 
 
 @pytest.mark.parametrize("confidence_sum", [0, 25, 50, 75, 100])
@@ -183,12 +185,14 @@ def test_generate_rating_change(confidence_sum):
                 ),
             ],
             rating_value=(1100 * 0.5 + 900 * 0.3) / (0.5 + 0.3),
+            projected_rating_value=(1100 * 0.5 + 900 * 0.3) / (0.5 + 0.3),
         ),
         PreMatchTeamRating(
             id="2",
             league=None,
             rating_value=1100,
-            players=[]
+            players=[],
+            projected_rating_value=1100,
         ),
     ]
 
@@ -227,7 +231,7 @@ def test_generate_rating_change(confidence_sum):
         id="1",
         league=None,
         performance=(1 * 0.5 + 0.8 * 0.3) / (0.5 + 0.3),
-        pre_match_rating_value=(1100 * 0.5 + 900 * 0.3) / (0.5 + 0.3),
+        pre_match_projected_rating_value=(1100 * 0.5 + 900 * 0.3) / (0.5 + 0.3),
         predicted_performance=(
                                       expected_player1_predicted_performance * 0.5 + expected_player2_predicted_performance * 0.3) / (
                                       0.5 + 0.3),
@@ -269,7 +273,7 @@ def test_update_by_team_rating_change():
         id="1",
         league=None,
         performance=1,
-        pre_match_rating_value=1100,
+        pre_match_projected_rating_value=1100,
         predicted_performance=1,
         rating_change_value=10,
         players=[
@@ -359,7 +363,7 @@ def test_league_ratings_are_updated_when_player_ratings_are_updated():
         id="1",
         league="league1",
         performance=1,
-        pre_match_rating_value=1100,
+        pre_match_projected_rating_value=1100,
         predicted_performance=1,
         rating_change_value=10,
         players=[
@@ -428,7 +432,7 @@ def test_player_ratings_are_updated_when_league_ratings_reaches_threshold():
         id="1",
         league="league1",
         performance=1,
-        pre_match_rating_value=1100,
+        pre_match_projected_rating_value=1100,
         predicted_performance=1,
         rating_change_value=10,
         players=[
@@ -472,3 +476,6 @@ def test_player_ratings_are_updated_when_league_ratings_reaches_threshold():
 
     assert team_rating_generator._league_rating_changes["league1"] == 0
     assert team_rating_generator.player_ratings["1"].rating_value == expected_new_player_rating
+
+
+

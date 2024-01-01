@@ -35,7 +35,7 @@ def test_predictor_tuner():
 
     match_predictor_factory = MatchPredictorFactory(
         predictor=SklearnPredictor(model=LogisticRegression(), features=["rating_difference"], target="__target"),
-        column_names=column_names,
+
     )
 
     search_ranges = [

@@ -29,9 +29,9 @@ def test_bayesian_time_weight_rating_generator():
 
     matches = convert_df_to_matches(df=df, column_names=column_names)
 
-    m = BayesianTimeWeightedRating()
+    m = BayesianTimeWeightedRating(column_names=column_names)
 
-    ratings = m.generate(matches=matches, df=df, column_names=column_names)
+    ratings = m.generate(matches=matches, df=df)
 
     rating_likelihood_ratio_game2 = (m.likelihood_exponential_weight ** 1) / m.likelihood_denom
     rating_evidence_game2 = 1.0
@@ -86,8 +86,8 @@ def test_time_weight_rating_generator_with_league_and_position_priors():
 
     matches = convert_df_to_matches(df=df, column_names=column_names)
 
-    m = BayesianTimeWeightedRating(prior_by_league=True, prior_by_position=True)
-    ratings = m.generate(matches=matches, df=df, column_names=column_names)
+    m = BayesianTimeWeightedRating(prior_by_league=True, prior_by_position=True, column_names=column_names)
+    ratings = m.generate(matches=matches, df=df)
 
 
     assert ratings[RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE][2] == None

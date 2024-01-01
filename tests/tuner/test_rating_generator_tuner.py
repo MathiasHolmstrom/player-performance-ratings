@@ -7,7 +7,8 @@ from player_performance_ratings.predictor.estimators import SklearnPredictor
 from player_performance_ratings import ColumnNames, PredictColumnNames
 from player_performance_ratings.ratings import TeamRatingGenerator, RatingColumnNames
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
-from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import RatingDifferencePerformancePredictor
+from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import \
+    RatingDifferencePerformancePredictor
 from player_performance_ratings.ratings.opponent_adjusted_rating.start_rating_generator import StartRatingGenerator
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import OpponentAdjustedRatingGenerator
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
@@ -24,15 +25,6 @@ def test_opponent_adjusted_rating_generator_tuner_team_rating():
             high=.12,
         )
     ]
-
-    rating_generator1 = OpponentAdjustedRatingGenerator(team_rating_generator=TeamRatingGenerator(
-        confidence_weight=0.5
-    ))
-    rating_generator2 = OpponentAdjustedRatingGenerator(team_rating_generator=TeamRatingGenerator(
-        confidence_weight=0.4
-    ))
-    rating_generators = [rating_generator1, rating_generator2]
-
     column_names = ColumnNames(
         match_id="game_id",
         team_id="team_id",
@@ -41,14 +33,22 @@ def test_opponent_adjusted_rating_generator_tuner_team_rating():
         performance="won"
     )
 
+    rating_generator1 = OpponentAdjustedRatingGenerator(team_rating_generator=TeamRatingGenerator(
+        confidence_weight=0.5
+    ), column_names=column_names)
+    rating_generator2 = OpponentAdjustedRatingGenerator(team_rating_generator=TeamRatingGenerator(
+        confidence_weight=0.4
+    ), column_names=column_names)
+    rating_generators = [rating_generator1, rating_generator2]
+
+
     match_predictor_factory = MatchPredictorFactory(
         rating_generators=rating_generators,
-        column_names=column_names,
         predictor=SklearnPredictor(
             features=[f"{RatingColumnNames.RATING_DIFFERENCE}0", f"{RatingColumnNames.RATING_DIFFERENCE}1"],
             target=PredictColumnNames.TARGET
         )
-     #   predictor = mock.Mock()
+        #   predictor = mock.Mock()
     )
 
     rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
@@ -97,21 +97,6 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
             high=.12,
         )
     ]
-
-    rating_generator1 = OpponentAdjustedRatingGenerator(team_rating_generator=TeamRatingGenerator(
-        confidence_weight=0.5,
-        performance_predictor=RatingDifferencePerformancePredictor(
-            max_predict_value=0.3
-        )
-    ))
-    rating_generator2 = OpponentAdjustedRatingGenerator(team_rating_generator=TeamRatingGenerator(
-        confidence_weight=0.4,
-        performance_predictor=RatingDifferencePerformancePredictor(
-            max_predict_value=0.4
-        )
-    ))
-    rating_generators = [rating_generator1, rating_generator2]
-
     column_names = ColumnNames(
         match_id="game_id",
         team_id="team_id",
@@ -120,9 +105,24 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
         performance="won"
     )
 
+    rating_generator1 = OpponentAdjustedRatingGenerator(team_rating_generator=TeamRatingGenerator(
+        confidence_weight=0.5,
+        performance_predictor=RatingDifferencePerformancePredictor(
+            max_predict_value=0.3
+        )
+    ), column_names=column_names)
+    rating_generator2 = OpponentAdjustedRatingGenerator(team_rating_generator=TeamRatingGenerator(
+        confidence_weight=0.4,
+        performance_predictor=RatingDifferencePerformancePredictor(
+            max_predict_value=0.4
+        )
+    ),        column_names=column_names)
+    rating_generators = [rating_generator1, rating_generator2]
+
+
     match_predictor_factory = MatchPredictorFactory(
         rating_generators=rating_generators,
-        column_names=column_names,
+
         predictor=SklearnPredictor(
             features=[f"{RatingColumnNames.RATING_DIFFERENCE}0", f"{RatingColumnNames.RATING_DIFFERENCE}1"],
             target=PredictColumnNames.TARGET
@@ -185,21 +185,6 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
             high=.12,
         )
     ]
-
-    rating_generator1 = OpponentAdjustedRatingGenerator(team_rating_generator=TeamRatingGenerator(
-        confidence_weight=0.5,
-        start_rating_generator=StartRatingGenerator(
-            team_weight=0.5
-        )
-    ))
-    rating_generator2 = OpponentAdjustedRatingGenerator(team_rating_generator=TeamRatingGenerator(
-        confidence_weight=0.4,
-        start_rating_generator=StartRatingGenerator(
-            team_weight=0.4
-        )
-    ))
-    rating_generators = [rating_generator1, rating_generator2]
-
     column_names = ColumnNames(
         match_id="game_id",
         team_id="team_id",
@@ -208,9 +193,25 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
         performance="won"
     )
 
+    rating_generator1 = OpponentAdjustedRatingGenerator(team_rating_generator=TeamRatingGenerator(
+        confidence_weight=0.5,
+        start_rating_generator=StartRatingGenerator(
+            team_weight=0.5
+        ),
+    ),
+        column_names=column_names
+    )
+    rating_generator2 = OpponentAdjustedRatingGenerator(team_rating_generator=TeamRatingGenerator(
+        confidence_weight=0.4,
+        start_rating_generator=StartRatingGenerator(
+            team_weight=0.4
+        )
+    ),
+        column_names=column_names)
+    rating_generators = [rating_generator1, rating_generator2]
+
     match_predictor_factory = MatchPredictorFactory(
         rating_generators=rating_generators,
-        column_names=column_names,
         predictor=SklearnPredictor(
             features=[f"{RatingColumnNames.RATING_DIFFERENCE}0", f"{RatingColumnNames.RATING_DIFFERENCE}1"],
             target=PredictColumnNames.TARGET

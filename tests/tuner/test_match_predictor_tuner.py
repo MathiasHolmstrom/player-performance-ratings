@@ -23,14 +23,13 @@ def test_match_predictor_tuner():
     """
 
     match_predictor_factory = MatchPredictorFactory(
-        column_names=ColumnNames(
+        rating_generators=OpponentAdjustedRatingGenerator(column_names=ColumnNames(
             match_id="game_id",
             team_id="team_id",
             player_id="player_id",
             start_date="start_date",
             performance="won"
-        ),
-        rating_generators=OpponentAdjustedRatingGenerator(),
+        )),
     )
 
     scorer_mock = mock.Mock()
@@ -91,14 +90,13 @@ def test_match_predictor_tuner():
 
 def test_match_predictor_uses_rating_generator_from_factory_if_no_rating_generator_tuning():
     match_predictor_factory = MatchPredictorFactory(
-        column_names=ColumnNames(
+        rating_generators=OpponentAdjustedRatingGenerator(column_names=ColumnNames(
             match_id="game_id",
             team_id="team_id",
             player_id="player_id",
             start_date="start_date",
             performance="won"
-        ),
-        rating_generators=OpponentAdjustedRatingGenerator(),
+        )),
     )
     original_match_predictor_factory = copy.deepcopy(match_predictor_factory)
     scorer_mock = mock.Mock()

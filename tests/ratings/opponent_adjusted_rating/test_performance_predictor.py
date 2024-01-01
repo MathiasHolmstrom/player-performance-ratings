@@ -38,6 +38,7 @@ def test_rating_difference_performance_predictor(team_rating_value: float, playe
 
     team_rating = PreMatchTeamRating(
         rating_value=team_rating_value,
+        projected_rating_value=team_rating_value,
         league='league',
         id="1",
         players=[]
@@ -45,6 +46,7 @@ def test_rating_difference_performance_predictor(team_rating_value: float, playe
 
     opponent_team_rating = PreMatchTeamRating(
         rating_value=opponent_team_rating_value,
+        projected_rating_value=opponent_team_rating_value,
         league='league',
         id="2",
         players=[]

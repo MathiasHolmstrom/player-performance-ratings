@@ -15,7 +15,6 @@ from player_performance_ratings.transformation.base_transformer import BaseTrans
 class MatchPredictorFactory():
 
     def __init__(self,
-                 column_names: Union[ColumnNames, list[ColumnNames]],
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  pre_transformers: Optional[List[BaseTransformer]] = None,
                  post_transformers: Optional[List[BaseTransformer]] = None,
@@ -36,17 +35,18 @@ class MatchPredictorFactory():
 
 
         self.post_transformers = post_transformers or []
-        self.column_names = column_names
-        if isinstance(self.column_names, ColumnNames):
-            self.column_names = [self.column_names]
+
         self.predictor = predictor
         self.train_split_date = train_split_date
         self.use_auto_pre_transformers = use_auto_pre_transformers
         self.column_weights = column_weights
         self.pre_transformers = pre_transformers or []
         if self.use_auto_pre_transformers:
+            if not self.rating_generators:
+                raise ValueError("If auto pre transformers are used, rating generators must be specified")
+            column_names = [rating_generator.column_names for rating_generator in self.rating_generators]
             self.pre_transformers = auto_create_pre_transformers(column_weights=self.column_weights,
-                                                                        column_names=self.column_names)
+                                                                        column_names=column_names)
 
     def create(self,
                pre_rating_transformers: Optional[List[BaseTransformer]] = None,
@@ -62,7 +62,7 @@ class MatchPredictorFactory():
 
 
 
-        return MatchPredictor(column_names=self.column_names,
+        return MatchPredictor(
                               rating_generators=rating_generators,
                               pre_rating_transformers=pre_rating_transformers,
                               post_rating_transformers=post_rating_transformers,

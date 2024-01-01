@@ -11,7 +11,8 @@ from optuna.trial import BaseTrial
 
 from player_performance_ratings.ratings import TeamRatingGenerator, RatingColumnNames
 from player_performance_ratings.ratings.opponent_adjusted_rating.start_rating_generator import StartRatingGenerator
-from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import OpponentAdjustedRatingGenerator, RatingGenerator
+from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import \
+    OpponentAdjustedRatingGenerator, RatingGenerator
 from player_performance_ratings.scorer import BaseScorer
 
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
@@ -123,8 +124,10 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
             best_rating_generator = copy.deepcopy(match_predictor_factory.rating_generators[rating_idx])
         else:
             potential_rating_features = [v for k, v in RatingColumnNames.__dict__.items() if isinstance(v, str)]
+
             best_rating_generator = OpponentAdjustedRatingGenerator(
-                features_out=[f for f in match_predictor_factory.predictor.features if f in potential_rating_features]
+                features_out=[f for f in match_predictor_factory.predictor.features if f in potential_rating_features],
+                column_names=match_predictor_factory.rating_generators[rating_idx].column_names
             )
 
         if self.team_rating_n_trials > 0:
@@ -149,7 +152,8 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                                                         )
             best_rating_generator.team_rating_generator.start_rating_generator = best_start_rating
 
-        return OpponentAdjustedRatingGenerator(team_rating_generator=best_rating_generator.team_rating_generator)
+        return OpponentAdjustedRatingGenerator(team_rating_generator=best_rating_generator.team_rating_generator,
+                                               column_names=best_rating_generator.column_names)
 
     def _tune_team_rating(self,
                           df: pd.DataFrame,
@@ -191,7 +195,8 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                 potential_rating_features = [v for k, v in RatingColumnNames.__dict__.items() if isinstance(v, str)]
                 rating_generators = [OpponentAdjustedRatingGenerator(
                     features_out=[f for f in match_predictor_factory.predictor.features if
-                                  f in potential_rating_features]
+                                  f in potential_rating_features],
+                    column_names=match_predictor_factory.rating_generators[rating_index].column_names
                 )]
 
             rating_generators[rating_index] = rating_g
@@ -244,16 +249,16 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                            match_predictor_factory: MatchPredictorFactory):
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
             start_rating_generator_params = list(
-                inspect.signature(rating_generator.team_rating_generator.start_rating_generator.__class__.__init__).parameters.keys())[1:]
+                inspect.signature(
+                    rating_generator.team_rating_generator.start_rating_generator.__class__.__init__).parameters.keys())[
+                                            1:]
 
             params = {attr: getattr(rating_generator.team_rating_generator.start_rating_generator, attr) for attr in
-                      start_rating_generator_params }
+                      start_rating_generator_params}
 
             params = add_params_from_search_range(params=params,
                                                   trial=trial,
                                                   parameter_search_range=self.start_rating_search_ranges)
-
-
 
             start_rating_generator = StartRatingGenerator(**params)
             rating_g = copy.deepcopy(rating_generator)
@@ -279,7 +284,8 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
         callbacks = []
         study.optimize(lambda trial: objective(trial, df), n_trials=self.start_rating_n_trials, callbacks=callbacks)
         start_rating_generator_params = list(
-                inspect.signature(rating_generator.team_rating_generator.start_rating_generator.__class__.__init__).parameters.keys())[1:]
+            inspect.signature(
+                rating_generator.team_rating_generator.start_rating_generator.__class__.__init__).parameters.keys())[1:]
 
         other_params = {attr: getattr(rating_generator.team_rating_generator.start_rating_generator, attr) for attr in
                         start_rating_generator_params}

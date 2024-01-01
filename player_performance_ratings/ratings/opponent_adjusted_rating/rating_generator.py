@@ -15,6 +15,9 @@ from player_performance_ratings.data_structures import Match, PreMatchRating, Pr
 
 class RatingGenerator(ABC):
 
+    def __init__(self, column_names: ColumnNames):
+        self.column_names = column_names
+
     @abstractmethod
     def generate(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[
         RatingColumnNames, list[float]]:
@@ -56,13 +59,15 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
             If called by match_predictor, feature_names_created determines which features will be used for prediction.
             If other features such as player_rating_difference is used, it must be added to this list.
         """
+        super().__init__(column_names=column_names)
         self.team_rating_generator = team_rating_generator
+        if column_names.projected_participation_weight is not None and column_names.projected_participation_weight != column_names.participation_weight:
+            self._features_out = [RatingColumnNames.RATING_DIFFERENCE_PROJECTED]
         self._features_out = features_out or [RatingColumnNames.RATING_DIFFERENCE]
 
         # If projected participation weight is not None, then the projected ratings will be used instead of the actual ratings (which first are known after game is finished)
-        if column_names.projected_participation_weight is not None and column_names.projected_participation_weight != column_names.participation_weight:
-            self._features_out = [RatingColumnNames.RATING_DIFFERENCE_PROJECTED]
-        self.column_names = column_names
+
+
         self.ratings_df = None
 
     def generate(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[
@@ -153,8 +158,8 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
                             pre_match_rating.teams[-team_idx + 1].projected_rating_value)
 
                         pre_match_player_rating_values.append(player_rating_change.pre_match_rating_value)
-                        pre_match_team_rating_values.append(team_rating_change.pre_match_rating_value)
-                        pre_match_opponent_rating_values.append(opponent_team.pre_match_rating_value)
+                        pre_match_team_rating_values.append(pre_match_rating.teams[team_idx].rating_value)
+                        pre_match_opponent_rating_values.append(pre_match_rating.teams[-team_idx+1].rating_value)
                         player_leagues.append(player_rating_change.league)
                         team_opponent_leagues.append(opponent_team.league)
                         match_ids.append(match.id)
@@ -181,24 +186,34 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
             RatingColumnNames.PLAYER_LEAGUE: player_leagues,
             RatingColumnNames.OPPONENT_LEAGUE: team_opponent_leagues,
             RatingColumnNames.TEAM_RATING: pre_match_team_rating_values,
-            RatingColumnNames.PERFORMANCE: performances,
             RatingColumnNames.RATING_MEAN_PROJECTED: rating_means_projected,
             RatingColumnNames.MATCH_ID: match_ids,
             RatingColumnNames.PLAYER_RATING: pre_match_player_rating_values,
         }
 
         if self.column_names.projected_participation_weight is None or self.column_names.projected_participation_weight == self.column_names.participation_weight:
-            feature_values[RatingColumnNames.RATING_DIFFERENCE] = feature_values.pop(
-                RatingColumnNames.RATING_DIFFERENCE_PROJECTED)
-            feature_values[RatingColumnNames.PLAYER_RATING_DIFFERENCE_FROM_TEAM] = feature_values.pop(
-                RatingColumnNames.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED)
-            feature_values[RatingColumnNames.PLAYER_RATING_DIFFERENCE] = feature_values.pop(
-                RatingColumnNames.PLAYER_RATING_DIFFERENCE_PROJECTED)
-            feature_values[RatingColumnNames.TEAM_RATING] = feature_values.pop(
-                RatingColumnNames.TEAM_RATING_PROJECTED)
-            feature_values[RatingColumnNames.OPPONENT_RATING] = feature_values.pop(
-                RatingColumnNames.OPPONENT_RATING_PROJECTED)
-            feature_values[RatingColumnNames.RATING_MEAN] = feature_values.pop(RatingColumnNames.RATING_MEAN_PROJECTED)
+            if RatingColumnNames.RATING_DIFFERENCE_PROJECTED not in self._features_out:
+                feature_values[RatingColumnNames.RATING_DIFFERENCE] = feature_values.pop(
+                    RatingColumnNames.RATING_DIFFERENCE_PROJECTED)
+
+            if RatingColumnNames.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED not in self._features_out:
+                feature_values[RatingColumnNames.PLAYER_RATING_DIFFERENCE_FROM_TEAM] = feature_values.pop(
+                    RatingColumnNames.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED)
+
+            if RatingColumnNames.PLAYER_RATING_DIFFERENCE_PROJECTED not in self._features_out:
+                feature_values[RatingColumnNames.PLAYER_RATING_DIFFERENCE] = feature_values.pop(
+                    RatingColumnNames.PLAYER_RATING_DIFFERENCE_PROJECTED)
+
+            if RatingColumnNames.TEAM_RATING_PROJECTED not in self._features_out:
+                feature_values[RatingColumnNames.TEAM_RATING] = feature_values.pop(
+                    RatingColumnNames.TEAM_RATING_PROJECTED)
+
+            if RatingColumnNames.OPPONENT_RATING_PROJECTED not in self._features_out:
+                feature_values[RatingColumnNames.OPPONENT_RATING] = feature_values.pop(
+                    RatingColumnNames.OPPONENT_RATING_PROJECTED)
+
+            if RatingColumnNames.RATING_MEAN_PROJECTED not in self._features_out:
+                feature_values[RatingColumnNames.RATING_MEAN] = feature_values.pop(RatingColumnNames.RATING_MEAN_PROJECTED)
 
         if not is_future:
             if RatingColumnNames.RATING_DIFFERENCE not in feature_values:
@@ -215,6 +230,7 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
 
                 feature_values[RatingColumnNames.PLAYER_RATING_DIFFERENCE_FROM_TEAM] = np.array(
                     pre_match_player_rating_values) - np.array(pre_match_team_rating_values)
+                feature_values[RatingColumnNames.PERFORMANCE] = performances
 
             feature_values[RatingColumnNames.PLAYER_RATING_CHANGE] = player_rating_changes
             feature_values[RatingColumnNames.PLAYER_PREDICTED_PERFORMANCE] = player_predicted_performances

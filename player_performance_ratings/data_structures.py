@@ -103,7 +103,7 @@ class TeamRatingChange:
     players: list[PlayerRatingChange]
     predicted_performance: float
     performance: float
-    pre_match_rating_value: float
+    pre_match_projected_rating_value: float
     rating_change_value: float
     league: Optional[str]
 

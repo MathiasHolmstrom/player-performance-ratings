@@ -16,6 +16,7 @@ class BayesianTimeWeightedRating(RatingGenerator):
     """
 
     def __init__(self,
+                 column_names: ColumnNames,
                  evidence_exponential_weight: float = 0.96,
                  likelihood_exponential_weight: float = 0.98,
                  likelihood_denom: float = 50,
@@ -53,6 +54,7 @@ class BayesianTimeWeightedRating(RatingGenerator):
             If True, the prior-rating will be based on ratings of players within the same position
         """
 
+        super().__init__(column_names=column_names)
         if evidence_exponential_weight < 0 or evidence_exponential_weight > 1:
             raise ValueError("evidence_exponential_weight must be between 0 and 1")
         if likelihood_exponential_weight < 0 or likelihood_exponential_weight > 1:
@@ -75,17 +77,16 @@ class BayesianTimeWeightedRating(RatingGenerator):
         self._granularity_ratings: dict[str, list[float]] = {}
         self._granularity_players: dict[str, list[str]] = {}
 
-    def generate(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None,
-                 column_names: ColumnNames = None) -> dict[RatingColumnNames, list[float]]:
+    def generate(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[RatingColumnNames, list[float]]:
 
-        if matches is None and df is None or matches is None and column_names is None:
+        if matches is None and df is None:
             raise ValueError("If matches is not passed, df and column names must be massed")
 
         if matches is None:
-            matches = convert_df_to_matches(df=df, column_names=column_names)
+            matches = convert_df_to_matches(df=df, column_names=self.column_names)
 
-        if df is not None and column_names is not None:
-            mean_performance_value = df[column_names.performance].mean()
+        if df is not None:
+            mean_performance_value = df[self.column_names.performance].mean()
         else:
             count = 0
             sum_mean_performance_value = 0

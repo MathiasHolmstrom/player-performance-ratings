@@ -36,11 +36,6 @@ def test_transformer_tuner():
     pre_transformer_search_ranges = [
         (columns_weighter, column_weigher_search_range),
     ]
-
-    rating_generator1 = OpponentAdjustedRatingGenerator()
-
-    rating_generators = [rating_generator1]
-
     column_names = ColumnNames(
         match_id="game_id",
         team_id="team_id",
@@ -48,10 +43,14 @@ def test_transformer_tuner():
         start_date="start_date",
         performance="kills"
     )
+    rating_generator1 = OpponentAdjustedRatingGenerator(column_names=column_names)
+
+    rating_generators = [rating_generator1]
+
+
 
     match_predictor_factory = MatchPredictorFactory(
         rating_generators=rating_generators,
-        column_names=column_names,
     )
 
     transformer_tuner = TransformerTuner(pre_or_post="pre_rating", transformer_search_ranges=pre_transformer_search_ranges, n_trials=2)
@@ -107,11 +106,6 @@ def test_transformer_tuner_regressor(estimator):
     pre_transformer_search_ranges = [
         (columns_weighter, column_weigher_search_range),
     ]
-
-    rating_generator1 = OpponentAdjustedRatingGenerator()
-
-    rating_generators = [rating_generator1]
-
     column_names = ColumnNames(
         match_id="game_id",
         team_id="team_id",
@@ -120,9 +114,13 @@ def test_transformer_tuner_regressor(estimator):
         performance="kills"
     )
 
+    rating_generator1 = OpponentAdjustedRatingGenerator(column_names=column_names)
+
+    rating_generators = [rating_generator1]
+
+
     match_predictor_factory = MatchPredictorFactory(
         rating_generators=rating_generators,
-        column_names=column_names,
         predictor=SklearnPredictor(
             model=estimator,
             features=[RatingColumnNames.RATING_DIFFERENCE]

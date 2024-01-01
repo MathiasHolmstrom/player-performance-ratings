@@ -69,7 +69,7 @@ class MatchPredictorTuner():
 
     def tune(self, df: pd.DataFrame) -> MatchPredictor:
 
-        column_names = self.match_predictor_factory.column_names
+        column_names = [rating_generator.column_names for rating_generator in self.match_predictor_factory.rating_generators]
 
         best_pre_transformers = copy.deepcopy(self.match_predictor_factory.pre_transformers)
 
@@ -120,7 +120,7 @@ class MatchPredictorTuner():
         else:
             best_predictor = self.match_predictor_factory.predictor
 
-        best_match_predictor = MatchPredictor(column_names=column_names,
+        best_match_predictor = MatchPredictor(
                                               rating_generators=best_rating_generators,
                                               pre_rating_transformers=best_pre_transformers,
                                               post_rating_transformers=best_post_transformers,

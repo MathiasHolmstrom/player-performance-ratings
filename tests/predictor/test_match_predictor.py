@@ -32,19 +32,21 @@ def test_match_predictor_auto_pre_transformers():
     predictor_mock = mock.Mock()
     predictor_mock.target = "__target"
     predictor_mock.add_prediction.return_value = expected_df
+    rating_generators = OpponentAdjustedRatingGenerator(features_out=[RatingColumnNames.RATING_DIFFERENCE],
+                                                        column_names=ColumnNames(
+                                                            match_id="game_id",
+                                                            team_id="team_id",
+                                                            player_id="player_id",
+                                                            start_date="start_date",
+                                                            performance="weighted_performance"
+                                                        ))
 
     match_predictor = MatchPredictor(
         train_split_date=pd.to_datetime("2023-01-02"),
         use_auto_pre_transformers=True,
         column_weights=column_weights,
         predictor=predictor_mock,
-        column_names=ColumnNames(
-            match_id="game_id",
-            team_id="team_id",
-            player_id="player_id",
-            start_date="start_date",
-            performance="weighted_performance"
-        ),
+        rating_generators=rating_generators,
     )
 
     new_df = match_predictor.generate_historical(df=df)
@@ -93,11 +95,12 @@ def test_match_predictor_multiple_rating_generators_same_performance():
         train_split_date=pd.to_datetime("2023-01-02"),
         use_auto_pre_transformers=False,
         column_weights=column_weights,
-        rating_generators=[OpponentAdjustedRatingGenerator(features_out=[RatingColumnNames.RATING_DIFFERENCE]),
-                           BayesianTimeWeightedRating()],
+        rating_generators=[
+            OpponentAdjustedRatingGenerator(features_out=[RatingColumnNames.RATING_DIFFERENCE],
+                                            column_names=column_names1),
+            BayesianTimeWeightedRating(column_names=column_names1)],
         post_rating_transformers=[],
         predictor=predictor_mock,
-        column_names=[column_names1],
     )
 
     new_df = match_predictor.generate_historical(df=df)
@@ -162,11 +165,11 @@ def test_match_predictor_multiple_rating_generators_difference_performance():
         train_split_date=pd.to_datetime("2023-01-02"),
         use_auto_pre_transformers=False,
         column_weights=column_weights,
-        rating_generators=[OpponentAdjustedRatingGenerator(features_out=[RatingColumnNames.RATING_DIFFERENCE]),
-                           OpponentAdjustedRatingGenerator()],
+        rating_generators=[OpponentAdjustedRatingGenerator(features_out=[RatingColumnNames.RATING_DIFFERENCE],
+                                                           column_names=column_names1),
+                           OpponentAdjustedRatingGenerator(column_names=column_names2)],
         post_rating_transformers=[],
         predictor=predictor_mock,
-        column_names=[column_names1, column_names2],
     )
 
     matches1 = convert_df_to_matches(df=df, column_names=column_names1)
@@ -232,7 +235,7 @@ def test_match_predictor_0_rating_generators():
         post_rating_transformers=[
             lag_transformer],
         predictor=predictor_mock,
-        column_names=column_names,
+        date_column_name=column_names.start_date,
     )
 
     new_df = match_predictor.generate_historical(df=df)
@@ -280,19 +283,22 @@ def test_match_predictor_generate_and_predict():
     predictor_mock.target = "__target"
     predictor_mock.add_prediction.return_value = expected_df
 
+    column_names = ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="start_date",
+        performance="weighted_performance"
+    )
+    rating_generator = OpponentAdjustedRatingGenerator(features_out=[RatingColumnNames.RATING_DIFFERENCE],
+                                                       column_names=column_names)
+
     match_predictor = MatchPredictor(
         train_split_date=pd.to_datetime("2023-01-02"),
         use_auto_pre_transformers=True,
         column_weights=column_weights,
         predictor=predictor_mock,
-        column_names=ColumnNames(
-            match_id="game_id",
-            team_id="team_id",
-            player_id="player_id",
-            start_date="start_date",
-            performance="weighted_performance"
-        ),
-    )
+        rating_generators=rating_generator, )
 
     _ = match_predictor.generate_historical(df=historical_df)
     new_df = match_predictor.predict(future_df)
