@@ -1,4 +1,5 @@
 import pandas as pd
+from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
 from player_performance_ratings.predictor import MatchPredictor
@@ -22,7 +23,7 @@ column_names = ColumnNames(
     performance="won",
 )
 match_predictor = MatchPredictor(
-    column_names=column_names,
+    rating_generators=[OpponentAdjustedRatingGenerator(column_names=column_names)],
 )
 historical_df[PredictColumnNames.TARGET] = historical_df['won']
 match_predictor.generate_historical(historical_df)

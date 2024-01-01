@@ -189,15 +189,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
 
             rating_g = copy.deepcopy(rating_generator)
             rating_g.team_rating_generator = team_rating_generator
-            if match_predictor_factory.rating_generators:
-                rating_generators = copy.deepcopy(match_predictor_factory.rating_generators)
-            else:
-                potential_rating_features = [v for k, v in RatingColumnNames.__dict__.items() if isinstance(v, str)]
-                rating_generators = [OpponentAdjustedRatingGenerator(
-                    features_out=[f for f in match_predictor_factory.predictor.features if
-                                  f in potential_rating_features],
-                    column_names=match_predictor_factory.rating_generators[rating_index].column_names
-                )]
+            rating_generators = copy.deepcopy(match_predictor_factory.rating_generators)
 
             rating_generators[rating_index] = rating_g
             match_predictor = match_predictor_factory.create(

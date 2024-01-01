@@ -80,11 +80,13 @@ class TransformerTuner:
         if not matches:
             matches = None
 
+        column_names = [r.column_names for r in match_predictor_factory.rating_generators]
+
         if self.transformer_search_ranges is None:
             logging.info("Creating transformer search ranges")
             self.transformer_search_ranges = create_pre_rating_search_range_for_auto(
                 feature_names=self.feature_names,
-                column_names=match_predictor_factory.column_names,
+                column_names=column_names,
                 lower_is_better_features=self.lower_is_better_features
             )
 

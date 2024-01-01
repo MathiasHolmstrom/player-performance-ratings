@@ -35,11 +35,11 @@ df['__target'] = df['result']
 
 df = (
     df.loc[lambda x: x.position != 'team']
-    .assign(team_count=df.groupby('gameid')['teamname'].fit_transform('nunique'))
+    .assign(team_count=df.groupby('gameid')['teamname'].transform('nunique'))
     .loc[lambda x: x.team_count == 2]
 )
 
-rating_generator = OpponentAdjustedRatingGenerator()
+rating_generator = OpponentAdjustedRatingGenerator(column_names=column_names)
 
 team_rating_search_ranges = [
     ParameterSearchRange(
@@ -194,7 +194,6 @@ predictor_tuner = PredictorTuner(
 )
 
 match_predictor_factory = MatchPredictorFactory(
-    column_names=column_names,
     rating_generators=rating_generator,
     predictor=SklearnPredictor(
         model=LGBMClassifier(verbose=-100),
