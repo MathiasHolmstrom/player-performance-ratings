@@ -84,6 +84,13 @@ class MatchPredictor():
 
         self.rating_generators: list[RatingGenerator] = rating_generators if isinstance(rating_generators, list) else [
             rating_generators]
+
+        if len(column_names) < len(self.rating_generators) and isinstance(column_names, list):
+            raise ValueError("the number of column_names must be equal to the number of rating_generators")
+
+        if isinstance(column_names, ColumnNames) and len(self.rating_generators) > 1:
+            logging.warning("Only 1 column name is passed. Will use the same column_names for all rating_generators")
+
         self.column_names = column_names if isinstance(column_names, list) else [column_names for _ in
                                                                                  self.rating_generators]
 
@@ -132,7 +139,7 @@ class MatchPredictor():
             features = list(set(self.other_features + self.other_categorical_features)) or []
 
             for c in self.post_rating_transformers:
-                features += c.features_created
+                features += c.features_out
             for rating_idx, c in enumerate(self.rating_generators):
                 for rating_feature in c.features_created:
                     if len(self.rating_generators) > 1:

@@ -62,7 +62,7 @@ def test_net_over_predicted_transformer_fit_transform():
 
     transformer = NetOverPredictedTransformer(features=['performance'], granularity=['position'])
     expected_df = df.copy()
-    expected_df[transformer.features_created[0]] = [-0.05, 0.05, -0.05, 0, 0.05]
+    expected_df[transformer.features_out[0]] = [-0.05, 0.05, -0.05, 0, 0.05]
     transformed_df = transformer.fit_transform(df)
 
     pd.testing.assert_frame_equal(expected_df, transformed_df)

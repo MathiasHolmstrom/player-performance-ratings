@@ -73,7 +73,8 @@ class PreMatchPlayerRating:
 class PreMatchTeamRating:
     id: str
     players: list[PreMatchPlayerRating]
-    rating_value: float
+    rating_value: Optional[float]
+    projected_rating_value: float
     league: Optional[str]
 
 
@@ -130,6 +131,7 @@ class MatchRating:
 
 @dataclass
 class MatchRatings:
+    pre_match_team_rating_projected_values: list[float]
     pre_match_team_rating_values: list[float]
     pre_match_player_rating_values: list[float]
     pre_match_opponent_rating_values: list[float]

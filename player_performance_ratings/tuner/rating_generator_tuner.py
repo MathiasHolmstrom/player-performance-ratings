@@ -124,7 +124,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
         else:
             potential_rating_features = [v for k, v in RatingColumnNames.__dict__.items() if isinstance(v, str)]
             best_rating_generator = OpponentAdjustedRatingGenerator(
-                features_created=[f for f in match_predictor_factory.predictor.features if f in potential_rating_features]
+                features_out=[f for f in match_predictor_factory.predictor.features if f in potential_rating_features]
             )
 
         if self.team_rating_n_trials > 0:
@@ -190,8 +190,8 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
             else:
                 potential_rating_features = [v for k, v in RatingColumnNames.__dict__.items() if isinstance(v, str)]
                 rating_generators = [OpponentAdjustedRatingGenerator(
-                    features_created=[f for f in match_predictor_factory.predictor.features if
-                                      f in potential_rating_features]
+                    features_out=[f for f in match_predictor_factory.predictor.features if
+                                  f in potential_rating_features]
                 )]
 
             rating_generators[rating_index] = rating_g

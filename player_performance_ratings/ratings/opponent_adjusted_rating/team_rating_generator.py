@@ -119,11 +119,14 @@ class TeamRatingGenerator():
         pre_match_player_ratings += new_player_pre_match_ratings
         pre_match_team_rating_value = self._generate_pre_match_team_rating_value(
             pre_match_player_ratings=pre_match_player_ratings)
+        pre_match_team_rating_projected_value = self._generate_pre_match_team_rating_projected_value(
+            pre_match_player_ratings=pre_match_player_ratings)
 
         return PreMatchTeamRating(
             id=match_team.id,
             players=pre_match_player_ratings,
             rating_value=pre_match_team_rating_value,
+            projected_rating_value=pre_match_team_rating_projected_value,
             league=match_team.league
         )
 
@@ -194,11 +197,21 @@ class TeamRatingGenerator():
 
         return pre_match_player_ratings
 
-    def _generate_pre_match_team_rating_value(self, pre_match_player_ratings: list[PreMatchPlayerRating]) -> float:
+    def _generate_pre_match_team_rating_projected_value(self, pre_match_player_ratings: list[PreMatchPlayerRating]) -> float:
         team_rating = sum(
             player.rating_value * player.match_performance.projected_participation_weight for player in pre_match_player_ratings)
         sum_participation_weight = sum(
             player.match_performance.projected_participation_weight for player in pre_match_player_ratings)
+
+        return team_rating / sum_participation_weight if sum_participation_weight > 0 else 0
+
+    def _generate_pre_match_team_rating_value(self, pre_match_player_ratings: list[PreMatchPlayerRating]) -> Optional[float]:
+        if len(pre_match_player_ratings) > 0 and pre_match_player_ratings[0].match_performance.participation_weight is None:
+            return None
+        team_rating = sum(
+            player.rating_value * player.match_performance.participation_weight for player in pre_match_player_ratings)
+        sum_participation_weight = sum(
+            player.match_performance.participation_weight for player in pre_match_player_ratings)
 
         return team_rating / sum_participation_weight if sum_participation_weight > 0 else 0
 
@@ -254,7 +267,7 @@ class TeamRatingGenerator():
             id=pre_match_team_rating.id,
             rating_change_value=sum_rating_change,
             predicted_performance=predicted_performance,
-            pre_match_rating_value=pre_match_team_rating.rating_value,
+            pre_match_rating_value=pre_match_team_rating.projected_rating_value,
             league=pre_match_team_rating.league,
             performance=performance
         )

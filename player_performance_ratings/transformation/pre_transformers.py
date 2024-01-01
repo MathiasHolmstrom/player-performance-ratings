@@ -57,7 +57,7 @@ class ColumnsWeighter(BaseTransformer):
         return self.fit_transform(df)
 
     @property
-    def features_created(self) -> list[str]:
+    def features_out(self) -> list[str]:
         return [self.weighted_column_name]
 
 
@@ -84,7 +84,7 @@ class SklearnEstimatorImputer(BaseTransformer):
         return df.drop(columns=[f'imputed_col_{self.target_name}'])
 
     @property
-    def features_created(self) -> list[str]:
+    def features_out(self) -> list[str]:
         return [self.target_name]
 
 
@@ -101,7 +101,7 @@ class SkLearnTransformerWrapper(BaseTransformer):
         return df.assign(**{feature: self.transformer.transform(df[[feature]]) for feature in self.features})
 
     @property
-    def features_created(self) -> list[str]:
+    def features_out(self) -> list[str]:
         return self.features
 
 
@@ -125,7 +125,7 @@ class MinMaxTransformer(BaseTransformer):
         if self.quantile < 0 or self.quantile > 1:
             raise ValueError("quantile must be between 0 and 1")
 
-        self._feature_names_created = []
+        self._features_out = []
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
@@ -136,7 +136,7 @@ class MinMaxTransformer(BaseTransformer):
             df[self.prefix + feature] = (df[feature] - self._min_values[feature]) / (
                     self._max_values[feature] - self._min_values[feature])
             df[self.prefix + feature].clip(0, 1, inplace=True)
-            self._feature_names_created.append(self.prefix + feature)
+            self._features_out.append(self.prefix + feature)
 
             if self.allowed_mean_diff:
 
@@ -181,8 +181,8 @@ class MinMaxTransformer(BaseTransformer):
         return df
 
     @property
-    def features_created(self) -> list[str]:
-        return self._feature_names_created
+    def features_out(self) -> list[str]:
+        return self._features_out
 
 
 class DiminishingValueTransformer(BaseTransformer):
@@ -238,7 +238,7 @@ class DiminishingValueTransformer(BaseTransformer):
         return df
 
     @property
-    def features_created(self) -> list[str]:
+    def features_out(self) -> list[str]:
         return self.features
 
 
@@ -319,7 +319,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
         return df
 
     @property
-    def features_created(self) -> list[str]:
+    def features_out(self) -> list[str]:
         return self.features
 
 
@@ -335,10 +335,10 @@ class GroupByTransformer(BaseTransformer):
         self.granularity = granularity
         self.agg_func = agg_func
         self.prefix = prefix
-        self._feature_names_created = []
+        self._features_out = []
         self._grouped = None
         for feature in self.features:
-            self._feature_names_created.append(self.prefix + feature)
+            self._features_out.append(self.prefix + feature)
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         self._grouped = (df
@@ -354,8 +354,8 @@ class GroupByTransformer(BaseTransformer):
         return df.merge(self._grouped, on=self.granularity, how='left')
 
     @property
-    def features_created(self) -> list[str]:
-        return self._feature_names_created
+    def features_out(self) -> list[str]:
+        return self._features_out
 
 
 class NetOverPredictedTransformer(BaseTransformer):
@@ -371,10 +371,10 @@ class NetOverPredictedTransformer(BaseTransformer):
                                                                              agg_func='mean')
         self.prefix = prefix
         self.features = features
-        self._feature_names_created = []
-        for idx, predicted_feature in enumerate(self.predict_transformer.features_created):
+        self._features_out = []
+        for idx, predicted_feature in enumerate(self.predict_transformer.features_out):
             new_feature_name = f'{self.prefix}{self.features[idx]}'
-            self._feature_names_created.append(new_feature_name)
+            self._features_out.append(new_feature_name)
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
@@ -384,19 +384,19 @@ class NetOverPredictedTransformer(BaseTransformer):
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         predicted_df = self.predict_transformer.transform(df)
-        df = df.merge(predicted_df[self.predict_transformer.features_created + ['__id']], on="__id").drop(
+        df = df.merge(predicted_df[self.predict_transformer.features_out + ['__id']], on="__id").drop(
             columns=["__id"])
 
         return self._add_net_over_predicted(df=df)
 
     def _add_net_over_predicted(self, df: pd.DataFrame) -> pd.DataFrame:
-        for idx, predicted_feature in enumerate(self.predict_transformer.features_created):
-            new_feature_name = self._feature_names_created[idx]
+        for idx, predicted_feature in enumerate(self.predict_transformer.features_out):
+            new_feature_name = self._features_out[idx]
             df = df.assign(**{new_feature_name: df[self.features[idx]] - df[predicted_feature]})
             df = df.drop(columns=[predicted_feature])
 
         return df
 
     @property
-    def features_created(self) -> list[str]:
-        return self._feature_names_created
+    def features_out(self) -> list[str]:
+        return self._features_out

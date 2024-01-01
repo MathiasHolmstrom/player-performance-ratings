@@ -3,7 +3,7 @@ import pandas as pd
 from player_performance_ratings.data_structures import Match, MatchPlayer, MatchPerformance, MatchTeam, \
     PlayerRating, ColumnNames
 from player_performance_ratings.ratings.enums import RatingColumnNames
-from player_performance_ratings.ratings import TeamRatingGenerator, convert_df_to_matches
+from player_performance_ratings.ratings import TeamRatingGenerator, convert_df_to_matches, StartRatingGenerator
 from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import \
     MATCH_CONTRIBUTION_TO_SUM_VALUE
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import OpponentAdjustedRatingGenerator
@@ -123,9 +123,18 @@ def test_rating_generator_update_id_different_from_match_id():
         )
     ]
 
-    rating_change_multiplier = 10  # k
+    rating_change_multiplier = 10
+    column_names = ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="start_date",
+        performance="won",
+    )
 
     rating_generator = OpponentAdjustedRatingGenerator(
+        column_names=column_names,
+        features_out=[RatingColumnNames.PLAYER_RATING_CHANGE],
         team_rating_generator=TeamRatingGenerator(
             rating_change_multiplier=rating_change_multiplier,
             confidence_weight=0
@@ -239,9 +248,19 @@ def test_rating_generator_1_match():
         ),
     ]
 
+    column_names = ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="start_date",
+        performance="won",
+    )
+
     rating_change_multiplier = 10  # k
 
     rating_generator = OpponentAdjustedRatingGenerator(
+        column_names=column_names,
+        features_out=[RatingColumnNames.PLAYER_RATING_CHANGE],
         team_rating_generator=TeamRatingGenerator(
             rating_change_multiplier=rating_change_multiplier,
             confidence_weight=0
@@ -312,15 +331,58 @@ def test_rating_generator_without_performance():
         column_names.start_date: [pd.to_datetime("2021-01-01"), pd.to_datetime("2021-01-01")],
     })
 
-
-    rating_generator = OpponentAdjustedRatingGenerator()
-    rating_generator.generate(df=hist_df, column_names=column_names)
+    rating_generator = OpponentAdjustedRatingGenerator(
+        features_out=[RatingColumnNames.PLAYER_RATING, RatingColumnNames.TEAM_RATING,
+                      RatingColumnNames.RATING_DIFFERENCE],
+        column_names=column_names,
+    )
+    rating_generator.generate(df=hist_df)
 
     future_matches = convert_df_to_matches(df=future_df, column_names=column_names)
     ratings = rating_generator.generate(matches=future_matches)
     assert ratings[RatingColumnNames.PLAYER_RATING][0] > ratings[RatingColumnNames.PLAYER_RATING][1]
     assert ratings[RatingColumnNames.TEAM_RATING][0] > ratings[RatingColumnNames.TEAM_RATING][1]
     assert ratings[RatingColumnNames.RATING_DIFFERENCE][0] > 0
-    assert ratings[RatingColumnNames.RATING_DIFFERENCE][1] <0
+    assert ratings[RatingColumnNames.RATING_DIFFERENCE][1] < 0
 
 
+def test_opponent_adjusted_rating_generator_with_projected_performance():
+    column_names = ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="start_date",
+        performance="won",
+        projected_participation_weight="projected_participation_weight",
+        participation_weight="participation_weight",
+    )
+
+    df = pd.DataFrame({
+        column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2],
+        column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2],
+        column_names.player_id: [1, 2, 3, 4, 1, 2, 3, 4],
+        column_names.start_date: [pd.to_datetime("2020-01-01"), pd.to_datetime("2020-01-01"),
+                                  pd.to_datetime("2020-01-01"), pd.to_datetime("2020-01-01"),
+                                  pd.to_datetime("2021-01-02"), pd.to_datetime("2021-01-02"),
+                                  pd.to_datetime("2021-01-02"), pd.to_datetime("2021-01-02")
+                                  ],
+        column_names.performance: [1, 0.5, 0.25, 0.25, 0.5, 0.5, 0.5, 0.5],
+        column_names.projected_participation_weight: [1, 1, 1, 1, 1, 0.2, 0.6, 0.6],
+        column_names.participation_weight: [1, 1, 1, 1, 1, 1, 1, 1],
+    })
+
+    rating_generator = OpponentAdjustedRatingGenerator(
+        column_names=column_names,
+        features_out=[RatingColumnNames.TEAM_RATING_PROJECTED, RatingColumnNames.TEAM_RATING],
+        team_rating_generator=TeamRatingGenerator(
+            confidence_weight=0,
+            start_rating_generator=StartRatingGenerator(
+                harcoded_start_rating=1000
+            )
+        )
+    )
+    ratings = rating_generator.generate(df=df)
+
+    assert ratings[RatingColumnNames.TEAM_RATING][4] == ratings[RatingColumnNames.TEAM_RATING][5]
+    assert ratings[RatingColumnNames.TEAM_RATING][6] == ratings[RatingColumnNames.TEAM_RATING][7]
+    assert ratings[RatingColumnNames.TEAM_RATING][4] > ratings[RatingColumnNames.TEAM_RATING_PROJECTED][4]

@@ -123,7 +123,7 @@ class LagTransformer(BaseTransformer):
         return transformed_df[list(set(ori_cols + self._features_created))]
 
     @property
-    def features_created(self) -> list[str]:
+    def features_out(self) -> list[str]:
         return self._features_created
 
 
@@ -157,11 +157,11 @@ class LagLowerGranularityTransformer(DifferentGranularityTransformer):
         self.lag_length = lag_length
         self.prefix = prefix
         self.weight_column = weight_column
-        self._features_created = []
+        self._features_out = []
         self._diff_granularity_df = None
         for feature_name in self.feature_names:
             for lag in range(1, self.lag_length + 1):
-                self._features_created.append(f'{self.prefix}{lag}_{feature_name}')
+                self._features_out.append(f'{self.prefix}{lag}_{feature_name}')
 
     def fit_transform(self, diff_granularity_df: pd.DataFrame, game_player_df: pd.DataFrame) -> pd.DataFrame:
 
@@ -219,8 +219,8 @@ class LagLowerGranularityTransformer(DifferentGranularityTransformer):
         return game_player_df
 
     @property
-    def features_created(self) -> list[str]:
-        return self._features_created
+    def features_out(self) -> list[str]:
+        return self._features_out
 
 
 class RollingMeanTransformer(BaseTransformer):
@@ -274,7 +274,7 @@ class RollingMeanTransformer(BaseTransformer):
         self.column_names = column_names
         self._df = None
         self.prefix = prefix
-        self._features_created = [f'{self.prefix}{self.window}_{c}' for c in self.feature_names]
+        self._features_out = [f'{self.prefix}{self.window}_{c}' for c in self.feature_names]
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         if self._df is None:
@@ -306,9 +306,9 @@ class RollingMeanTransformer(BaseTransformer):
                 self.column_names.player_id].astype(
                 'str'))
 
-        transformed_df = all_df[all_df['__id'].isin(df['__id'].unique().tolist())][ori_cols + self._features_created]
+        transformed_df = all_df[all_df['__id'].isin(df['__id'].unique().tolist())][ori_cols + self._features_out]
         transformed_df.index = ori_index_values
-        return transformed_df[list(set(ori_cols + self._features_created))]
+        return transformed_df[list(set(ori_cols + self._features_out))]
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
@@ -328,5 +328,5 @@ class RollingMeanTransformer(BaseTransformer):
         return transformed_df
 
     @property
-    def features_created(self) -> list[str]:
-        return self._features_created
+    def features_out(self) -> list[str]:
+        return self._features_out

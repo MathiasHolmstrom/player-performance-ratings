@@ -15,7 +15,7 @@ class BaseTransformer(ABC):
 
     @property
     @abstractmethod
-    def features_created(self) -> list[str]:
+    def features_out(self) -> list[str]:
         pass
 
 class DifferentGranularityTransformer(ABC):
@@ -29,7 +29,7 @@ class DifferentGranularityTransformer(ABC):
 
     @property
     @abstractmethod
-    def features_created(self) -> list[str]:
+    def features_out(self) -> list[str]:
         pass
 
 

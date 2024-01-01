@@ -65,9 +65,9 @@ class BayesianTimeWeightedRating(RatingGenerator):
         self.prior_granularity_count_max = prior_granularity_count_max
         self.by_league = prior_by_league
         self.by_position = prior_by_position
-        self._features_created = features_created or [RatingColumnNames.TIME_WEIGHTED_RATING,
-                                                      RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE,
-                                                      RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO]
+        self._features_out = features_created or [RatingColumnNames.TIME_WEIGHTED_RATING,
+                                                  RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE,
+                                                  RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO]
 
         self.player_performances: dict[str, list[float]] = {}
         self.player_days: dict[str, list[int]] = {}
@@ -192,5 +192,5 @@ class BayesianTimeWeightedRating(RatingGenerator):
         return self.team_ratings
 
     @property
-    def features_created(self) -> list[str]:
-        return self._features_created
+    def features_out(self) -> list[str]:
+        return self._features_out

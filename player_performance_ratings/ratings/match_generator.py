@@ -38,6 +38,10 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
     If the league_identifier is passed it will identify the league of the match by the players past matches played.
     If not the  league of the match will be equal to the league of the current match
     """
+
+    if column_names.participation_weight is None and column_names.projected_participation_weight is not None:
+        raise ValueError("projected_participation_weight column passed but not participation_weight column")
+
     if column_names.performance in df.columns:
         if max(df[column_names.performance]) > 1.001 or min(df[column_names.performance]) < -0.001:
             raise ValueError("performance column must be between 0 and 1")

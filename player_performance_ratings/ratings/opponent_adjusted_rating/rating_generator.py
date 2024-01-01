@@ -16,8 +16,8 @@ from player_performance_ratings.data_structures import Match, PreMatchRating, Pr
 class RatingGenerator(ABC):
 
     @abstractmethod
-    def generate(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None,
-                 column_names: Optional[ColumnNames] = None) -> dict[RatingColumnNames, list[float]]:
+    def generate(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[
+        RatingColumnNames, list[float]]:
         pass
 
     @property
@@ -32,7 +32,7 @@ class RatingGenerator(ABC):
 
     @property
     @abstractmethod
-    def features_created(self) -> list[str]:
+    def features_out(self) -> list[str]:
         pass
 
 
@@ -43,8 +43,9 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
     """
 
     def __init__(self,
+                 column_names: ColumnNames,
                  team_rating_generator: TeamRatingGenerator = TeamRatingGenerator(),
-                 features_created: Optional[list[str]] = None,
+                 features_out: Optional[list[str]] = None,
                  ):
 
         """
@@ -56,11 +57,16 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
             If other features such as player_rating_difference is used, it must be added to this list.
         """
         self.team_rating_generator = team_rating_generator
-        self._features_created = features_created or [RatingColumnNames.RATING_DIFFERENCE]
+        self._features_out = features_out or [RatingColumnNames.RATING_DIFFERENCE]
+
+        # If projected participation weight is not None, then the projected ratings will be used instead of the actual ratings (which first are known after game is finished)
+        if column_names.projected_participation_weight is not None and column_names.projected_participation_weight != column_names.participation_weight:
+            self._features_out = [RatingColumnNames.RATING_DIFFERENCE_PROJECTED]
+        self.column_names = column_names
         self.ratings_df = None
 
-    def generate(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None,
-                 column_names: Optional[ColumnNames] = None) -> dict[RatingColumnNames, list[float]]:
+    def generate(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[
+        RatingColumnNames, list[float]]:
 
         """
         Generate ratings by iterating over each match, calculate predicted performance and update ratings after the match is finished.
@@ -76,35 +82,37 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
         if matches is not None and len(matches) > 0 and not isinstance(matches[0], Match):
             raise ValueError("matches must be a list of Match objects")
 
-        if matches is None and df is None or matches is None and column_names is None:
+        if matches is None and df is None:
             raise ValueError("If matches is not passed, df and column names must be massed")
 
         if matches is None:
-            matches = convert_df_to_matches(df=df, column_names=column_names)
+            matches = convert_df_to_matches(df=df, column_names=self.column_names)
 
-        if df is not None and column_names:
+        if df is not None and self.column_names:
             logging.info(
                 "both df and column names are passed, and match-ratings will therefore be stored in the class object")
 
-        elif column_names and df is None:
+        elif self.column_names and df is None:
             logging.warning(
                 "Column names is passed but df not - this match-ratings will not be stored in the class object")
 
         pre_match_player_rating_values = []
         pre_match_team_rating_values = []
+        pre_match_opponent_projected_rating_values = []
         pre_match_opponent_rating_values = []
         team_opponent_leagues = []
         match_ids = []
         player_rating_changes = []
         player_leagues = []
         player_predicted_performances = []
-        player_rating_differences = []
+        pre_match_team_projected_rating_values = []
         performances = []
 
         team_rating_changes = []
 
-        is_past = False if len(matches) > 0 and matches[0].teams[0].players[0].performance.performance_value is None else True
-        logging.info("Creating ratings for past matches" if is_past else "Creating ratings for future matches")
+        is_future = True if len(matches) > 0 and matches[0].teams[0].players[
+            0].performance.performance_value is None else False
+        logging.info("Creating ratings for past matches" if is_future else "Creating ratings for future matches")
 
         for match_idx, match in enumerate(matches):
             self._validate_match(match)
@@ -114,18 +122,18 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
                 day_number=match.day_number
             )
 
-            if not is_past:
+            if is_future:
                 for team_idx, pre_match_team in enumerate(pre_match_rating.teams):
                     opponent_team = pre_match_rating.teams[-team_idx + 1]
                     for player_idx, pre_match_player in enumerate(pre_match_team.players):
+                        pre_match_team_projected_rating_values.append(pre_match_team.projected_rating_value)
                         pre_match_player_rating_values.append(pre_match_player.rating_value)
-                        pre_match_team_rating_values.append(pre_match_team.rating_value)
-                        pre_match_opponent_rating_values.append(opponent_team.rating_value)
-                        player_leagues.append(pre_match_player.league)
+                        pre_match_opponent_projected_rating_values.append(opponent_team.projected_rating_value)
                         team_opponent_leagues.append(opponent_team.league)
-                        player_rating_differences.append(
-                            pre_match_player.rating_value - opponent_team.rating_value)
+                        player_leagues.append(pre_match_player.league)
+
                         match_ids.append(match.id)
+
 
             else:
                 match_team_rating_changes = self._create_match_team_rating_changes(match=match,
@@ -139,53 +147,84 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
                 for team_idx, team_rating_change in enumerate(match_team_rating_changes):
                     opponent_team = match_team_rating_changes[-team_idx + 1]
                     for player_idx, player_rating_change in enumerate(team_rating_change.players):
+                        pre_match_team_projected_rating_values.append(
+                            pre_match_rating.teams[team_idx].projected_rating_value)
+                        pre_match_opponent_projected_rating_values.append(
+                            pre_match_rating.teams[-team_idx + 1].projected_rating_value)
+
                         pre_match_player_rating_values.append(player_rating_change.pre_match_rating_value)
-                        pre_match_team_rating_values.append(player_rating_change.pre_match_rating_value)
+                        pre_match_team_rating_values.append(team_rating_change.pre_match_rating_value)
                         pre_match_opponent_rating_values.append(opponent_team.pre_match_rating_value)
                         player_leagues.append(player_rating_change.league)
                         team_opponent_leagues.append(opponent_team.league)
                         match_ids.append(match.id)
 
                         performances.append(player_rating_change.performance)
-                        player_rating_differences.append(
-                            player_rating_change.pre_match_rating_value - opponent_team.pre_match_rating_value)
                         player_predicted_performances.append(player_rating_change.predicted_performance)
                         player_rating_changes.append(player_rating_change.rating_change_value)
 
-        rating_differences = np.array(pre_match_team_rating_values) - (
-            pre_match_opponent_rating_values)
-        rating_means = np.array(pre_match_team_rating_values) * 0.5 + 0.5 * np.array(
-            pre_match_opponent_rating_values)
+        rating_differences_projected = np.array(pre_match_team_projected_rating_values) - (
+            pre_match_opponent_projected_rating_values)
+        player_rating_differences_projected = np.array(pre_match_team_projected_rating_values) - (
+            pre_match_opponent_projected_rating_values)
+        player_rating_difference_from_team_projected = np.array(pre_match_player_rating_values) - np.array(
+            pre_match_team_projected_rating_values)
+        rating_means_projected = np.array(pre_match_team_projected_rating_values) * 0.5 + 0.5 * np.array(
+            pre_match_opponent_projected_rating_values)
 
-        if df is not None and column_names and is_past:
-            self.ratings_df = df[
-                [column_names.team_id, column_names.player_id, column_names.match_id]].assign(
-                **{
-                    RatingColumnNames.RATING_DIFFERENCE: rating_differences,
-                    RatingColumnNames.PLAYER_LEAGUE: player_leagues,
-                    RatingColumnNames.OPPONENT_LEAGUE: team_opponent_leagues,
-                    RatingColumnNames.PLAYER_RATING: pre_match_player_rating_values,
-                    RatingColumnNames.PLAYER_RATING_CHANGE: player_rating_changes,
-                    RatingColumnNames.TEAM_RATING: pre_match_team_rating_values,
-                    RatingColumnNames.OPPONENT_RATING: pre_match_opponent_rating_values,
-                    RatingColumnNames.PERFORMANCE: performances,
-                    RatingColumnNames.RATING_MEAN: rating_means,
-                    RatingColumnNames.PLAYER_PREDICTED_PERFORMANCE: player_predicted_performances
-                })
-
-        return {
-            RatingColumnNames.PLAYER_RATING_DIFFERENCE: player_rating_differences,
-            RatingColumnNames.RATING_DIFFERENCE: rating_differences,
+        feature_values = {
+            RatingColumnNames.RATING_DIFFERENCE_PROJECTED: rating_differences_projected,
+            RatingColumnNames.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED: player_rating_difference_from_team_projected,
+            RatingColumnNames.PLAYER_RATING_DIFFERENCE_PROJECTED: player_rating_differences_projected,
+            RatingColumnNames.TEAM_RATING_PROJECTED: pre_match_team_projected_rating_values,
+            RatingColumnNames.OPPONENT_RATING_PROJECTED: pre_match_opponent_projected_rating_values,
             RatingColumnNames.PLAYER_LEAGUE: player_leagues,
             RatingColumnNames.OPPONENT_LEAGUE: team_opponent_leagues,
-            RatingColumnNames.PLAYER_RATING: pre_match_player_rating_values,
-            RatingColumnNames.PLAYER_RATING_CHANGE: player_rating_changes,
-            RatingColumnNames.MATCH_ID: match_ids,
             RatingColumnNames.TEAM_RATING: pre_match_team_rating_values,
-            RatingColumnNames.OPPONENT_RATING: pre_match_opponent_rating_values,
-            RatingColumnNames.RATING_MEAN: rating_means,
-            RatingColumnNames.PLAYER_PREDICTED_PERFORMANCE: player_predicted_performances
+            RatingColumnNames.PERFORMANCE: performances,
+            RatingColumnNames.RATING_MEAN_PROJECTED: rating_means_projected,
+            RatingColumnNames.MATCH_ID: match_ids,
+            RatingColumnNames.PLAYER_RATING: pre_match_player_rating_values,
         }
+
+        if self.column_names.projected_participation_weight is None or self.column_names.projected_participation_weight == self.column_names.participation_weight:
+            feature_values[RatingColumnNames.RATING_DIFFERENCE] = feature_values.pop(
+                RatingColumnNames.RATING_DIFFERENCE_PROJECTED)
+            feature_values[RatingColumnNames.PLAYER_RATING_DIFFERENCE_FROM_TEAM] = feature_values.pop(
+                RatingColumnNames.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED)
+            feature_values[RatingColumnNames.PLAYER_RATING_DIFFERENCE] = feature_values.pop(
+                RatingColumnNames.PLAYER_RATING_DIFFERENCE_PROJECTED)
+            feature_values[RatingColumnNames.TEAM_RATING] = feature_values.pop(
+                RatingColumnNames.TEAM_RATING_PROJECTED)
+            feature_values[RatingColumnNames.OPPONENT_RATING] = feature_values.pop(
+                RatingColumnNames.OPPONENT_RATING_PROJECTED)
+            feature_values[RatingColumnNames.RATING_MEAN] = feature_values.pop(RatingColumnNames.RATING_MEAN_PROJECTED)
+
+        if not is_future:
+            if RatingColumnNames.RATING_DIFFERENCE not in feature_values:
+                feature_values[RatingColumnNames.PLAYER_RATING_DIFFERENCE] = np.array(
+                    pre_match_player_rating_values) - np.array(
+                    pre_match_opponent_rating_values)
+                feature_values[RatingColumnNames.RATING_DIFFERENCE] = np.array(pre_match_team_rating_values) - np.array(
+                    pre_match_opponent_rating_values)
+                feature_values[RatingColumnNames.PLAYER_RATING] = pre_match_player_rating_values
+                feature_values[RatingColumnNames.OPPONENT_RATING] = pre_match_opponent_rating_values
+                feature_values[RatingColumnNames.TEAM_RATING] = pre_match_team_rating_values
+                feature_values[RatingColumnNames.RATING_MEAN] = np.array(
+                    pre_match_team_rating_values) * 0.5 + 0.5 * np.array(pre_match_opponent_rating_values)
+
+                feature_values[RatingColumnNames.PLAYER_RATING_DIFFERENCE_FROM_TEAM] = np.array(
+                    pre_match_player_rating_values) - np.array(pre_match_team_rating_values)
+
+            feature_values[RatingColumnNames.PLAYER_RATING_CHANGE] = player_rating_changes
+            feature_values[RatingColumnNames.PLAYER_PREDICTED_PERFORMANCE] = player_predicted_performances
+
+        if df is not None and self.column_names and is_future:
+            self.ratings_df = df[
+                [self.column_names.team_id, self.column_names.player_id, self.column_names.match_id]].assign(
+                **feature_values)
+
+        return {f: feature_values[f] for f in self._features_out}
 
     def _create_match_team_rating_changes(self, match: Match, pre_match_rating: PreMatchRating) -> list[
         TeamRatingChange]:
@@ -241,5 +280,5 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
                            key=lambda team: team.rating_value, reverse=True))
 
     @property
-    def features_created(self) -> list[str]:
-        return self._features_created
+    def features_out(self) -> list[str]:
+        return self._features_out
