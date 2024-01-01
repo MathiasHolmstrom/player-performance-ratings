@@ -1,7 +1,61 @@
 import pandas as pd
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from player_performance_ratings.transformation.pre_transformers import GroupByTransformer, DiminishingValueTransformer, \
-    NetOverPredictedTransformer, SymmetricDistributionTransformer
+    NetOverPredictedTransformer, SymmetricDistributionTransformer, SkLearnTransformerWrapper
+
+
+def test_sklearn_transformer_wrapper_one_hot_encoder():
+    sklearn_transformer = OneHotEncoder(handle_unknown='ignore')
+
+    df = pd.DataFrame({
+        'game_id': [1, 1, 1],
+        "position": ["a", "b", "a"],
+    })
+
+    transformer = SkLearnTransformerWrapper(transformer=sklearn_transformer, features=['position'])
+
+    transformed_df = transformer.fit_transform(df)
+
+    assert transformed_df.shape[1] == 4
+
+    df_future = pd.DataFrame({
+        'game_id': [1, 2],
+        "position": ["a", "c"],
+    })
+
+    expected_future_transformed_df = df_future.copy()
+    future_transformed_df = transformer.transform(df_future)
+
+    expected_future_transformed_df['position_a'] = [1, 0]
+    expected_future_transformed_df['position_b'] = [0, 0]
+
+    pd.testing.assert_frame_equal(expected_future_transformed_df, future_transformed_df, check_dtype=False)
+
+
+def test_sklearn_transformer_wrapper_standard_scaler():
+    sklearn_transformer = StandardScaler()
+
+    df = pd.DataFrame({
+        'game_id': [1, 1, 1],
+        "position": ["a", "b", "a"],
+        "value": [1.2, 0.4, 2.3]
+    })
+
+    transformer = SkLearnTransformerWrapper(transformer=sklearn_transformer, features=['value'])
+
+    transformed_df = transformer.fit_transform(df)
+
+    assert transformed_df.shape[1] == 3
+
+    df_future = pd.DataFrame({
+        'game_id': [1, 2],
+        "position": ["a", "c"],
+        "value": [1.2, 0.4]
+    })
+
+    future_transformed_df = transformer.transform(df_future)
+    assert future_transformed_df['value'].min() < 0
 
 
 def test_groupby_transformer_fit_transform():
@@ -102,8 +156,8 @@ def test_symmetric_distribution_transformer_transform():
                                                    max_iterations=40)
     fit_transformed_df = transformer.fit_transform(ori_fit_transform_df)
     expected_value_1 = \
-    fit_transformed_df.iloc[ori_fit_transform_df[ori_fit_transform_df['performance'] == 0.8].index.tolist()[0]][
-        'performance']
+        fit_transformed_df.iloc[ori_fit_transform_df[ori_fit_transform_df['performance'] == 0.8].index.tolist()[0]][
+            'performance']
     expected_value_2 = \
         fit_transformed_df.iloc[ori_fit_transform_df[ori_fit_transform_df['performance'] == 0.1].index.tolist()[0]][
             'performance']

@@ -6,7 +6,7 @@ import pandas as pd
 
 from player_performance_ratings.data_structures import Match, ColumnNames, TeamRating, PlayerRating
 from player_performance_ratings.ratings import convert_df_to_matches
-from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.enums import FutureRatingColumnNames
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
 
 
@@ -67,9 +67,9 @@ class BayesianTimeWeightedRating(RatingGenerator):
         self.prior_granularity_count_max = prior_granularity_count_max
         self.by_league = prior_by_league
         self.by_position = prior_by_position
-        self._features_out = features_created or [RatingColumnNames.TIME_WEIGHTED_RATING,
-                                                  RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE,
-                                                  RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO]
+        self._features_out = features_created or [FutureRatingColumnNames.TIME_WEIGHTED_RATING,
+                                                  FutureRatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE,
+                                                  FutureRatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO]
 
         self.player_performances: dict[str, list[float]] = {}
         self.player_days: dict[str, list[int]] = {}
@@ -77,7 +77,7 @@ class BayesianTimeWeightedRating(RatingGenerator):
         self._granularity_ratings: dict[str, list[float]] = {}
         self._granularity_players: dict[str, list[str]] = {}
 
-    def generate(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[RatingColumnNames, list[float]]:
+    def generate(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[FutureRatingColumnNames, list[float]]:
 
         if matches is None and df is None:
             raise ValueError("If matches is not passed, df and column names must be massed")
@@ -99,9 +99,9 @@ class BayesianTimeWeightedRating(RatingGenerator):
             mean_performance_value = sum_mean_performance_value / count
 
         ratings = {
-            RatingColumnNames.TIME_WEIGHTED_RATING: [],
-            RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO: [],
-            RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE: [],
+            FutureRatingColumnNames.TIME_WEIGHTED_RATING: [],
+            FutureRatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO: [],
+            FutureRatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE: [],
         }
 
         for match in matches:
@@ -133,9 +133,9 @@ class BayesianTimeWeightedRating(RatingGenerator):
                     self.player_days[team_player.id].append(match.day_number)
                     self.player_performances[team_player.id].append(team_player.performance.performance_value)
 
-                    ratings[RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO].append(likelihood_ratio)
-                    ratings[RatingColumnNames.TIME_WEIGHTED_RATING].append(posterior_rating)
-                    ratings[RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE].append(evidence_performances)
+                    ratings[FutureRatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO].append(likelihood_ratio)
+                    ratings[FutureRatingColumnNames.TIME_WEIGHTED_RATING].append(posterior_rating)
+                    ratings[FutureRatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE].append(evidence_performances)
 
         return ratings
 

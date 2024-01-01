@@ -26,7 +26,7 @@ def create_output_column_by_game_group(data: pd.DataFrame, feature_name: str,
 class LagTransformer(BaseTransformer):
 
     def __init__(self,
-                 feature_names: list[str],
+                 features: list[str],
                  lag_length: int,
                  column_names: ColumnNames,
                  granularity: Optional[list[str]] = None,
@@ -57,14 +57,14 @@ class LagTransformer(BaseTransformer):
             Prefix for the new lag columns
         """
 
-        self.feature_names = feature_names
+        super().__init__(features=features)
         self.column_names = column_names
         self.granularity = granularity or [self.column_names.player_id]
         self.lag_length = lag_length
         self.prefix = prefix
         self._features_created = []
         self._df = None
-        for feature_name in self.feature_names:
+        for feature_name in self.features:
             for lag in range(1, self.lag_length + 1):
                 self._features_created.append(f'{self.prefix}{lag}_{feature_name}')
 
@@ -99,14 +99,14 @@ class LagTransformer(BaseTransformer):
 
         validate_sorting(df=all_df, column_names=self.column_names)
 
-        for feature_name in self.feature_names:
+        for feature_name in self.features:
             for lag in range(1, self.lag_length + 1):
                 output_column_name = f'{self.prefix}{lag}_{feature_name}'
                 if output_column_name in all_df.columns:
                     raise ValueError(
                         f'Column {output_column_name} already exists. Choose different prefix or ensure no duplication was performed')
 
-        for feature_name in self.feature_names:
+        for feature_name in self.features:
             for lag in range(1, self.lag_length + 1):
                 output_column_name = f'{self.prefix}{lag}_{feature_name}'
 
@@ -130,7 +130,7 @@ class LagTransformer(BaseTransformer):
 class LagLowerGranularityTransformer(DifferentGranularityTransformer):
 
     def __init__(self,
-                 feature_names: list[str],
+                 features: list[str],
                  lag_length: int,
                  column_names: ColumnNames,
                  granularity: Union[list[str], str] = None,
@@ -151,7 +151,7 @@ class LagLowerGranularityTransformer(DifferentGranularityTransformer):
 
         :param column_names:
         """
-        self.feature_names = feature_names
+        super().__init__(features)
         self.column_names = column_names
         self.granularity = granularity or [self.column_names.player_id]
         self.lag_length = lag_length
@@ -159,7 +159,7 @@ class LagLowerGranularityTransformer(DifferentGranularityTransformer):
         self.weight_column = weight_column
         self._features_out = []
         self._diff_granularity_df = None
-        for feature_name in self.feature_names:
+        for feature_name in self.features:
             for lag in range(1, self.lag_length + 1):
                 self._features_out.append(f'{self.prefix}{lag}_{feature_name}')
 
@@ -194,14 +194,14 @@ class LagLowerGranularityTransformer(DifferentGranularityTransformer):
             by=[self.column_names.start_date, self.column_names.match_id, self.column_names.team_id,
                 self.column_names.player_id])
 
-        for feature_name in self.feature_names:
+        for feature_name in self.features:
             for lag in range(1, self.lag_length + 1):
                 output_column_name = f'{self.prefix}{lag}_{feature_name}'
                 if output_column_name in diff_granularity_df.columns:
                     raise ValueError(
                         f'Column {output_column_name} already exists. Choose different prefix or ensure no duplication was performed')
 
-        for feature_name in self.feature_names:
+        for feature_name in self.features:
             for lag in range(1, self.lag_length + 1):
                 grouped_data = create_output_column_by_game_group(data=diff_granularity_df, feature_name=feature_name,
                                                                   weight_column=self.weight_column,
@@ -226,7 +226,7 @@ class LagLowerGranularityTransformer(DifferentGranularityTransformer):
 class RollingMeanTransformer(BaseTransformer):
 
     def __init__(self,
-                 feature_names: list[str],
+                 features: list[str],
                  window: int,
                  column_names: ColumnNames,
                  granularity: Union[list[str], str] = None,
@@ -235,7 +235,7 @@ class RollingMeanTransformer(BaseTransformer):
                  prefix: str = 'rolling_mean_'):
         """
 
-        :param feature_names:
+        :param features:
             Features to create rolling mean for
 
         :param granularity:
@@ -265,7 +265,7 @@ class RollingMeanTransformer(BaseTransformer):
             Prefix for the new rolling mean columns
         """
 
-        self.feature_names = feature_names
+        super().__init__(features=features)
         self.granularity = granularity
         if isinstance(self.granularity, str):
             self.granularity = [self.granularity]
@@ -274,7 +274,7 @@ class RollingMeanTransformer(BaseTransformer):
         self.column_names = column_names
         self._df = None
         self.prefix = prefix
-        self._features_out = [f'{self.prefix}{self.window}_{c}' for c in self.feature_names]
+        self._features_out = [f'{self.prefix}{self.window}_{c}' for c in self.features]
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         if self._df is None:
@@ -291,7 +291,7 @@ class RollingMeanTransformer(BaseTransformer):
 
         validate_sorting(df=all_df, column_names=self.column_names)
 
-        for feature_name in self.feature_names:
+        for feature_name in self.features:
 
             output_column_name = f'{self.prefix}{self.window}_{feature_name}'
             if output_column_name in all_df.columns:

@@ -10,7 +10,7 @@ from player_performance_ratings import RatingGenerator, SkLearnTransformerWrappe
     MinMaxTransformer, TeamRatingTuner, StartRatingTuner, MatchPredictorTuner, ParameterSearchRange
 from player_performance_ratings.predictor.estimators.classifier import SkLearnGameTeamPredictor
 from player_performance_ratings.predictor.estimators.ordinal_classifier import OrdinalClassifier
-from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.enums import FutureRatingColumnNames
 from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
 from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import RatingMeanPerformancePredictor
 from player_performance_ratings.ratings.opponent_adjusted_rating.start_rating_generator import StartRatingGenerator
@@ -98,7 +98,7 @@ start_rating_search_range = [
     ),
 ]
 
-predictor = SkLearnGameTeamPredictor(features=[RatingColumnNames.RATING_MEAN],
+predictor = SkLearnGameTeamPredictor(features=[FutureRatingColumnNames.RATING_MEAN],
                                      weight_column='participation_weight',
                                      model=OrdinalClassifier(),
                                      team_id_column='team_id', game_id_colum=column_names.rating_update_id,

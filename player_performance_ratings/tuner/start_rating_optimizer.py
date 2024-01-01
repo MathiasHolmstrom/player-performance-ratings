@@ -8,7 +8,7 @@ import pandas as pd
 
 from player_performance_ratings.data_structures import ColumnNames, Match
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
-from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.enums import FutureRatingColumnNames
 from player_performance_ratings.ratings.opponent_adjusted_rating.start_rating_generator import \
     StartRatingGenerator
 from player_performance_ratings.scorer.score import BaseScorer, LogLossScorer
@@ -77,38 +77,38 @@ class StartLeagueRatingOptimizer():
                 logging.info(f"iteration {iteration} finished. Score: {score}. best startings {league_ratings}")
 
             league_rating_changes = (df
-            .groupby([RatingColumnNames.PLAYER_LEAGUE, RatingColumnNames.OPPONENT_LEAGUE])
+            .groupby([FutureRatingColumnNames.PLAYER_LEAGUE, FutureRatingColumnNames.OPPONENT_LEAGUE])
             .agg(
                 {
-                    RatingColumnNames.PLAYER_RATING_CHANGE: 'mean',
+                    FutureRatingColumnNames.PLAYER_RATING_CHANGE: 'mean',
                     self.column_names.player_id: 'count'
                 }
             )
             .reset_index()
             .rename(
                 columns={
-                    RatingColumnNames.PLAYER_RATING_CHANGE: 'mean_rating_change',
+                    FutureRatingColumnNames.PLAYER_RATING_CHANGE: 'mean_rating_change',
                     self.column_names.player_id: 'count'
                 })
             )
-            leagues = league_rating_changes[RatingColumnNames.PLAYER_LEAGUE].unique().tolist()
+            leagues = league_rating_changes[FutureRatingColumnNames.PLAYER_LEAGUE].unique().tolist()
 
             league_opp_league_h2hs: dict[str, dict[str, LeagueH2H]] = {}
             league_to_played_against_leagues = {}
 
             for league in leagues:
                 league_to_played_against_leagues[league] = \
-                    league_rating_changes[league_rating_changes[RatingColumnNames.PLAYER_LEAGUE] == league][
-                        RatingColumnNames.OPPONENT_LEAGUE].unique().tolist()
+                    league_rating_changes[league_rating_changes[FutureRatingColumnNames.PLAYER_LEAGUE] == league][
+                        FutureRatingColumnNames.OPPONENT_LEAGUE].unique().tolist()
 
                 league_opp_league_h2hs[league] = {}
                 for opp_league in leagues:
                     if league == opp_league:
                         continue
 
-                    rows = league_rating_changes[(league_rating_changes[RatingColumnNames.PLAYER_LEAGUE] == league) &
+                    rows = league_rating_changes[(league_rating_changes[FutureRatingColumnNames.PLAYER_LEAGUE] == league) &
                                                  (league_rating_changes[
-                                                      RatingColumnNames.OPPONENT_LEAGUE] == opp_league)]
+                                                      FutureRatingColumnNames.OPPONENT_LEAGUE] == opp_league)]
                     if len(rows) == 0:
                         weight = 0
                         mean_rating_change = 0

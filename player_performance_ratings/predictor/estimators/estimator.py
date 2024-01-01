@@ -3,6 +3,9 @@ import warnings
 import pandas as pd
 from lightgbm import LGBMClassifier
 from pandas.errors import SettingWithCopyWarning
+from player_performance_ratings.transformation.base_transformer import BaseTransformer
+
+from player_performance_ratings.transformation import SkLearnTransformerWrapper
 
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 
@@ -27,6 +30,8 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
                  model: Optional = None,
                  multiclassifier: bool = False,
                  pred_column: Optional[str] = "prob",
+                 categorical_transformers: Optional[list[BaseTransformer]] = None
+
                  ):
         """
         Wrapper for sklearn models that predicts game results.
@@ -54,12 +59,13 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
         self.game_id_colum = game_id_colum
         self.team_id_column = team_id_column
         self._target = target
+
         self.multiclassifier = multiclassifier
         super().__init__(target=self._target, features=features, pred_column=pred_column,
-                         model=model or LogisticRegression())
+                         model=model or LogisticRegression(), categorical_transformers=categorical_transformers)
 
     def train(self, df: pd.DataFrame) -> None:
-
+        df = self.fit_transform_categorical_transformers(df=df)
         if len(df[self._target].unique()) > 2 and hasattr(self.model, "predict_proba"):
             logging.warning("target has more than 2 unique values, multiclassifier has therefore been set to True")
             self.multiclassifier = True
@@ -67,7 +73,7 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
         if self._target not in df.columns:
             raise ValueError(f"target {self._target} not in df")
         grouped = self._create_grouped(df)
-        self.model.fit(grouped[self.features], grouped[self._target])
+        self.model.fit(grouped[self.estimator_features], grouped[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -76,15 +82,15 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
         :param df:
         :return: Input df with prediction column
         """
-
+        df = self.transform_categorical_transformers(df=df)
         grouped = self._create_grouped(df)
 
         if self.multiclassifier:
-            grouped[self._pred_column] = self.model.predict_proba(grouped[self.features]).tolist()
+            grouped[self._pred_column] = self.model.predict_proba(grouped[self.estimator_features]).tolist()
         elif not hasattr(self.model, "predict_proba"):
-            grouped[self._pred_column] = self.model.predict(grouped[self.features])
+            grouped[self._pred_column] = self.model.predict(grouped[self.estimator_features])
         else:
-            grouped[self._pred_column] = self.model.predict_proba(grouped[self.features])[:, 1]
+            grouped[self._pred_column] = self.model.predict_proba(grouped[self.estimator_features])[:, 1]
 
         if self.pred_column in df.columns:
             df = df.drop(columns=[self.pred_column])
@@ -96,31 +102,46 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
 
     def _create_grouped(self, df: pd.DataFrame) -> pd.DataFrame:
 
-        if df[self._target].dtype == 'object':
-            df.loc[:, self._target] = df[self._target].astype('int')
+        numeric_features = [feature for feature in self.estimator_features if
+                            feature not in self.estimator_categorical_features]
+
+        if self._target in df.columns:
+            if df[self._target].dtype == 'object':
+                df.loc[:, self._target] = df[self._target].astype('int')
 
         if self.weight_column:
-            for feature in self.features:
+            for feature in numeric_features:
                 df = df.assign(**{feature: df[self.weight_column] * df[feature]})
 
         if self.weight_column:
             grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
-                **{feature: 'sum' for feature in self.features},
+                **{feature: 'sum' for feature in numeric_features},
                 self._target: 'mean',
                 self.weight_column: 'sum',
             }).reset_index()
-            for feature in self.features:
+
+            for feature in numeric_features:
                 grouped[feature] = grouped[feature] / grouped[self.weight_column]
 
             grouped.drop(columns=[self.weight_column], inplace=True)
 
         else:
-            grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
-                **{feature: 'sum' for feature in self.features},
-                self._target: 'mean',
-            }).reset_index()
+            if self._target in df.columns:
+                grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
+                    **{feature: 'sum' for feature in numeric_features},
+                    self._target: 'mean',
+                }).reset_index()
+            else:
+                grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
+                    **{feature: 'sum' for feature in numeric_features}
+                }).reset_index()
 
-        grouped[self._target] = grouped[self._target].astype('int')
+        if self._target in df.columns:
+            grouped[self._target] = grouped[self._target].astype('int')
+
+        grouped = grouped.merge(df[[self.game_id_colum, self.team_id_column, *self.estimator_categorical_features]].drop_duplicates(
+                                    subset=[self.game_id_colum, self.team_id_column]),
+                                on=[self.game_id_colum, self.team_id_column], how='inner')
         return grouped
 
 
@@ -133,23 +154,21 @@ class SklearnPredictor(BaseMLWrapper):
                  multiclassifier: bool = False,
                  pred_column: Optional[str] = "prob",
                  column_names: Optional[ColumnNames] = None,
-                 categorical_features: Optional[list[str]] = None
+                 categorical_transformers: Optional[list[BaseTransformer]] = None
                  ):
         self._target = target
         self.multiclassifier = multiclassifier
         self.column_names = column_names
-        self.categorical_features = categorical_features or []
 
         if model is None:
             logging.warning(
                 "model is not set. Will use LGBMClassifier(max_depth=2, n_estimators=400, learning_rate=0.05)")
 
         super().__init__(target=self._target, features=features, pred_column=pred_column,
-                         model=model or LGBMClassifier(max_depth=2, n_estimators=300, learning_rate=0.05, verbose=-100))
+                         model=model or LGBMClassifier(max_depth=2, n_estimators=300, learning_rate=0.05, verbose=-100),
+                         categorical_transformers=categorical_transformers)
 
     def train(self, df: pd.DataFrame) -> None:
-        for cat_feature in self.categorical_features:
-            df = df.assign(**{cat_feature: df[cat_feature].astype('category')})
 
         if self.multiclassifier is False and len(df[self._target].unique()) > 2 and hasattr(self.model,
                                                                                             "predict_proba"):
@@ -168,8 +187,6 @@ class SklearnPredictor(BaseMLWrapper):
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
 
         df = df.copy()
-        for cat_feature in self.categorical_features:
-            df[cat_feature] = df[cat_feature].astype('category')
 
         if self.multiclassifier:
             df[self._pred_column] = self.model.predict_proba(df[self.features]).tolist()

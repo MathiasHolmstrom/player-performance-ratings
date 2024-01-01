@@ -2,15 +2,23 @@ from abc import abstractmethod, ABC
 from typing import Optional
 
 import pandas as pd
+from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 
 class BaseMLWrapper(ABC):
 
-    def __init__(self, model, features: list[str] ,target: str, pred_column: Optional[str] = "prob"):
+    def __init__(self,
+                 model, features: list[str],
+                 target: str, categorical_transformers: Optional[list[BaseTransformer]] = None,
+                 pred_column: Optional[str] = "prob"
+                 ):
         self.model = model
         self.features = features
         self._target = target
         self._pred_column = pred_column
+        self.categorical_transformers = categorical_transformers
+        self._estimator_features = self.features
+        self._estimator_categorical_features = []
 
     @abstractmethod
     def train(self, df: pd.DataFrame) -> None:
@@ -37,5 +45,28 @@ class BaseMLWrapper(ABC):
     def set_target(self, new_target_name: str):
         self._target = new_target_name
 
+    def fit_transform_categorical_transformers(self, df: pd.DataFrame) -> pd.DataFrame:
+        if self.categorical_transformers:
+            for pre_transformer in self.categorical_transformers:
+                df = pre_transformer.fit_transform(df)
+                for feature in pre_transformer.features:
+                    if feature in self._estimator_features:
+                        self._estimator_features.remove(feature)
+                self._estimator_features = list(set(pre_transformer.features_out + self._estimator_features))
+                self._estimator_categorical_features = list(
+                    set(pre_transformer.features_out + self._estimator_categorical_features))
+        return df
 
+    def transform_categorical_transformers(self, df: pd.DataFrame) -> pd.DataFrame:
+        if self.categorical_transformers:
+            for pre_transformer in self.categorical_transformers:
+                df = pre_transformer.transform(df)
+        return df
 
+    @property
+    def estimator_features(self) -> list[str]:
+        return self._estimator_features
+
+    @property
+    def estimator_categorical_features(self) -> list[str]:
+        return self._estimator_categorical_features

@@ -12,7 +12,7 @@ from player_performance_ratings.data_structures import ColumnNames
 
 from player_performance_ratings.predictor.estimators.classifier import SkLearnGameTeamPredictor
 
-from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.enums import FutureRatingColumnNames
 from player_performance_ratings.ratings import TeamRatingGenerator
 from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import RatingDifferencePerformancePredictor
 from player_performance_ratings.ratings.opponent_adjusted_rating.start_rating_generator import StartRatingGenerator
@@ -162,7 +162,7 @@ start_rating_search_range = [
     ),
 ]
 
-predictor = SkLearnGameTeamPredictor(features=[RatingColumnNames.RATING_DIFFERENCE],
+predictor = SkLearnGameTeamPredictor(features=[FutureRatingColumnNames.RATING_DIFFERENCE],
                                      weight_column='participation_weight',
                                      team_id_column='team_id', game_id_colum=column_names.rating_update_id,
                                      target='won')

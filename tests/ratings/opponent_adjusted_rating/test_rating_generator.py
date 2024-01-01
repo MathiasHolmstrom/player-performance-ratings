@@ -2,7 +2,7 @@ import pandas as pd
 
 from player_performance_ratings.data_structures import Match, MatchPlayer, MatchPerformance, MatchTeam, \
     PlayerRating, ColumnNames
-from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.enums import FutureRatingColumnNames, HistoricalRatingColumnNames
 from player_performance_ratings.ratings import TeamRatingGenerator, convert_df_to_matches, StartRatingGenerator
 from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import \
     MATCH_CONTRIBUTION_TO_SUM_VALUE
@@ -134,7 +134,6 @@ def test_rating_generator_update_id_different_from_match_id():
 
     rating_generator = OpponentAdjustedRatingGenerator(
         column_names=column_names,
-        features_out=[RatingColumnNames.PLAYER_RATING_CHANGE],
         team_rating_generator=TeamRatingGenerator(
             rating_change_multiplier=rating_change_multiplier,
             confidence_weight=0
@@ -153,16 +152,7 @@ def test_rating_generator_update_id_different_from_match_id():
     expected_player_game_2_player3 = (1 - 0.5) * rating_change_multiplier * 0.2
     expected_player_game_2_player4 = (0.7 - 0.5) * rating_change_multiplier * 0.2
 
-    assert ratings[RatingColumnNames.PLAYER_RATING_CHANGE] == [
-        expected_player_game_1_player1,
-        expected_player_game_1_player2,
-        expected_player_game_1_player3,
-        expected_player_game_1_player4,
-        expected_player_game_2_player1,
-        expected_player_game_2_player2,
-        expected_player_game_2_player3,
-        expected_player_game_2_player4
-    ]
+
     new_confidence_sum = MATCH_CONTRIBUTION_TO_SUM_VALUE * 0.3
     expected_player_ratings = {
         "1": PlayerRating(id="1", rating_value=1000 + expected_player_game_1_player1 + expected_player_game_2_player1,
@@ -260,7 +250,6 @@ def test_rating_generator_1_match():
 
     rating_generator = OpponentAdjustedRatingGenerator(
         column_names=column_names,
-        features_out=[RatingColumnNames.PLAYER_RATING_CHANGE],
         team_rating_generator=TeamRatingGenerator(
             rating_change_multiplier=rating_change_multiplier,
             confidence_weight=0
@@ -268,20 +257,14 @@ def test_rating_generator_1_match():
         )
     )
 
-    ratings = rating_generator.generate(matches=matches)
+    _ = rating_generator.generate(matches=matches)
 
     expected_rating_change_game_1_player1 = (0.7 - 0.5) * rating_change_multiplier * 0.1
     expected_rating_change_game_1_player2 = (1 - 0.5) * rating_change_multiplier * 0.1
     expected_rating_change_game_1_player3 = (0.3 - 0.5) * rating_change_multiplier * 0.1
     expected_rating_change_game_1_player4 = (0 - 0.5) * rating_change_multiplier * 0.1
 
-    assert ratings[RatingColumnNames.PLAYER_RATING_CHANGE] == [
-        expected_rating_change_game_1_player1,
-        expected_rating_change_game_1_player2,
-        expected_rating_change_game_1_player3,
-        expected_rating_change_game_1_player4,
 
-    ]
     new_confidence_sum = MATCH_CONTRIBUTION_TO_SUM_VALUE * 0.1
     expected_player_ratings = {
         "1": PlayerRating(id="1", rating_value=1000 + expected_rating_change_game_1_player1,
@@ -332,18 +315,18 @@ def test_rating_generator_without_performance():
     })
 
     rating_generator = OpponentAdjustedRatingGenerator(
-        features_out=[RatingColumnNames.PLAYER_RATING, RatingColumnNames.TEAM_RATING,
-                      RatingColumnNames.RATING_DIFFERENCE],
+        features_out=[FutureRatingColumnNames.PLAYER_RATING, FutureRatingColumnNames.TEAM_RATING_PROJECTED,
+                      FutureRatingColumnNames.RATING_DIFFERENCE_PROJECTED],
         column_names=column_names,
     )
     rating_generator.generate(df=hist_df)
 
     future_matches = convert_df_to_matches(df=future_df, column_names=column_names)
     ratings = rating_generator.generate(matches=future_matches)
-    assert ratings[RatingColumnNames.PLAYER_RATING][0] > ratings[RatingColumnNames.PLAYER_RATING][1]
-    assert ratings[RatingColumnNames.TEAM_RATING][0] > ratings[RatingColumnNames.TEAM_RATING][1]
-    assert ratings[RatingColumnNames.RATING_DIFFERENCE][0] > 0
-    assert ratings[RatingColumnNames.RATING_DIFFERENCE][1] < 0
+    assert ratings[FutureRatingColumnNames.PLAYER_RATING][0] > ratings[FutureRatingColumnNames.PLAYER_RATING][1]
+    assert ratings[FutureRatingColumnNames.TEAM_RATING_PROJECTED][0] > ratings[FutureRatingColumnNames.TEAM_RATING_PROJECTED][1]
+    assert ratings[FutureRatingColumnNames.RATING_DIFFERENCE_PROJECTED][0] > 0
+    assert ratings[FutureRatingColumnNames.RATING_DIFFERENCE_PROJECTED][1] < 0
 
 
 def test_opponent_adjusted_rating_generator_with_projected_performance():
@@ -373,7 +356,8 @@ def test_opponent_adjusted_rating_generator_with_projected_performance():
 
     rating_generator = OpponentAdjustedRatingGenerator(
         column_names=column_names,
-        features_out=[RatingColumnNames.TEAM_RATING_PROJECTED, RatingColumnNames.TEAM_RATING],
+
+        features_out=[FutureRatingColumnNames.TEAM_RATING_PROJECTED],
         team_rating_generator=TeamRatingGenerator(
             confidence_weight=0,
             start_rating_generator=StartRatingGenerator(
@@ -381,11 +365,12 @@ def test_opponent_adjusted_rating_generator_with_projected_performance():
             )
         )
     )
-    ratings = rating_generator.generate(df=df)
+    _ = rating_generator.generate(df=df)
 
-    assert ratings[RatingColumnNames.TEAM_RATING][4] == ratings[RatingColumnNames.TEAM_RATING][5]
-    assert ratings[RatingColumnNames.TEAM_RATING][6] == ratings[RatingColumnNames.TEAM_RATING][7]
-    assert ratings[RatingColumnNames.TEAM_RATING][4] > ratings[RatingColumnNames.TEAM_RATING_PROJECTED][4]
+
+    assert rating_generator.ratings_df[FutureRatingColumnNames.TEAM_RATING_PROJECTED].iloc[4] == rating_generator.ratings_df[FutureRatingColumnNames.TEAM_RATING_PROJECTED].iloc[5]
+    assert rating_generator.ratings_df[FutureRatingColumnNames.TEAM_RATING_PROJECTED].iloc[6] == rating_generator.ratings_df[FutureRatingColumnNames.TEAM_RATING_PROJECTED][7]
+    assert rating_generator.ratings_df[FutureRatingColumnNames.TEAM_RATING_PROJECTED].iloc[4] < rating_generator.ratings_df[HistoricalRatingColumnNames.TEAM_RATING][4]
 
 
 def test_test_opponent_adjusted_rating_generator_with_projected_performance_features_out():
@@ -415,9 +400,9 @@ def test_test_opponent_adjusted_rating_generator_with_projected_performance_feat
 
     rating_generator = OpponentAdjustedRatingGenerator(
         column_names=column_names,
-        features_out=[RatingColumnNames.TEAM_RATING, RatingColumnNames.PLAYER_RATING,
-                      RatingColumnNames.RATING_DIFFERENCE, RatingColumnNames.PLAYER_RATING_DIFFERENCE,
-                      RatingColumnNames.PLAYER_RATING_DIFFERENCE_FROM_TEAM, RatingColumnNames.PLAYER_RATING_CHANGE],
+        features_out=[FutureRatingColumnNames.TEAM_RATING_PROJECTED, FutureRatingColumnNames.PLAYER_RATING,
+                      FutureRatingColumnNames.RATING_DIFFERENCE_PROJECTED, FutureRatingColumnNames.PLAYER_RATING_DIFFERENCE_PROJECTED,
+                      FutureRatingColumnNames.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED],
         team_rating_generator=TeamRatingGenerator(
             confidence_weight=0,
             start_rating_generator=StartRatingGenerator(

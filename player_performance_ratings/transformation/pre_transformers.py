@@ -16,7 +16,7 @@ class ColumnWeight:
     lower_is_better: bool = False
 
 
-class ColumnsWeighter(BaseTransformer):
+class ColumnsWeighter:
 
     def __init__(self,
                  weighted_column_name: str,
@@ -61,11 +61,30 @@ class ColumnsWeighter(BaseTransformer):
         return [self.weighted_column_name]
 
 
+class ConvertDataFrameToCategoricalTransformer(BaseTransformer):
+
+    def __init__(self, features: list[str]):
+        super().__init__(features=features)
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        return self.transform(df)
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        for feature in self.features:
+            df = df.assign(**{feature: df[feature].astype('category')})
+        return df
+
+    @property
+    def features_out(self) -> list[str]:
+        return self.features
+
+
+
 class SklearnEstimatorImputer(BaseTransformer):
 
-    def __init__(self, features: list[str], target_name: str, estimator: Optional[LGBMRegressor] = None, ):
+    def __init__(self, features: list[str], target_name: str, estimator: Optional[LGBMRegressor] = None):
+        super().__init__(features=features)
         self.estimator = estimator or LGBMRegressor()
-        self.features = features
         self.target_name = target_name
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -92,17 +111,31 @@ class SkLearnTransformerWrapper(BaseTransformer):
 
     def __init__(self, transformer, features: list[str]):
         self.transformer = transformer
-        self.features = features
+        super().__init__(features=features)
+        self._features_out = []
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        return df.assign(**{feature: self.transformer.fit_transform(df[[feature]]) for feature in self.features})
+
+        try:
+            transformed_values = self.transformer.fit_transform(df[self.features]).toarray()
+        except AttributeError:
+            transformed_values = self.transformer.fit_transform(df[self.features])
+        self._features_out = self.transformer.get_feature_names_out().tolist()
+
+        return df.assign(
+            **{self._features_out[idx]: transformed_values[:, idx] for idx in range(len(self._features_out))})
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        return df.assign(**{feature: self.transformer.transform(df[[feature]]) for feature in self.features})
+        try:
+            transformed_values = self.transformer.transform(df[self.features]).toarray()
+        except AttributeError:
+            transformed_values = self.transformer.transform(df[self.features])
+        return df.assign(
+            **{self._features_out[idx]: transformed_values[:, idx] for idx in range(len(self._features_out))})
 
     @property
     def features_out(self) -> list[str]:
-        return self.features
+        return self._features_out
 
 
 class MinMaxTransformer(BaseTransformer):
@@ -113,7 +146,7 @@ class MinMaxTransformer(BaseTransformer):
                  allowed_mean_diff: Optional[float] = 0.01,
                  prefix: str = ""
                  ):
-        self.features = features
+        super().__init__(features=features)
         self.quantile = quantile
         self.allowed_mean_diff = allowed_mean_diff
         self.prefix = prefix
@@ -194,7 +227,7 @@ class DiminishingValueTransformer(BaseTransformer):
                  excessive_multiplier: float = 0.8,
                  reverse: bool = False,
                  ):
-        self.features = features
+        super().__init__(features=features)
         self.cutoff_value = cutoff_value
         self.excessive_multiplier = excessive_multiplier
         self.quantile_cutoff = quantile_cutoff
@@ -246,7 +279,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
 
     def __init__(self, features: List[str], granularity: Optional[list[str]] = None, skewness_allowed: float = 0.15,
                  max_iterations: int = 20):
-        self.features = features
+        super().__init__(features=features)
         self.granularity = granularity
         self.skewness_allowed = skewness_allowed
         self.max_iterations = max_iterations
@@ -331,7 +364,7 @@ class GroupByTransformer(BaseTransformer):
                  agg_func: str = "mean",
                  prefix: str = "mean_",
                  ):
-        self.features = features
+        super().__init__(features=features)
         self.granularity = granularity
         self.agg_func = agg_func
         self.prefix = prefix
@@ -370,7 +403,7 @@ class NetOverPredictedTransformer(BaseTransformer):
         self.predict_transformer = predict_transformer or GroupByTransformer(features=features, granularity=granularity,
                                                                              agg_func='mean')
         self.prefix = prefix
-        self.features = features
+        super().__init__(features=features)
         self._features_out = []
         for idx, predicted_feature in enumerate(self.predict_transformer.features_out):
             new_feature_name = f'{self.prefix}{self.features[idx]}'

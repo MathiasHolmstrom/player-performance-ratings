@@ -30,7 +30,7 @@ def test_lag_fit_transform(column_names):
     original_df = df.copy()
 
     lag_transformation = LagTransformer(
-        feature_names=['points'],
+        features=['points'],
         lag_length=1,
         granularity=['player'],
         column_names=column_names,
@@ -59,7 +59,7 @@ def test_lag_fit_transform_2_features(column_names):
     original_df = df.copy()
 
     lag_transformation = LagTransformer(
-        feature_names=['points', "points_per_minute"],
+        features=['points', "points_per_minute"],
         lag_length=1,
         granularity=['player'],
         column_names=column_names
@@ -89,7 +89,7 @@ def test_lag_fit_transform_lag_length_2(column_names):
     original_df = df.copy()
 
     lag_transformation = LagTransformer(
-        feature_names=['points'],
+        features=['points'],
         lag_length=2,
         granularity=['player'],
         column_names=column_names
@@ -127,7 +127,7 @@ def test_lag_fit_transform_and_transform(column_names):
     future_df_copy = future_df.copy()
 
     lag_transformation = LagTransformer(
-        feature_names=['points'],
+        features=['points'],
         lag_length=1,
         granularity=['player'],
         column_names=column_names
@@ -165,7 +165,7 @@ def test_lag_lower_granularity_transform(column_names):
     )
 
     transformer = LagLowerGranularityTransformer(
-        feature_names=['points'],
+        features=['points'],
         lag_length=1,
         granularity=['player'],
         column_names=column_names,
@@ -199,7 +199,7 @@ def test_lag_lower_granularity_fit_transform(column_names):
     original_game_player_df = game_player_df.copy()
 
     transformer = LagLowerGranularityTransformer(
-        feature_names=['points'],
+        features=['points'],
         lag_length=1,
         granularity=['player'],
         column_names=column_names,
@@ -257,7 +257,7 @@ def test_lag_lower_granularity_fit_transform_and_transform(column_names):
     original_future_game_player_df = future_game_player_df.copy()
 
     transformer = LagLowerGranularityTransformer(
-        feature_names=['points'],
+        features=['points'],
         lag_length=1,
         granularity=['player'],
         column_names=column_names,
@@ -297,7 +297,7 @@ def test_lag_lower_granularity_with_weights_fit_transform(column_names):
     original_game_player_df = game_player_df.copy()
 
     lag_transformation = LagLowerGranularityTransformer(
-        feature_names=['points'],
+        features=['points'],
         lag_length=1,
         granularity=['player'],
         column_names=column_names,
@@ -336,7 +336,7 @@ def test_lag_transformation_transform_2_lags(column_names):
     future_df_copy = future_df.copy()
 
     lag_transformation = LagTransformer(
-        feature_names=['points'],
+        features=['points'],
         lag_length=2,
         granularity=['player'],
         column_names=column_names
@@ -364,7 +364,7 @@ def test_rolling_mean_fit_transform(column_names):
     original_df = df.copy()
 
     rolling_mean_transformation = RollingMeanTransformer(
-        feature_names=['points'],
+        features=['points'],
         window=2,
         min_periods=1,
         granularity=['player'],
@@ -401,7 +401,7 @@ def test_rolling_mean_fit_transform_and_transform(column_names):
 
     original_future_df = future_df.copy()
     rolling_mean_transformation = RollingMeanTransformer(
-        feature_names=['points'],
+        features=['points'],
         window=2,
         min_periods=1,
         granularity=['player'],

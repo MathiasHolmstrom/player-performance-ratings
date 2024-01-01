@@ -9,7 +9,7 @@ from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdju
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
 from player_performance_ratings.predictor.estimators import SklearnPredictor
-from player_performance_ratings.ratings import RatingColumnNames, OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings import FutureRatingColumnNames, OpponentAdjustedRatingGenerator
 from player_performance_ratings.tuner import MatchPredictorTuner
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 from player_performance_ratings.tuner.utils import get_default_team_rating_search_range
@@ -34,10 +34,10 @@ column_names = ColumnNames(
 
 match_predictor_factory = MatchPredictorFactory(
     rating_generators=[OpponentAdjustedRatingGenerator(column_names=column_names,
-                                                       features_out=[RatingColumnNames.RATING_DIFFERENCE,
-                                                                     RatingColumnNames.PLAYER_RATING_DIFFERENCE])],
-    predictor=SklearnPredictor(model=LGBMRegressor(), features=[RatingColumnNames.RATING_DIFFERENCE,
-                                                                RatingColumnNames.PLAYER_RATING_DIFFERENCE],
+                                                       features_out=[FutureRatingColumnNames.RATING_DIFFERENCE,
+                                                                     FutureRatingColumnNames.PLAYER_RATING_DIFFERENCE])],
+    predictor=SklearnPredictor(model=LGBMRegressor(), features=[FutureRatingColumnNames.RATING_DIFFERENCE,
+                                                                FutureRatingColumnNames.PLAYER_RATING_DIFFERENCE],
                                pred_column='pred'),
     use_auto_pre_transformers=True,
     column_weights=[ColumnWeight(name='points', weight=1)],

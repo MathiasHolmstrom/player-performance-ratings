@@ -3,12 +3,14 @@ from typing import List, Optional, Union
 
 import pandas as pd
 import pendulum
+from sklearn.preprocessing import OneHotEncoder
+
 from player_performance_ratings.transformation import ColumnWeight
 
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
 
-from player_performance_ratings.predictor.estimators import SklearnPredictor
+from player_performance_ratings.predictor.estimators import SklearnPredictor, SkLearnGameTeamPredictor
 from player_performance_ratings.data_structures import ColumnNames, Match
 from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
@@ -16,6 +18,8 @@ from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generato
     OpponentAdjustedRatingGenerator
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 from player_performance_ratings.transformation.factory import auto_create_pre_transformers
+from player_performance_ratings.transformation.pre_transformers import ConvertDataFrameToCategoricalTransformer, \
+    SkLearnTransformerWrapper
 
 
 class MatchPredictor():
@@ -28,8 +32,11 @@ class MatchPredictor():
                  estimator: Optional = None,
                  other_features: Optional[list[str]] = None,
                  other_categorical_features: Optional[list[str]] = None,
+                 group_predictor_by_game_team: bool = False,
                  train_split_date: Optional[pendulum.datetime] = None,
                  date_column_name: Optional[str] = None,
+                 match_id_column_name: Optional[str] = None,
+                 team_id_column_name: Optional[str] = None,
                  use_auto_pre_transformers: bool = False,
                  column_weights: Optional[Union[list[list[ColumnWeight]], list[ColumnWeight]]] = None
                  ):
@@ -111,6 +118,9 @@ class MatchPredictor():
         self.predictor = predictor
         self.other_features = other_features or []
         self.other_categorical_features = other_categorical_features or []
+        self.group_predictor_by_game_team = group_predictor_by_game_team
+        self.match_id_column_name = match_id_column_name
+        self.team_id_column_name = team_id_column_name
 
         if self.predictor is not None and estimator is not None:
             logging.warning(
@@ -134,13 +144,41 @@ class MatchPredictor():
                     features.append(rating_feature_str)
 
             logging.warning(f"predictor is not set. Will use {features} as features")
+            if self.other_categorical_features:
+                if estimator.__class__.__name__ in ('LGBMClassifier', 'LGBMRegressor', "XGBClassifier", "XGBRegressor"):
+                    categorical_transformers = [
+                        ConvertDataFrameToCategoricalTransformer(features=self.other_categorical_features)
+                    ]
+                else:
+                    categorical_transformers = [
+                        SkLearnTransformerWrapper(
+                            transformer=OneHotEncoder(handle_unknown='ignore'), features=self.other_categorical_features)
+                    ]
+            else:
+                categorical_transformers = []
 
-            self.predictor = SklearnPredictor(
-                model=estimator,
-                features=features,
-                target=PredictColumnNames.TARGET,
-                categorical_features=self.other_categorical_features
-            )
+            if self.group_predictor_by_game_team:
+                match_id = rating_generators[
+                    0].column_names.match_id if rating_generators else self.match_id_column_name
+                team_id = rating_generators[0].column_names.team_id if rating_generators else self.team_id_column_name
+                if match_id is None or team_id is None:
+                    raise ValueError(
+                        "match_id and team_id must be set if group_predictor_by_game_team is used to create predictor")
+                self.predictor = SkLearnGameTeamPredictor(
+                    model=estimator,
+                    features=features,
+                    target=PredictColumnNames.TARGET,
+                    game_id_colum=match_id,
+                    team_id_column=team_id,
+                    categorical_transformers=categorical_transformers
+                )
+
+            else:
+                self.predictor = SklearnPredictor(
+                    model=estimator,
+                    features=features,
+                    target=PredictColumnNames.TARGET,
+                )
 
         self.predictor.set_target(PredictColumnNames.TARGET)
         self.train_split_date = train_split_date
@@ -167,8 +205,6 @@ class MatchPredictor():
             raise ValueError(
                 f"Target {self.predictor.target} not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
 
-
-
         for rating_idx, rating_generator in enumerate(self.rating_generators):
 
             rating_column_names = rating_generator.column_names
@@ -194,7 +230,8 @@ class MatchPredictor():
             df = post_rating_transformer.fit_transform(df)
 
         if self.date_column_name:
-            self.train_split_date = df.iloc[int(len(df) / 1.3)][self.date_column_name]
+            if not self.train_split_date:
+                self.train_split_date = df.iloc[int(len(df) / 1.3)][self.date_column_name]
             train_df = df[df[self.date_column_name] <= self.train_split_date]
         else:
             logging.warning("train date is not defined. Uses entire dataset to train predictor")

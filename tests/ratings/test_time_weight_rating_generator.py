@@ -1,7 +1,7 @@
 import pandas as pd
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.enums import FutureRatingColumnNames
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 from player_performance_ratings.ratings.time_weight_ratings import BayesianTimeWeightedRating
 
@@ -47,17 +47,17 @@ def test_bayesian_time_weight_rating_generator():
                 1 - rating_likelihood_ratio_game3) * 0.5
 
     expected_ratings = {
-        RatingColumnNames.TIME_WEIGHTED_RATING: [0.5, time_weighted_rating_game2, time_weighted_rating_game3],
-        RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO: [0.0, rating_likelihood_ratio_game2,
-                                                                  rating_likelihood_ratio_game3],
-        RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE: [None, rating_evidence_game2, rating_evidence_game3],
+        FutureRatingColumnNames.TIME_WEIGHTED_RATING: [0.5, time_weighted_rating_game2, time_weighted_rating_game3],
+        FutureRatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO: [0.0, rating_likelihood_ratio_game2,
+                                                                        rating_likelihood_ratio_game3],
+        FutureRatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE: [None, rating_evidence_game2, rating_evidence_game3],
 
     }
-    assert ratings[RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO] == expected_ratings[
-        RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO]
-    assert ratings[RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE] == expected_ratings[
-        RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE]
-    assert ratings[RatingColumnNames.TIME_WEIGHTED_RATING] == expected_ratings[RatingColumnNames.TIME_WEIGHTED_RATING]
+    assert ratings[FutureRatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO] == expected_ratings[
+        FutureRatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO]
+    assert ratings[FutureRatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE] == expected_ratings[
+        FutureRatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE]
+    assert ratings[FutureRatingColumnNames.TIME_WEIGHTED_RATING] == expected_ratings[FutureRatingColumnNames.TIME_WEIGHTED_RATING]
 
 
 def test_time_weight_rating_generator_with_league_and_position_priors():
@@ -90,6 +90,6 @@ def test_time_weight_rating_generator_with_league_and_position_priors():
     ratings = m.generate(matches=matches, df=df)
 
 
-    assert ratings[RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE][2] == None
-    assert ratings[RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO][2] == 0.0
-    assert ratings[RatingColumnNames.TIME_WEIGHTED_RATING][2] > 0.5 and ratings[RatingColumnNames.TIME_WEIGHTED_RATING][2] < 0.75
+    assert ratings[FutureRatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE][2] == None
+    assert ratings[FutureRatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO][2] == 0.0
+    assert ratings[FutureRatingColumnNames.TIME_WEIGHTED_RATING][2] > 0.5 and ratings[FutureRatingColumnNames.TIME_WEIGHTED_RATING][2] < 0.75

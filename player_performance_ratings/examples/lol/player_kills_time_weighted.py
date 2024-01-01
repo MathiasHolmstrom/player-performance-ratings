@@ -7,7 +7,7 @@ from player_performance_ratings.predictor.estimators import SklearnPredictor
 from player_performance_ratings import ColumnNames, PredictColumnNames
 
 from player_performance_ratings.predictor import MatchPredictor
-from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.enums import FutureRatingColumnNames
 from player_performance_ratings.ratings.time_weight_ratings import BayesianTimeWeightedRating
 from player_performance_ratings.scorer.score import OrdinalLossScorer
 
@@ -54,12 +54,12 @@ match_predictor = MatchPredictor(
     predictor=SklearnPredictor(
         model=LGBMClassifier(verbose=-100),
         features=[
-            RatingColumnNames.TIME_WEIGHTED_RATING + "0",
-            RatingColumnNames.TIME_WEIGHTED_RATING + "1",
-            RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO + "0",
-            RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO + "1",
-            RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE + "0",
-            RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE + "1",
+            FutureRatingColumnNames.TIME_WEIGHTED_RATING + "0",
+            FutureRatingColumnNames.TIME_WEIGHTED_RATING + "1",
+            FutureRatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO + "0",
+            FutureRatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO + "1",
+            FutureRatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE + "0",
+            FutureRatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE + "1",
             "position"
         ],
         target=PredictColumnNames.TARGET,
