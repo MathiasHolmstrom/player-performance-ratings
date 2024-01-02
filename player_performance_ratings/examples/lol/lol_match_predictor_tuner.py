@@ -204,7 +204,7 @@ match_predictor_factory = MatchPredictorFactory(
 scorer = LogLossScorer(pred_column="prob")
 
 tuner = MatchPredictorTuner(
-    pre_transformer_tuner=pre_transformer_tuner,
+    performances_generator_tuner=pre_transformer_tuner,
     rating_generator_tuners=rating_generator_tuner,
     predictor_tuner=predictor_tuner,
     fit_best=True,

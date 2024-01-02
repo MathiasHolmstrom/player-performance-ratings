@@ -62,7 +62,7 @@ def test_match_predictor_tuner():
     match_predictor_tuner = MatchPredictorTuner(
         scorer=scorer_mock,
         match_predictor_factory=match_predictor_factory,
-        pre_transformer_tuner=pre_transformer_tuner,
+        performances_generator_tuner=pre_transformer_tuner,
         rating_generator_tuners=rating_generator_tuner,
         post_transformer_tuner=post_transformer_tuner,
 
@@ -122,7 +122,7 @@ def test_match_predictor_uses_rating_generator_from_factory_if_no_rating_generat
     match_predictor_tuner = MatchPredictorTuner(
         scorer=scorer_mock,
         match_predictor_factory=match_predictor_factory,
-        pre_transformer_tuner=pre_transformer_tuner,
+        performances_generator_tuner=pre_transformer_tuner,
         post_transformer_tuner=post_transformer_tuner,
 
     )

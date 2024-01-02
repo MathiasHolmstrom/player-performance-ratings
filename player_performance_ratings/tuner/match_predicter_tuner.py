@@ -11,7 +11,7 @@ from player_performance_ratings.scorer import BaseScorer
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 from player_performance_ratings.tuner.rating_generator_tuner import RatingGeneratorTuner
-from player_performance_ratings.tuner.performance_generator_tuner import PerformanceGeneratorTuner
+from player_performance_ratings.tuner.performances_generator_tuner import PerformancesGeneratorTuner
 
 logging.basicConfig(level=logging.INFO)
 
@@ -25,9 +25,8 @@ class MatchPredictorTuner():
     def __init__(self,
                  scorer: BaseScorer,
                  match_predictor_factory: MatchPredictorFactory,
-                 pre_transformer_tuner: Optional[TransformerTuner] = None,
+                 performances_generator_tuner: Optional[PerformancesGeneratorTuner] = None,
                  rating_generator_tuners: Optional[Union[list[RatingGeneratorTuner], RatingGeneratorTuner]] = None,
-                 post_transformer_tuner: Optional[TransformerTuner] = None,
                  predictor_tuner: Optional[PredictorTuner] = None,
                  fit_best: bool = True
                  ):
@@ -39,15 +38,13 @@ class MatchPredictorTuner():
             The factory that creates the MatchPredictor.
             Contains the parameters to create the MatchPredictor if no parameter-tuning was done.
             Based on hyperparameter-tuning the final way the match-predictor is generated will be based on a combination of the parameters in the factory and the tuned parameters.
-        :param pre_transformer_tuner:
+        :param performances_generator_tuner:
             The tuner that tunes the hyperparameters of the pre_transformers.
             If left none or as [], the pre_transformers in the match_predictor_factory will be used.
         :param rating_generator_tuners:
             The tuner that tunes the hyperparameters of the rating_generators.
             If left none or as [], the rating_generators in the match_predictor_factory will be used.
-        :param post_transformer_tuner:
-            The tuner that tunes the hyperparameters of the post_transformers.
-            If left none or as [], the post_transformers in the match_predictor_factory will be used.
+
         :param predictor_tuner:
             The tuner that tunes the hyperparameters of the predictor model.
 
@@ -56,30 +53,29 @@ class MatchPredictorTuner():
 
         self.scorer = scorer
         self.match_predictor_factory = match_predictor_factory
-        self.pre_transformer_tuner = pre_transformer_tuner or []
+        self.performances_generator_tuner = performances_generator_tuner
         self.rating_generator_tuners = rating_generator_tuners or []
-        self.post_transformer_tuner = post_transformer_tuner or []
         self.predictor_tuner = predictor_tuner
         if isinstance(self.rating_generator_tuners, RatingGeneratorTuner):
             self.rating_generator_tuners = [self.rating_generator_tuners]
         self.fit_best = fit_best
 
-        if not self.pre_transformer_tuner and not self.rating_generator_tuners and not self.post_transformer_tuner:
+        if not self.performances_generator_tuner and not self.rating_generator_tuners and not self.predictor_tuner:
             raise ValueError("No tuning has been provided in config")
 
     def tune(self, df: pd.DataFrame) -> MatchPredictor:
 
         column_names = [rating_generator.column_names for rating_generator in self.match_predictor_factory.rating_generators]
 
-        best_pre_transformers = copy.deepcopy(self.match_predictor_factory.pre_transformers)
+        best_performances_generator = copy.deepcopy(self.match_predictor_factory.performances_generator)
 
 
-        if self.pre_transformer_tuner:
+        if self.performances_generator_tuner:
             logging.info("Tuning PreTransformers")
-            best_pre_transformers = self.pre_transformer_tuner.tune(df=df,
-                                                                    match_predictor_factory=self.match_predictor_factory,
-                                                                    scorer=self.scorer)
-        for pre_rating_transformer in best_pre_transformers:
+            best_performances_generator = self.performances_generator_tuner.tune(df=df,
+                                                                                 match_predictor_factory=self.match_predictor_factory,
+                                                                                 scorer=self.scorer)
+        for pre_rating_transformer in best_performances_generator:
             df = pre_rating_transformer.fit_transform(df)
 
         best_rating_generators = copy.deepcopy(self.match_predictor_factory.rating_generators)
@@ -101,17 +97,9 @@ class MatchPredictorTuner():
                 best_rating_generators = [tuned_rating_generator]
 
         best_post_transformers = copy.deepcopy(self.match_predictor_factory.post_transformers)
-        if self.post_transformer_tuner:
-            logging.info("Tuning PostTransformers")
-            best_post_transformers = self.post_transformer_tuner.tune(df,
-                                                                      match_predictor_factory=self.match_predictor_factory,
-                                                                      scorer=self.scorer,
-                                                                      pre_rating_transformers=best_pre_transformers,
-                                                                      rating_generators=best_rating_generators,
-                                                                      matches=matches
-                                                                      )
-            for post_rating_transformer in best_post_transformers:
-                df = post_rating_transformer.fit_transform(df)
+
+        for post_rating_transformer in best_post_transformers:
+            df = post_rating_transformer.fit_transform(df)
 
         if self.predictor_tuner:
             logging.info("Tuning Predictor")
@@ -122,7 +110,7 @@ class MatchPredictorTuner():
 
         best_match_predictor = MatchPredictor(
                                               rating_generators=best_rating_generators,
-                                              pre_rating_transformers=best_pre_transformers,
+                                              performances_generator=best_performances_generator,
                                               post_rating_transformers=best_post_transformers,
                                               predictor=best_predictor)
         if self.fit_best:

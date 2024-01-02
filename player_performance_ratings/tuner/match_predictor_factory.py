@@ -18,23 +18,34 @@ class MatchPredictorFactory():
                  performances_generator: Optional[PerformancesGenerator] = None,
                  post_transformers: Optional[List[BaseTransformer]] = None,
                  predictor: BaseMLWrapper = None,
+                 estimator: Optional = None,
+                 other_features: Optional[list[str]] = None,
+                 other_categorical_features: Optional[list[str]] = None,
+                 group_predictor_by_game_team: bool = False,
                  train_split_date: Optional[pendulum.datetime] = None,
+                 date_column_name: Optional[str] = None,
+                 match_id_column_name: Optional[str] = None,
+                 team_id_column_name: Optional[str] = None,
                  use_auto_create_performance_calculator: bool = False,
                  column_weights: Optional[List[List[ColumnWeight]]] = None,
                  ):
+
 
         self.rating_generators = rating_generators or []
         if isinstance(self.rating_generators, RatingGenerator):
             self.rating_generators = [self.rating_generators]
 
-        if len(self.rating_generators) > 1 and predictor is None:
-            raise ValueError(
-                "If multiple rating generators are used, a predictor must be specified."
-                " Otherwise it is not clear which features from which rating-model is used ")
-
         self.post_transformers = post_transformers or []
 
         self.predictor = predictor
+        self.estimator = estimator
+        self.date_column_name = date_column_name
+        self.other_features = other_features or []
+        self.other_categorical_features = other_categorical_features or []
+        self.group_predictor_by_game_team = group_predictor_by_game_team
+        self.match_id_column_name = match_id_column_name
+        self.team_id_column_name = team_id_column_name
+
         self.train_split_date = train_split_date
         self.use_auto_create_performance_calculator = use_auto_create_performance_calculator
         self.performances_generator = performances_generator
@@ -64,4 +75,11 @@ class MatchPredictorFactory():
             post_rating_transformers=post_rating_transformers,
             predictor=predictor,
             train_split_date=self.train_split_date,
+            estimator=self.estimator,
+            other_features=self.other_features,
+            other_categorical_features=self.other_categorical_features,
+            group_predictor_by_game_team=self.group_predictor_by_game_team,
+            match_id_column_name=self.match_id_column_name,
+            team_id_column_name=self.team_id_column_name,
+            date_column_name=self.date_column_name,
         )
