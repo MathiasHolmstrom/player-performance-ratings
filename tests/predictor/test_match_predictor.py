@@ -1,9 +1,9 @@
 import mock
 import pandas as pd
 from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator, BayesianTimeWeightedRating, \
-    RatingColumnNames, convert_df_to_matches
+    RatingColumnNames, convert_df_to_matches, ColumnWeight
 
-from player_performance_ratings.transformation import ColumnWeight, LagTransformer
+from player_performance_ratings.transformation import LagTransformer
 
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.predictor import MatchPredictor
@@ -43,7 +43,7 @@ def test_match_predictor_auto_pre_transformers():
 
     match_predictor = MatchPredictor(
         train_split_date=pd.to_datetime("2023-01-02"),
-        use_auto_pre_transformers=True,
+        use_auto_create_performance_calculator=True,
         column_weights=column_weights,
         predictor=predictor_mock,
         rating_generators=rating_generators,
@@ -93,7 +93,7 @@ def test_match_predictor_multiple_rating_generators_same_performance():
 
     match_predictor = MatchPredictor(
         train_split_date=pd.to_datetime("2023-01-02"),
-        use_auto_pre_transformers=False,
+        use_auto_create_performance_calculator=False,
         column_weights=column_weights,
         rating_generators=[
             OpponentAdjustedRatingGenerator(features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
@@ -163,7 +163,7 @@ def test_match_predictor_multiple_rating_generators_difference_performance():
 
     match_predictor = MatchPredictor(
         train_split_date=pd.to_datetime("2023-01-02"),
-        use_auto_pre_transformers=False,
+        use_auto_create_performance_calculator=False,
         column_weights=column_weights,
         rating_generators=[OpponentAdjustedRatingGenerator(features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
                                                            column_names=column_names1),
@@ -229,7 +229,7 @@ def test_match_predictor_0_rating_generators():
 
     match_predictor = MatchPredictor(
         train_split_date=2,
-        use_auto_pre_transformers=False,
+        use_auto_create_performance_calculator=False,
         column_weights=column_weights,
         rating_generators=[],
         post_rating_transformers=[
@@ -295,7 +295,7 @@ def test_match_predictor_generate_and_predict():
 
     match_predictor = MatchPredictor(
         train_split_date=pd.to_datetime("2023-01-02"),
-        use_auto_pre_transformers=True,
+        use_auto_create_performance_calculator=True,
         column_weights=column_weights,
         predictor=predictor_mock,
         rating_generators=rating_generator, )

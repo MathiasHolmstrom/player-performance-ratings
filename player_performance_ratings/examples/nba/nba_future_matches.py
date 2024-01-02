@@ -35,7 +35,7 @@ column_names = ColumnNames(
 
 match_predictor = MatchPredictor(
     rating_generators=[OpponentAdjustedRatingGenerator(column_names=column_names)],
-    use_auto_pre_transformers=True,
+    use_auto_create_performance_calculator=True,
     column_weights=[ColumnWeight(name='plus_minus', weight=1)],
     estimator=LGBMClassifier(),
     group_predictor_by_game_team = True,

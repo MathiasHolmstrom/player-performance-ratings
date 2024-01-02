@@ -49,7 +49,7 @@ time_weighed_rating_kills = BayesianTimeWeightedRating(column_names=column_names
 
 match_predictor = MatchPredictor(
     rating_generators=[time_weighed_rating_kills_per_minute, time_weighed_rating_kills],
-    use_auto_pre_transformers=True,
+    use_auto_create_performance_calculator=True,
     column_weights=[[ColumnWeight(name='kills_per_minute', weight=1)], [ColumnWeight(name='kills', weight=1)]],
     predictor=SklearnPredictor(
         model=LGBMClassifier(verbose=-100),

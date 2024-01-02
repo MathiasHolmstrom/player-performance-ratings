@@ -3,10 +3,12 @@ from dataclasses import dataclass, field
 from typing import Literal, Optional, Union, Any, Tuple
 
 from optuna.trial import BaseTrial
+from player_performance_ratings.ratings import PerformancesGenerator
 from sklearn.preprocessing import StandardScaler
 
+from player_performance_ratings.ratings import ColumnWeight
 from player_performance_ratings.transformation.pre_transformers import SymmetricDistributionTransformer, \
-    NetOverPredictedTransformer, SkLearnTransformerWrapper, MinMaxTransformer, ColumnWeight, ColumnsWeighter
+    NetOverPredictedTransformer, SkLearnTransformerWrapper, MinMaxTransformer
 
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.transformation.base_transformer import BaseTransformer

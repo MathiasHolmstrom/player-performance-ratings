@@ -139,6 +139,10 @@ class BayesianTimeWeightedRating(RatingGenerator):
 
         return ratings
 
+    def generate_future(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[
+        RatingColumnNames, list[float]]:
+        pass
+
     def _generate_base_prior(self, player_id: str, base_prior_value: float, league: Optional[str],
                              position: Optional[str]) -> float:
         granularity_id = ""

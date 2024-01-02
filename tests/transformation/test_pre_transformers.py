@@ -5,6 +5,9 @@ from player_performance_ratings.transformation.pre_transformers import GroupByTr
     NetOverPredictedTransformer, SymmetricDistributionTransformer, SkLearnTransformerWrapper
 
 
+def test_min_max_transformer():
+    pass
+
 def test_sklearn_transformer_wrapper_one_hot_encoder():
     sklearn_transformer = OneHotEncoder(handle_unknown='ignore')
 

@@ -9,58 +9,6 @@ from lightgbm import LGBMRegressor
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 
-@dataclass
-class ColumnWeight:
-    name: str
-    weight: float
-    lower_is_better: bool = False
-
-
-class ColumnsWeighter:
-
-    def __init__(self,
-                 weighted_column_name: str,
-                 column_weights: list[ColumnWeight]
-                 ):
-        self.weighted_column_name = weighted_column_name
-        self.column_weights = column_weights
-
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy()
-        df[f"__{self.weighted_column_name}"] = 0
-
-        df['sum_cols_weights'] = 0
-        for column_weight in self.column_weights:
-            df[f'weight__{column_weight.name}'] = column_weight.weight
-            df.loc[df[column_weight.name].isna(), f'weight__{column_weight.name}'] = 0
-            df.loc[df[column_weight.name].isna(), column_weight.name] = 0
-            df['sum_cols_weights'] = df['sum_cols_weights'] + df[f'weight__{column_weight.name}']
-
-        drop_cols = ['sum_cols_weights', f"__{self.weighted_column_name}"]
-        for column_weight in self.column_weights:
-            df[f'weight__{column_weight.name}'] / df['sum_cols_weights']
-            drop_cols.append(f'weight__{column_weight.name}')
-
-        for column_weight in self.column_weights:
-
-            if column_weight.lower_is_better:
-                df[f"__{self.weighted_column_name}"] += df[f'weight__{column_weight.name}'] * (
-                        1 - df[column_weight.name])
-            else:
-                df[f"__{self.weighted_column_name}"] += df[f'weight__{column_weight.name}'] * df[column_weight.name]
-
-        df[self.weighted_column_name] = df[f"__{self.weighted_column_name}"]
-        df = df.drop(columns=drop_cols)
-        return df
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        return self.fit_transform(df)
-
-    @property
-    def features_out(self) -> list[str]:
-        return [self.weighted_column_name]
-
-
 class ConvertDataFrameToCategoricalTransformer(BaseTransformer):
 
     def __init__(self, features: list[str]):
@@ -163,8 +111,8 @@ class MinMaxTransformer(BaseTransformer):
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         for feature in self.features:
-            self._min_values[feature] = df[feature].quantile(self.quantile)
-            self._max_values[feature] = df[feature].quantile(1 - self.quantile)
+            self._min_values[feature] = df[feature].quantile(1 - self.quantile)
+            self._max_values[feature] = df[feature].quantile(self.quantile)
 
             df[self.prefix + feature] = (df[feature] - self._min_values[feature]) / (
                     self._max_values[feature] - self._min_values[feature])

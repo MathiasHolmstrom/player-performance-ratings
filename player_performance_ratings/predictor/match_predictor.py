@@ -5,7 +5,7 @@ import pandas as pd
 import pendulum
 from sklearn.preprocessing import OneHotEncoder
 
-from player_performance_ratings.transformation import ColumnWeight
+from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
 
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
@@ -14,10 +14,11 @@ from player_performance_ratings.predictor.estimators import SklearnPredictor, Sk
 from player_performance_ratings.data_structures import ColumnNames, Match
 from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
-from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator, \
-    OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
+
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
-from player_performance_ratings.transformation.factory import auto_create_pre_transformers
+from player_performance_ratings.transformation.factory import auto_create_performance_generator
+
 from player_performance_ratings.transformation.pre_transformers import ConvertDataFrameToCategoricalTransformer, \
     SkLearnTransformerWrapper
 
@@ -26,7 +27,7 @@ class MatchPredictor():
 
     def __init__(self,
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
-                 pre_rating_transformers: Optional[List[BaseTransformer]] = None,
+                 performances_generator: Optional[PerformancesGenerator] = None,
                  post_rating_transformers: Optional[List[BaseTransformer]] = None,
                  predictor: [Optional[BaseMLWrapper]] = None,
                  estimator: Optional = None,
@@ -37,7 +38,7 @@ class MatchPredictor():
                  date_column_name: Optional[str] = None,
                  match_id_column_name: Optional[str] = None,
                  team_id_column_name: Optional[str] = None,
-                 use_auto_pre_transformers: bool = False,
+                 use_auto_create_performance_calculator: bool = False,
                  column_weights: Optional[Union[list[list[ColumnWeight]], list[ColumnWeight]]] = None
                  ):
 
@@ -47,10 +48,8 @@ class MatchPredictor():
         :param rating_generators:
         A single or a list of RatingGenerators.
 
-        :param pre_rating_transformers:
-        An optional list of transformations that take place rating generation.
-            This is generally recommended if a more complex performance-value is used to update ratings.
-            Although any type of feature engineering that isn't dependant upon the output of the ratings can be performed here.
+        :param performances_generator:
+        An optional transformer class that take place in order to convert one or multiple column names into the performance value that is used by the rating model
 
         :param post_rating_transformers:
             After rating-generation, additional feature engineering can be performed.
@@ -76,7 +75,7 @@ class MatchPredictor():
         :param date_column_name:
             If rating_generators are not defined and train_split_date is used, then train_column_name must be set.
 
-        :param use_auto_pre_transformers:
+        :param use_auto_create_performance_calculator:
             If true, the pre_rating_transformers will be automatically generated to ensure the performance-value is done according to good practices.
             For new users, this is recommended.
 
@@ -93,25 +92,25 @@ class MatchPredictor():
         if rating_generators is None:
             self.rating_generators: list[RatingGenerator] = []
 
-        self.use_auto_pre_transformers = use_auto_pre_transformers
-        if self.use_auto_pre_transformers and not column_weights:
+        self.auto_create_performance_calculator = use_auto_create_performance_calculator
+        if self.auto_create_performance_calculator and not column_weights:
             raise ValueError("column_weights must be set if auto_create_pre_transformers is True")
 
         self.column_weights = column_weights
         if self.column_weights and isinstance(self.column_weights[0], ColumnWeight):
             self.column_weights = [self.column_weights]
 
-        if not self.use_auto_pre_transformers and column_weights:
+        if not self.auto_create_performance_calculator and column_weights:
             logging.warning(
                 "column_weights is set but auto_create_pre_transformers is False. column_weights will be ignored")
 
-        self.pre_rating_transformers = pre_rating_transformers or []
-        if self.use_auto_pre_transformers:
+        self.performances_generator = performances_generator
+        if self.auto_create_performance_calculator:
             if not self.rating_generators:
                 raise ValueError("rating_generators must be set if auto_create_pre_transformers is True")
             column_names = [r.column_names for r in self.rating_generators]
-            self.pre_rating_transformers = auto_create_pre_transformers(column_weights=self.column_weights,
-                                                                        column_names=column_names)
+            self.performances_generator = auto_create_performance_generator(column_weights=self.column_weights,
+                                                                            column_names=column_names)
 
         self.post_rating_transformers = post_rating_transformers or []
 
@@ -194,12 +193,13 @@ class MatchPredictor():
     def generate_historical(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
                             store_ratings: bool = True) -> pd.DataFrame:
 
-        for pre_rating_transformer in self.pre_rating_transformers:
-            df = pre_rating_transformer.fit_transform(df)
 
         if matches:
             if isinstance(matches[0], Match):
                 matches = [matches for _ in self.rating_generators]
+
+        elif self.performances_generator:
+            df = self.performances_generator.generate(df)
 
         if self.predictor.target not in df.columns:
             raise ValueError(

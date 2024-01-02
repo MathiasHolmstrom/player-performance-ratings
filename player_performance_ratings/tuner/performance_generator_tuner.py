@@ -9,10 +9,10 @@ from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
 from player_performance_ratings.data_structures import Match
+from player_performance_ratings.ratings import ColumnWeight
 from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
 from player_performance_ratings.scorer.score import BaseScorer
-from player_performance_ratings.transformation import ColumnWeight
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
@@ -48,21 +48,18 @@ def add_hyperparams_to_common_transformers(object: object, params: dict[str, Uni
                                                 parameter_search_range=parameter_search_range)
 
 
-class TransformerTuner:
+class PerformanceGeneratorTuner:
 
     def __init__(self,
-                 pre_or_post: Literal["pre_rating", "post_rating"],
                  transformer_search_ranges: Optional[list[Tuple[BaseTransformer, list[ParameterSearchRange]]]] = None,
                  feature_names: Optional[Union[list[str], list[list[str]]]] = None,
                  lower_is_better_features: Optional[list[str]] = None,
                  n_trials: int = 30,
                  ):
 
-        if transformer_search_ranges is None and feature_names is None:
-            raise ValueError("Either transformer_search_ranges or feature_names must be provided")
+
 
         self.transformer_search_ranges = transformer_search_ranges
-        self.pre_or_post = pre_or_post
         self.feature_names = feature_names
         self.lower_is_better_features = lower_is_better_features
 
@@ -112,12 +109,8 @@ class TransformerTuner:
                 transformers.append(class_transformer(**params))
 
             # TODO: Fix it properly so it works with pre and post transformers after tuned
-            if self.pre_or_post == "pre_rating":
-                match_predictor = match_predictor_factory.create(pre_rating_transformers=transformers)
-            else:
-                match_predictor = match_predictor_factory.create(pre_rating_transformers=pre_rating_transformers,
-                                                                 rating_generators=rating_generators,
-                                                                 post_rating_transformers=transformers)
+
+            match_predictor = match_predictor_factory.create(pre_rating_transformers=transformers)
 
             df_with_prediction = match_predictor.generate_historical(df=df, matches=matches, store_ratings=False)
             return scorer.score(df_with_prediction, classes_=match_predictor.classes_)

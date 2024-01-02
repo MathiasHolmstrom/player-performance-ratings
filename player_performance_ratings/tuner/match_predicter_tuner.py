@@ -11,7 +11,7 @@ from player_performance_ratings.scorer import BaseScorer
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 from player_performance_ratings.tuner.rating_generator_tuner import RatingGeneratorTuner
-from player_performance_ratings.tuner.transformer_tuner import TransformerTuner
+from player_performance_ratings.tuner.performance_generator_tuner import PerformanceGeneratorTuner
 
 logging.basicConfig(level=logging.INFO)
 

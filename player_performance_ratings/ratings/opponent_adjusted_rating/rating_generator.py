@@ -40,7 +40,7 @@ class RatingGenerator(ABC):
 
     @property
     @abstractmethod
-    def features_out(self) -> list[str]:
+    def features_out(self) -> list[RatingColumnNames]:
         pass
 
 
@@ -323,5 +323,5 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
                            key=lambda team: team.rating_value, reverse=True))
 
     @property
-    def features_out(self) -> list[str]:
+    def features_out(self) -> list[RatingColumnNames]:
         return self._features_out

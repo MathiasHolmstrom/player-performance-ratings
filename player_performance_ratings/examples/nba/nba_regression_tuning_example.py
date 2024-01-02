@@ -39,7 +39,7 @@ match_predictor_factory = MatchPredictorFactory(
     predictor=SklearnPredictor(model=LGBMRegressor(), features=[RatingColumnNames.RATING_DIFFERENCE,
                                                                 RatingColumnNames.PLAYER_RATING_DIFFERENCE],
                                pred_column='pred'),
-    use_auto_pre_transformers=True,
+    use_auto_create_performance_calculator=True,
     column_weights=[ColumnWeight(name='points', weight=1)],
 )
 
