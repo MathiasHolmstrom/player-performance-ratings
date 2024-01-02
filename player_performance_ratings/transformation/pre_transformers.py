@@ -273,6 +273,8 @@ class SymmetricDistributionTransformer(BaseTransformer):
                 reverse = True
             else:
                 reverse = False
+
+
             self._diminishing_value_transformer[feature][granularity_value] = DiminishingValueTransformer(
                 features=[feature],
                 reverse=reverse,
@@ -290,6 +292,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
             df = df.assign(__concat_granularity=df[self.granularity].apply(lambda x: "_".join(x), axis=1))
 
         for feature in self.features:
+            out_feature = self.prefix + feature
             if self.granularity:
 
                 unique_values = df["__concat_granularity"].unique()
@@ -297,7 +300,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
                     rows = df[df["__concat_granularity"] == unique_value]
                     if unique_value in self._diminishing_value_transformer[feature]:
                         rows = self._diminishing_value_transformer[feature][unique_value].transform(rows)
-                        df.loc[df["__concat_granularity"] == unique_value, feature] = rows[feature]
+                        df.loc[df["__concat_granularity"] == unique_value, out_feature] = rows[feature]
 
             else:
                 if None in self._diminishing_value_transformer[feature]:

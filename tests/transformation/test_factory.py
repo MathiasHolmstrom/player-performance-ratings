@@ -99,8 +99,8 @@ def test_auto_create_pre_transformers_with_position():
 
     performances_generator = auto_create_performance_generator(column_weights=column_weights, column_names=col_names)
 
-    expected_column_weights = [[ColumnWeight(name="symmetric_position__kills", weight=0.5),
-                                ColumnWeight(name="symmetric_position__deaths", weight=0.5, lower_is_better=True)],
+    expected_column_weights = [[ColumnWeight(name="net_position_predicted__symmetric_position__kills", weight=0.5),
+                                ColumnWeight(name="net_position_predicted__symmetric_position__deaths", weight=0.5, lower_is_better=True)],
                                 [ColumnWeight(name="deaths", weight=0.5, lower_is_better=True)]]
 
     expected_performances_generator = PerformancesGenerator(
