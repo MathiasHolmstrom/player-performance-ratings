@@ -27,7 +27,7 @@ class MatchPredictorFactory():
                  match_id_column_name: Optional[str] = None,
                  team_id_column_name: Optional[str] = None,
                  use_auto_create_performance_calculator: bool = False,
-                 column_weights: Optional[List[List[ColumnWeight]]] = None,
+                 column_weights: Optional[Union[List[List[ColumnWeight]], list[ColumnWeight]]] = None,
                  ):
 
 
@@ -49,7 +49,7 @@ class MatchPredictorFactory():
         self.train_split_date = train_split_date
         self.use_auto_create_performance_calculator = use_auto_create_performance_calculator
         self.performances_generator = performances_generator
-        self.column_weights = column_weights
+        self.column_weights = column_weights if isinstance(column_weights, list) else [column_weights] if column_weights else None
         if self.use_auto_create_performance_calculator:
             if not self.rating_generators:
                 raise ValueError("If auto pre transformers are used, rating generators must be specified")

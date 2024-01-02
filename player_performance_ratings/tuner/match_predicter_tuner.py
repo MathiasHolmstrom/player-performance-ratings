@@ -75,8 +75,8 @@ class MatchPredictorTuner():
             best_performances_generator = self.performances_generator_tuner.tune(df=df,
                                                                                  match_predictor_factory=self.match_predictor_factory,
                                                                                  scorer=self.scorer)
-        for pre_rating_transformer in best_performances_generator:
-            df = pre_rating_transformer.fit_transform(df)
+
+        df = best_performances_generator.generate(df)
 
         best_rating_generators = copy.deepcopy(self.match_predictor_factory.rating_generators)
 

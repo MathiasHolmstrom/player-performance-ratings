@@ -225,12 +225,18 @@ class DiminishingValueTransformer(BaseTransformer):
 
 class SymmetricDistributionTransformer(BaseTransformer):
 
-    def __init__(self, features: List[str], granularity: Optional[list[str]] = None, skewness_allowed: float = 0.15,
-                 max_iterations: int = 20):
+    def __init__(self,
+                 features: List[str],
+                 granularity: Optional[list[str]] = None,
+                 skewness_allowed: float = 0.15,
+                 max_iterations: int = 20,
+                 prefix: str = ""
+                 ):
         super().__init__(features=features)
         self.granularity = granularity
         self.skewness_allowed = skewness_allowed
         self.max_iterations = max_iterations
+        self.prefix = prefix
 
         self._diminishing_value_transformer = {}
 
@@ -301,7 +307,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
 
     @property
     def features_out(self) -> list[str]:
-        return self.features
+        return [self.prefix + feature for feature in self.features]
 
 
 class GroupByTransformer(BaseTransformer):
@@ -360,7 +366,7 @@ class NetOverPredictedTransformer(BaseTransformer):
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         df = df.assign(__id=range(1, len(df) + 1))
-        predicted_df = self.predict_transformer.fit_transform(df)
+        _ = self.predict_transformer.fit_transform(df)
         return self.transform(df)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:

@@ -177,6 +177,7 @@ class MatchPredictor():
                     model=estimator,
                     features=features,
                     target=PredictColumnNames.TARGET,
+                    categorical_transformers=categorical_transformers
                 )
 
         self.predictor.set_target(PredictColumnNames.TARGET)
@@ -249,7 +250,7 @@ class MatchPredictor():
             matches = convert_df_to_matches(column_names=rating_column_names, df=df,
                                             league_identifier=LeagueIdentifier())
 
-            match_ratings = rating_generator.generate_historical(matches, df=df)
+            match_ratings = rating_generator.generate_future(matches, df=df)
             for rating_feature in rating_generator.features_out:
                 values = match_ratings[rating_feature]
 

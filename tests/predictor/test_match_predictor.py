@@ -53,7 +53,7 @@ def test_match_predictor_auto_pre_transformers():
 
     pd.testing.assert_frame_equal(new_df, expected_df, check_like=True)
 
-    assert len(match_predictor.pre_rating_transformers) > 0
+    assert len(match_predictor.performances_generator.pre_transformations) > 0
 
 
 def test_match_predictor_multiple_rating_generators_same_performance():
@@ -305,4 +305,4 @@ def test_match_predictor_generate_and_predict():
 
     pd.testing.assert_frame_equal(new_df, expected_df, check_like=True)
 
-    assert len(match_predictor.pre_rating_transformers) > 0
+    assert len(match_predictor.performances_generator.pre_transformations) > 0

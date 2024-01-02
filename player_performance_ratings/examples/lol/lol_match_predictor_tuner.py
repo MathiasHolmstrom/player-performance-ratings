@@ -5,19 +5,20 @@ from lightgbm import LGBMClassifier
 
 from player_performance_ratings.predictor.estimators import SklearnPredictor
 from player_performance_ratings.scorer import LogLossScorer
+from player_performance_ratings.transformation.factory import auto_create_performance_generator
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 
-from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator, RatingColumnNames
+from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator, RatingColumnNames, PerformancesGenerator
 
-from player_performance_ratings.transformation import SkLearnTransformerWrapper, ColumnsWeighter, MinMaxTransformer
+from player_performance_ratings.transformation import SkLearnTransformerWrapper, MinMaxTransformer
 from sklearn.preprocessing import StandardScaler
 
 from player_performance_ratings.data_structures import ColumnNames
 
-from player_performance_ratings.tuner import TransformerTuner, MatchPredictorTuner
+from player_performance_ratings.tuner import MatchPredictorTuner, PerformancesGeneratorTuner
 from player_performance_ratings.tuner.utils import ParameterSearchRange
 
 column_names = ColumnNames(
@@ -86,45 +87,39 @@ team_rating_search_ranges = [
     )
 ]
 
-features = ["result"]
-standard_scaler = SkLearnTransformerWrapper(transformer=StandardScaler(), features=features)
-
-pre_transformers = [
-    standard_scaler,
-]
-
-duration_performance_search_range = []
-column_weigher_search_range = [
-    ParameterSearchRange(
-        name='damagetochampions',
-        type='uniform',
-        low=0,
-        high=0.45
-    ),
-    ParameterSearchRange(
-        name='deaths',
-        type='uniform',
-        low=0,
-        high=.3,
-    ),
-    ParameterSearchRange(
-        name='kills',
-        type='uniform',
-        low=0,
-        high=0.3
-    ),
-    ParameterSearchRange(
-        name='result',
-        type='uniform',
-        low=0.25,
-        high=0.85
-    ),
-]
+weighter_search_range = {
+    column_names.performance:
+        [
+            ParameterSearchRange(
+                name='damagetochampions',
+                type='uniform',
+                low=0,
+                high=0.45
+            ),
+            ParameterSearchRange(
+                name='deaths',
+                type='uniform',
+                low=0,
+                high=.3,
+            ),
+            ParameterSearchRange(
+                name='kills',
+                type='uniform',
+                low=0,
+                high=0.3
+            ),
+            ParameterSearchRange(
+                name='result',
+                type='uniform',
+                low=0.25,
+                high=0.85
+            ),
+        ]
+}
 
 features = ["damagetochampions", "result",
             "kills", "deaths"]
 standard_scaler = SkLearnTransformerWrapper(transformer=StandardScaler(), features=features)
-
 
 start_rating_search_range = [
     ParameterSearchRange(
@@ -147,11 +142,15 @@ start_rating_search_range = [
     )
 ]
 
-pre_transformer_tuner = TransformerTuner(feature_names=["damagetochampions", "result", "kills", "deaths"],
-                                         lower_is_better_features=["deaths"],
-                                         pre_or_post="pre_rating",
-                                         n_trials=20
-                                         )
+pre_transformations = [
+    standard_scaler,
+    MinMaxTransformer(features=features),
+]
+performance_generator_tuner = PerformancesGeneratorTuner(performances_weight_search_ranges=weighter_search_range,
+                                                         pre_transformations=pre_transformations,
+                                                         lower_is_better_features=["deaths"],
+                                                         n_trials=20
+                                                         )
 
 rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
     team_rating_search_ranges=team_rating_search_ranges,
@@ -197,14 +196,14 @@ match_predictor_factory = MatchPredictorFactory(
     rating_generators=rating_generator,
     predictor=SklearnPredictor(
         model=LGBMClassifier(verbose=-100),
-        features=[RatingColumnNames.RATING_DIFFERENCE],
+        features=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
     )
 )
 
 scorer = LogLossScorer(pred_column="prob")
 
 tuner = MatchPredictorTuner(
-    performances_generator_tuner=pre_transformer_tuner,
+    performances_generator_tuner=performance_generator_tuner,
     rating_generator_tuners=rating_generator_tuner,
     predictor_tuner=predictor_tuner,
     fit_best=True,

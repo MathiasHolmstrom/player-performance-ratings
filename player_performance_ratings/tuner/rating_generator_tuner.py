@@ -194,7 +194,6 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
             rating_generators[rating_index] = rating_g
             match_predictor = match_predictor_factory.create(
                 rating_generators=rating_generators,
-                pre_rating_transformers=[],
             )
 
             df_with_prediction = match_predictor.generate_historical(df=df, matches=matches, store_ratings=False)
@@ -262,7 +261,6 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                 rating_generators = [rating_g]
             match_predictor = match_predictor_factory.create(
                 rating_generators=rating_generators,
-                pre_rating_transformers=[],
             )
 
             df_with_prediction = match_predictor.generate_historical(df=df, matches=matches, store_ratings=False)

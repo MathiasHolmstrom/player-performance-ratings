@@ -28,6 +28,7 @@ class PerformancesGeneratorTuner:
     def __init__(self,
                  pre_transformer_search_ranges: Optional[Tuple[BaseTransformer, list[ParameterSearchRange]]] = None,
                  performances_weight_search_ranges: Optional[dict[str, list[ParameterSearchRange]]] = None,
+                 pre_transformations: Optional[list[BaseTransformer]] = None,
                  feature_names: Optional[Union[list[str], list[list[str]]]] = None,
                  lower_is_better_features: Optional[list[str]] = None,
                  n_trials: int = 30,
@@ -35,6 +36,7 @@ class PerformancesGeneratorTuner:
 
         self.pre_transformer_search_ranges = pre_transformer_search_ranges
         self.performances_weight_search_ranges = performances_weight_search_ranges
+        self.pre_transformations = pre_transformations
         self.feature_names = feature_names
         self.lower_is_better_features = lower_is_better_features
 
@@ -67,7 +69,7 @@ class PerformancesGeneratorTuner:
                       match_predictor_factory: MatchPredictorFactory,
                       scorer: BaseScorer,
                       ) -> float:
-            pre_transformations = []
+
 
             column_weights = []
             for performance_name, search_range in self.performances_weight_search_ranges.items():
@@ -83,7 +85,7 @@ class PerformancesGeneratorTuner:
             performances_generator = PerformancesGenerator(
                 column_names=col_names,
                 column_weights=column_weights,
-                pre_transformations=pre_transformations
+                pre_transformations=self.pre_transformations
             )
             match_predictor = match_predictor_factory.create(performances_generator=performances_generator)
 
@@ -104,10 +106,9 @@ class PerformancesGeneratorTuner:
         best_params = study.best_params
         best_column_weights = self._select_best_column_weights(all_params=best_params)
 
-        best_pre_transformations = match_predictor_factory.performances_generator.pre_transformations if match_predictor_factory.performances_generator else None
 
         return PerformancesGenerator(column_weights=best_column_weights, column_names=column_names,
-                                     pre_transformations=best_pre_transformations)
+                                     pre_transformations=self.pre_transformations)
 
     def _create_column_weights(self, params: dict, remove_string: str) -> list[ColumnWeight]:
 

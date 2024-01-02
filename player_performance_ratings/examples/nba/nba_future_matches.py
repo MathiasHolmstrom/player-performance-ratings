@@ -1,10 +1,8 @@
 import pandas as pd
 from lightgbm import LGBMClassifier
-from sklearn.linear_model import LogisticRegression
 
-from player_performance_ratings.transformation import ColumnWeight
 
-from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator, ColumnWeight
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
 from player_performance_ratings.predictor import MatchPredictor

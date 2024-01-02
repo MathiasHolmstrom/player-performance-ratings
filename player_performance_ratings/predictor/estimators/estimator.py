@@ -169,7 +169,7 @@ class SklearnPredictor(BaseMLWrapper):
                          categorical_transformers=categorical_transformers)
 
     def train(self, df: pd.DataFrame) -> None:
-
+        df = self.fit_transform_categorical_transformers(df=df)
         if self.multiclassifier is False and len(df[self._target].unique()) > 2 and hasattr(self.model,
                                                                                             "predict_proba"):
             logging.warning("target has more than 2 unique values, multiclassifier has therefore been set to True")
@@ -185,7 +185,7 @@ class SklearnPredictor(BaseMLWrapper):
         self.model.fit(df[self.features], df[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
-
+        df = self.transform_categorical_transformers(df=df)
         df = df.copy()
 
         if self.multiclassifier:

@@ -3,10 +3,9 @@ from lightgbm import LGBMRegressor
 from sklearn.metrics import mean_absolute_error
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.transformation import ColumnWeight
 
 from player_performance_ratings.predictor import MatchPredictor
-from player_performance_ratings.ratings import BayesianTimeWeightedRating
+from player_performance_ratings.ratings import BayesianTimeWeightedRating, ColumnWeight
 
 df = pd.read_parquet("data/subsample_lol_data")
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])

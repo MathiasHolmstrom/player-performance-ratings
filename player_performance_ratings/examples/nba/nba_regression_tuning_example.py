@@ -2,14 +2,12 @@ import pandas as pd
 from lightgbm import LGBMRegressor
 from sklearn.metrics import mean_absolute_error
 
-from player_performance_ratings.transformation import ColumnWeight
-
 from player_performance_ratings.scorer.score import SklearnScorer
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
 from player_performance_ratings.predictor.estimators import SklearnPredictor
-from player_performance_ratings.ratings import RatingColumnNames, OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings import RatingColumnNames, OpponentAdjustedRatingGenerator, ColumnWeight
 from player_performance_ratings.tuner import MatchPredictorTuner
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 from player_performance_ratings.tuner.utils import get_default_team_rating_search_range
@@ -34,10 +32,10 @@ column_names = ColumnNames(
 
 match_predictor_factory = MatchPredictorFactory(
     rating_generators=[OpponentAdjustedRatingGenerator(column_names=column_names,
-                                                       features_out=[RatingColumnNames.RATING_DIFFERENCE,
-                                                                     RatingColumnNames.PLAYER_RATING_DIFFERENCE])],
-    predictor=SklearnPredictor(model=LGBMRegressor(), features=[RatingColumnNames.RATING_DIFFERENCE,
-                                                                RatingColumnNames.PLAYER_RATING_DIFFERENCE],
+                                                       features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED,
+                                                                     RatingColumnNames.PLAYER_RATING_DIFFERENCE_PROJECTED])],
+    predictor=SklearnPredictor(model=LGBMRegressor(), features=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED,
+                                                                RatingColumnNames.PLAYER_RATING_DIFFERENCE_PROJECTED],
                                pred_column='pred'),
     use_auto_create_performance_calculator=True,
     column_weights=[ColumnWeight(name='points', weight=1)],
