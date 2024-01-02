@@ -7,7 +7,7 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.predictor.estimators import SklearnPredictor
-from player_performance_ratings.ratings import FutureRatingColumnNames
+from player_performance_ratings.ratings import RatingColumnNames
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import OpponentAdjustedRatingGenerator
 from player_performance_ratings.transformation.pre_transformers import ColumnsWeighter
 from player_performance_ratings.tuner import TransformerTuner
@@ -123,7 +123,7 @@ def test_transformer_tuner_regressor(estimator):
         rating_generators=rating_generators,
         predictor=SklearnPredictor(
             model=estimator,
-            features=[FutureRatingColumnNames.RATING_DIFFERENCE_PROJECTED]
+            features=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED]
         )
     )
 

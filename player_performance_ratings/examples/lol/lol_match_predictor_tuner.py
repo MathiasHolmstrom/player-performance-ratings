@@ -10,7 +10,7 @@ from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 
-from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator, FutureRatingColumnNames
+from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator, RatingColumnNames
 
 from player_performance_ratings.transformation import SkLearnTransformerWrapper, ColumnsWeighter, MinMaxTransformer
 from sklearn.preprocessing import StandardScaler
@@ -197,7 +197,7 @@ match_predictor_factory = MatchPredictorFactory(
     rating_generators=rating_generator,
     predictor=SklearnPredictor(
         model=LGBMClassifier(verbose=-100),
-        features=[FutureRatingColumnNames.RATING_DIFFERENCE],
+        features=[RatingColumnNames.RATING_DIFFERENCE],
     )
 )
 

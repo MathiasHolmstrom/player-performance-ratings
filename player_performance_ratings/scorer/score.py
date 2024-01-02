@@ -6,7 +6,7 @@ import pandas as pd
 from sklearn.metrics import log_loss
 
 from player_performance_ratings.consts import PredictColumnNames
-from player_performance_ratings.ratings.enums import FutureRatingColumnNames
+from player_performance_ratings.ratings.enums import RatingColumnNames
 
 
 class BaseScorer(ABC):
@@ -43,8 +43,8 @@ class LogLossScorer(BaseScorer):
             return log_loss(df[self.target], df[self.pred_column_name])
 
         else:
-            cross_league_rows = df[df[FutureRatingColumnNames.PLAYER_LEAGUE] != FutureRatingColumnNames.OPPONENT_LEAGUE]
-            same_league_rows = df[df[FutureRatingColumnNames.PLAYER_LEAGUE] == df[FutureRatingColumnNames.OPPONENT_LEAGUE]]
+            cross_league_rows = df[df[RatingColumnNames.PLAYER_LEAGUE] != RatingColumnNames.OPPONENT_LEAGUE]
+            same_league_rows = df[df[RatingColumnNames.PLAYER_LEAGUE] == df[RatingColumnNames.OPPONENT_LEAGUE]]
             cross_league_logloss = log_loss(cross_league_rows[self.target], cross_league_rows[self.pred_column_name])
             same_league_logloss = log_loss(same_league_rows[self.target], same_league_rows[self.pred_column_name])
 

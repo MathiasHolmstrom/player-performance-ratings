@@ -105,7 +105,7 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
             match_teams = []
 
         participation_weight = 1.0
-        if col_names.participation_weight:
+        if col_names.participation_weight and col_names.participation_weight in row:
             participation_weight = row[col_names.participation_weight]
 
         player_id = row[col_names.team_id]

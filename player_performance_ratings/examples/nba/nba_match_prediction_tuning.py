@@ -10,7 +10,7 @@ from player_performance_ratings import ColumnNames, LogLossScorer
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor.estimators.classifier import SkLearnGameTeamPredictor
 from player_performance_ratings.predictor.estimators.sklearn_models import SkLearnWrapper
-from player_performance_ratings.ratings.enums import FutureRatingColumnNames
+from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.ratings.match_rating import TeamRatingGenerator
 from player_performance_ratings.ratings.opponent_adjusted_rating.start_rating_generator import StartRatingGenerator
 
@@ -74,7 +74,7 @@ start_rating_search_range = [
 
 estimator = SkLearnWrapper(VennAbersCalibrator(estimator=LogisticRegression(), inductive=True, cal_size=0.2, random_state=101))
 
-predictor = SkLearnGameTeamPredictor(model=estimator, features=[FutureRatingColumnNames.RATING_DIFFERENCE], game_id_colum='game_id',
+predictor = SkLearnGameTeamPredictor(model=estimator, features=[RatingColumnNames.RATING_DIFFERENCE], game_id_colum='game_id',
                                      team_id_column='team_id', weight_column='participation_weight')
 
 

@@ -216,9 +216,9 @@ class MatchPredictor():
                 rating_matches = matches[rating_idx]
 
             if store_ratings:
-                match_ratings = rating_generator.generate(matches=rating_matches, df=df)
+                match_ratings = rating_generator.generate_historical(matches=rating_matches, df=df)
             else:
-                match_ratings = rating_generator.generate(matches=rating_matches)
+                match_ratings = rating_generator.generate_historical(matches=rating_matches)
             for rating_feature, values in match_ratings.items():
                 if len(self.rating_generators) > 1:
                     rating_feature_str = rating_feature + str(rating_idx)
@@ -249,7 +249,7 @@ class MatchPredictor():
             matches = convert_df_to_matches(column_names=rating_column_names, df=df,
                                             league_identifier=LeagueIdentifier())
 
-            match_ratings = rating_generator.generate(matches, df=df)
+            match_ratings = rating_generator.generate_historical(matches, df=df)
             for rating_feature in rating_generator.features_out:
                 values = match_ratings[rating_feature]
 

@@ -9,7 +9,7 @@ class InputColumnNames:
 
 
 @dataclass
-class FutureRatingColumnNames:
+class RatingColumnNames:
     PLAYER_RATING = 'player_rating'
     PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED = "player_rating_difference_from_team_projected"
     OPPONENT_RATING_PROJECTED = "opponent_rating_projected"

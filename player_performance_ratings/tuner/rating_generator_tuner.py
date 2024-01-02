@@ -9,7 +9,7 @@ import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
-from player_performance_ratings.ratings import TeamRatingGenerator, FutureRatingColumnNames
+from player_performance_ratings.ratings import TeamRatingGenerator, RatingColumnNames
 from player_performance_ratings.ratings.opponent_adjusted_rating.start_rating_generator import StartRatingGenerator
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import \
     OpponentAdjustedRatingGenerator, RatingGenerator
@@ -123,7 +123,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
         if match_predictor_factory.rating_generators:
             best_rating_generator = copy.deepcopy(match_predictor_factory.rating_generators[rating_idx])
         else:
-            potential_rating_features = [v for k, v in FutureRatingColumnNames.__dict__.items() if isinstance(v, str)]
+            potential_rating_features = [v for k, v in RatingColumnNames.__dict__.items() if isinstance(v, str)]
 
             best_rating_generator = OpponentAdjustedRatingGenerator(
                 features_out=[f for f in match_predictor_factory.predictor.features if f in potential_rating_features],

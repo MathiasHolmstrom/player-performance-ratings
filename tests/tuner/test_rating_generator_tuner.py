@@ -5,7 +5,7 @@ import pandas as pd
 from player_performance_ratings.predictor.estimators import SklearnPredictor
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
-from player_performance_ratings.ratings import TeamRatingGenerator, FutureRatingColumnNames
+from player_performance_ratings.ratings import TeamRatingGenerator, RatingColumnNames
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import \
     RatingDifferencePerformancePredictor
@@ -45,7 +45,7 @@ def test_opponent_adjusted_rating_generator_tuner_team_rating():
     match_predictor_factory = MatchPredictorFactory(
         rating_generators=rating_generators,
         predictor=SklearnPredictor(
-            features=[f"{FutureRatingColumnNames.RATING_DIFFERENCE_PROJECTED}0", f"{FutureRatingColumnNames.RATING_DIFFERENCE_PROJECTED}1"],
+            features=[f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}0", f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}1"],
             target=PredictColumnNames.TARGET
         )
         #   predictor = mock.Mock()
@@ -124,7 +124,7 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
         rating_generators=rating_generators,
 
         predictor=SklearnPredictor(
-            features=[f"{FutureRatingColumnNames.RATING_DIFFERENCE_PROJECTED}0", f"{FutureRatingColumnNames.RATING_DIFFERENCE_PROJECTED}1"],
+            features=[f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}0", f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}1"],
             target=PredictColumnNames.TARGET
         )
     )
@@ -213,7 +213,7 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
     match_predictor_factory = MatchPredictorFactory(
         rating_generators=rating_generators,
         predictor=SklearnPredictor(
-            features=[f"{FutureRatingColumnNames.RATING_DIFFERENCE_PROJECTED}0", f"{FutureRatingColumnNames.RATING_DIFFERENCE_PROJECTED}1"],
+            features=[f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}0", f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}1"],
             target=PredictColumnNames.TARGET
         )
     )
@@ -255,3 +255,6 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
     # ratings should be reset
     assert tuned_model.player_ratings == {}
     assert tuned_model.team_ratings == []
+
+
+
