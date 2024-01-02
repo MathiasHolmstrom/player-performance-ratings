@@ -66,7 +66,10 @@ def auto_create_performance_generator(column_weights: list[list[ColumnWeight]], 
             else:
                 not_position_features += [c.name for c in column_weights[idx]]
 
-    all_feature_names = not_position_features + position_features
+        all_feature_names = not_position_features + position_features
+    else:
+        not_position_features = all_feature_names
+
     if contains_not_position:
         distribution_transformer = SymmetricDistributionTransformer(features=not_position_features)
         pre_transformations.append(distribution_transformer)

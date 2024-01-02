@@ -68,6 +68,7 @@ class SkLearnTransformerWrapper(BaseTransformer):
             transformed_values = self.transformer.fit_transform(df[self.features]).toarray()
         except AttributeError:
             transformed_values = self.transformer.fit_transform(df[self.features])
+
         self._features_out = self.transformer.get_feature_names_out().tolist()
 
         return df.assign(
