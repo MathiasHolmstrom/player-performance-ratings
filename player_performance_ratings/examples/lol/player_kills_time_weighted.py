@@ -1,8 +1,8 @@
 import pandas as pd
 from lightgbm import LGBMClassifier
-from player_performance_ratings.transformation import ColumnWeight
 
-from player_performance_ratings.predictor.estimators import SklearnPredictor
+
+from player_performance_ratings.predictor.estimators import Predictor
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
 
@@ -51,8 +51,9 @@ match_predictor = MatchPredictor(
     rating_generators=[time_weighed_rating_kills_per_minute, time_weighed_rating_kills],
     use_auto_create_performance_calculator=True,
     column_weights=[[ColumnWeight(name='kills_per_minute', weight=1)], [ColumnWeight(name='kills', weight=1)]],
-    predictor=SklearnPredictor(
-        model=LGBMClassifier(verbose=-100),
+    other_categorical_features=["position"],
+    predictor=Predictor(
+        estimator=LGBMClassifier(verbose=-100),
         features=[
             RatingColumnNames.TIME_WEIGHTED_RATING + "0",
             RatingColumnNames.TIME_WEIGHTED_RATING + "1",
@@ -63,20 +64,19 @@ match_predictor = MatchPredictor(
             "position"
         ],
         target=PredictColumnNames.TARGET,
-        categorical_features=["position"]
     )
 )
 
 df_predictions = match_predictor.generate_historical(df=df)
 
-for idx, kills in enumerate(match_predictor.predictor.model.classes_):
+for idx, kills in enumerate(match_predictor.predictor.estimator.classes_):
     print(df_predictions.iloc[500]['playername'], kills,
           df_predictions.iloc[500][match_predictor.predictor.pred_column][idx])
 
-print(match_predictor.predictor.model.feature_importances_)
+print(match_predictor.predictor.estimator.feature_importances_)
 
 scorer = OrdinalLossScorer(
     pred_column=match_predictor.predictor.pred_column,
 )
 
-print(scorer.score(df_predictions, classes_=match_predictor.predictor.model.classes_))
+print(scorer.score(df_predictions, classes_=match_predictor.predictor.estimator.classes_))

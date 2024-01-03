@@ -10,7 +10,7 @@ from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeig
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
 
-from player_performance_ratings.predictor.estimators import SklearnPredictor, SkLearnGameTeamPredictor
+from player_performance_ratings.predictor.estimators import Predictor, GameTeamPredictor
 from player_performance_ratings.data_structures import ColumnNames, Match
 from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
@@ -29,8 +29,10 @@ class MatchPredictor():
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
                  post_rating_transformers: Optional[List[BaseTransformer]] = None,
+                 post_prediction_transformers: Optional[List[BaseTransformer]] = None,
                  predictor: [Optional[BaseMLWrapper]] = None,
                  estimator: Optional = None,
+                 estimator_or_transformers: Optional[Union[BaseMLWrapper, List[BaseTransformer]]] = None,
                  other_features: Optional[list[str]] = None,
                  other_categorical_features: Optional[list[str]] = None,
                  group_predictor_by_game_team: bool = False,
@@ -113,11 +115,13 @@ class MatchPredictor():
                                                                             column_names=column_names)
 
         self.post_rating_transformers = post_rating_transformers or []
+        self.post_prediction_transformers = post_prediction_transformers or []
 
         self.predictor = predictor
         self.other_features = other_features or []
         self.other_categorical_features = other_categorical_features or []
         self.group_predictor_by_game_team = group_predictor_by_game_team
+        self.estimator_or_transformers = estimator_or_transformers
         self.match_id_column_name = match_id_column_name
         self.team_id_column_name = team_id_column_name
 
@@ -163,8 +167,8 @@ class MatchPredictor():
                 if match_id is None or team_id is None:
                     raise ValueError(
                         "match_id and team_id must be set if group_predictor_by_game_team is used to create predictor")
-                self.predictor = SkLearnGameTeamPredictor(
-                    model=estimator,
+                self.predictor = GameTeamPredictor(
+                    estimator=estimator,
                     features=features,
                     target=PredictColumnNames.TARGET,
                     game_id_colum=match_id,
@@ -172,9 +176,10 @@ class MatchPredictor():
                     categorical_transformers=categorical_transformers
                 )
 
+
             else:
-                self.predictor = SklearnPredictor(
-                    model=estimator,
+                self.predictor = Predictor(
+                    estimator=estimator,
                     features=features,
                     target=PredictColumnNames.TARGET,
                     categorical_transformers=categorical_transformers
@@ -240,6 +245,8 @@ class MatchPredictor():
 
         self.predictor.train(train_df)
         df = self.predictor.add_prediction(df)
+        for post_prediction_transformer in self.post_prediction_transformers:
+            df = post_prediction_transformer.transform(df)
         return df
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -264,10 +271,12 @@ class MatchPredictor():
             df = post_rating_transformer.transform(df)
 
         df = self.predictor.add_prediction(df)
+        for post_prediction_transformer in self.post_prediction_transformers:
+            df = post_prediction_transformer.transform(df)
         return df
 
     @property
     def classes_(self) -> Optional[list[str]]:
-        if 'classes_' not in dir(self.predictor.model):
+        if 'classes_' not in dir(self.predictor.estimator):
             return None
-        return self.predictor.model.classes_
+        return self.predictor.estimator.classes_

@@ -8,14 +8,14 @@ from player_performance_ratings.transformation.base_transformer import BaseTrans
 class BaseMLWrapper(ABC):
 
     def __init__(self,
-                 model, features: list[str],
+                 estimator, features: list[str],
                  target: str, categorical_transformers: Optional[list[BaseTransformer]] = None,
-                 pred_column: Optional[str] = "prob"
+                 pred_column: Optional[str] = None
                  ):
-        self.model = model
+        self.estimator = estimator
         self.features = features
         self._target = target
-        self._pred_column = pred_column
+        self._pred_column = pred_column or f"{self._target}_prediction"
         self.categorical_transformers = categorical_transformers
         self._estimator_features = self.features
         self._estimator_categorical_features = []
@@ -38,9 +38,9 @@ class BaseMLWrapper(ABC):
 
     @property
     def classes_(self) -> Optional[list[str]]:
-        if 'classes_' not in dir(self.model):
+        if 'classes_' not in dir(self.estimator):
             return None
-        return self.model.classes_
+        return self.estimator.classes_
 
     def set_target(self, new_target_name: str):
         self._target = new_target_name

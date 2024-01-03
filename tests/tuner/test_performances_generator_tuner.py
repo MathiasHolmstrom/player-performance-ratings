@@ -6,7 +6,7 @@ import pytest
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.predictor.estimators import SklearnPredictor
+from player_performance_ratings.predictor.estimators import Predictor
 from player_performance_ratings.ratings import RatingColumnNames
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import OpponentAdjustedRatingGenerator
 from player_performance_ratings.tuner import PerformancesGeneratorTuner
@@ -48,7 +48,7 @@ def test_transformer_tuner():
 
     match_predictor_factory = MatchPredictorFactory(
         rating_generators=rating_generators,
-        predictor=SklearnPredictor(model=LogisticRegression(), features=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED])
+        predictor=Predictor(estimator=LogisticRegression(), features=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED])
     )
 
     performances_generator_tuner = PerformancesGeneratorTuner(

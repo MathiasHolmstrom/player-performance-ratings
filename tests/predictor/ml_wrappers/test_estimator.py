@@ -5,15 +5,15 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 
 from player_performance_ratings.consts import PredictColumnNames
-from player_performance_ratings.predictor.estimators.estimator import SkLearnGameTeamPredictor, SklearnPredictor
+from player_performance_ratings.predictor.estimators.estimator import GameTeamPredictor, Predictor
 
 
 def test_sklearn_game_team_predictor_add_prediction():
     mock_model = Mock()
     mock_model.predict_proba.return_value = np.array([[0.2, 0.8], [0.6, 0.4], [0.3, 0.7]])
 
-    predictor = SkLearnGameTeamPredictor(game_id_colum='game_id', team_id_column='team_id',
-                                         features=['feature1', 'feature2'], model=mock_model)
+    predictor = GameTeamPredictor(game_id_colum='game_id', team_id_column='team_id',
+                                  features=['feature1', 'feature2'], estimator=mock_model)
 
     df = pd.DataFrame(
         {'game_id': [1, 1, 2],
@@ -40,8 +40,8 @@ def test_sklearn_wrapper_game_player():
 
     mock_model = Mock()
 
-    predictor = SkLearnGameTeamPredictor(game_id_colum='game_id', team_id_column='team_id',
-                                         features=['feature1'], model=mock_model, weight_column='weight')
+    predictor = GameTeamPredictor(game_id_colum='game_id', team_id_column='team_id',
+                                  features=['feature1'], estimator=mock_model, weight_column='weight')
 
     df = pd.DataFrame(
         {
@@ -78,8 +78,8 @@ def test_sklearn_wrapper_sub_game_player():
 
     mock_model = Mock()
 
-    predictor = SkLearnGameTeamPredictor(game_id_colum='game_id', team_id_column='team_id',
-                                         features=['feature1'], model=mock_model, weight_column='weight')
+    predictor = GameTeamPredictor(game_id_colum='game_id', team_id_column='team_id',
+                                  features=['feature1'], estimator=mock_model, weight_column='weight')
 
     df = pd.DataFrame(
         {
@@ -106,8 +106,8 @@ def test_sklearn_wrapper_sub_game_player():
 def test_sklearn_game_team_predictor_regressor():
     "should identify it's a regressor and train and predict works as intended"
 
-    predictor = SkLearnGameTeamPredictor(game_id_colum='game_id', team_id_column='team_id',
-                                         features=['feature1'], model=LinearRegression())
+    predictor = GameTeamPredictor(game_id_colum='game_id', team_id_column='team_id',
+                                  features=['feature1'], estimator=LinearRegression())
 
     df = pd.DataFrame(
         {
@@ -129,8 +129,8 @@ def test_sklearn_game_team_predictor_regressor():
 def test_sklearn_wrapper_regressor():
     "should identify it's a regressor and train and predict works as intended"
 
-    predictor = SklearnPredictor(
-                                         features=['feature1'], model=LinearRegression())
+    predictor = Predictor(
+                                         features=['feature1'], estimator=LinearRegression())
 
     df = pd.DataFrame(
         { 'feature1': [0.1, 0.5, 0.1, 0.5],

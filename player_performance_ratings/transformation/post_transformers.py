@@ -23,6 +23,108 @@ def create_output_column_by_game_group(data: pd.DataFrame, feature_name: str,
     return data
 
 
+class FutureTransformer(BaseTransformer):
+    pass
+
+class SklearnPredictorTransformer(BaseTransformer):
+
+    def __init__(self, estimator, features: list[str], target:str, feature_out: Optional[str] = None):
+        super().__init__(features=features)
+        self.estimator = estimator
+        self.target = target
+        self.feature_out = feature_out or f'{self.target}_transform_prediction'
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        self.estimator.fit(df[self.features], df[self.target])
+        return self.transform(df=df)
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        prediction = self.estimator.predict(df[self.features])
+        df = df.assign(**{self.feature_out: prediction})
+        return df
+
+    @property
+    def features_out(self) -> list[str]:
+        return [f'{self.feature_out}']
+
+
+class GameTeamMembersColumnsTransformer(BaseTransformer):
+
+    def __init__(self, column_names: ColumnNames, features: list[str], players_per_match_per_team_count: int, sort_by: Optional[list[str]] = None):
+        super().__init__(features=features)
+        self.column_names = column_names
+        self.players_per_match_per_team_count = players_per_match_per_team_count
+        self.sort_by = sort_by
+        self._features_out = []
+        for number in range(1, self.players_per_match_per_team_count + 1):
+            for feature in self.features:
+                feature_name = f'team_player{number}_{feature}'
+                self._features_out.append(feature_name)
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        return self.transform(df=df)
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        df = df.copy()
+
+        def add_teammate_minutes(row, grouped_df):
+            game_team_group = grouped_df.get_group((row[self.column_names.match_id], row[self.column_names.team_id]))
+            number = 0
+            if self.sort_by:
+                game_team_group = game_team_group.sort_values(by=self.sort_by, ascending=False)
+
+            for index, teammate in game_team_group.iterrows():
+                if teammate[self.column_names.player_id] != row[self.column_names.player_id]:
+                    number += 1
+                    for feature in self.features:
+                        feature_name = f'team_player{number}_{feature}'
+                        row[feature_name] = teammate[feature]
+
+            return row
+
+
+        grouped = df.groupby([self.column_names.match_id, self.column_names.team_id])
+
+        df = df.apply(lambda row: add_teammate_minutes(row, grouped), axis=1)
+        return df.sort_values(by=[self.column_names.start_date, self.column_names.match_id, self.column_names.team_id,
+                                  self.column_names.player_id])
+
+    @property
+    def features_out(self) -> list[str]:
+        return self._features_out
+
+
+class NormalizerTransformer(BaseTransformer):
+
+    def __init__(self, features: list[str], granularity, target_mean: Optional[float] = None,
+                 create_target_as_mean: bool = False):
+        super().__init__(features=features)
+        self.granularity = granularity
+        self.target_mean = target_mean
+        self.create_target_as_mean = create_target_as_mean
+        self._features_to_normalization_target = {}
+
+        if self.target_mean is None and not self.create_target_as_mean:
+            raise ValueError("Either target_sum or create_target_as_mean must be set")
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        self._features_to_normalization_target = {f: self.target_mean for f in self.features} if self.target_mean else {
+            f: df[f].mean() for f in self.features}
+        return self.transform(df=df)
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.assign(**{f'__mean_{feature}': df.groupby(self.granularity)[feature].transform('mean') for feature in
+                          self.features})
+        for feature, target_sum in self._features_to_normalization_target.items():
+            df = df.assign(**{feature: df[feature] / df[f'__mean_{feature}'] * target_sum})
+        return df.drop(columns=[f'__mean_{feature}' for feature in self.features])
+
+    @property
+    def features_out(self) -> list[str]:
+        return self.features
+
+
 class LagTransformer(BaseTransformer):
 
     def __init__(self,
@@ -87,6 +189,10 @@ class LagTransformer(BaseTransformer):
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         if self._df is None:
             raise ValueError("fit_transform needs to be called before transform")
+
+        if len(df.drop_duplicates(subset=[self.column_names.player_id, self.column_names.match_id])) != len(df):
+            raise ValueError(
+                f"Duplicated rows in df. Df must be a unique combination of {self.column_names.player_id} and {self.column_names.match_id}")
 
         ori_cols = df.columns.tolist()
         ori_index_values = df.index.tolist()

@@ -17,6 +17,7 @@ class MatchPredictorFactory():
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
                  post_transformers: Optional[List[BaseTransformer]] = None,
+                 post_prediction_transformers: Optional[List[BaseTransformer]] = None,
                  predictor: BaseMLWrapper = None,
                  estimator: Optional = None,
                  other_features: Optional[list[str]] = None,
@@ -36,6 +37,7 @@ class MatchPredictorFactory():
             self.rating_generators = [self.rating_generators]
 
         self.post_transformers = post_transformers or []
+        self.post_prediction_transformers = post_prediction_transformers or []
 
         self.predictor = predictor
         self.estimator = estimator
@@ -73,6 +75,7 @@ class MatchPredictorFactory():
             rating_generators=rating_generators,
             performances_generator=performances_generator,
             post_rating_transformers=post_rating_transformers,
+            post_prediction_transformers=self.post_prediction_transformers,
             predictor=predictor,
             train_split_date=self.train_split_date,
             estimator=self.estimator,

@@ -65,10 +65,10 @@ class MatchPredictorTuner():
 
     def tune(self, df: pd.DataFrame) -> MatchPredictor:
 
-        column_names = [rating_generator.column_names for rating_generator in self.match_predictor_factory.rating_generators]
+        column_names = [rating_generator.column_names for rating_generator in
+                        self.match_predictor_factory.rating_generators]
 
         best_performances_generator = copy.deepcopy(self.match_predictor_factory.performances_generator)
-
 
         if self.performances_generator_tuner:
             logging.info("Tuning PreTransformers")
@@ -88,7 +88,8 @@ class MatchPredictorTuner():
         for rating_idx, rating_generator_tuner in enumerate(self.rating_generator_tuners):
             rating_matches = convert_df_to_matches(df=df, column_names=column_names[rating_idx])
             matches.append(rating_matches)
-            tuned_rating_generator = rating_generator_tuner.tune(df=df, matches=matches[rating_idx], rating_idx=rating_idx,
+            tuned_rating_generator = rating_generator_tuner.tune(df=df, matches=matches[rating_idx],
+                                                                 rating_idx=rating_idx,
                                                                  scorer=self.scorer,
                                                                  match_predictor_factory=self.match_predictor_factory)
             if best_rating_generators:
@@ -109,10 +110,11 @@ class MatchPredictorTuner():
             best_predictor = self.match_predictor_factory.predictor
 
         best_match_predictor = MatchPredictor(
-                                              rating_generators=best_rating_generators,
-                                              performances_generator=best_performances_generator,
-                                              post_rating_transformers=best_post_transformers,
-                                              predictor=best_predictor)
+            rating_generators=best_rating_generators,
+            performances_generator=best_performances_generator,
+            post_rating_transformers=best_post_transformers,
+            post_prediction_transformers=self.match_predictor_factory.post_prediction_transformers,
+            predictor=best_predictor)
         if self.fit_best:
             best_match_predictor.generate_historical(df=df, matches=matches, store_ratings=True)
 

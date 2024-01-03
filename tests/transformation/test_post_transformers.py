@@ -3,7 +3,8 @@ import pytest
 
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.transformation import LagTransformer, RollingMeanTransformer
-from player_performance_ratings.transformation.post_transformers import LagLowerGranularityTransformer
+from player_performance_ratings.transformation.post_transformers import LagLowerGranularityTransformer, \
+    NormalizerTransformer, GameTeamMembersColumnsTransformer
 
 
 @pytest.fixture
@@ -15,6 +16,51 @@ def column_names():
         start_date="start_date",
         performance="performance"
     )
+
+def test_game_team_members_column_transformer(column_names):
+    df = pd.DataFrame(
+        {
+            'player': ['a', 'b', 'c', "d"],
+            "team": [1, 1, 2, 2],
+            'game': [1, 1, 1, 1],
+            "minutes": [15, 20, 16, 20],
+            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01")]
+        }
+    )
+    expected_df = df.copy()
+    transformer = GameTeamMembersColumnsTransformer(column_names=column_names, features=["minutes"], sort_by=["minutes"], players_per_team_per_match_count=2)
+    df = transformer.fit_transform(df)
+    expected_df["team_player1_minutes"] = [20, 15, 20, 16]
+    pd.testing.assert_frame_equal(df, expected_df, check_like=True)
+
+
+
+def test_normalizer_transformer(column_names):
+    df = pd.DataFrame(
+        {
+            'player': ['a', 'b', 'a', "b", 'a', 'b', 'a', "b"],
+            "team": [1, 1, 2, 2, 1, 1, 2, 2],
+            'game': [1, 1, 1, 1, 2, 2, 2, 2],
+            "minutes": [15, 20, 16, 20, 20, 25, 20, 25],
+        }
+    )
+
+    expected_df = df.copy()
+    transformer = NormalizerTransformer(features=["minutes"], granularity=[column_names.match_id, column_names.team_id],
+                                        create_target_as_mean=True)
+    df = transformer.fit_transform(df)
+    mean_minutes = df['minutes'].mean()
+    game1_team_1_multiplier = mean_minutes / (15 * 0.5 + 20 * 0.5)
+    game1_team_2_multiplier = mean_minutes / (16 * 0.5 + 20 * 0.5)
+    game2_team_1_multiplier = mean_minutes / (20 * 0.5 + 25 * 0.5)
+    game2_team_2_multiplier = mean_minutes / (20 * 0.5 + 25 * 0.5)
+
+    expected_df["minutes"] = [15 * game1_team_1_multiplier, 20 * game1_team_1_multiplier, 16 * game1_team_2_multiplier,
+                              20 * game1_team_2_multiplier,
+                              20 * game2_team_1_multiplier, 25 * game2_team_1_multiplier, 20 * game2_team_2_multiplier,
+                              25 * game2_team_2_multiplier]
+
+    pd.testing.assert_frame_equal(df, expected_df, check_like=True)
 
 
 def test_lag_fit_transform(column_names):
@@ -374,7 +420,7 @@ def test_rolling_mean_fit_transform(column_names):
     df_with_rolling_mean = rolling_mean_transformation.fit_transform(df)
 
     expected_df = original_df.assign(**{
-        f"{rolling_mean_transformation.prefix}2_points": [None, None, 1, (3+1)/2]
+        f"{rolling_mean_transformation.prefix}2_points": [None, None, 1, (3 + 1) / 2]
     })
 
     pd.testing.assert_frame_equal(df_with_rolling_mean, expected_df, check_like=True)
@@ -416,4 +462,3 @@ def test_rolling_mean_fit_transform_and_transform(column_names):
     })
 
     pd.testing.assert_frame_equal(transformed_future_df, expected_df, check_like=True)
-

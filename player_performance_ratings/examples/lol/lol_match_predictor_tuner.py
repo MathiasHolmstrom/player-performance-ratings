@@ -3,7 +3,7 @@ import pickle
 import pandas as pd
 from lightgbm import LGBMClassifier
 
-from player_performance_ratings.predictor.estimators import SklearnPredictor
+from player_performance_ratings.predictor.estimators import Predictor
 from player_performance_ratings.scorer import LogLossScorer
 from player_performance_ratings.transformation.factory import auto_create_performance_generator
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
@@ -194,8 +194,8 @@ predictor_tuner = PredictorTuner(
 
 match_predictor_factory = MatchPredictorFactory(
     rating_generators=rating_generator,
-    predictor=SklearnPredictor(
-        model=LGBMClassifier(verbose=-100),
+    predictor=Predictor(
+        estimator=LGBMClassifier(verbose=-100),
         features=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
     )
 )

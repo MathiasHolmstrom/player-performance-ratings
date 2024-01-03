@@ -5,11 +5,10 @@ from lightgbm import LGBMClassifier
 from pandas.errors import SettingWithCopyWarning
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
-from player_performance_ratings.transformation import SkLearnTransformerWrapper
 
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 
-from typing import Optional
+from typing import Optional, Any
 
 from sklearn.linear_model import LogisticRegression
 
@@ -19,7 +18,7 @@ from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
 
 
-class SkLearnGameTeamPredictor(BaseMLWrapper):
+class GameTeamPredictor(BaseMLWrapper):
 
     def __init__(self,
                  game_id_colum: str,
@@ -27,9 +26,9 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
                  features: list[str],
                  weight_column: Optional[str] = None,
                  target: Optional[str] = PredictColumnNames.TARGET,
-                 model: Optional = None,
+                 estimator: Optional = None,
                  multiclassifier: bool = False,
-                 pred_column: Optional[str] = "prob",
+                 pred_column: Optional[str] = None,
                  categorical_transformers: Optional[list[BaseTransformer]] = None
 
                  ):
@@ -50,7 +49,7 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
         :param features:
         :param weight_column:
         :param target:
-        :param model:
+        :param estimator:
         :param multiclassifier:
         :param pred_column:
         """
@@ -62,18 +61,18 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
 
         self.multiclassifier = multiclassifier
         super().__init__(target=self._target, features=features, pred_column=pred_column,
-                         model=model or LogisticRegression(), categorical_transformers=categorical_transformers)
+                         estimator=estimator or LogisticRegression(), categorical_transformers=categorical_transformers)
 
     def train(self, df: pd.DataFrame) -> None:
         df = self.fit_transform_categorical_transformers(df=df)
-        if len(df[self._target].unique()) > 2 and hasattr(self.model, "predict_proba"):
+        if len(df[self._target].unique()) > 2 and hasattr(self.estimator, "predict_proba"):
             logging.warning("target has more than 2 unique values, multiclassifier has therefore been set to True")
             self.multiclassifier = True
 
         if self._target not in df.columns:
             raise ValueError(f"target {self._target} not in df")
         grouped = self._create_grouped(df)
-        self.model.fit(grouped[self.estimator_features], grouped[self._target])
+        self.estimator.fit(grouped[self.estimator_features], grouped[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -86,11 +85,11 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
         grouped = self._create_grouped(df)
 
         if self.multiclassifier:
-            grouped[self._pred_column] = self.model.predict_proba(grouped[self.estimator_features]).tolist()
-        elif not hasattr(self.model, "predict_proba"):
-            grouped[self._pred_column] = self.model.predict(grouped[self.estimator_features])
+            grouped[self._pred_column] = self.estimator.predict_proba(grouped[self.estimator_features]).tolist()
+        elif not hasattr(self.estimator, "predict_proba"):
+            grouped[self._pred_column] = self.estimator.predict(grouped[self.estimator_features])
         else:
-            grouped[self._pred_column] = self.model.predict_proba(grouped[self.estimator_features])[:, 1]
+            grouped[self._pred_column] = self.estimator.predict_proba(grouped[self.estimator_features])[:, 1]
 
         if self.pred_column in df.columns:
             df = df.drop(columns=[self.pred_column])
@@ -145,14 +144,14 @@ class SkLearnGameTeamPredictor(BaseMLWrapper):
         return grouped
 
 
-class SklearnPredictor(BaseMLWrapper):
+class Predictor(BaseMLWrapper):
 
     def __init__(self,
                  features: list[str],
                  target: Optional[str] = PredictColumnNames.TARGET,
-                 model: Optional = None,
+                 estimator: Optional = None,
                  multiclassifier: bool = False,
-                 pred_column: Optional[str] = "prob",
+                 pred_column: Optional[str] = None,
                  column_names: Optional[ColumnNames] = None,
                  categorical_transformers: Optional[list[BaseTransformer]] = None
                  ):
@@ -160,17 +159,17 @@ class SklearnPredictor(BaseMLWrapper):
         self.multiclassifier = multiclassifier
         self.column_names = column_names
 
-        if model is None:
+        if estimator is None:
             logging.warning(
                 "model is not set. Will use LGBMClassifier(max_depth=2, n_estimators=400, learning_rate=0.05)")
 
         super().__init__(target=self._target, features=features, pred_column=pred_column,
-                         model=model or LGBMClassifier(max_depth=2, n_estimators=300, learning_rate=0.05, verbose=-100),
+                         estimator=estimator or LGBMClassifier(max_depth=2, n_estimators=300, learning_rate=0.05, verbose=-100),
                          categorical_transformers=categorical_transformers)
 
     def train(self, df: pd.DataFrame) -> None:
         df = self.fit_transform_categorical_transformers(df=df)
-        if self.multiclassifier is False and len(df[self._target].unique()) > 2 and hasattr(self.model,
+        if self.multiclassifier is False and len(df[self._target].unique()) > 2 and hasattr(self.estimator,
                                                                                             "predict_proba"):
             logging.warning("target has more than 2 unique values, multiclassifier has therefore been set to True")
             self.multiclassifier = True
@@ -179,23 +178,23 @@ class SklearnPredictor(BaseMLWrapper):
                     f"target has {len(df[self._target].unique())} unique values. This may machine-learning model to not function properly."
                     f" It is recommended to limit max and min values to ensure less than 50 unique targets")
 
-        if hasattr(self.model, "predict_proba"):
+        if hasattr(self.estimator, "predict_proba"):
             df = df.assign(**{self._target: df[self._target].astype('int')})
 
-        self.model.fit(df[self.features], df[self._target])
+        self.estimator.fit(df[self.estimator_features], df[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self.transform_categorical_transformers(df=df)
         df = df.copy()
 
         if self.multiclassifier:
-            df[self._pred_column] = self.model.predict_proba(df[self.features]).tolist()
+            df[self._pred_column] = self.estimator.predict_proba(df[self.estimator_features]).tolist()
             if len(set(df[self.pred_column].iloc[0])) == 2:
                 raise ValueError(
                     "Too many unique values in relation to rows in the training dataset causes multiclassifier to not train properly")
 
-        elif not hasattr(self.model, "predict_proba"):
-            df[self._pred_column] = self.model.predict(df[self.features])
+        elif not hasattr(self.estimator, "predict_proba"):
+            df[self._pred_column] = self.estimator.predict(df[self.estimator_features])
         else:
-            df[self._pred_column] = self.model.predict_proba(df[self.features])[:, 1]
+            df[self._pred_column] = self.estimator.predict_proba(df[self.estimator_features])[:, 1]
         return df

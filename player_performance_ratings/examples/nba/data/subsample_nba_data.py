@@ -12,7 +12,9 @@ df.loc[df['won'] == False, 'won'] = 0
 
 # randomly select 10% of game_ids
 
-df = df[["team_id", "start_date", "game_id", "player_id", "team_id_opponent", "points", "game_minutes" ,"minutes", "won", "plus_minus", "location", "score", "score_opponent"]]
-df = df[df['start_date'].between('2022-10-17', '2023-02-01')]
+df = df[["team_id", "start_date", "game_id", "player_id", 'player_name', 'start_position', "team_id_opponent", "points",
+         "game_minutes",
+         "minutes", "won", "plus_minus", "location", "score", "score_opponent"]]
+#df = df[df['start_date'].between('2022-10-17', '2023-02-01')]
 
-df.to_pickle("game_player_subsample.pickle")
+df.to_pickle("game_player_full.pickle")

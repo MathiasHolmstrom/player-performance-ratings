@@ -2,7 +2,7 @@ import copy
 
 import mock
 import pandas as pd
-from player_performance_ratings.predictor.estimators import SklearnPredictor
+from player_performance_ratings.predictor.estimators import Predictor
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
 from player_performance_ratings.ratings import TeamRatingGenerator, RatingColumnNames
@@ -44,7 +44,7 @@ def test_opponent_adjusted_rating_generator_tuner_team_rating():
 
     match_predictor_factory = MatchPredictorFactory(
         rating_generators=rating_generators,
-        predictor=SklearnPredictor(
+        predictor=Predictor(
             features=[f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}0", f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}1"],
             target=PredictColumnNames.TARGET
         )
@@ -123,7 +123,7 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
     match_predictor_factory = MatchPredictorFactory(
         rating_generators=rating_generators,
 
-        predictor=SklearnPredictor(
+        predictor=Predictor(
             features=[f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}0", f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}1"],
             target=PredictColumnNames.TARGET
         )
@@ -212,7 +212,7 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
 
     match_predictor_factory = MatchPredictorFactory(
         rating_generators=rating_generators,
-        predictor=SklearnPredictor(
+        predictor=Predictor(
             features=[f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}0", f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}1"],
             target=PredictColumnNames.TARGET
         )

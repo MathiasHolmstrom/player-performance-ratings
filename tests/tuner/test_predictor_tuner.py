@@ -4,7 +4,7 @@ import pandas as pd
 from deepdiff import DeepDiff
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.predictor.estimators import SklearnPredictor
+from player_performance_ratings.predictor.estimators import Predictor
 from sklearn.linear_model import LogisticRegression
 
 from player_performance_ratings.ratings import convert_df_to_matches
@@ -34,7 +34,7 @@ def test_predictor_tuner():
     )
 
     match_predictor_factory = MatchPredictorFactory(
-        predictor=SklearnPredictor(model=LogisticRegression(), features=["rating_difference"], target="__target"),
+        predictor=Predictor(estimator=LogisticRegression(), features=["rating_difference"], target="__target"),
 
     )
 
@@ -52,9 +52,9 @@ def test_predictor_tuner():
     matches = convert_df_to_matches(df=df, column_names=column_names)
     best_predictor = predictor_tuner.tune(df=df, matches=[matches], scorer=scorer, match_predictor_factory=match_predictor_factory)
 
-    expected_best_predictor = SklearnPredictor(model=LogisticRegression(C=0.5), features=["rating_difference"], target="__target")
+    expected_best_predictor = Predictor(estimator=LogisticRegression(C=0.5), features=["rating_difference"], target="__target")
 
-    diff = DeepDiff(best_predictor.model, expected_best_predictor.model)
+    diff = DeepDiff(best_predictor.estimator, expected_best_predictor.estimator)
     assert diff == {}
 
     assert expected_best_predictor.features == best_predictor.features

@@ -31,17 +31,17 @@ class PredictorTuner():
 
             predictor = copy.deepcopy(match_predictor_factory.predictor)
             param_names = list(
-                inspect.signature(predictor.model.__class__.__init__).parameters.keys())[1:]
-            params = {attr: getattr(predictor.model, attr) for attr in param_names if attr != 'kwargs'}
-            if '_other_params' in predictor.model.__dict__:
-                params.update(predictor.model._other_params)
+                inspect.signature(predictor.estimator.__class__.__init__).parameters.keys())[1:]
+            params = {attr: getattr(predictor.estimator, attr) for attr in param_names if attr != 'kwargs'}
+            if '_other_params' in predictor.estimator.__dict__:
+                params.update(predictor.estimator._other_params)
             params = add_params_from_search_range(params=params,
                                                   trial=trial,
                                                   parameter_search_range=self.search_ranges)
 
             predictor = copy.deepcopy(match_predictor_factory.predictor)
             for param in params:
-                setattr(predictor.model, param, params[param])
+                setattr(predictor.estimator, param, params[param])
 
             match_predictor = match_predictor_factory.create(
                 predictor=predictor
@@ -61,12 +61,12 @@ class PredictorTuner():
         other_predictor_params = list(
             inspect.signature(match_predictor_factory.predictor.__class__.__init__).parameters.keys())[1:]
 
-        if '_other_params' in match_predictor_factory.predictor.model.__dict__:
-            best_model_params.update(match_predictor_factory.predictor.model._other_params)
+        if '_other_params' in match_predictor_factory.predictor.estimator.__dict__:
+            best_model_params.update(match_predictor_factory.predictor.estimator._other_params)
 
         other_predictor_params = {attr: getattr(match_predictor_factory.predictor, attr) for attr in
                                   other_predictor_params if attr not in ('model')}
 
         predictor_class = match_predictor_factory.predictor.__class__
-        model_class = match_predictor_factory.predictor.model.__class__
+        model_class = match_predictor_factory.predictor.estimator.__class__
         return predictor_class(model=model_class(**best_model_params), **other_predictor_params)
