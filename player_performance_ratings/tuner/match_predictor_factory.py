@@ -33,6 +33,9 @@ class MatchPredictorFactory():
                  ):
 
 
+        if use_auto_create_performance_calculator and not column_weights:
+            raise ValueError("If auto pre transformers are used, column weights must be specified")
+
         self.rating_generators = rating_generators or []
         if isinstance(self.rating_generators, RatingGenerator):
             self.rating_generators = [self.rating_generators]
@@ -92,11 +95,6 @@ class MatchPredictorFactory():
             post_prediction_transformers=self.post_prediction_transformers,
             predictor=predictor,
             train_split_date=self.train_split_date,
-            estimator=self.estimator,
-            other_features=self.other_features,
-            other_categorical_features=self.other_categorical_features,
-            group_predictor_by_game_team=self.group_predictor_by_game_team,
             match_id_column_name=self.match_id_column_name,
-            team_id_column_name=self.team_id_column_name,
             date_column_name=self.date_column_name,
         )

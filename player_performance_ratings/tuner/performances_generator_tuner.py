@@ -11,14 +11,12 @@ from optuna.trial import BaseTrial
 from player_performance_ratings.data_structures import Match
 from player_performance_ratings.ratings import ColumnWeight, PerformancesGenerator
 from player_performance_ratings.ratings.enums import RatingColumnNames
-from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
 from player_performance_ratings.scorer.score import BaseScorer
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 
-from player_performance_ratings.tuner.utils import add_params_from_search_range, ParameterSearchRange, \
-    create_pre_rating_search_range_for_auto
+from player_performance_ratings.tuner.utils import add_params_from_search_range, ParameterSearchRange
 
 RC = RatingColumnNames
 

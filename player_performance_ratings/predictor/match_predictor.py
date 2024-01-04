@@ -104,7 +104,8 @@ class MatchPredictor():
                  match_id_column_name: Optional[str] = None,
                  team_id_column_name: Optional[str] = None,
                  use_auto_create_performance_calculator: bool = False,
-                 column_weights: Optional[Union[list[list[ColumnWeight]], list[ColumnWeight]]] = None
+                 column_weights: Optional[Union[list[list[ColumnWeight]], list[ColumnWeight]]] = None,
+                 keep_features: bool = False,
                  ):
 
         """
@@ -187,12 +188,13 @@ class MatchPredictor():
         self.estimator_or_transformers = estimator_or_transformers
         self.match_id_column_name = match_id_column_name
         self.team_id_column_name = team_id_column_name
+        self.keep_features = keep_features
 
         if self.predictor is not None and estimator is not None:
             logging.warning(
                 "predictor and estimator is set. estimator will be ignored. If it's intended to be used, either inject it into predictor or remove predictor")
 
-        if self.predictor is not None and self.other_features is not None:
+        if self.predictor is not None and self.other_features:
             logging.warning(
                 "predictor and other_features is set. other_features will be ignored. If it's intended to be used, either inject it into predictor or remove predictor")
 
@@ -222,6 +224,10 @@ class MatchPredictor():
     def generate_historical(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
                             store_ratings: bool = True) -> pd.DataFrame:
 
+        if self.predictor.pred_column in df.columns:
+            raise ValueError(f"Predictor column {self.predictor.pred_column} already in df columns. Remove or rename before generating predictions")
+
+        ori_cols = df.columns.tolist()
 
         if matches:
             if isinstance(matches[0], Match):
@@ -270,10 +276,13 @@ class MatchPredictor():
         df = self.predictor.add_prediction(df)
         for post_prediction_transformer in self.post_prediction_transformers:
             df = post_prediction_transformer.transform(df)
+        if not self.keep_features:
+            df = df[ori_cols + [self.predictor.pred_column]]
+
         return df
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
-
+        ori_cols = df.columns.tolist()
         for rating_idx, rating_generator in enumerate(self.rating_generators):
             rating_column_names = rating_generator.column_names
 
@@ -296,6 +305,8 @@ class MatchPredictor():
         df = self.predictor.add_prediction(df)
         for post_prediction_transformer in self.post_prediction_transformers:
             df = post_prediction_transformer.transform(df)
+        if not self.keep_features:
+            df = df[ori_cols + [self.predictor.pred_column]]
         return df
 
     @property

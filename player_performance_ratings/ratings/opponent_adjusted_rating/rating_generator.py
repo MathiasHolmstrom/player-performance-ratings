@@ -87,7 +87,7 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
          These ratings can easily be added as new columns to the original dataframe for later model training or exploration
         """
 
-        if self.column_names.participation_weight is not None and self.column_names.participation_weight not in df.columns:
+        if self.column_names.participation_weight is not None and df is not None and self.column_names.participation_weight not in df.columns:
             raise ValueError(f"participation_weight {self.column_names.participation_weight} not in df columns")
 
         if matches is not None and len(matches) > 0 and not isinstance(matches[0], Match):
@@ -96,13 +96,6 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
         if matches is None and df is None:
             raise ValueError("If matches is not passed, df must be massed")
 
-        if df is not None and self.column_names:
-            logging.info(
-                "both df and column names are passed, and match-ratings will therefore be stored in the class object")
-
-        elif self.column_names and df is None:
-            logging.warning(
-                "Column names is passed but df not - this match-ratings will not be stored in the class object")
         if matches is None:
             matches = convert_df_to_matches(df=df, column_names=self.column_names)
 
@@ -155,7 +148,6 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
                     player_predicted_performances.append(player_rating_change.predicted_performance)
                     player_rating_changes.append(player_rating_change.rating_change_value)
 
-
         potential_feature_values = self._get_shared_rating_values(
             pre_match_team_projected_rating_values=pre_match_team_projected_rating_values,
             pre_match_opponent_projected_rating_values=pre_match_opponent_projected_rating_values,
@@ -181,7 +173,8 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
         potential_feature_values[HistoricalRatingColumnNames.PERFORMANCE] = performances
 
         potential_feature_values[HistoricalRatingColumnNames.PLAYER_RATING_CHANGE] = player_rating_changes
-        potential_feature_values[HistoricalRatingColumnNames.PLAYER_PREDICTED_PERFORMANCE] = player_predicted_performances
+        potential_feature_values[
+            HistoricalRatingColumnNames.PLAYER_PREDICTED_PERFORMANCE] = player_predicted_performances
 
         if df is not None and self.column_names:
             self.ratings_df = df[
@@ -246,7 +239,7 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
                                   player_leagues: list[str],
                                   team_opponent_leagues: list[str],
                                   match_ids: list[str]
-                                  ) ->  dict[RatingColumnNames, Any]:
+                                  ) -> dict[RatingColumnNames, Any]:
         rating_differences_projected = (np.array(pre_match_team_projected_rating_values) - np.array(
             pre_match_opponent_projected_rating_values)).tolist()
         player_rating_differences_projected = (np.array(pre_match_player_rating_values) - np.array(
