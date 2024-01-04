@@ -7,7 +7,7 @@ from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeig
 from player_performance_ratings.predictor import MatchPredictor
 from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
-from player_performance_ratings.transformation.base_transformer import BaseTransformer
+from player_performance_ratings.transformation.base_transformer import BaseTransformer, BasePostTransformer
 from player_performance_ratings.transformation.factory import auto_create_performance_generator
 
 
@@ -16,8 +16,8 @@ class MatchPredictorFactory():
     def __init__(self,
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
-                 post_transformers: Optional[List[BaseTransformer]] = None,
-                 post_prediction_transformers: Optional[List[BaseTransformer]] = None,
+                 post_rating_transformers: Optional[List[BasePostTransformer]] = None,
+                 post_prediction_transformers: Optional[List[BasePostTransformer]] = None,
                  predictor: BaseMLWrapper = None,
                  estimator: Optional = None,
                  other_features: Optional[list[str]] = None,
@@ -36,7 +36,7 @@ class MatchPredictorFactory():
         if isinstance(self.rating_generators, RatingGenerator):
             self.rating_generators = [self.rating_generators]
 
-        self.post_transformers = post_transformers or []
+        self.post_rating_transformers = post_rating_transformers or []
         self.post_prediction_transformers = post_prediction_transformers or []
 
         self.predictor = predictor
@@ -68,7 +68,7 @@ class MatchPredictorFactory():
 
         rating_generators = rating_generators if rating_generators is not None else self.rating_generators
         performances_generator = performances_generator if performances_generator is not None else self.performances_generator
-        post_rating_transformers = post_rating_transformers if post_rating_transformers is not None else self.post_transformers
+        post_rating_transformers = post_rating_transformers if post_rating_transformers is not None else self.post_rating_transformers
         predictor = predictor if predictor is not None else self.predictor
 
         return MatchPredictor(

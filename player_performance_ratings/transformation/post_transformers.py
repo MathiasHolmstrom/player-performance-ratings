@@ -5,7 +5,7 @@ import pandas as pd
 
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.transformation.base_transformer import BaseTransformer, \
-    DifferentGranularityTransformer
+    DifferentGranularityTransformer, BasePostTransformer
 from player_performance_ratings.utils import validate_sorting
 
 
@@ -23,19 +23,20 @@ def create_output_column_by_game_group(data: pd.DataFrame, feature_name: str,
     return data
 
 
-class FutureTransformer(BaseTransformer):
-    pass
+class SklearnPredictorTransformer(BasePostTransformer):
 
-class SklearnPredictorTransformer(BaseTransformer):
-
-    def __init__(self, estimator, features: list[str], target:str, feature_out: Optional[str] = None):
+    def __init__(self, estimator, features: list[str], target: str, train_date: str, date_column_name: str,
+                 feature_out: Optional[str] = None):
         super().__init__(features=features)
         self.estimator = estimator
         self.target = target
+        self.train_date = train_date
+        self.date_column_name = date_column_name
         self.feature_out = feature_out or f'{self.target}_transform_prediction'
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        self.estimator.fit(df[self.features], df[self.target])
+        train_df = df[df[self.date_column_name] < self.train_date]
+        self.estimator.fit(train_df[self.features], train_df[self.target])
         return self.transform(df=df)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -48,9 +49,10 @@ class SklearnPredictorTransformer(BaseTransformer):
         return [f'{self.feature_out}']
 
 
-class GameTeamMembersColumnsTransformer(BaseTransformer):
+class GameTeamMembersColumnsTransformer(BasePostTransformer):
 
-    def __init__(self, column_names: ColumnNames, features: list[str], players_per_match_per_team_count: int, sort_by: Optional[list[str]] = None):
+    def __init__(self, column_names: ColumnNames, features: list[str], players_per_match_per_team_count: int,
+                 sort_by: Optional[list[str]] = None):
         super().__init__(features=features)
         self.column_names = column_names
         self.players_per_match_per_team_count = players_per_match_per_team_count
@@ -69,7 +71,8 @@ class GameTeamMembersColumnsTransformer(BaseTransformer):
         df = df.copy()
 
         def add_teammate_minutes(row, grouped_df):
-            game_team_group = grouped_df.get_group((row[self.column_names.match_id], row[self.column_names.team_id]))
+            game_team_group = grouped_df.get_group(
+                (row[self.column_names.rating_update_id], row[self.column_names.team_id]))
             number = 0
             if self.sort_by:
                 game_team_group = game_team_group.sort_values(by=self.sort_by, ascending=False)
@@ -83,19 +86,19 @@ class GameTeamMembersColumnsTransformer(BaseTransformer):
 
             return row
 
-
-        grouped = df.groupby([self.column_names.match_id, self.column_names.team_id])
+        grouped = df.groupby([self.column_names.rating_update_id, self.column_names.team_id])
 
         df = df.apply(lambda row: add_teammate_minutes(row, grouped), axis=1)
-        return df.sort_values(by=[self.column_names.start_date, self.column_names.match_id, self.column_names.team_id,
-                                  self.column_names.player_id])
+        return df.sort_values(
+            by=[self.column_names.start_date, self.column_names.rating_update_id, self.column_names.team_id,
+                self.column_names.player_id])
 
     @property
     def features_out(self) -> list[str]:
         return self._features_out
 
 
-class NormalizerTransformer(BaseTransformer):
+class NormalizerTransformer(BasePostTransformer):
 
     def __init__(self, features: list[str], granularity, target_mean: Optional[float] = None,
                  create_target_as_mean: bool = False):
@@ -125,14 +128,16 @@ class NormalizerTransformer(BaseTransformer):
         return self.features
 
 
-class LagTransformer(BaseTransformer):
+class LagTransformer(BasePostTransformer):
 
     def __init__(self,
                  features: list[str],
                  lag_length: int,
                  column_names: ColumnNames,
                  granularity: Optional[list[str]] = None,
-                 prefix: str = 'lag_'
+                 days_between_lags: Optional[list[int]] = None,
+                 prefix: str = 'lag_',
+                 future_lag: bool = False,
                  ):
 
         """
@@ -163,22 +168,31 @@ class LagTransformer(BaseTransformer):
         self.column_names = column_names
         self.granularity = granularity or [self.column_names.player_id]
         self.lag_length = lag_length
+        self.days_between_lags = days_between_lags or []
         self.prefix = prefix
-        self._features_created = []
+        self.future_lag = future_lag
+        self._features_out = []
         self._df = None
         for feature_name in self.features:
             for lag in range(1, self.lag_length + 1):
-                self._features_created.append(f'{self.prefix}{lag}_{feature_name}')
+                self._features_out.append(f'{self.prefix}{lag}_{feature_name}')
+
+        for days_lag in self.days_between_lags:
+            self._features_out.append(f'{self.prefix}{days_lag}_days_ago')
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         validate_sorting(df=df, column_names=self.column_names)
+        for feature_out in self._features_out:
+            if feature_out in df.columns:
+                raise ValueError(
+                    f'Column {feature_out} already exists. Choose different prefix or ensure no duplication was performed')
         if self._df is None:
             self._df = df
         else:
             self._df = pd.concat([self._df, df], axis=0)
 
         self._df = self._df.assign(
-            __id=self._df[self.column_names.match_id].astype('str') + "__" + self._df[
+            __id=self._df[self.column_names.rating_update_id].astype('str') + "__" + self._df[
                 self.column_names.player_id].astype(
                 'str'))
         self._df = self._df.drop_duplicates(subset=['__id'], keep='last')
@@ -190,20 +204,30 @@ class LagTransformer(BaseTransformer):
         if self._df is None:
             raise ValueError("fit_transform needs to be called before transform")
 
-        if len(df.drop_duplicates(subset=[self.column_names.player_id, self.column_names.match_id])) != len(df):
+        if len(df.drop_duplicates(subset=[self.column_names.player_id, self.column_names.rating_update_id])) != len(df):
             raise ValueError(
-                f"Duplicated rows in df. Df must be a unique combination of {self.column_names.player_id} and {self.column_names.match_id}")
+                f"Duplicated rows in df. Df must be a unique combination of {self.column_names.player_id} and {self.column_names.rating_update_id}")
 
         ori_cols = df.columns.tolist()
         ori_index_values = df.index.tolist()
 
         all_df = pd.concat([self._df, df], axis=0)
         all_df = all_df.assign(
-            __id=all_df[self.column_names.match_id].astype('str') + "__" + all_df[self.column_names.player_id].astype(
+            __id=all_df[self.column_names.rating_update_id].astype('str') + "__" + all_df[
+                self.column_names.player_id].astype(
                 'str'))
         all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
 
         validate_sorting(df=all_df, column_names=self.column_names)
+
+        for days_lag in self.days_between_lags:
+            if self.future_lag:
+                all_df["shifted_days"] = all_df.groupby(self.granularity)[self.column_names.start_date].shift(-days_lag)
+            else:
+                all_df["shifted_days"] = all_df.groupby(self.granularity)[self.column_names.start_date].shift(days_lag)
+            all_df[f'{self.prefix}{days_lag}_days_ago'] = (
+                pd.to_datetime(all_df["shifted_days"]) - pd.to_datetime(all_df[self.column_names.start_date])).dt.days
+            all_df = all_df.drop(columns=["shifted_days"])
 
         for feature_name in self.features:
             for lag in range(1, self.lag_length + 1):
@@ -215,22 +239,25 @@ class LagTransformer(BaseTransformer):
         for feature_name in self.features:
             for lag in range(1, self.lag_length + 1):
                 output_column_name = f'{self.prefix}{lag}_{feature_name}'
-
-                all_df = all_df.assign(
-                    **{output_column_name: all_df.groupby(self.granularity)[feature_name].shift(lag)})
+                if self.future_lag:
+                    all_df = all_df.assign(
+                        **{output_column_name: all_df.groupby(self.granularity)[feature_name].shift(-lag)})
+                else:
+                    all_df = all_df.assign(
+                        **{output_column_name: all_df.groupby(self.granularity)[feature_name].shift(lag)})
 
         df = df.assign(
-            __id=df[self.column_names.match_id].astype('str') + "__" + df[
+            __id=df[self.column_names.rating_update_id].astype('str') + "__" + df[
                 self.column_names.player_id].astype(
                 'str'))
 
-        transformed_df = all_df[all_df['__id'].isin(df['__id'].unique().tolist())][ori_cols + self._features_created]
+        transformed_df = all_df[all_df['__id'].isin(df['__id'].unique().tolist())][ori_cols + self._features_out]
         transformed_df.index = ori_index_values
-        return transformed_df[list(set(ori_cols + self._features_created))]
+        return transformed_df[list(set(ori_cols + self._features_out))]
 
     @property
     def features_out(self) -> list[str]:
-        return self._features_created
+        return self._features_out
 
 
 class LagLowerGranularityTransformer(DifferentGranularityTransformer):
@@ -297,7 +324,7 @@ class LagLowerGranularityTransformer(DifferentGranularityTransformer):
         diff_granularity_df = pd.concat([self._diff_granularity_df, diff_granularity_df], axis=0)
 
         diff_granularity_df = diff_granularity_df.sort_values(
-            by=[self.column_names.start_date, self.column_names.match_id, self.column_names.team_id,
+            by=[self.column_names.start_date, self.column_names.rating_update_id, self.column_names.team_id,
                 self.column_names.player_id])
 
         for feature_name in self.features:
@@ -311,7 +338,7 @@ class LagLowerGranularityTransformer(DifferentGranularityTransformer):
             for lag in range(1, self.lag_length + 1):
                 grouped_data = create_output_column_by_game_group(data=diff_granularity_df, feature_name=feature_name,
                                                                   weight_column=self.weight_column,
-                                                                  game_id=self.column_names.match_id,
+                                                                  game_id=self.column_names.rating_update_id,
                                                                   granularity=self.granularity)
 
                 output_column_name = f'{self.prefix}{lag}_{feature_name}'
@@ -319,8 +346,8 @@ class LagLowerGranularityTransformer(DifferentGranularityTransformer):
                 grouped_data = grouped_data.assign(
                     **{output_column_name: grouped_data.groupby(self.granularity)[feature_name].shift(lag)})
                 game_player_df = game_player_df[[c for c in game_player_df.columns if c != output_column_name]].merge(
-                    grouped_data[[output_column_name, self.column_names.match_id] + self.granularity],
-                    on=self.granularity + [self.column_names.match_id], how='left')
+                    grouped_data[[output_column_name, self.column_names.rating_update_id] + self.granularity],
+                    on=self.granularity + [self.column_names.rating_update_id], how='left')
 
         return game_player_df
 
@@ -329,7 +356,7 @@ class LagLowerGranularityTransformer(DifferentGranularityTransformer):
         return self._features_out
 
 
-class RollingMeanTransformer(BaseTransformer):
+class RollingMeanTransformer(BasePostTransformer):
 
     def __init__(self,
                  features: list[str],
@@ -391,7 +418,8 @@ class RollingMeanTransformer(BaseTransformer):
 
         all_df = pd.concat([self._df, df], axis=0).reset_index()
         all_df = all_df.assign(
-            __id=all_df[self.column_names.match_id].astype('str') + "__" + all_df[self.column_names.player_id].astype(
+            __id=all_df[self.column_names.rating_update_id].astype('str') + "__" + all_df[
+                self.column_names.player_id].astype(
                 'str'))
         all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
 
@@ -408,7 +436,7 @@ class RollingMeanTransformer(BaseTransformer):
                 lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())})
 
         df = df.assign(
-            __id=df[self.column_names.match_id].astype('str') + "__" + df[
+            __id=df[self.column_names.rating_update_id].astype('str') + "__" + df[
                 self.column_names.player_id].astype(
                 'str'))
 
@@ -425,7 +453,7 @@ class RollingMeanTransformer(BaseTransformer):
             self._df = pd.concat([self._df, df], axis=0)
 
         self._df = self._df.assign(
-            __id=self._df[self.column_names.match_id].astype('str') + "__" + self._df[
+            __id=self._df[self.column_names.rating_update_id].astype('str') + "__" + self._df[
                 self.column_names.player_id].astype(
                 'str'))
         self._df = self._df.drop_duplicates(subset=['__id'], keep='last')

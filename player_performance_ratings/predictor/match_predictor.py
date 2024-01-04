@@ -16,7 +16,7 @@ from player_performance_ratings.ratings.league_identifier import LeagueIdentifie
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
 
-from player_performance_ratings.transformation.base_transformer import BaseTransformer
+from player_performance_ratings.transformation.base_transformer import BaseTransformer, BasePostTransformer
 from player_performance_ratings.transformation.factory import auto_create_performance_generator
 
 from player_performance_ratings.transformation.pre_transformers import ConvertDataFrameToCategoricalTransformer, \
@@ -28,8 +28,8 @@ class MatchPredictor():
     def __init__(self,
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
-                 post_rating_transformers: Optional[List[BaseTransformer]] = None,
-                 post_prediction_transformers: Optional[List[BaseTransformer]] = None,
+                 post_rating_transformers: Optional[List[BasePostTransformer]] = None,
+                 post_prediction_transformers: Optional[List[BasePostTransformer]] = None,
                  predictor: [Optional[BaseMLWrapper]] = None,
                  estimator: Optional = None,
                  estimator_or_transformers: Optional[Union[BaseMLWrapper, List[BaseTransformer]]] = None,

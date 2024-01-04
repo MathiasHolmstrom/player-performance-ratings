@@ -97,7 +97,7 @@ class MatchPredictorTuner():
             else:
                 best_rating_generators = [tuned_rating_generator]
 
-        best_post_transformers = copy.deepcopy(self.match_predictor_factory.post_transformers)
+        best_post_transformers = copy.deepcopy(self.match_predictor_factory.post_rating_transformers)
 
         for post_rating_transformer in best_post_transformers:
             df = post_rating_transformer.fit_transform(df)

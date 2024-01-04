@@ -1,5 +1,7 @@
 import pandas as pd
 from lightgbm import LGBMClassifier, LGBMRegressor
+from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+
 from player_performance_ratings.transformation import LagTransformer
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
@@ -7,7 +9,7 @@ from player_performance_ratings.predictor import MatchPredictor
 from player_performance_ratings.transformation.post_transformers import NormalizerTransformer, \
     GameTeamMembersColumnsTransformer, SklearnPredictorTransformer
 
-df = pd.read_pickle(r"data/game_player_subsample.pickle")
+df = pd.read_pickle(r"data/game_player_full.pickle")
 df = df.drop_duplicates(subset=['game_id', 'player_id'])
 df = (
     df.assign(team_count=df.groupby("game_id")["team_id"].transform('nunique'))
@@ -34,19 +36,32 @@ lag_transformer = LagTransformer(
     column_names=column_names,
 )
 
+train_split_date = df.iloc[int(len(df) / 1.3)][column_names.start_date]
+
 post_rating_transformers = [
     LagTransformer(
         features=["minutes"],
-        lag_length=20,
+        lag_length=25,
         granularity=[column_names.player_id, "starting"],
         column_names=column_names,
+        days_between_lags=[1, 2,3,10, 25]
     ),
-    SklearnPredictorTransformer(estimator=LGBMRegressor(), target=f"__target",
-                                features=lag_transformer.features_out + ["starting"], feature_out=f"{PredictColumnNames.TARGET}_transform_prediction"),
-    GameTeamMembersColumnsTransformer(column_names=column_names,
-                                      features=[f"{PredictColumnNames.TARGET}_transform_prediction"],
-                                      sort_by=["starting"],
-                                      players_per_match_per_team_count=8)
+    LagTransformer(
+        features=["minutes"],
+        lag_length=1,
+        granularity=[column_names.player_id, "starting", 'location'],
+        column_names=column_names,
+        prefix="starting_location_lag_"
+    ),
+    LagTransformer(
+        features=[],
+        lag_length=1,
+        granularity=[column_names.player_id],
+        column_names=column_names,
+        prefix="future_lag",
+        future_lag=True,
+        days_between_lags=[2]
+    ),
 ]
 
 post_prediction_transformers = [
@@ -57,10 +72,21 @@ post_prediction_transformers = [
 match_predictor = MatchPredictor(
     post_rating_transformers=post_rating_transformers,
     post_prediction_transformers=post_prediction_transformers,
-    estimator=LGBMRegressor(),
+    estimator=LGBMRegressor(reg_alpha=1),
     date_column_name=column_names.start_date,
     other_categorical_features=["starting"],
+    train_split_date=train_split_date
 )
+
+match_predictor_factory = MatchPredictorFactory(
+    post_rating_transformers=post_rating_transformers,
+    post_prediction_transformers=post_prediction_transformers,
+    estimator=LGBMRegressor(reg_alpha=1),
+    date_column_name=column_names.start_date,
+    other_categorical_features=["starting"],
+    train_split_date=train_split_date
+)
+
 
 df[PredictColumnNames.TARGET] = df['minutes']
 df = match_predictor.generate_historical(df)
