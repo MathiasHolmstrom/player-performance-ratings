@@ -27,6 +27,16 @@ df = (
 df.loc[df['start_position'] != '', 'starting'] = 1
 df.loc[df['start_position'] == '', 'starting'] = 0
 
+df['is_playoff'] = 0
+df.loc[
+    (df['start_date'].between('2018-04-13', '2018-06-20')) |
+    (df['start_date'].between('2019-04-13', '2019-06-27')) |
+    (df['start_date'].between('2020-08-13', '2020-09-20')) |
+    (df['start_date'].between('2021-05-20', '2021-07-22')) |
+    (df['start_date'].between('2022-04-13', '2022-06-27')) |
+    (df['start_date'].between('2023-04-13', '2023-06-27')), 'is_playoff'
+] = 1
+
 df[PredictColumnNames.TARGET] = df['minutes']
 
 df = df.sort_values(["start_date", "game_id", "team_id", "player_id"])
@@ -53,7 +63,15 @@ post_rating_transformers = [
         lag_length=25,
         granularity=[column_names.player_id, "starting"],
         column_names=column_names,
-        days_between_lags=[1, 2,3,10, 25]
+        days_between_lags=[1, 2, 3, 10, 25]
+    ),
+    LagTransformer(
+        features=["minutes"],
+        lag_length=10,
+        granularity=[column_names.player_id, "starting", "is_playoff"],
+        column_names=column_names,
+        days_between_lags=[1, 2, 4],
+        prefix="is_playoff_lag_"
     ),
     LagTransformer(
         features=["minutes"],
@@ -78,24 +96,25 @@ post_prediction_transformers = [
                           granularity=[column_names.team_id, column_names.match_id],
                           create_target_as_mean=True)]
 
-
 match_predictor_factory = MatchPredictorFactory(
     post_rating_transformers=post_rating_transformers,
     post_prediction_transformers=post_prediction_transformers,
     estimator=LGBMRegressor(reg_alpha=1, learning_rate=0.02, verbose=-100),
     date_column_name=column_names.start_date,
-    other_categorical_features=["starting"],
+    other_categorical_features=["starting", "is_playoff"],
 )
 
 predictor_tuner = PredictorTuner(
-    search_ranges=get_default_lgbm_regressor_search_range_by_learning_rate(learning_rate=match_predictor_factory.estimator.learning_rate),
+    search_ranges=get_default_lgbm_regressor_search_range_by_learning_rate(
+        learning_rate=match_predictor_factory.estimator.learning_rate),
     n_trials=65,
     date_column_name=column_names.start_date,
 )
 
 match_tuner = MatchPredictorTuner(
     scorer=SklearnScorer(target=PredictColumnNames.TARGET,
-                         scorer_function=mean_absolute_error, pred_column=match_predictor_factory.predictor.pred_column),
+                         scorer_function=mean_absolute_error,
+                         pred_column=match_predictor_factory.predictor.pred_column),
     match_predictor_factory=match_predictor_factory,
     predictor_tuner=predictor_tuner
 )

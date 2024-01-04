@@ -15,8 +15,6 @@ from player_performance_ratings import ColumnNames
 
 from player_performance_ratings.tuner.utils import ParameterSearchRange, get_default_team_rating_search_range, \
     get_default_lgbm_classifier_search_range_by_learning_rate
-from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import StandardScaler
 from venn_abers import VennAbersCalibrator
 
 from player_performance_ratings.consts import PredictColumnNames
@@ -139,12 +137,12 @@ predictor_tuner = PredictorTuner(
     date_column_name=column_names.start_date,
 )
 
-
 tuner = MatchPredictorTuner(
     match_predictor_factory=match_predictor_factory,
     fit_best=True,
     scorer=LogLossScorer(pred_column=match_predictor_factory.predictor.pred_column),
     rating_generator_tuners=rating_generator_tuner,
+    predictor_tuner=predictor_tuner,
 )
 best_match_predictor = tuner.tune(df=df)
 df_with_minutes_prediction = best_match_predictor.generate_historical(df=df)
