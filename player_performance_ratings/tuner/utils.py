@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Literal, Optional, Union, Any, Tuple
 
 from optuna.trial import BaseTrial
-from player_performance_ratings.ratings import PerformancesGenerator
+
 from sklearn.preprocessing import StandardScaler
 
 from player_performance_ratings.ratings import ColumnWeight
@@ -102,6 +102,80 @@ def create_pre_rating_search_range_for_auto(feature_names: Union[list[str], list
     return pre_transformer_search_ranges
 
 
+def get_default_lgbm_classifier_search_range_by_learning_rate(learning_rate: float) -> list[ParameterSearchRange]:
+    min_n_estimators = min(1 / learning_rate * 7, 1000)
+
+    return [
+        ParameterSearchRange(
+            name='n_estimators',
+            type='int',
+            low=min_n_estimators,
+            high=min_n_estimators*6,
+        ),
+        ParameterSearchRange(
+            name='num_leaves',
+            type='int',
+            low=10,
+            high=100,
+        ),
+        ParameterSearchRange(
+            name='max_depth',
+            type='int',
+            low=2,
+            high=7,
+        ),
+        ParameterSearchRange(
+            name='min_child_samples',
+            type='int',
+            low=2,
+            high=200,
+        ),
+        ParameterSearchRange(
+            name='reg_alpha',
+            type='uniform',
+            low=0,
+            high=5,
+        ),
+    ]
+
+
+def get_default_lgbm_regressor_search_range_by_learning_rate(learning_rate: float) -> list[ParameterSearchRange]:
+
+    min_n_estimators = min(1/learning_rate*7, 1000)
+    return [
+        ParameterSearchRange(
+            name='n_estimators',
+            type='int',
+            low=min_n_estimators,
+            high=min_n_estimators * 7,
+        ),
+        ParameterSearchRange(
+            name='num_leaves',
+            type='int',
+            low=10,
+            high=100,
+        ),
+        ParameterSearchRange(
+            name='max_depth',
+            type='int',
+            low=2,
+            high=14,
+        ),
+        ParameterSearchRange(
+            name='min_child_samples',
+            type='int',
+            low=2,
+            high=200,
+        ),
+        ParameterSearchRange(
+            name='reg_alpha',
+            type='uniform',
+            low=0,
+            high=5,
+        ),
+    ]
+
+
 def get_default_team_rating_search_range() -> list[ParameterSearchRange]:
     return [
         ParameterSearchRange(
@@ -147,4 +221,3 @@ def get_default_team_rating_search_range() -> list[ParameterSearchRange]:
             high=0.2,
         )
     ]
-

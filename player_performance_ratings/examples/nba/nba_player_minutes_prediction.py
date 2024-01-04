@@ -1,13 +1,20 @@
+import pickle
+
 import pandas as pd
-from lightgbm import LGBMClassifier, LGBMRegressor
+from lightgbm import LGBMRegressor
+from player_performance_ratings.scorer.score import SklearnScorer
+from sklearn.metrics import mean_absolute_error
+from player_performance_ratings.tuner import MatchPredictorTuner
+
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 
 from player_performance_ratings.transformation import LagTransformer
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
-from player_performance_ratings.predictor import MatchPredictor
-from player_performance_ratings.transformation.post_transformers import NormalizerTransformer, \
-    GameTeamMembersColumnsTransformer, SklearnPredictorTransformer
+
+from player_performance_ratings.transformation.post_transformers import NormalizerTransformer
+from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
+from player_performance_ratings.tuner.utils import get_default_lgbm_regressor_search_range_by_learning_rate
 
 df = pd.read_pickle(r"data/game_player_full.pickle")
 df = df.drop_duplicates(subset=['game_id', 'player_id'])
@@ -19,6 +26,8 @@ df = (
 
 df.loc[df['start_position'] != '', 'starting'] = 1
 df.loc[df['start_position'] == '', 'starting'] = 0
+
+df[PredictColumnNames.TARGET] = df['minutes']
 
 df = df.sort_values(["start_date", "game_id", "team_id", "player_id"])
 column_names = ColumnNames(
@@ -69,27 +78,31 @@ post_prediction_transformers = [
                           granularity=[column_names.team_id, column_names.match_id],
                           create_target_as_mean=True)]
 
-match_predictor = MatchPredictor(
-    post_rating_transformers=post_rating_transformers,
-    post_prediction_transformers=post_prediction_transformers,
-    estimator=LGBMRegressor(reg_alpha=1),
-    date_column_name=column_names.start_date,
-    other_categorical_features=["starting"],
-    train_split_date=train_split_date
-)
 
 match_predictor_factory = MatchPredictorFactory(
     post_rating_transformers=post_rating_transformers,
     post_prediction_transformers=post_prediction_transformers,
-    estimator=LGBMRegressor(reg_alpha=1),
+    estimator=LGBMRegressor(reg_alpha=1, learning_rate=0.02, verbose=-100),
     date_column_name=column_names.start_date,
     other_categorical_features=["starting"],
-    train_split_date=train_split_date
 )
 
+predictor_tuner = PredictorTuner(
+    search_ranges=get_default_lgbm_regressor_search_range_by_learning_rate(learning_rate=match_predictor_factory.estimator.learning_rate),
+    n_trials=65,
+    date_column_name=column_names.start_date,
+)
 
-df[PredictColumnNames.TARGET] = df['minutes']
-df = match_predictor.generate_historical(df)
-test_df = df[df[column_names.start_date] > match_predictor.train_split_date]
+match_tuner = MatchPredictorTuner(
+    scorer=SklearnScorer(target=PredictColumnNames.TARGET,
+                         scorer_function=mean_absolute_error, pred_column=match_predictor_factory.predictor.pred_column),
+    match_predictor_factory=match_predictor_factory,
+    predictor_tuner=predictor_tuner
+)
 
-print("MAE", abs(test_df['minutes'] - test_df[match_predictor.predictor.pred_column]).mean())
+best_model = match_tuner.tune(df=df)
+
+df_with_minutes_prediction = best_model.generate_historical(df=df)
+
+pickle.dump(best_model, open("models/nba_minute_prediction", 'wb'))
+df_with_minutes_prediction.to_pickle("data/game_player_full_with_minutes_prediction.pickle")

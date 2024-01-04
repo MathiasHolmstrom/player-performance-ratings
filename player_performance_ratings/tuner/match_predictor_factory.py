@@ -2,6 +2,7 @@ from typing import Optional, List, Union
 
 import pendulum
 
+from player_performance_ratings.predictor.match_predictor import create_predictor
 from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
 
 from player_performance_ratings.predictor import MatchPredictor
@@ -14,6 +15,7 @@ from player_performance_ratings.transformation.factory import auto_create_perfor
 class MatchPredictorFactory():
 
     def __init__(self,
+                 date_column_name: Optional[str],
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
                  post_rating_transformers: Optional[List[BasePostTransformer]] = None,
@@ -24,7 +26,6 @@ class MatchPredictorFactory():
                  other_categorical_features: Optional[list[str]] = None,
                  group_predictor_by_game_team: bool = False,
                  train_split_date: Optional[pendulum.datetime] = None,
-                 date_column_name: Optional[str] = None,
                  match_id_column_name: Optional[str] = None,
                  team_id_column_name: Optional[str] = None,
                  use_auto_create_performance_calculator: bool = False,
@@ -52,6 +53,19 @@ class MatchPredictorFactory():
         self.use_auto_create_performance_calculator = use_auto_create_performance_calculator
         self.performances_generator = performances_generator
         self.column_weights = column_weights if isinstance(column_weights, list) else [column_weights] if column_weights else None
+
+        if self.predictor is None:
+            self.predictor = create_predictor(
+                rating_generators=self.rating_generators,
+                other_features=self.other_features,
+                other_categorical_features=self.other_categorical_features,
+                post_rating_transformers=self.post_rating_transformers,
+                estimator=estimator,
+                group_predictor_by_game_team=self.group_predictor_by_game_team,
+                match_id_column_name=self.match_id_column_name,
+                team_id_column_name=self.team_id_column_name
+            )
+
         if self.use_auto_create_performance_calculator:
             if not self.rating_generators:
                 raise ValueError("If auto pre transformers are used, rating generators must be specified")

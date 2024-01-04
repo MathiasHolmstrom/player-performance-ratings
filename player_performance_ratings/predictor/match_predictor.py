@@ -22,6 +22,69 @@ from player_performance_ratings.transformation.factory import auto_create_perfor
 from player_performance_ratings.transformation.pre_transformers import ConvertDataFrameToCategoricalTransformer, \
     SkLearnTransformerWrapper
 
+def create_predictor(
+        rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]],
+        other_features: Optional[list[str]],
+        other_categorical_features: Optional[list[str]],
+        post_rating_transformers: Optional[List[BasePostTransformer]],
+        estimator: Optional,
+        group_predictor_by_game_team: bool,
+        match_id_column_name: Optional[str],
+        team_id_column_name: Optional[str] ,
+
+) -> BaseMLWrapper:
+    features = list(set(other_features + other_categorical_features)) or []
+
+    for c in post_rating_transformers:
+        features += c.features_out
+    for rating_idx, c in enumerate(rating_generators):
+        for rating_feature in c.features_out:
+            if len(rating_generators) > 1:
+                rating_feature_str = rating_feature + str(rating_idx)
+            else:
+                rating_feature_str = rating_feature
+            features.append(rating_feature_str)
+
+    logging.warning(f"predictor is not set. Will use {features} as features")
+    if other_categorical_features:
+        if estimator.__class__.__name__ in ('LGBMClassifier', 'LGBMRegressor', "XGBClassifier", "XGBRegressor"):
+            categorical_transformers = [
+                ConvertDataFrameToCategoricalTransformer(features=other_categorical_features)
+            ]
+        else:
+            categorical_transformers = [
+                SkLearnTransformerWrapper(
+                    transformer=OneHotEncoder(handle_unknown='ignore'), features=other_categorical_features)
+            ]
+    else:
+        categorical_transformers = []
+
+    if group_predictor_by_game_team:
+        match_id = rating_generators[
+            0].column_names.match_id if rating_generators else match_id_column_name
+        team_id = rating_generators[0].column_names.team_id if rating_generators else team_id_column_name
+        if match_id is None or team_id is None:
+            raise ValueError(
+                "match_id and team_id must be set if group_predictor_by_game_team is used to create predictor")
+
+        return  GameTeamPredictor(
+            estimator=estimator,
+            features=features,
+            target=PredictColumnNames.TARGET,
+            game_id_colum=match_id,
+            team_id_column=team_id,
+            categorical_transformers=categorical_transformers
+        )
+
+
+    else:
+        return  Predictor(
+            estimator=estimator,
+            features=features,
+            target=PredictColumnNames.TARGET,
+            categorical_transformers=categorical_transformers
+        )
+
 
 class MatchPredictor():
 
@@ -134,56 +197,16 @@ class MatchPredictor():
                 "predictor and other_features is set. other_features will be ignored. If it's intended to be used, either inject it into predictor or remove predictor")
 
         if self.predictor is None:
-            features = list(set(self.other_features + self.other_categorical_features)) or []
-
-            for c in self.post_rating_transformers:
-                features += c.features_out
-            for rating_idx, c in enumerate(self.rating_generators):
-                for rating_feature in c.features_out:
-                    if len(self.rating_generators) > 1:
-                        rating_feature_str = rating_feature + str(rating_idx)
-                    else:
-                        rating_feature_str = rating_feature
-                    features.append(rating_feature_str)
-
-            logging.warning(f"predictor is not set. Will use {features} as features")
-            if self.other_categorical_features:
-                if estimator.__class__.__name__ in ('LGBMClassifier', 'LGBMRegressor', "XGBClassifier", "XGBRegressor"):
-                    categorical_transformers = [
-                        ConvertDataFrameToCategoricalTransformer(features=self.other_categorical_features)
-                    ]
-                else:
-                    categorical_transformers = [
-                        SkLearnTransformerWrapper(
-                            transformer=OneHotEncoder(handle_unknown='ignore'), features=self.other_categorical_features)
-                    ]
-            else:
-                categorical_transformers = []
-
-            if self.group_predictor_by_game_team:
-                match_id = rating_generators[
-                    0].column_names.match_id if rating_generators else self.match_id_column_name
-                team_id = rating_generators[0].column_names.team_id if rating_generators else self.team_id_column_name
-                if match_id is None or team_id is None:
-                    raise ValueError(
-                        "match_id and team_id must be set if group_predictor_by_game_team is used to create predictor")
-                self.predictor = GameTeamPredictor(
-                    estimator=estimator,
-                    features=features,
-                    target=PredictColumnNames.TARGET,
-                    game_id_colum=match_id,
-                    team_id_column=team_id,
-                    categorical_transformers=categorical_transformers
-                )
-
-
-            else:
-                self.predictor = Predictor(
-                    estimator=estimator,
-                    features=features,
-                    target=PredictColumnNames.TARGET,
-                    categorical_transformers=categorical_transformers
-                )
+            self.predictor = create_predictor(
+                rating_generators=self.rating_generators,
+                other_features=self.other_features,
+                other_categorical_features=self.other_categorical_features,
+                post_rating_transformers=self.post_rating_transformers,
+                estimator=estimator,
+                group_predictor_by_game_team=self.group_predictor_by_game_team,
+                match_id_column_name=self.match_id_column_name,
+                team_id_column_name=self.team_id_column_name
+            )
 
         self.predictor.set_target(PredictColumnNames.TARGET)
         self.train_split_date = train_split_date

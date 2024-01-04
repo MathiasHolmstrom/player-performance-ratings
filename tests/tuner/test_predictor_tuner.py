@@ -49,8 +49,7 @@ def test_predictor_tuner():
     predictor_tuner = PredictorTuner(search_ranges=search_ranges, n_trials=2)
     scorer = mock.Mock()
     scorer.score.side_effect = [0.5, 0.3]
-    matches = convert_df_to_matches(df=df, column_names=column_names)
-    best_predictor = predictor_tuner.tune(df=df, matches=[matches], scorer=scorer, match_predictor_factory=match_predictor_factory)
+    best_predictor = predictor_tuner.tune(df=df, scorer=scorer, match_predictor_factory=match_predictor_factory)
 
     expected_best_predictor = Predictor(estimator=LogisticRegression(C=0.5), features=["rating_difference"], target="__target")
 

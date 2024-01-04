@@ -65,6 +65,9 @@ class MatchPredictorTuner():
 
     def tune(self, df: pd.DataFrame) -> MatchPredictor:
 
+
+        original_df = df.copy()
+
         column_names = [rating_generator.column_names for rating_generator in
                         self.match_predictor_factory.rating_generators]
 
@@ -75,8 +78,8 @@ class MatchPredictorTuner():
             best_performances_generator = self.performances_generator_tuner.tune(df=df,
                                                                                  match_predictor_factory=self.match_predictor_factory,
                                                                                  scorer=self.scorer)
-
-        df = best_performances_generator.generate(df)
+        if best_performances_generator:
+            df = best_performances_generator.generate(df)
 
         best_rating_generators = copy.deepcopy(self.match_predictor_factory.rating_generators)
 
@@ -104,7 +107,7 @@ class MatchPredictorTuner():
 
         if self.predictor_tuner:
             logging.info("Tuning Predictor")
-            best_predictor = self.predictor_tuner.tune(df=df, matches=matches, scorer=self.scorer,
+            best_predictor = self.predictor_tuner.tune(df=df,  scorer=self.scorer,
                                                        match_predictor_factory=self.match_predictor_factory)
         else:
             best_predictor = self.match_predictor_factory.predictor
@@ -116,6 +119,6 @@ class MatchPredictorTuner():
             post_prediction_transformers=self.match_predictor_factory.post_prediction_transformers,
             predictor=best_predictor)
         if self.fit_best:
-            best_match_predictor.generate_historical(df=df, matches=matches, store_ratings=True)
+            best_match_predictor.generate_historical(df=original_df, store_ratings=True)
 
         return best_match_predictor
