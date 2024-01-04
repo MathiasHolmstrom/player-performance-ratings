@@ -67,7 +67,7 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
         super().__init__(column_names=column_names)
         self.team_rating_generator = team_rating_generator
 
-        self._features_out = features_out or [RatingColumnNames.RATING_DIFFERENCE_PROJECTED]
+        self._features_out = features_out if features_out is not None else [RatingColumnNames.RATING_DIFFERENCE_PROJECTED]
 
         # If projected participation weight is not None, then the projected ratings will be used instead of the actual ratings (which first are known after game is finished)
 

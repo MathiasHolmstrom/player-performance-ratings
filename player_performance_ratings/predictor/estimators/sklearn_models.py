@@ -11,18 +11,18 @@ from sklearn.linear_model import LogisticRegression
 class SkLearnWrapper(BaseEstimator, ClassifierMixin):
 
     def __init__(self,
-                 model: Any,
+                 estimator: Any,
                  ):
-        self.model = model
+        self.estimator = estimator
         self.classes_ = []
         super().__init__()
 
     def fit(self, X: pd.DataFrame, y: pd.Series):
         self.classes_ = np.sort(np.unique(y))
-        self.model.fit(X, y)
+        self.estimator.fit(X, y)
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
-        return self.model.predict_proba(X)
+        return self.estimator.predict_proba(X)
 
 
 class OrdinalClassifier(BaseEstimator, ClassifierMixin):

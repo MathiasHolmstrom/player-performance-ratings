@@ -5,6 +5,7 @@ from typing import Optional, Union
 import pandas as pd
 
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
+from player_performance_ratings.ratings import PerformancesGenerator
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 from player_performance_ratings.scorer import BaseScorer
 
@@ -71,7 +72,7 @@ class MatchPredictorTuner():
         column_names = [rating_generator.column_names for rating_generator in
                         self.match_predictor_factory.rating_generators]
 
-        best_performances_generator = copy.deepcopy(self.match_predictor_factory.performances_generator)
+        best_performances_generator: PerformancesGenerator = copy.deepcopy(self.match_predictor_factory.performances_generator)
 
         if self.performances_generator_tuner:
             logging.info("Tuning PreTransformers")
@@ -118,7 +119,9 @@ class MatchPredictorTuner():
             post_rating_transformers=best_post_transformers,
             post_prediction_transformers=self.match_predictor_factory.post_prediction_transformers,
             predictor=best_predictor)
+
         if self.fit_best:
+            logging.info("Retraining best match predictor with all data")
             best_match_predictor.generate_historical(df=original_df, store_ratings=True)
 
         return best_match_predictor

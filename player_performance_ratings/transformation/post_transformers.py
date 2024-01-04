@@ -223,10 +223,14 @@ class LagTransformer(BasePostTransformer):
         for days_lag in self.days_between_lags:
             if self.future_lag:
                 all_df["shifted_days"] = all_df.groupby(self.granularity)[self.column_names.start_date].shift(-days_lag)
+                all_df[f'{self.prefix}{days_lag}_days_ago'] = (
+                        pd.to_datetime(all_df["shifted_days"]) - pd.to_datetime(
+                    all_df[self.column_names.start_date])).dt.days
             else:
                 all_df["shifted_days"] = all_df.groupby(self.granularity)[self.column_names.start_date].shift(days_lag)
-            all_df[f'{self.prefix}{days_lag}_days_ago'] = (
-                pd.to_datetime(all_df["shifted_days"]) - pd.to_datetime(all_df[self.column_names.start_date])).dt.days
+                all_df[f'{self.prefix}{days_lag}_days_ago'] = (pd.to_datetime(
+                    all_df[self.column_names.start_date]) - pd.to_datetime(all_df["shifted_days"])).dt.days
+
             all_df = all_df.drop(columns=["shifted_days"])
 
         for feature_name in self.features:
@@ -245,6 +249,7 @@ class LagTransformer(BasePostTransformer):
                 else:
                     all_df = all_df.assign(
                         **{output_column_name: all_df.groupby(self.granularity)[feature_name].shift(lag)})
+                    i = 2
 
         df = df.assign(
             __id=df[self.column_names.rating_update_id].astype('str') + "__" + df[

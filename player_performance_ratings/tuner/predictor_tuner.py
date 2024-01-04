@@ -23,11 +23,13 @@ class PredictorTuner():
                  search_ranges: list[ParameterSearchRange],
                  date_column_name: str,
                  train_split_date: Optional[pendulum.datetime] = None,
+                 default_params: Optional[dict] = None,
                  n_trials: int = 30
                  ):
         self.search_ranges = search_ranges
         self.date_column_name = date_column_name
         self.train_split_date = train_split_date
+        self.default_params = default_params or {}
         self.n_trials = n_trials
 
     def tune(self, df: pd.DataFrame,  scorer: BaseScorer,
@@ -47,6 +49,8 @@ class PredictorTuner():
             params = add_params_from_search_range(params=params,
                                                   trial=trial,
                                                   parameter_search_range=self.search_ranges)
+            for param, value in self.default_params.items():
+                params[param] = value
 
             predictor = copy.deepcopy(match_predictor_factory.predictor)
             for param in params:
