@@ -1,3 +1,4 @@
+import copy
 from typing import Optional, List, Union
 
 import pendulum
@@ -91,8 +92,8 @@ class MatchPredictorFactory():
         return MatchPredictor(
             rating_generators=rating_generators,
             performances_generator=performances_generator,
-            post_rating_transformers=post_rating_transformers,
-            post_prediction_transformers=self.post_prediction_transformers,
+            post_rating_transformers=copy.deepcopy(post_rating_transformers),
+            post_prediction_transformers=copy.deepcopy(self.post_prediction_transformers),
             predictor=predictor,
             train_split_date=self.train_split_date,
             match_id_column_name=self.match_id_column_name,

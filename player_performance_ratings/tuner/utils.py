@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass, field
-from typing import Literal, Optional, Union, Any, Tuple
+from typing import Literal, Optional, Union, Any
 
 from optuna.trial import BaseTrial
 
