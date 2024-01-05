@@ -93,6 +93,13 @@ post_rating_transformers = [
         days_between_lags=[1, 2, 3, 4, 5]
     ),
     LagTransformer(
+        features=["score_difference", RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
+        lag_length=5,
+        granularity=[column_names.player_id, "is_playoff"],
+        column_names=column_names,
+        prefix="playoff_lag",
+    ),
+    LagTransformer(
         features=[],
         lag_length=4,
         granularity=[column_names.player_id],
@@ -133,8 +140,9 @@ rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
 predictor_tuner = PredictorTuner(
     default_params={'learning_rate': 0.04},
     search_ranges=get_default_lgbm_classifier_search_range_by_learning_rate(learning_rate=0.04),
-    n_trials=30,
+    n_trials=35,
     date_column_name=column_names.start_date,
+    estimator_subclass_level=2,
 )
 
 tuner = MatchPredictorTuner(
