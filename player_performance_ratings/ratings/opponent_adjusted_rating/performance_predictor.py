@@ -2,6 +2,10 @@ import math
 from abc import ABC, abstractmethod
 from typing import Optional
 
+import pandas as pd
+from lightgbm import LGBMRegressor
+
+
 from player_performance_ratings.data_structures import PreMatchPlayerRating, PreMatchTeamRating
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
@@ -22,6 +26,7 @@ class PerformancePredictor(ABC):
                             team_rating: PreMatchTeamRating
                             ) -> float:
         pass
+
 
 
 class RatingDifferencePerformancePredictor(PerformancePredictor):
@@ -54,11 +59,11 @@ class RatingDifferencePerformancePredictor(PerformancePredictor):
         rating_diff_team_from_entity = team_rating.rating_value - player_rating.rating_value
         team_rating_diff = team_rating.rating_value - opponent_team_rating.rating_value
 
-
         value = self.rating_diff_coef * rating_difference + \
                 self.rating_diff_team_from_entity_coef * rating_diff_team_from_entity + team_rating_diff * self.team_rating_diff_coef
         if self.participation_weight_coef:
-            value += value  * self.participation_weight_coef * (player_rating.match_performance.participation_weight - self.mean_participation_weight)
+            value += value * self.participation_weight_coef * (
+                    player_rating.match_performance.participation_weight - self.mean_participation_weight)
 
         prediction = (math.exp(value)) / (1 + math.exp(value))
         if prediction > self.max_predict_value:

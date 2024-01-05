@@ -31,6 +31,7 @@ def test_match_predictor_auto_pre_transformers():
 
     predictor_mock = mock.Mock()
     predictor_mock.target = "__target"
+    predictor_mock.pred_column = 'prediction'
     predictor_mock.add_prediction.return_value = expected_df
     rating_generators = OpponentAdjustedRatingGenerator(features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
                                                         column_names=ColumnNames(
@@ -90,6 +91,7 @@ def test_match_predictor_multiple_rating_generators_same_performance():
     predictor_mock = mock.Mock()
     predictor_mock.target = "__target"
     predictor_mock.add_prediction.return_value = expected_df
+    predictor_mock.pred_column = 'prediction'
 
     match_predictor = MatchPredictor(
         train_split_date=pd.to_datetime("2023-01-02"),
@@ -159,6 +161,7 @@ def test_match_predictor_multiple_rating_generators_difference_performance():
 
     predictor_mock = mock.Mock()
     predictor_mock.target = "__target"
+    predictor_mock.pred_column = 'prediction'
     predictor_mock.add_prediction.return_value = expected_df
 
     match_predictor = MatchPredictor(
@@ -214,6 +217,7 @@ def test_match_predictor_0_rating_generators():
 
     predictor_mock = mock.Mock()
     predictor_mock.target = "__target"
+    predictor_mock.pred_column = 'prediction'
     predictor_mock.add_prediction.return_value = expected_df
 
     column_names = ColumnNames(
@@ -271,17 +275,21 @@ def test_match_predictor_generate_and_predict():
         }
     )
 
-    expected_df = future_df.copy()
-    expected_df["prediction"] = [0.5, 0.5, 0.5, 0.5]
+    expected_future_dfdf = future_df.copy()
+    expected_future_dfdf["prediction"] = [0.5, 0.5, 0.5, 0.5]
 
     column_weights = [
         ColumnWeight(name="kills", weight=0.6),
         ColumnWeight(name="deaths", weight=0.4, lower_is_better=True)
     ]
 
+    historical_df_mock_return_with_prediction = historical_df.copy()
+    historical_df_mock_return_with_prediction["prediction"] = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+
     predictor_mock = mock.Mock()
     predictor_mock.target = "__target"
-    predictor_mock.add_prediction.return_value = expected_df
+    predictor_mock.pred_column = 'prediction'
+    predictor_mock.add_prediction.side_effect = [historical_df_mock_return_with_prediction, expected_future_dfdf]
 
     column_names = ColumnNames(
         match_id="game_id",
@@ -298,11 +306,11 @@ def test_match_predictor_generate_and_predict():
         use_auto_create_performance_calculator=True,
         column_weights=column_weights,
         predictor=predictor_mock,
-        rating_generators=rating_generator, )
+        rating_generators=rating_generator)
 
     _ = match_predictor.generate_historical(df=historical_df)
     new_df = match_predictor.predict(future_df)
 
-    pd.testing.assert_frame_equal(new_df, expected_df, check_like=True)
+    pd.testing.assert_frame_equal(new_df, expected_future_dfdf, check_like=True)
 
     assert len(match_predictor.performances_generator.pre_transformations) > 0

@@ -24,15 +24,13 @@ RC = RatingColumnNames
 class PerformancesGeneratorTuner:
 
     def __init__(self,
-                 pre_transformer_search_ranges: Optional[Tuple[BaseTransformer, list[ParameterSearchRange]]] = None,
-                 performances_weight_search_ranges: Optional[dict[str, list[ParameterSearchRange]]] = None,
+                 performances_weight_search_ranges: dict[str, list[ParameterSearchRange]],
                  pre_transformations: Optional[list[BaseTransformer]] = None,
                  feature_names: Optional[Union[list[str], list[list[str]]]] = None,
                  lower_is_better_features: Optional[list[str]] = None,
                  n_trials: int = 30,
                  ):
 
-        self.pre_transformer_search_ranges = pre_transformer_search_ranges
         self.performances_weight_search_ranges = performances_weight_search_ranges
         self.pre_transformations = pre_transformations
         self.feature_names = feature_names
@@ -47,18 +45,13 @@ class PerformancesGeneratorTuner:
              matches: Optional[list[list[Match]]] = None,
              ) -> PerformancesGenerator:
 
+        df = df.copy()
+
         if not matches:
             matches = None
 
         column_names = [r.column_names for r in match_predictor_factory.rating_generators]
 
-        if self.performances_weight_search_ranges is None:
-            logging.info("Creating transformer search ranges")
-            self.performances_weight_search_ranges = create_pre_rating_search_range_for_auto(
-                feature_names=self.feature_names,
-                column_names=column_names,
-                lower_is_better_features=self.lower_is_better_features
-            )
 
         match_predictor_factory = copy.deepcopy(match_predictor_factory)
 
@@ -88,7 +81,9 @@ class PerformancesGeneratorTuner:
             match_predictor = match_predictor_factory.create(performances_generator=performances_generator)
 
             df_with_prediction = match_predictor.generate_historical(df=df, matches=matches, store_ratings=False)
-            return scorer.score(df_with_prediction, classes_=match_predictor.classes_)
+            test_df = df_with_prediction[
+                df_with_prediction[match_predictor.date_column_name] > match_predictor.train_split_date]
+            return scorer.score(test_df, classes_=match_predictor.predictor.classes_)
 
         direction = "minimize"
         study_name = "optuna_study"

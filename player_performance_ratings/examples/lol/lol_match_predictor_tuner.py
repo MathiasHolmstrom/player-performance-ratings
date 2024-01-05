@@ -2,16 +2,17 @@ import pickle
 
 import pandas as pd
 from lightgbm import LGBMClassifier
+from player_performance_ratings.transformation.pre_transformers import SymmetricDistributionTransformer, \
+    NetOverPredictedTransformer
 
 from player_performance_ratings.predictor.estimators import Predictor
 from player_performance_ratings.scorer import LogLossScorer
-from player_performance_ratings.transformation.factory import auto_create_performance_generator
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 
-from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator, RatingColumnNames, PerformancesGenerator
+from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator, RatingColumnNames
 
 from player_performance_ratings.transformation import SkLearnTransformerWrapper, MinMaxTransformer
 from sklearn.preprocessing import StandardScaler
@@ -21,17 +22,20 @@ from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.tuner import MatchPredictorTuner, PerformancesGeneratorTuner
 from player_performance_ratings.tuner.utils import ParameterSearchRange
 
+
+
 column_names = ColumnNames(
     team_id='teamname',
     match_id='gameid',
     start_date="date",
     player_id="playername",
     performance='performance',
-    league='league'
+    league='league',
+    position='champion_position',
 )
 df = pd.read_parquet("data/subsample_lol_data")
 df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
-
+df['champion_position'] = df['champion'] + df['position']
 df['__target'] = df['result']
 
 df = (
@@ -119,7 +123,6 @@ weighter_search_range = {
 
 features = ["damagetochampions", "result",
             "kills", "deaths"]
-standard_scaler = SkLearnTransformerWrapper(transformer=StandardScaler(), features=features)
 
 start_rating_search_range = [
     ParameterSearchRange(
@@ -142,10 +145,18 @@ start_rating_search_range = [
     )
 ]
 
+position_based_features = ["kills", "deaths", "damagetochampions"]
+
+
 pre_transformations = [
-    standard_scaler,
-    MinMaxTransformer(features=features),
+    NetOverPredictedTransformer(features=position_based_features,
+                                granularity=[column_names.position],
+                                prefix=""),
+    SymmetricDistributionTransformer(features=position_based_features),
+    SkLearnTransformerWrapper(transformer=StandardScaler(), features=position_based_features),
+    MinMaxTransformer(features=position_based_features)
 ]
+
 performance_generator_tuner = PerformancesGeneratorTuner(performances_weight_search_ranges=weighter_search_range,
                                                          pre_transformations=pre_transformations,
                                                          lower_is_better_features=["deaths"],
@@ -190,6 +201,7 @@ predictor_tuner = PredictorTuner(
             high=5,
         ),
     ],
+    date_column_name="date",
 )
 
 match_predictor_factory = MatchPredictorFactory(
@@ -197,10 +209,11 @@ match_predictor_factory = MatchPredictorFactory(
     predictor=Predictor(
         estimator=LGBMClassifier(verbose=-100),
         features=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
-    )
+    ),
+    date_column_name="date",
 )
 
-scorer = LogLossScorer(pred_column="prob")
+scorer = LogLossScorer(pred_column=match_predictor_factory.predictor.pred_column)
 
 tuner = MatchPredictorTuner(
     performances_generator_tuner=performance_generator_tuner,

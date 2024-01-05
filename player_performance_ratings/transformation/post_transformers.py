@@ -369,7 +369,6 @@ class RollingMeanTransformer(BasePostTransformer):
                  column_names: ColumnNames,
                  granularity: Union[list[str], str] = None,
                  min_periods: int = 1,
-
                  prefix: str = 'rolling_mean_'):
         """
 
@@ -437,9 +436,15 @@ class RollingMeanTransformer(BasePostTransformer):
                 raise ValueError(
                     f'Column {output_column_name} already exists. Choose different prefix or ensure no duplication was performed')
 
-            all_df = all_df.assign(**{output_column_name: all_df.groupby(self.granularity)[feature_name].apply(
+            grp = all_df.groupby(self.granularity + [self.column_names.match_id])[feature_name].mean().reset_index()
+
+            grp = grp.assign(**{output_column_name: grp.groupby(self.granularity)[feature_name].apply(
                 lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())})
 
+            all_df = all_df.merge(grp[self.granularity + [self.column_names.match_id, output_column_name]],
+                                  on=self.granularity + [self.column_names.match_id], how='left')
+            all_df = all_df.sort_values(by=[self.column_names.start_date, self.column_names.match_id,
+                                        self.column_names.team_id, self.column_names.player_id])
         df = df.assign(
             __id=df[self.column_names.rating_update_id].astype('str') + "__" + df[
                 self.column_names.player_id].astype(

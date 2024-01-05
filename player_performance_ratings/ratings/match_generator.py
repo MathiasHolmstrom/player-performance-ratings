@@ -39,6 +39,8 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
     If not the  league of the match will be equal to the league of the current match
     """
 
+    df = df.copy()
+
     if column_names.participation_weight is None and column_names.projected_participation_weight is not None:
         raise ValueError("projected_participation_weight column passed but not participation_weight column")
 

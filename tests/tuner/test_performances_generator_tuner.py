@@ -48,7 +48,8 @@ def test_transformer_tuner():
 
     match_predictor_factory = MatchPredictorFactory(
         rating_generators=rating_generators,
-        predictor=Predictor(estimator=LogisticRegression(), features=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED])
+        predictor=Predictor(estimator=LogisticRegression(), features=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED]),
+        date_column_name="start_date",
     )
 
     performances_generator_tuner = PerformancesGeneratorTuner(
@@ -145,7 +146,8 @@ def test_transformer_tuner_2_performances(estimator):
 
     match_predictor_factory = MatchPredictorFactory(
         rating_generators=rating_generators,
-        estimator=LogisticRegression()
+        estimator=LogisticRegression(),
+        date_column_name="start_date",
     )
 
     performances_generator_tuner = PerformancesGeneratorTuner(
@@ -174,9 +176,5 @@ def test_transformer_tuner_2_performances(estimator):
     assert match_predictor_factory.rating_generators == rating_generators
 
     # assert best model belongs in search range
-    assert tuned_model.column_weights[0][0].weight <  tuned_model.column_weights[0][1].weight
+    assert tuned_model.column_weights[0][0].weight < tuned_model.column_weights[0][1].weight
     assert tuned_model.column_weights[1][0].weight > tuned_model.column_weights[1][1].weight
-
-
-
-

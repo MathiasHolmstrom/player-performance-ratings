@@ -127,12 +127,12 @@ class GameTeamPredictor(BaseMLWrapper):
         else:
             if self._target in df.columns:
                 grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
-                    **{feature: 'sum' for feature in numeric_features},
+                    **{feature: 'mean' for feature in numeric_features},
                     self._target: 'mean',
                 }).reset_index()
             else:
                 grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
-                    **{feature: 'sum' for feature in numeric_features}
+                    **{feature: 'mean' for feature in numeric_features}
                 }).reset_index()
 
         if self._target in df.columns:

@@ -224,6 +224,8 @@ class MatchPredictor():
     def generate_historical(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
                             store_ratings: bool = True) -> pd.DataFrame:
 
+        df = df.copy()
+
         if self.predictor.pred_column in df.columns:
             raise ValueError(f"Predictor column {self.predictor.pred_column} already in df columns. Remove or rename before generating predictions")
 
@@ -282,6 +284,7 @@ class MatchPredictor():
         return df
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
         ori_cols = df.columns.tolist()
         for rating_idx, rating_generator in enumerate(self.rating_generators):
             rating_column_names = rating_generator.column_names

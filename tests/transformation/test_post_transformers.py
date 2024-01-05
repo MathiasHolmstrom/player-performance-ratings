@@ -17,6 +17,7 @@ def column_names():
         performance="performance"
     )
 
+
 def test_game_team_members_column_transformer(column_names):
     df = pd.DataFrame(
         {
@@ -24,15 +25,16 @@ def test_game_team_members_column_transformer(column_names):
             "team": [1, 1, 2, 2],
             'game': [1, 1, 1, 1],
             "minutes": [15, 20, 16, 20],
-            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01")]
+            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"),
+                           pd.to_datetime("2023-01-01")]
         }
     )
     expected_df = df.copy()
-    transformer = GameTeamMembersColumnsTransformer(column_names=column_names, features=["minutes"], sort_by=["minutes"], players_per_team_per_match_count=2)
+    transformer = GameTeamMembersColumnsTransformer(column_names=column_names, features=["minutes"],
+                                                    sort_by=["minutes"], players_per_match_per_team_count=2)
     df = transformer.fit_transform(df)
     expected_df["team_player1_minutes"] = [20, 15, 20, 16]
     pd.testing.assert_frame_equal(df, expected_df, check_like=True)
-
 
 
 def test_normalizer_transformer(column_names):
@@ -462,3 +464,33 @@ def test_rolling_mean_fit_transform_and_transform(column_names):
     })
 
     pd.testing.assert_frame_equal(transformed_future_df, expected_df, check_like=True)
+
+
+def test_rolling_mean_transformer_fit_transformer_team_stat(column_names):
+    historical_df = pd.DataFrame(
+        {
+            'player': ['a', 'b', 'c', "d", 'a', 'b', 'c', "d"],
+            "game": [1, 1, 1, 1, 2, 2, 2, 2],
+            'score_difference': [10, 10, -10, -10, 15, 15, -15, -15],
+            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"),
+                           pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"),
+                           pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-02"),
+                           pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-02")],
+            "team": [1, 1, 2, 2, 1, 1, 2, 2],
+        }
+    )
+
+    expected_df = historical_df.copy()
+
+    rolling_mean_transformation = RollingMeanTransformer(
+        features=['score_difference'],
+        window=2,
+        min_periods=1,
+        granularity=['team'],
+        column_names=column_names
+    )
+
+    transformed_data = rolling_mean_transformation.fit_transform(historical_df)
+    expected_df[rolling_mean_transformation.prefix + "2_score_difference"] = [None, None, None, None, 10, 10, -10, -10]
+
+    pd.testing.assert_frame_equal(transformed_data, expected_df, check_like=True, check_dtype=False)

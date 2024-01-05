@@ -197,7 +197,8 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
             )
 
             df_with_prediction = match_predictor.generate_historical(df=df, matches=matches, store_ratings=False)
-            return scorer.score(df_with_prediction, classes_=match_predictor.predictor.classes_)
+            test_df = df_with_prediction[df_with_prediction[match_predictor.date_column_name] > match_predictor.train_split_date]
+            return scorer.score(test_df, classes_=match_predictor.predictor.classes_)
 
         direction = "minimize"
         study_name = "optuna_study"
@@ -264,7 +265,9 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
             )
 
             df_with_prediction = match_predictor.generate_historical(df=df, matches=matches, store_ratings=False)
-            return scorer.score(df_with_prediction, classes_=match_predictor.predictor.classes_)
+            test_df = df_with_prediction[
+                df_with_prediction[match_predictor.date_column_name] > match_predictor.train_split_date]
+            return scorer.score(test_df, classes_=match_predictor.predictor.classes_)
 
         direction = "minimize"
         study_name = "optuna_study"

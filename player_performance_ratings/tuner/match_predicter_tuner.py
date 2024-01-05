@@ -101,6 +101,17 @@ class MatchPredictorTuner():
             else:
                 best_rating_generators = [tuned_rating_generator]
 
+            match_ratings = tuned_rating_generator.generate_historical(df=df, matches=matches[rating_idx])
+            for rating_feature in tuned_rating_generator.features_out:
+                values = match_ratings[rating_feature]
+
+                if len(self.rating_generator_tuners) > 1:
+                    rating_feature_str = rating_feature + str(rating_idx)
+                else:
+                    rating_feature_str = rating_feature
+                df[rating_feature_str] = values
+
+
         best_post_transformers = copy.deepcopy(self.match_predictor_factory.post_rating_transformers)
 
         for post_rating_transformer in best_post_transformers:

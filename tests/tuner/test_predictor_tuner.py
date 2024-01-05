@@ -3,11 +3,9 @@ from unittest import mock
 import pandas as pd
 from deepdiff import DeepDiff
 
-from player_performance_ratings import ColumnNames
 from player_performance_ratings.predictor.estimators import Predictor
 from sklearn.linear_model import LogisticRegression
 
-from player_performance_ratings.ratings import convert_df_to_matches
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 from player_performance_ratings.tuner.utils import ParameterSearchRange
@@ -25,16 +23,11 @@ def test_predictor_tuner():
             "__target": [1, 0, 0, 1]
         }
     )
-    column_names = ColumnNames(
-        match_id="game_id",
-        team_id="team_id",
-        player_id="player_id",
-        start_date="start_date",
-        performance="won"
-    )
 
     match_predictor_factory = MatchPredictorFactory(
         predictor=Predictor(estimator=LogisticRegression(), features=["rating_difference"], target="__target"),
+        date_column_name="start_date",
+        train_split_date="2020-01-02"
 
     )
 
@@ -46,7 +39,7 @@ def test_predictor_tuner():
         )
     ]
 
-    predictor_tuner = PredictorTuner(search_ranges=search_ranges, n_trials=2)
+    predictor_tuner = PredictorTuner(search_ranges=search_ranges, n_trials=2, date_column_name="start_date", train_split_date="2020-01-01")
     scorer = mock.Mock()
     scorer.score.side_effect = [0.5, 0.3]
     best_predictor = predictor_tuner.tune(df=df, scorer=scorer, match_predictor_factory=match_predictor_factory)

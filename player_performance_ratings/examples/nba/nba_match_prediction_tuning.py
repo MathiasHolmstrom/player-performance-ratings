@@ -2,10 +2,12 @@ import pickle
 
 import pandas as pd
 from lightgbm import LGBMClassifier
+from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import PerformancePredictor, \
+    RatingDifferencePerformancePredictor, TrainRatingDifferencePerformancePredictor
 
-from player_performance_ratings.transformation import LagTransformer
+from player_performance_ratings.transformation import LagTransformer, RollingMeanTransformer
 
-from player_performance_ratings.ratings import ColumnWeight
+from player_performance_ratings.ratings import ColumnWeight, TeamRatingGenerator
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 
@@ -20,7 +22,6 @@ from venn_abers import VennAbersCalibrator
 from player_performance_ratings.consts import PredictColumnNames
 
 from player_performance_ratings.predictor.estimators.sklearn_models import SkLearnWrapper
-from player_performance_ratings.ratings.enums import RatingColumnNames
 
 from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import OpponentAdjustedRatingGenerator
 from player_performance_ratings.tuner import MatchPredictorTuner
@@ -77,27 +78,26 @@ df.loc[df['minutes'] == 0, 'plus_minus_per_minute'] = 0
 
 estimator = SkLearnWrapper(
     VennAbersCalibrator(
-        estimator=LGBMClassifier(max_depth=2, learning_rate=0.1, n_estimators=300, verbose=-100, reg_alpha=1.2),
+        estimator=LGBMClassifier(max_depth=2, learning_rate=0.1, n_estimators=200, verbose=-100, reg_alpha=1),
         inductive=True, cal_size=0.2, random_state=101))
 
-rating_generator = OpponentAdjustedRatingGenerator(column_names=column_names)
+performance_predictor = RatingDifferencePerformancePredictor(
+    rating_diff_team_from_entity_coef=0.00425,
+)
+
+rating_generator = OpponentAdjustedRatingGenerator(column_names=column_names, team_rating_generator=TeamRatingGenerator(
+    performance_predictor=performance_predictor))
 
 column_weights = [ColumnWeight(name='plus_minus', weight=1)]
 
+
 post_rating_transformers = [
     LagTransformer(
-        features=["score_difference", RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
-        lag_length=10,
+        features=["score_difference"],
+        lag_length=5,
         granularity=[column_names.player_id],
         column_names=column_names,
-        days_between_lags=[1, 2, 3, 4, 5]
-    ),
-    LagTransformer(
-        features=["score_difference", RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
-        lag_length=5,
-        granularity=[column_names.player_id, "is_playoff"],
-        column_names=column_names,
-        prefix="playoff_lag",
+        days_between_lags=[1, 2, 3, 4, 5],
     ),
     LagTransformer(
         features=[],
@@ -108,14 +108,14 @@ post_rating_transformers = [
         future_lag=True,
         days_between_lags=[1, 2, 3, 4]
     ),
-    LagTransformer(
-        features=["score_difference", RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
-        lag_length=8,
-        granularity=[column_names.player_id, 'location'],
+
+    RollingMeanTransformer(
+        features=["score_difference"],
+        window=800,
+        min_periods=300,
+        granularity=["location"],
         column_names=column_names,
-        days_between_lags=[1, 2, 3, 4, 5],
-        prefix="location_lag"
-    ),
+    )
 ]
 
 match_predictor_factory = MatchPredictorFactory(
@@ -129,6 +129,7 @@ match_predictor_factory = MatchPredictorFactory(
     group_predictor_by_game_team=True,
     team_id_column_name=column_names.team_id,
     match_id_column_name=column_names.match_id,
+    train_split_date="2022-12-11",
 )
 
 rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
@@ -138,9 +139,9 @@ rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
     start_rating_n_trials=8,
 )
 predictor_tuner = PredictorTuner(
-    default_params={'learning_rate': 0.04},
-    search_ranges=get_default_lgbm_classifier_search_range_by_learning_rate(learning_rate=0.04),
-    n_trials=35,
+    default_params={'learning_rate': 0.03},
+    search_ranges=get_default_lgbm_classifier_search_range_by_learning_rate(learning_rate=0.03),
+    n_trials=65,
     date_column_name=column_names.start_date,
     estimator_subclass_level=2,
 )

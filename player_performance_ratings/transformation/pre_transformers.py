@@ -96,7 +96,7 @@ class MinMaxTransformer(BaseTransformer):
     def __init__(self,
                  features: list[str],
                  quantile: float = 0.99,
-                 allowed_mean_diff: Optional[float] = 0.01,
+                 allowed_mean_diff: Optional[float] = 0.02,
                  prefix: str = ""
                  ):
         super().__init__(features=features)
@@ -114,6 +114,7 @@ class MinMaxTransformer(BaseTransformer):
         self._features_out = []
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        self._mean_aligning_iterations = 0
         df = df.copy()
         for feature in self.features:
             self._min_values[feature] = df[feature].quantile(1 - self.quantile)
@@ -140,12 +141,13 @@ class MinMaxTransformer(BaseTransformer):
                     mean_value = df[self.prefix + feature].mean()
 
                     self._mean_aligning_iterations += 1
-                    if self._mean_aligning_iterations > 100:
-                        logging.warning(
-                            f"MinMaxTransformer: {feature} mean value is {mean_value} after {self._mean_aligning_iterations} repetitions."
-                            f"This is above the allowed mean difference of {self.allowed_mean_diff}."
-                            f" It is recommended to use DiminishingValueTransformer or SymmetricDistributionTransformer before MinMaxTransformer")
-                        continue
+                if self._mean_aligning_iterations > 100:
+                    raise ValueError(
+                        f"MinMaxTransformer: {feature} mean value is {mean_value} after {self._mean_aligning_iterations} repetitions."
+                        f"This is above the allowed mean difference of {self.allowed_mean_diff}."
+                        f" It is recommended to use DiminishingValueTransformer or SymmetricDistributionTransformer before MinMaxTransformer."
+                        f"If positions are known use NetOverPredictedTransformer before DiminishingValueTransformer or SymmetricDistributionTransformer.")
+
 
         return df
 

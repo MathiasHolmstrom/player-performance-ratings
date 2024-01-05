@@ -31,6 +31,7 @@ def test_match_predictor_tuner():
             start_date="start_date",
             performance="won"
         )),
+        date_column_name="start_date",
     )
 
     scorer_mock = mock.Mock()

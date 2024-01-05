@@ -47,8 +47,9 @@ def test_opponent_adjusted_rating_generator_tuner_team_rating():
         predictor=Predictor(
             features=[f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}0", f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}1"],
             target=PredictColumnNames.TARGET
-        )
-        #   predictor = mock.Mock()
+        ),
+        date_column_name="start_date"
+
     )
 
     rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
@@ -126,7 +127,8 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
         predictor=Predictor(
             features=[f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}0", f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}1"],
             target=PredictColumnNames.TARGET
-        )
+        ),
+        date_column_name="start_date"
     )
 
     rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
@@ -215,7 +217,8 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
         predictor=Predictor(
             features=[f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}0", f"{RatingColumnNames.RATING_DIFFERENCE_PROJECTED}1"],
             target=PredictColumnNames.TARGET
-        )
+        ),
+        date_column_name="start_date"
     )
 
     rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
