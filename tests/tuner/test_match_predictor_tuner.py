@@ -7,7 +7,7 @@ from skbase.testing.utils.deep_equals import deep_equals
 
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings.opponent_adjusted_rating import OpponentAdjustedRatingGenerator
 
 from player_performance_ratings.tuner import MatchPredictorTuner, PerformancesGeneratorTuner
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory

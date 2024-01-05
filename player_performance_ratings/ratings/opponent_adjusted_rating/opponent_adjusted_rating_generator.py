@@ -1,47 +1,16 @@
-import logging
-from abc import ABC, abstractmethod
 from typing import Optional, Any
 
 import numpy as np
 import pandas as pd
 
 from player_performance_ratings.ratings import convert_df_to_matches
+from player_performance_ratings.ratings.opponent_adjusted_rating import RatingMeanPerformancePredictor
 from player_performance_ratings.ratings.opponent_adjusted_rating.team_rating_generator import TeamRatingGenerator
 from player_performance_ratings.ratings.enums import RatingColumnNames, HistoricalRatingColumnNames
 
 from player_performance_ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PlayerRating, \
     TeamRating, ColumnNames, TeamRatingChange
-
-
-class RatingGenerator(ABC):
-
-    def __init__(self, column_names: ColumnNames):
-        self.column_names = column_names
-
-    @abstractmethod
-    def generate_historical(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[
-        RatingColumnNames, list[float]]:
-        pass
-
-    @abstractmethod
-    def generate_future(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[
-        RatingColumnNames, list[float]]:
-        pass
-
-    @property
-    @abstractmethod
-    def player_ratings(self) -> dict[str, PlayerRating]:
-        pass
-
-    @property
-    @abstractmethod
-    def team_ratings(self) -> list[TeamRating]:
-        pass
-
-    @property
-    @abstractmethod
-    def features_out(self) -> list[RatingColumnNames]:
-        pass
+from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
 
 class OpponentAdjustedRatingGenerator(RatingGenerator):
@@ -67,7 +36,9 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
         super().__init__(column_names=column_names)
         self.team_rating_generator = team_rating_generator
 
-        self._features_out = features_out if features_out is not None else [RatingColumnNames.RATING_DIFFERENCE_PROJECTED]
+        self._features_out = features_out if features_out is not None else [
+            RatingColumnNames.RATING_MEAN_PROJECTED] if isinstance(team_rating_generator.performance_predictor, RatingMeanPerformancePredictor) else [
+            RatingColumnNames.RATING_DIFFERENCE_PROJECTED]
 
         # If projected participation weight is not None, then the projected ratings will be used instead of the actual ratings (which first are known after game is finished)
 

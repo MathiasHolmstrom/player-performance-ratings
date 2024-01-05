@@ -7,7 +7,7 @@ from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeig
 
 from player_performance_ratings.predictor import MatchPredictor
 from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
-from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
+from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.transformation.base_transformer import BaseTransformer, BasePostTransformer
 from player_performance_ratings.transformation.factory import auto_create_performance_generator
 

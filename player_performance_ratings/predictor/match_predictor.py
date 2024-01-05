@@ -11,10 +11,10 @@ from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
 
 from player_performance_ratings.predictor.estimators import Predictor, GameTeamPredictor
-from player_performance_ratings.data_structures import ColumnNames, Match
+from player_performance_ratings.data_structures import Match
 from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
-from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import RatingGenerator
+from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
 from player_performance_ratings.transformation.base_transformer import BaseTransformer, BasePostTransformer
 from player_performance_ratings.transformation.factory import auto_create_performance_generator

@@ -2,12 +2,14 @@ import pickle
 
 import pandas as pd
 from lightgbm import LGBMClassifier
-from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import PerformancePredictor, \
-    RatingDifferencePerformancePredictor, TrainRatingDifferencePerformancePredictor
+
+from player_performance_ratings.ratings.opponent_adjusted_rating import TeamRatingGenerator
+from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import \
+    RatingDifferencePerformancePredictor, RatingMeanPerformancePredictor
 
 from player_performance_ratings.transformation import LagTransformer, RollingMeanTransformer
 
-from player_performance_ratings.ratings import ColumnWeight, TeamRatingGenerator
+from player_performance_ratings.ratings import ColumnWeight
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 
@@ -23,7 +25,7 @@ from player_performance_ratings.consts import PredictColumnNames
 
 from player_performance_ratings.predictor.estimators.sklearn_models import SkLearnWrapper
 
-from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings.opponent_adjusted_rating import OpponentAdjustedRatingGenerator
 from player_performance_ratings.tuner import MatchPredictorTuner
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 
@@ -84,6 +86,7 @@ estimator = SkLearnWrapper(
 performance_predictor = RatingDifferencePerformancePredictor(
     rating_diff_team_from_entity_coef=0.00425,
 )
+
 
 rating_generator = OpponentAdjustedRatingGenerator(column_names=column_names, team_rating_generator=TeamRatingGenerator(
     performance_predictor=performance_predictor))

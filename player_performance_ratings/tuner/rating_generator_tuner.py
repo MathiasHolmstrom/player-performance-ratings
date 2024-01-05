@@ -9,10 +9,12 @@ import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
-from player_performance_ratings.ratings import TeamRatingGenerator, RatingColumnNames
+from player_performance_ratings.ratings.opponent_adjusted_rating import TeamRatingGenerator
+
 from player_performance_ratings.ratings.opponent_adjusted_rating.start_rating_generator import StartRatingGenerator
-from player_performance_ratings.ratings.opponent_adjusted_rating.rating_generator import \
-    OpponentAdjustedRatingGenerator, RatingGenerator
+from player_performance_ratings.ratings.opponent_adjusted_rating import \
+    OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.scorer import BaseScorer
 
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
