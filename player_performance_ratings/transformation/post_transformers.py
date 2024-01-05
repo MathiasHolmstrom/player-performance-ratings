@@ -220,18 +220,20 @@ class LagTransformer(BasePostTransformer):
 
         validate_sorting(df=all_df, column_names=self.column_names)
 
+        grouped = all_df.groupby(self.granularity + [self.column_names.rating_update_id, self.column_names.start_date])[self.features].mean().reset_index()
+
         for days_lag in self.days_between_lags:
             if self.future_lag:
-                all_df["shifted_days"] = all_df.groupby(self.granularity)[self.column_names.start_date].shift(-days_lag)
+                grouped["shifted_days"] = grouped.groupby(self.granularity)[self.column_names.start_date].shift(-days_lag)
                 all_df[f'{self.prefix}{days_lag}_days_ago'] = (
-                        pd.to_datetime(all_df["shifted_days"]) - pd.to_datetime(
-                    all_df[self.column_names.start_date])).dt.days
+                        pd.to_datetime(grouped["shifted_days"]) - pd.to_datetime(
+                    grouped[self.column_names.start_date])).dt.days
             else:
-                all_df["shifted_days"] = all_df.groupby(self.granularity)[self.column_names.start_date].shift(days_lag)
-                all_df[f'{self.prefix}{days_lag}_days_ago'] = (pd.to_datetime(
-                    all_df[self.column_names.start_date]) - pd.to_datetime(all_df["shifted_days"])).dt.days
+                grouped["shifted_days"] = grouped.groupby(self.granularity)[self.column_names.start_date].shift(days_lag)
+                grouped[f'{self.prefix}{days_lag}_days_ago'] = (pd.to_datetime(
+                    grouped[self.column_names.start_date]) - pd.to_datetime(grouped["shifted_days"])).dt.days
 
-            all_df = all_df.drop(columns=["shifted_days"])
+            grouped = grouped.drop(columns=["shifted_days"])
 
         for feature_name in self.features:
             for lag in range(1, self.lag_length + 1):
@@ -244,12 +246,14 @@ class LagTransformer(BasePostTransformer):
             for lag in range(1, self.lag_length + 1):
                 output_column_name = f'{self.prefix}{lag}_{feature_name}'
                 if self.future_lag:
-                    all_df = all_df.assign(
-                        **{output_column_name: all_df.groupby(self.granularity)[feature_name].shift(-lag)})
+                    grouped = grouped.assign(
+                        **{output_column_name: grouped.groupby(self.granularity)[feature_name].shift(-lag)})
                 else:
-                    all_df = all_df.assign(
-                        **{output_column_name: all_df.groupby(self.granularity)[feature_name].shift(lag)})
-                    i = 2
+                    grouped = grouped.assign(
+                        **{output_column_name: grouped.groupby(self.granularity)[feature_name].shift(lag)})
+
+        all_df = all_df.merge(grouped[self.granularity + [self.column_names.rating_update_id, *self.features_out]],
+                              on=self.granularity + [self.column_names.rating_update_id], how='left')
 
         df = df.assign(
             __id=df[self.column_names.rating_update_id].astype('str') + "__" + df[
@@ -436,13 +440,13 @@ class RollingMeanTransformer(BasePostTransformer):
                 raise ValueError(
                     f'Column {output_column_name} already exists. Choose different prefix or ensure no duplication was performed')
 
-            grp = all_df.groupby(self.granularity + [self.column_names.match_id])[feature_name].mean().reset_index()
+            grp = all_df.groupby(self.granularity + [self.column_names.rating_update_id])[feature_name].mean().reset_index()
 
             grp = grp.assign(**{output_column_name: grp.groupby(self.granularity)[feature_name].apply(
                 lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())})
 
-            all_df = all_df.merge(grp[self.granularity + [self.column_names.match_id, output_column_name]],
-                                  on=self.granularity + [self.column_names.match_id], how='left')
+            all_df = all_df.merge(grp[self.granularity + [self.column_names.rating_update_id, output_column_name]],
+                                  on=self.granularity + [self.column_names.rating_update_id], how='left')
             all_df = all_df.sort_values(by=[self.column_names.start_date, self.column_names.match_id,
                                         self.column_names.team_id, self.column_names.player_id])
         df = df.assign(

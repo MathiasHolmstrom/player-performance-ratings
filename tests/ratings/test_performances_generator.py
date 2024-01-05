@@ -32,7 +32,7 @@ def test_performances_generator():
 
     column_weights = [
         [
-            ColumnWeight(name="won", weight=0.5), ColumnWeight(name="points_difference", weight=0.5)        ],        [
+            ColumnWeight(name="won", weight=0.5), ColumnWeight(name="points_difference", weight=0.5)], [
             ColumnWeight(name="won", weight=1),
         ]
     ]
@@ -40,11 +40,12 @@ def test_performances_generator():
     df = pd.DataFrame(
         {
             column_names[0].match_id: [1, 1, 2, 2],
-            column_names[0].team_id: [1, 2, 1,2],
+            column_names[0].team_id: [1, 2, 1, 2],
             column_names[0].player_id: [1, 2, 1, 2],
-            column_names[0].start_date: [pd.to_datetime("2021-01-01"), pd.to_datetime("2021-01-01"), pd.to_datetime("2021-01-02"), pd.to_datetime("2021-01-02")],
+            column_names[0].start_date: [pd.to_datetime("2021-01-01"), pd.to_datetime("2021-01-01"),
+                                         pd.to_datetime("2021-01-02"), pd.to_datetime("2021-01-02")],
             "points_difference": [5, 1, 3, 3],
-            "won": [1, 0, 1,0],
+            "won": [1, 0, 1, 0],
         }
     )
     expected_df_with_performances = df.copy()
@@ -54,8 +55,8 @@ def test_performances_generator():
 
     df_with_performances = performances_generator.generate(df)
 
-    expected_df_with_performances[performances_generator.features_out[0]] =[1, 0, 0.75, 0.25 ]
+    expected_df_with_performances[performances_generator.features_out[0]] = [1, 0, 0.75, 0.25]
     expected_df_with_performances[performances_generator.features_out[1]] = [1, 0, 1, 0]
     expected_df_with_performances['points_difference'] = [1, 0, 0.5, 0.5]
-    pd.testing.assert_frame_equal(df_with_performances, expected_df_with_performances, check_dtype=False, check_like=True)
-
+    pd.testing.assert_frame_equal(df_with_performances, expected_df_with_performances, check_dtype=False,
+                                  check_like=True)

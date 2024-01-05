@@ -65,14 +65,22 @@ def test_normalizer_transformer(column_names):
     pd.testing.assert_frame_equal(df, expected_df, check_like=True)
 
 
-def test_lag_fit_transform(column_names):
+def test_lag_team_fit_transform(column_names):
+
+    "Should calculate average point of prior game"
+
     df = pd.DataFrame(
         {
-            'player': ['a', 'b', 'a'],
-            "team": [1, 2, 1],
-            'game': [1, 1, 2],
-            'points': [1, 2, 3],
-            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02")]
+            'player': ['a', 'b', 'c', 'd', 'a', 'b', 'c', 'd'],
+            "team": [1, 1, 2, 2, 1, 1, 2, 2],
+            'game': [1, 1, 1, 1, 2, 2, 2, 2],
+            'points': [1, 2, 3, 2, 4, 5, 6, 7],
+            "start_date": [
+                pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"),
+                pd.to_datetime("2023-01-01"),
+                pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-02"),
+                pd.to_datetime("2023-01-02")
+            ]
         }
     )
     original_df = df.copy()
@@ -80,14 +88,14 @@ def test_lag_fit_transform(column_names):
     lag_transformation = LagTransformer(
         features=['points'],
         lag_length=1,
-        granularity=['player'],
+        granularity=['team'],
         column_names=column_names,
     )
 
     df_with_lags = lag_transformation.fit_transform(df)
 
     expected_df = original_df.assign(**{
-        "lag_1_points": [None, None, 1]
+        "lag_1_points": [None, None, None, None, 1.5, 1.5, 2.5, 2.5]
     })
 
     pd.testing.assert_frame_equal(df_with_lags, expected_df, check_like=True)
