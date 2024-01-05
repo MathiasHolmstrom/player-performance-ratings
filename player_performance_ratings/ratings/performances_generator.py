@@ -12,7 +12,7 @@ class ColumnWeight:
     weight: float
     lower_is_better: bool = False
 
-    def __init__(self):
+    def __post_init__(self):
         if self.weight < 0:
             raise ValueError("Weight must be positive")
         if self.weight > 1:
