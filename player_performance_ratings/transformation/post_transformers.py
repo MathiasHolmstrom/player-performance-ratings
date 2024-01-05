@@ -225,7 +225,7 @@ class LagTransformer(BasePostTransformer):
         for days_lag in self.days_between_lags:
             if self.future_lag:
                 grouped["shifted_days"] = grouped.groupby(self.granularity)[self.column_names.start_date].shift(-days_lag)
-                all_df[f'{self.prefix}{days_lag}_days_ago'] = (
+                grouped[f'{self.prefix}{days_lag}_days_ago'] = (
                         pd.to_datetime(grouped["shifted_days"]) - pd.to_datetime(
                     grouped[self.column_names.start_date])).dt.days
             else:
