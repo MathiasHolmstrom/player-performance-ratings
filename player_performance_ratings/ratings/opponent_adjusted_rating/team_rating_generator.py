@@ -98,7 +98,6 @@ class TeamRatingGenerator():
         self.performance_predictor = performance_predictor or RatingDifferencePerformancePredictor()
         self.start_rating_generator = start_rating_generator or StartRatingGenerator()
 
-        self._min_applied_rating_change_multiplier = self.rating_change_multiplier * self.min_rating_change_multiplier_ratio
         self._teams: dict[str, Team] = {}
 
     def generate_pre_match_team_rating(self, day_number: int, match_team: MatchTeam) -> PreMatchTeamRating:
@@ -316,10 +315,11 @@ class TeamRatingGenerator():
     def _calculate_applied_rating_change_multiplier(self,
                                                     player_id: str,
                                                     ) -> float:
+        min_applied_rating_change_multiplier = self.rating_change_multiplier * self.min_rating_change_multiplier_ratio
         confidence_change_multiplier = self.rating_change_multiplier * ((EXPECTED_MEAN_CONFIDENCE_SUM - self.player_ratings[player_id].confidence_sum) / self.confidence_value_denom +1 )
         applied_rating_change_multiplier = confidence_change_multiplier * self.confidence_weight + (
                 1 - self.confidence_weight) * self.rating_change_multiplier
-        return max(self._min_applied_rating_change_multiplier, applied_rating_change_multiplier)
+        return max(min_applied_rating_change_multiplier, applied_rating_change_multiplier)
 
 
 
