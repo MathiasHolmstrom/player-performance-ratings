@@ -1,1 +1,1 @@
-from .score import BaseScorer, LogLossScorer, OrdinalLossScorer
+from .score import BaseScorer, OrdinalLossScorer
