@@ -61,7 +61,7 @@ class MatchPredictorTuner():
             self.rating_generator_tuners = [self.rating_generator_tuners]
         self.fit_best = fit_best
 
-        if len(self.rating_generator_tuners) != len(self.match_predictor_factory.rating_generators):
+        if len(self.rating_generator_tuners) != len(self.match_predictor_factory.rating_generators) and self.rating_generator_tuners:
             raise ValueError("Number of rating_generator_tuners must match number of rating_generators")
 
         if not self.performances_generator_tuner and not self.rating_generator_tuners and not self.predictor_tuner:
