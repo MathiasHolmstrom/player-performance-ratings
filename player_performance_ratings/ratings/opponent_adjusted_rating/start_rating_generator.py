@@ -38,8 +38,8 @@ class StartRatingGenerator():
         self.harcoded_start_rating = harcoded_start_rating
         if self.harcoded_start_rating is not None:
             logging.warning(
-                f"Hardcoded ratings are used. This will usually result in worse accuracy."
-                f"Although can come with computational benefits if there are many different players in the dataset")
+                f"Hardcoded start ratings are used."
+                f" This will usually result in worse accuracy when new players are expected to perform worse")
 
         self._league_to_last_day_number: Dict[str, List[Any]] = {}
         self._league_to_entity_ids: Dict[str, List[str]] = {}

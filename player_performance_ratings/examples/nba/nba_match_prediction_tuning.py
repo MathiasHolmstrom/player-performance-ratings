@@ -65,14 +65,14 @@ start_rating_search_range = [
     ParameterSearchRange(
         name='league_quantile',
         type='uniform',
-        low=0.04,
-        high=.4,
+        low=0.199,
+        high=0.2,
     ),
     ParameterSearchRange(
         name='min_count_for_percentiles',
         type='int',
-        low=50,
-        high=400,
+        low=99,
+        high=100,
     ),
 ]
 df.loc[df['minutes'] > 0, 'plus_minus_per_minute'] = df['plus_minus'] / df['minutes']
@@ -138,7 +138,7 @@ match_predictor_factory = MatchPredictorFactory(
 rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
     team_rating_search_ranges=get_default_team_rating_search_range(),
     start_rating_search_ranges=start_rating_search_range,
-    team_rating_n_trials=3,
+    team_rating_n_trials=8,
     start_rating_n_trials=8,
 )
 predictor_tuner = PredictorTuner(
