@@ -69,6 +69,8 @@ class MatchPredictorFactory():
                 match_id_column_name=self.match_id_column_name,
                 team_id_column_name=self.team_id_column_name
             )
+            if not self.predictor.features:
+                raise ValueError("No Features specified for estimator/predictor")
 
         if self.use_auto_create_performance_calculator:
             if not self.rating_generators:

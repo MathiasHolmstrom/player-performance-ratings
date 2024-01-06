@@ -88,7 +88,7 @@ class PredictorTuner():
 
             predictor.train(train_df)
             df_with_prediction = predictor.add_prediction(predict_df)
-            return scorer.score(df_with_prediction, classes_=match_predictor_factory.predictor.classes_)
+            return scorer.score(df=df_with_prediction, classes_=predictor.classes_)
 
 
 

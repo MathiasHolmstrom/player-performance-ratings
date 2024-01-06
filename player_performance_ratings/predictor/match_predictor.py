@@ -209,6 +209,8 @@ class MatchPredictor():
                 match_id_column_name=self.match_id_column_name,
                 team_id_column_name=self.team_id_column_name
             )
+            if not self.predictor.features:
+                raise ValueError("No Features specified for estimator/predictor")
 
         self.predictor.set_target(PredictColumnNames.TARGET)
         self.train_split_date = train_split_date
