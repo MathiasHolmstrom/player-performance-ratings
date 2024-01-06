@@ -2,13 +2,16 @@ from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
+from player_performance_ratings.scorer import LogLossScorer
+
+from player_performance_ratings.predictor.estimators import OrdinalClassifier
 from sklearn.linear_model import LinearRegression
 
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor.estimators.estimator import GameTeamPredictor, Predictor
 
 
-def test_sklearn_game_team_predictor_add_prediction():
+def test_game_team_predictor_add_prediction():
     mock_model = Mock()
     mock_model.predict_proba.return_value = np.array([[0.2, 0.8], [0.6, 0.4], [0.3, 0.7]])
 
@@ -32,7 +35,28 @@ def test_sklearn_game_team_predictor_add_prediction():
     pd.testing.assert_frame_equal(result, expected_df, check_like=True)
 
 
-def test_sklearn_wrapper_game_player():
+def test_game_team_predictor_multiclass_train():
+    predictor = Predictor(features=['feature1'], estimator=OrdinalClassifier())
+
+    df = pd.DataFrame(
+        {
+            'game_id': [1, 1, 1, 1],
+            'team_id': [1, 1, 2, 2],
+            "player_id": [1, 2, 3, 4],
+            'feature1': [0.1, 0.5, 0.3, 0.4],
+            "__target": [1, 0, 2, 3]
+        }
+    )
+
+    predictor.train(df)
+    assert len(predictor.estimator.classes_) == 4
+
+    df_with_predictions = predictor.add_prediction(df)
+    assert predictor.pred_column in df_with_predictions.columns
+
+
+
+def test_game_team_predictor_game_player():
     """
     When weight_column is used -->
       the injected model.train() should be called with weighted * feature1 grouped by game_id, team_id
@@ -67,7 +91,7 @@ def test_sklearn_wrapper_game_player():
     assert mock_model.fit.call_args[0][1].tolist() == [1, 0]
 
 
-def test_sklearn_wrapper_sub_game_player():
+def test_game_team_predictor_sub_game_player():
     """
     When sub-game are used the same player can exist multiple times in the same game_id for the same team_id.
     In this case the weighted average should be calculated for each player and then the average of the players.
@@ -103,7 +127,8 @@ def test_sklearn_wrapper_sub_game_player():
     pd.testing.assert_frame_equal(mock_model.fit.call_args[0][0], expected_features, check_like=True)
     assert mock_model.fit.call_args[0][1].tolist() == [1]
 
-def test_sklearn_game_team_predictor_regressor():
+
+def test_game_team_predictor_regressor():
     "should identify it's a regressor and train and predict works as intended"
 
     predictor = GameTeamPredictor(game_id_colum='game_id', team_id_column='team_id',
@@ -125,21 +150,18 @@ def test_sklearn_game_team_predictor_regressor():
     assert predictor.pred_column in df.columns
 
 
-
-def test_sklearn_wrapper_regressor():
+def test_predictor_regressor():
     "should identify it's a regressor and train and predict works as intended"
 
     predictor = Predictor(
-                                         features=['feature1'], estimator=LinearRegression())
+        features=['feature1'], estimator=LinearRegression())
 
     df = pd.DataFrame(
-        { 'feature1': [0.1, 0.5, 0.1, 0.5],
-            "__target": [1, 1, 1, 1]
-        }
+        {'feature1': [0.1, 0.5, 0.1, 0.5],
+         "__target": [1, 1, 1, 1]
+         }
     )
 
     predictor.train(df)
     df = predictor.add_prediction(df)
     assert predictor.pred_column in df.columns
-
-

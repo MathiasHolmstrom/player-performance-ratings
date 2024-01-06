@@ -28,6 +28,8 @@ class SklearnScorer(BaseScorer):
         super().__init__(target=target, pred_column=pred_column)
 
     def score(self, df: pd.DataFrame, classes_: Optional[list[str]] = None) -> float:
+        if isinstance(df[self.pred_column_name].iloc[0], list):
+            return self.scorer_function(df[self.target], np.asarray(df[self.pred_column_name]).tolist())
         return self.scorer_function(df[self.target], df[self.pred_column_name])
 
 
@@ -40,6 +42,8 @@ class LogLossScorer(BaseScorer):
 
     def score(self, df: pd.DataFrame, classes_: Optional[list[str]] = None) -> float:
         if self.weight_cross_league == 1:
+            if isinstance(df[self.pred_column_name].iloc[0], list):
+                return log_loss(df[self.target], np.asarray(df[self.pred_column_name]).tolist())
             return log_loss(df[self.target], df[self.pred_column_name])
 
         else:
