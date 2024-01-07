@@ -221,8 +221,9 @@ class Pipeline():
             df = self._add_performance(df=df, matches=None)
         if create_rating_features:
             df = self._add_rating_and_post_rating(matches=matches, df=df, store_ratings=False)
-        validation_predict = cross_validator.cross_validate_predict(df)
-        return cross_validator.cross_validation_score(validation_df=validation_predict)
+
+        validation_df = cross_validator.generate_validation_df(df=df, predictor=self.predictor)
+        return cross_validator.cross_validation_score(validation_df=validation_df)
 
     def generate_cross_validate_df(self,
                                    df: pd.DataFrame,
@@ -234,7 +235,8 @@ class Pipeline():
             df = self._add_performance(df=df, matches=None)
         if create_rating_features:
             df = self._add_rating_and_post_rating(matches=matches, df=df, store_ratings=False)
-        return cross_validator.cross_validate_predict(df)
+
+        return cross_validator.generate_validation_df(df=df, predictor=self.predictor)
 
     def generate_historical(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
                             store_ratings: bool = True) -> pd.DataFrame:

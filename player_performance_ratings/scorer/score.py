@@ -61,7 +61,7 @@ class BaseScorer(ABC):
         self.granularity = granularity
 
     @abstractmethod
-    def score(self, df: pd.DataFrame, classes_: Optional[list[str]] = None) -> float:
+    def score(self, df: pd.DataFrame) -> float:
         pass
 
 
@@ -78,7 +78,7 @@ class SklearnScorer(BaseScorer):
         self.scorer_function = scorer_function
         super().__init__(target=target, pred_column=pred_column, granularity=granularity, filters=filters)
 
-    def score(self, df: pd.DataFrame, classes_: Optional[list[str]] = None) -> float:
+    def score(self, df: pd.DataFrame) -> float:
         df = df.copy()
         df = apply_filters(df, self.filters)
         if self.granularity:
@@ -94,21 +94,20 @@ class OrdinalLossScorer(BaseScorer):
 
     def __init__(self,
                  pred_column: str,
+                 target_range: list[int],
                  target: Optional[str] = PredictColumnNames.TARGET,
                  granularity: Optional[list[str]] = None,
                  filters: Optional[list[Filter]] = None
                  ):
 
         self.pred_column_name = pred_column
+        self.target_range = target_range
         self.granularity = granularity
         super().__init__(target=target, pred_column=pred_column, filters=filters, granularity=granularity)
 
-    def score(self, df: pd.DataFrame, classes_: Optional[list[str]] = None) -> float:
+    def score(self, df: pd.DataFrame) -> float:
 
         df = df.copy()
-
-        if classes_ is None:
-            raise ValueError("classes_ must be passed to OrdinalLossScorer")
 
         probs = df[self.pred_column_name]
         last_column_name = 'prob_under_0.5'
@@ -120,7 +119,7 @@ class OrdinalLossScorer(BaseScorer):
 
         sum_lr = 0
 
-        for class_ in classes_[1:]:
+        for class_ in self.target_range:
             class_index += 1
             p_c = 'prob_under_' + str(class_ + 0.5)
             df[p_c] = probs.apply(lambda x: x[class_index]) + df[last_column_name]

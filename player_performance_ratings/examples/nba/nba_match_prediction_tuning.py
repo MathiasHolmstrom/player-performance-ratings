@@ -143,8 +143,8 @@ match_predictor_factory = MatchPredictorFactory(
 rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
     team_rating_search_ranges=get_default_team_rating_search_range(),
     start_rating_search_ranges=start_rating_search_range,
-    team_rating_n_trials=8,
-    start_rating_n_trials=8,
+    team_rating_n_trials=1,
+    start_rating_n_trials=1,
 )
 predictor_tuner = PredictorTuner(
     default_params={'learning_rate': 0.03},

@@ -12,7 +12,6 @@ from player_performance_ratings.transformation import LagTransformer
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
 
-from player_performance_ratings.transformation.post_transformers import NormalizerTransformer
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 from player_performance_ratings.tuner.utils import get_default_lgbm_regressor_search_range_by_learning_rate
 
@@ -94,8 +93,8 @@ post_rating_transformers = [
 match_predictor_factory = MatchPredictorFactory(
     post_rating_transformers=post_rating_transformers,
     estimator=LGBMRegressor(reg_alpha=1, learning_rate=0.02, verbose=-100),
-    date_column_name=column_names.start_date,
     other_categorical_features=["starting", "is_playoff"],
+    match_id_column_name=column_names.match_id,
 )
 
 predictor_tuner = PredictorTuner(

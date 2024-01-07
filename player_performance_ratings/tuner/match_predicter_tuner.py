@@ -81,7 +81,7 @@ class MatchPredictorTuner():
         else:
 
             if self.cv_validation_days is not None:
-                self.cross_validator = MatchCountCrossValidator(predictor=self.match_predictor_factory.predictor,
+                self.cross_validator = MatchCountCrossValidator(
                                                                 scorer=self.scorer,
                                                                 match_id_column_name=self.match_predictor_factory.match_id_column_name,
                                                                 validation_match_count=self.cv_validation_days,
@@ -92,7 +92,6 @@ class MatchPredictorTuner():
                         "date_column_name must be specified if cv_validation_days is not specified and cross_validator is not specified")
 
                 self.cross_validator = MatchKFoldCrossValidator(
-                    predictor=self.match_predictor_factory.predictor,
                     scorer=self.scorer,
                     match_id_column_name=self.match_predictor_factory.match_id_column_name,
                     n_splits=self.cv_n_splits,

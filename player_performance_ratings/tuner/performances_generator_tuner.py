@@ -42,13 +42,9 @@ class PerformancesGeneratorTuner:
     def tune(self, df: pd.DataFrame,
              cross_validator: CrossValidator,
              match_predictor_factory: MatchPredictorFactory,
-             matches: Optional[list[list[Match]]] = None,
              ) -> PerformancesGenerator:
 
         df = df.copy()
-
-        if not matches:
-            matches = None
 
         column_names = [r.column_names for r in match_predictor_factory.rating_generators]
 
@@ -58,7 +54,6 @@ class PerformancesGeneratorTuner:
         def objective(trial: BaseTrial,
                       df: pd.DataFrame,
                       match_predictor_factory: MatchPredictorFactory,
-                      scorer: BaseScorer,
                       ) -> float:
 
 
@@ -79,11 +74,8 @@ class PerformancesGeneratorTuner:
                 pre_transformations=self.pre_transformations
             )
             match_predictor = match_predictor_factory.create(performances_generator=performances_generator)
-
-            df_with_prediction = match_predictor.generate_historical(df=df, matches=matches, store_ratings=False)
-            test_df = df_with_prediction[
-                df_with_prediction[match_predictor.date_column_name] > match_predictor.train_split_date]
-            return scorer.score(test_df, classes_=match_predictor.predictor.classes_)
+            return match_predictor.cross_validate_score(df=df, cross_validator=cross_validator,
+                                                        create_performance=True, create_rating_features=True)
 
         direction = "minimize"
         study_name = "optuna_study"
@@ -93,12 +85,11 @@ class PerformancesGeneratorTuner:
         callbacks = []
         study.optimize(
             lambda trial: objective(trial, df=df,
-                                    match_predictor_factory=match_predictor_factory, scorer=scorer),
+                                    match_predictor_factory=match_predictor_factory),
             n_trials=self.n_trials, callbacks=callbacks)
 
         best_params = study.best_params
         best_column_weights = self._select_best_column_weights(all_params=best_params)
-
 
         return PerformancesGenerator(column_weights=best_column_weights, column_names=column_names,
                                      pre_transformations=self.pre_transformations)

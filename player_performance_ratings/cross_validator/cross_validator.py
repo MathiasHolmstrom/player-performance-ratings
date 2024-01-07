@@ -4,26 +4,25 @@ from typing import Optional
 import pandas as pd
 
 from player_performance_ratings.cross_validator._base import CrossValidator
+from player_performance_ratings.predictor import BaseMLWrapper
 from player_performance_ratings.scorer import BaseScorer
 
-from player_performance_ratings.predictor import BaseMLWrapper
 
 
 class MatchCountCrossValidator(CrossValidator):
 
     def __init__(self,
-                 predictor: BaseMLWrapper,
                  scorer: BaseScorer,
                  match_id_column_name: str,
                  validation_match_count: int,
                  n_splits: int = 3):
-        super().__init__(scorer=scorer, predictor=predictor)
-        self.predictor = predictor
+        super().__init__(scorer=scorer)
         self.n_splits = n_splits
         self.match_id_column_name = match_id_column_name
         self.validation_match_count = validation_match_count
 
-    def cross_validate_predict(self, df: pd.DataFrame) -> pd.DataFrame:
+    def generate_validation_df(self, df: pd.DataFrame, predictor: BaseMLWrapper) -> pd.DataFrame:
+        predictor = copy.deepcopy(predictor)
         validation_dfs = []
         df = df.assign(__cv_match_number=pd.factorize(df[self.match_id_column_name])[0])
         max_match_number = df['__cv_match_number'].max()
@@ -38,9 +37,8 @@ class MatchCountCrossValidator(CrossValidator):
                     df['__cv_match_number'] < train_cut_off_match_number + step_matches)]
 
         for _ in range(self.n_splits):
-            self.predictor.train(train_df)
-            self._predictors.append(copy.deepcopy(self.predictor))
-            validation_df = self.predictor.add_prediction(validation_df)
+            predictor.train(train_df)
+            validation_df = predictor.add_prediction(validation_df)
             validation_dfs.append(validation_df)
 
             train_cut_off_match_number = train_cut_off_match_number + step_matches
@@ -48,25 +46,24 @@ class MatchCountCrossValidator(CrossValidator):
             validation_df = df[(df['__cv_match_number'] >= train_cut_off_match_number) & (
                     df['__cv_match_number'] < train_cut_off_match_number + step_matches)]
 
-        return sum(self._scores) / len(self._scores)
+        return pd.concat(validation_dfs)
 
 
 class MatchKFoldCrossValidator(CrossValidator):
     def __init__(self,
                  scorer: BaseScorer,
-                 predictor: BaseMLWrapper,
                  match_id_column_name: str,
                  date_column_name: str,
                  min_validation_date: Optional[str] = None,
                  n_splits: int = 3):
-        super().__init__(scorer=scorer, predictor=predictor)
+        super().__init__(scorer=scorer)
         self.match_id_column_name = match_id_column_name
         self.date_column_name = date_column_name
         self.n_splits = n_splits
         self.min_validation_date = min_validation_date
 
-    def cross_validate_predict(self, df: pd.DataFrame) -> pd.DataFrame:
-
+    def generate_validation_df(self, df: pd.DataFrame, predictor: BaseMLWrapper) -> pd.DataFrame:
+        predictor = copy.deepcopy(predictor)
         validation_dfs = []
 
         if not self.min_validation_date:
@@ -89,9 +86,8 @@ class MatchKFoldCrossValidator(CrossValidator):
                 df['__cv_match_number'] < train_cut_off_match_number + step_matches)]
 
         for idx in range(self.n_splits):
-            self.predictor.train(train_df)
-            self._predictors.append(copy.deepcopy(self.predictor))
-            validation_df = self.predictor.add_prediction(validation_df)
+            predictor.train(train_df)
+            validation_df = predictor.add_prediction(validation_df)
             validation_dfs.append(validation_df)
 
             train_cut_off_match_number = train_cut_off_match_number + step_matches

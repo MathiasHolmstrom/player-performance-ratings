@@ -11,7 +11,7 @@ def test_ordinal_loss_scorer_multiclass():
         'predictions': [[0.1, 0.6, 0.3], [0.5, 0.3, 0.2], [0.2, 0.3, 0.5]],
         "__target": [1, 0, 2]
     })
-    score = OrdinalLossScorer(pred_column='predictions').score(data, classes_=list(range(3)))
+    score = OrdinalLossScorer(pred_column='predictions', target_range=list(range(3))).score(data)
     assert score > 0
     assert score < 0.693
 

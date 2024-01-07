@@ -201,8 +201,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
             match_predictor = match_predictor_factory.create(
                 rating_generators=rating_generators,
             )
-
-            return match_predictor.generate_cross_validate_score(df=df, matches=matches, cross_validator=cross_validator,
+            return match_predictor.cross_validate_score(df=df, matches=matches, cross_validator=cross_validator,
                                                                  create_performance=False)
 
         direction = "minimize"
@@ -231,7 +230,6 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
             if param in performance_predictor_params:
                 performance_predictor.__setattr__(param, best_params[param])
                 best_params.pop(param)
-
         return TeamRatingGenerator(**best_params,
                                    performance_predictor=performance_predictor,
                                    start_rating_generator=rating_generator.team_rating_generator.start_rating_generator
@@ -269,8 +267,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                 rating_generators=rating_generators,
 
             )
-
-            return match_predictor.generate_cross_validate_score(df=df, matches=matches, create_performance=False,
+            return match_predictor.cross_validate_score(df=df, matches=matches, create_performance=False,
                                                                  cross_validator=cross_validator)
 
         direction = "minimize"
