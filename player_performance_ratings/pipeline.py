@@ -211,19 +211,30 @@ class Pipeline():
 
         self.predictor.set_target(PredictColumnNames.TARGET)
 
-
-    def cross_validate(self,
-                       df: pd.DataFrame,
-                       cross_validator: CrossValidator,
-                       matches: Optional[ list[Match]] = None,
-                       create_performance: bool = True,
-                       create_rating_features: bool = True) -> float:
+    def cross_validate_score(self,
+                             df: pd.DataFrame,
+                             cross_validator: CrossValidator,
+                             matches: Optional[list[Match]] = None,
+                             create_performance: bool = True,
+                             create_rating_features: bool = True) -> float:
         if create_performance:
             df = self._add_performance(df=df, matches=None)
         if create_rating_features:
             df = self._add_rating_and_post_rating(matches=matches, df=df, store_ratings=False)
-        validation_predict =  cross_validator.cross_validate_predict(df)
+        validation_predict = cross_validator.cross_validate_predict(df)
         return cross_validator.cross_validation_score(validation_df=validation_predict)
+
+    def generate_cross_validate_df(self,
+                                   df: pd.DataFrame,
+                                   cross_validator: CrossValidator,
+                                   matches: Optional[list[Match]] = None,
+                                   create_performance: bool = True,
+                                   create_rating_features: bool = True) -> pd.DataFrame:
+        if create_performance:
+            df = self._add_performance(df=df, matches=None)
+        if create_rating_features:
+            df = self._add_rating_and_post_rating(matches=matches, df=df, store_ratings=False)
+        return cross_validator.cross_validate_predict(df)
 
     def generate_historical(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
                             store_ratings: bool = True) -> pd.DataFrame:
@@ -238,7 +249,8 @@ class Pipeline():
 
         return df
 
-    def _add_performance(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]]) -> pd.DataFrame:
+    def _add_performance(self, df: pd.DataFrame,
+                         matches: Optional[Union[list[Match], list[list[Match]]]]) -> pd.DataFrame:
         df = df.copy()
 
         if self.predictor.pred_column in df.columns:
@@ -252,7 +264,6 @@ class Pipeline():
         if self.predictor.target not in df.columns:
             raise ValueError(
                 f"Target {self.predictor.target} not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
-
 
         return df
 
@@ -287,7 +298,6 @@ class Pipeline():
             df = post_rating_transformer.fit_transform(df)
 
         return df
-
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()

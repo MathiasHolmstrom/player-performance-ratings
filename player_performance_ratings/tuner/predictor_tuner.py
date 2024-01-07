@@ -88,8 +88,8 @@ class PredictorTuner():
 
             match_predictor = match_predictor_factory.create(predictor=predictor)
 
-            return match_predictor.cross_validate(df=df, create_performance=False, create_rating_features=False,
-                                                  cross_validator=cross_validator)
+            return match_predictor.generate_cross_validate_score(df=df, create_performance=False, create_rating_features=False,
+                                                                 cross_validator=cross_validator)
 
         direction = "minimize"
         study_name = "optuna_study"

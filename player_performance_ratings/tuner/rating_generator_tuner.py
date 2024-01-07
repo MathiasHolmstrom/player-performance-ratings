@@ -202,8 +202,8 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                 rating_generators=rating_generators,
             )
 
-            return match_predictor.cross_validate(df=df, matches=matches, cross_validator=cross_validator,
-                                                  create_performance=False)
+            return match_predictor.generate_cross_validate_score(df=df, matches=matches, cross_validator=cross_validator,
+                                                                 create_performance=False)
 
         direction = "minimize"
         study_name = "optuna_study"
@@ -270,8 +270,8 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
 
             )
 
-            return match_predictor.cross_validate(df=df, matches=matches, create_performance=False,
-                                                  cross_validator=cross_validator)
+            return match_predictor.generate_cross_validate_score(df=df, matches=matches, create_performance=False,
+                                                                 cross_validator=cross_validator)
 
         direction = "minimize"
         study_name = "optuna_study"
