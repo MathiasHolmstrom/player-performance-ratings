@@ -5,6 +5,7 @@ import pandas as pd
 import pendulum
 from sklearn.preprocessing import OneHotEncoder
 
+from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
 
 from player_performance_ratings.consts import PredictColumnNames
@@ -22,6 +23,7 @@ from player_performance_ratings.transformation.factory import auto_create_perfor
 from player_performance_ratings.transformation.pre_transformers import ConvertDataFrameToCategoricalTransformer, \
     SkLearnTransformerWrapper
 
+
 def create_predictor(
         rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]],
         other_features: Optional[list[str]],
@@ -30,7 +32,7 @@ def create_predictor(
         estimator: Optional,
         group_predictor_by_game_team: bool,
         match_id_column_name: Optional[str],
-        team_id_column_name: Optional[str] ,
+        team_id_column_name: Optional[str],
 
 ) -> BaseMLWrapper:
     features = list(set(other_features + other_categorical_features)) or []
@@ -67,7 +69,7 @@ def create_predictor(
             raise ValueError(
                 "match_id and team_id must be set if group_predictor_by_game_team is used to create predictor")
 
-        return  GameTeamPredictor(
+        return GameTeamPredictor(
             estimator=estimator,
             features=features,
             target=PredictColumnNames.TARGET,
@@ -78,7 +80,7 @@ def create_predictor(
 
 
     else:
-        return  Predictor(
+        return Predictor(
             estimator=estimator,
             features=features,
             target=PredictColumnNames.TARGET,
@@ -92,7 +94,6 @@ class MatchPredictor():
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
                  post_rating_transformers: Optional[List[BasePostTransformer]] = None,
-                 post_prediction_transformers: Optional[List[BasePostTransformer]] = None,
                  predictor: [Optional[BaseMLWrapper]] = None,
                  estimator: Optional = None,
                  estimator_or_transformers: Optional[Union[BaseMLWrapper, List[BaseTransformer]]] = None,
@@ -179,7 +180,6 @@ class MatchPredictor():
                                                                             column_names=column_names)
 
         self.post_rating_transformers = post_rating_transformers or []
-        self.post_prediction_transformers = post_prediction_transformers or []
 
         self.predictor = predictor
         self.other_features = other_features or []
@@ -223,15 +223,33 @@ class MatchPredictor():
             self.date_column_name = self.rating_generators[
                 0].column_names.start_date
 
+    def cross_validate(self, df: pd.DataFrame, cross_validator: CrossValidator, create_performance: bool = True,
+                       create_rating_features: bool = True) -> float:
+        if create_performance:
+            df = self._add_performance(df=df, matches=None)
+        if create_rating_features:
+            df = self._add_rating_and_post_rating(matches=None, df=df, store_ratings=False)
+        return cross_validator.cross_validate(df)
+
     def generate_historical(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
                             store_ratings: bool = True) -> pd.DataFrame:
+        ori_cols = df.columns.tolist()
+        df = self._add_performance(df=df, matches=matches)
+        df = self._add_rating_and_post_rating(matches=matches, df=df, store_ratings=store_ratings)
 
+        self.predictor.train(df)
+        df = self.predictor.add_prediction(df)
+        if not self.keep_features:
+            df = df[ori_cols + [self.predictor.pred_column]]
+
+        return df
+
+    def _add_performance(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]]) -> pd.DataFrame:
         df = df.copy()
 
         if self.predictor.pred_column in df.columns:
-            raise ValueError(f"Predictor column {self.predictor.pred_column} already in df columns. Remove or rename before generating predictions")
-
-        ori_cols = df.columns.tolist()
+            raise ValueError(
+                f"Predictor column {self.predictor.pred_column} already in df columns. Remove or rename before generating predictions")
 
         if matches:
             if isinstance(matches[0], Match):
@@ -244,6 +262,10 @@ class MatchPredictor():
             raise ValueError(
                 f"Target {self.predictor.target} not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
 
+
+        return df
+
+    def _add_rating_and_post_rating(self, matches: Optional[list[Match]], df: pd.DataFrame, store_ratings: bool = True):
         for rating_idx, rating_generator in enumerate(self.rating_generators):
 
             rating_column_names = rating_generator.column_names
@@ -268,22 +290,8 @@ class MatchPredictor():
         for post_rating_transformer in self.post_rating_transformers:
             df = post_rating_transformer.fit_transform(df)
 
-        if self.date_column_name:
-            if not self.train_split_date:
-                self.train_split_date = df.iloc[int(len(df) / 1.3)][self.date_column_name]
-            train_df = df[df[self.date_column_name] <= self.train_split_date]
-        else:
-            logging.warning("train date is not defined. Uses entire dataset to train predictor")
-            train_df = df
-
-        self.predictor.train(train_df)
-        df = self.predictor.add_prediction(df)
-        for post_prediction_transformer in self.post_prediction_transformers:
-            df = post_prediction_transformer.transform(df)
-        if not self.keep_features:
-            df = df[ori_cols + [self.predictor.pred_column]]
-
         return df
+
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
@@ -308,8 +316,7 @@ class MatchPredictor():
             df = post_rating_transformer.transform(df)
 
         df = self.predictor.add_prediction(df)
-        for post_prediction_transformer in self.post_prediction_transformers:
-            df = post_prediction_transformer.transform(df)
+
         if not self.keep_features:
             df = df[ori_cols + [self.predictor.pred_column]]
         return df

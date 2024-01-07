@@ -3,6 +3,7 @@ import pickle
 import pandas as pd
 from lightgbm import LGBMClassifier
 
+from player_performance_ratings.cross_validator.cross_validator import DayCountCrossValidator
 from player_performance_ratings.ratings.opponent_adjusted_rating import TeamRatingGenerator
 from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import \
     RatingDifferencePerformancePredictor, RatingMeanPerformancePredictor
@@ -120,6 +121,11 @@ post_rating_transformers = [
         column_names=column_names,
     )
 ]
+
+cross_validator = DayCountCrossValidator(
+    validation_days = 30,
+    n_splits=3
+)
 
 match_predictor_factory = MatchPredictorFactory(
     post_rating_transformers=post_rating_transformers,

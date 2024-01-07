@@ -91,14 +91,8 @@ post_rating_transformers = [
     ),
 ]
 
-post_prediction_transformers = [
-    NormalizerTransformer(features=[f"{PredictColumnNames.TARGET}_prediction"],
-                          granularity=[column_names.team_id, column_names.match_id],
-                          create_target_as_mean=True)]
-
 match_predictor_factory = MatchPredictorFactory(
     post_rating_transformers=post_rating_transformers,
-    post_prediction_transformers=post_prediction_transformers,
     estimator=LGBMRegressor(reg_alpha=1, learning_rate=0.02, verbose=-100),
     date_column_name=column_names.start_date,
     other_categorical_features=["starting", "is_playoff"],
