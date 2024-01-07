@@ -4,6 +4,8 @@ from typing import Optional, Union
 
 import pandas as pd
 
+from player_performance_ratings.cross_validator.cross_validator import CrossValidator, MatchCountCrossValidator, \
+    MatchKFoldCrossValidator
 from player_performance_ratings.predictor.match_predictor import MatchPredictor
 from player_performance_ratings.ratings import PerformancesGenerator
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
@@ -29,12 +31,15 @@ class MatchPredictorTuner():
                  performances_generator_tuner: Optional[PerformancesGeneratorTuner] = None,
                  rating_generator_tuners: Optional[Union[list[RatingGeneratorTuner], RatingGeneratorTuner]] = None,
                  predictor_tuner: Optional[PredictorTuner] = None,
-                 fit_best: bool = True
+                 fit_best: bool = True,
+                 cv_n_splits: int = 3,
+                 cv_validation_days: Optional[int] = None,
+                 date_column_name: Optional[str] = None,
+                 cross_validator: Optional[CrossValidator] = None,
                  ):
 
         """
-        :param scorer:
-            The class object that scores the predictions
+        :param scorer: The scorer to use to evaluate the performance of the match_predictor
         :param match_predictor_factory:
             The factory that creates the MatchPredictor.
             Contains the parameters to create the MatchPredictor if no parameter-tuning was done.
@@ -53,7 +58,10 @@ class MatchPredictorTuner():
         """
 
         self.scorer = scorer
+        self.cv_n_splits = cv_n_splits
+        self.cv_validation_days = cv_validation_days
         self.match_predictor_factory = match_predictor_factory
+        self.date_column_name = date_column_name
         self.performances_generator_tuner = performances_generator_tuner
         self.rating_generator_tuners = rating_generator_tuners or []
         self.predictor_tuner = predictor_tuner
@@ -61,11 +69,35 @@ class MatchPredictorTuner():
             self.rating_generator_tuners = [self.rating_generator_tuners]
         self.fit_best = fit_best
 
-        if len(self.rating_generator_tuners) != len(self.match_predictor_factory.rating_generators) and self.rating_generator_tuners:
+        if len(self.rating_generator_tuners) != len(
+                self.match_predictor_factory.rating_generators) and self.rating_generator_tuners:
             raise ValueError("Number of rating_generator_tuners must match number of rating_generators")
 
         if not self.performances_generator_tuner and not self.rating_generator_tuners and not self.predictor_tuner:
             raise ValueError("No tuning has been provided in config")
+
+        if cross_validator is not None:
+            self.cross_validator = cross_validator
+        else:
+
+            if self.cv_validation_days is not None:
+                self.cross_validator = MatchCountCrossValidator(predictor=self.match_predictor_factory.predictor,
+                                                                scorer=self.scorer,
+                                                                match_id_column_name=self.match_predictor_factory.match_id_column_name,
+                                                                validation_match_count=self.cv_validation_days,
+                                                                n_splits=self.cv_n_splits)
+            else:
+                if self.date_column_name is None:
+                    raise ValueError(
+                        "date_column_name must be specified if cv_validation_days is not specified and cross_validator is not specified")
+
+                self.cross_validator = MatchKFoldCrossValidator(
+                    predictor=self.match_predictor_factory.predictor,
+                    scorer=self.scorer,
+                    match_id_column_name=self.match_predictor_factory.match_id_column_name,
+                    n_splits=self.cv_n_splits,
+                    date_column_name=self.date_column_name
+                )
 
     def tune(self, df: pd.DataFrame) -> MatchPredictor:
 
@@ -81,7 +113,7 @@ class MatchPredictorTuner():
             logging.info("Tuning PreTransformers")
             best_performances_generator = self.performances_generator_tuner.tune(df=df,
                                                                                  match_predictor_factory=self.match_predictor_factory,
-                                                                                 scorer=self.scorer)
+                                                                                 cross_validator=self.cross_validator)
         if best_performances_generator:
             df = best_performances_generator.generate(df)
 
@@ -103,7 +135,7 @@ class MatchPredictorTuner():
                 matches.append(rating_matches)
                 tuned_rating_generator = rating_generator_tuner.tune(df=df, matches=matches[rating_idx],
                                                                      rating_idx=rating_idx,
-                                                                     scorer=self.scorer,
+                                                                     cross_validator=self.cross_validator,
                                                                      match_predictor_factory=self.match_predictor_factory)
 
                 best_rating_generators[rating_idx] = tuned_rating_generator
@@ -126,7 +158,7 @@ class MatchPredictorTuner():
 
         if self.predictor_tuner:
             logging.info("Tuning Predictor")
-            best_predictor = self.predictor_tuner.tune(df=df, scorer=self.scorer,
+            best_predictor = self.predictor_tuner.tune(df=df, cross_validator=self.cross_validator,
                                                        match_predictor_factory=self.match_predictor_factory)
         else:
             best_predictor = self.match_predictor_factory.predictor
@@ -135,7 +167,6 @@ class MatchPredictorTuner():
             rating_generators=best_rating_generators,
             performances_generator=best_performances_generator,
             post_rating_transformers=best_post_transformers,
-            post_prediction_transformers=self.match_predictor_factory.post_prediction_transformers,
             predictor=best_predictor)
 
         if self.fit_best:

@@ -8,6 +8,8 @@ import optuna
 import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
+
+from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings.ratings import RatingColumnNames
 
 from player_performance_ratings.ratings.opponent_adjusted_rating import TeamRatingGenerator
@@ -97,7 +99,7 @@ DEFAULT_START_RATING_SEARCH_RANGE = [
 class RatingGeneratorTuner(ABC):
 
     @abstractmethod
-    def tune(self, df: pd.DataFrame, rating_idx: int, scorer: BaseScorer,
+    def tune(self, df: pd.DataFrame, rating_idx: int, cross_validator: CrossValidator,
              match_predictor_factory: MatchPredictorFactory,
              matches: list[Match]) -> RatingGenerator:
         pass
@@ -119,7 +121,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
     def tune(self,
              df: pd.DataFrame,
              rating_idx: int,
-             scorer: BaseScorer,
+             cross_validator: CrossValidator,
              match_predictor_factory: MatchPredictorFactory,
              matches: list[Match]) -> OpponentAdjustedRatingGenerator:
 
@@ -138,7 +140,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
             best_team_rating_generator = self._tune_team_rating(df=df,
                                                                 rating_generator=best_rating_generator,
                                                                 rating_index=rating_idx,
-                                                                scorer=scorer,
+                                                                cross_validator=cross_validator,
                                                                 matches=matches,
                                                                 match_predictor_factory=match_predictor_factory)
 
@@ -150,7 +152,8 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
             best_start_rating = self._tune_start_rating(df=df,
                                                         matches=matches,
                                                         rating_generator=best_rating_generator,
-                                                        rating_index=rating_idx, scorer=scorer,
+                                                        rating_index=rating_idx,
+                                                        cross_validator=cross_validator,
                                                         match_predictor_factory=match_predictor_factory
                                                         )
             best_rating_generator.team_rating_generator.start_rating_generator = best_start_rating
@@ -163,7 +166,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                           rating_generator: OpponentAdjustedRatingGenerator,
                           rating_index: int,
                           matches: list[Match],
-                          scorer: BaseScorer,
+                          cross_validator: CrossValidator,
                           match_predictor_factory: MatchPredictorFactory,
                           ) -> TeamRatingGenerator:
 
@@ -199,9 +202,8 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                 rating_generators=rating_generators,
             )
 
-            df_with_prediction = match_predictor.generate_historical(df=df, matches=matches, store_ratings=False)
-            test_df = df_with_prediction[df_with_prediction[match_predictor.date_column_name] > match_predictor.train_split_date]
-            return scorer.score(test_df, classes_=match_predictor.predictor.classes_)
+            return match_predictor.cross_validate(df=df, matches=matches, cross_validator=cross_validator,
+                                                  create_performance=False)
 
         direction = "minimize"
         study_name = "optuna_study"
@@ -240,7 +242,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                            rating_generator: OpponentAdjustedRatingGenerator,
                            rating_index: int,
                            matches: list[Match],
-                           scorer: BaseScorer,
+                           cross_validator: CrossValidator,
                            match_predictor_factory: MatchPredictorFactory):
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
             start_rating_generator_params = list(
@@ -268,10 +270,8 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
 
             )
 
-            df_with_prediction = match_predictor.generate_historical(df=df, matches=matches, store_ratings=False)
-            test_df = df_with_prediction[
-                df_with_prediction[match_predictor.date_column_name] > match_predictor.train_split_date]
-            return scorer.score(test_df, classes_=match_predictor.predictor.classes_)
+            return match_predictor.cross_validate(df=df, matches=matches, create_performance=False,
+                                                  cross_validator=cross_validator)
 
         direction = "minimize"
         study_name = "optuna_study"

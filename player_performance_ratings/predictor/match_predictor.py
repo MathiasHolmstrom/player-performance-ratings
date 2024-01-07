@@ -100,8 +100,6 @@ class MatchPredictor():
                  other_features: Optional[list[str]] = None,
                  other_categorical_features: Optional[list[str]] = None,
                  group_predictor_by_game_team: bool = False,
-                 train_split_date: Optional[pendulum.datetime] = None,
-                 date_column_name: Optional[str] = None,
                  match_id_column_name: Optional[str] = None,
                  team_id_column_name: Optional[str] = None,
                  use_auto_create_performance_calculator: bool = False,
@@ -213,22 +211,18 @@ class MatchPredictor():
                 raise ValueError("No Features specified for estimator/predictor")
 
         self.predictor.set_target(PredictColumnNames.TARGET)
-        self.train_split_date = train_split_date
-        self.date_column_name = date_column_name
-        if self.train_split_date and date_column_name is None:
-            if not self.rating_generators:
-                raise ValueError(
-                    "date_column_name must be set if train_split_date is set and rating_generators is None")
 
-            self.date_column_name = self.rating_generators[
-                0].column_names.start_date
 
-    def cross_validate(self, df: pd.DataFrame, cross_validator: CrossValidator, create_performance: bool = True,
+    def cross_validate(self,
+                       df: pd.DataFrame,
+                       cross_validator: CrossValidator,
+                       matches: Optional[ list[Match]] = None,
+                       create_performance: bool = True,
                        create_rating_features: bool = True) -> float:
         if create_performance:
             df = self._add_performance(df=df, matches=None)
         if create_rating_features:
-            df = self._add_rating_and_post_rating(matches=None, df=df, store_ratings=False)
+            df = self._add_rating_and_post_rating(matches=matches, df=df, store_ratings=False)
         return cross_validator.cross_validate(df)
 
     def generate_historical(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
@@ -251,9 +245,6 @@ class MatchPredictor():
             raise ValueError(
                 f"Predictor column {self.predictor.pred_column} already in df columns. Remove or rename before generating predictions")
 
-        if matches:
-            if isinstance(matches[0], Match):
-                matches = [matches for _ in self.rating_generators]
 
         elif self.performances_generator:
             df = self.performances_generator.generate(df)
@@ -266,6 +257,11 @@ class MatchPredictor():
         return df
 
     def _add_rating_and_post_rating(self, matches: Optional[list[Match]], df: pd.DataFrame, store_ratings: bool = True):
+
+        if matches:
+            if isinstance(matches[0], Match):
+                matches = [matches for _ in self.rating_generators]
+
         for rating_idx, rating_generator in enumerate(self.rating_generators):
 
             rating_column_names = rating_generator.column_names

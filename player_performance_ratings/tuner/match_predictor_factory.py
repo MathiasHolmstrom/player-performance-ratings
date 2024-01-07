@@ -2,7 +2,9 @@ import copy
 from typing import Optional, List, Union
 
 import pendulum
+from player_performance_ratings.scorer import BaseScorer
 
+from player_performance_ratings.cross_validator.cross_validator import CrossValidator, MatchCountCrossValidator
 from player_performance_ratings.predictor.match_predictor import create_predictor
 from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
 
@@ -16,7 +18,7 @@ from player_performance_ratings.transformation.factory import auto_create_perfor
 class MatchPredictorFactory():
 
     def __init__(self,
-                 date_column_name: Optional[str],
+                 match_id_column_name: str,
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
                  post_rating_transformers: Optional[List[BasePostTransformer]] = None,
@@ -25,13 +27,10 @@ class MatchPredictorFactory():
                  other_features: Optional[list[str]] = None,
                  other_categorical_features: Optional[list[str]] = None,
                  group_predictor_by_game_team: bool = False,
-                 train_split_date: Optional[pendulum.datetime] = None,
-                 match_id_column_name: Optional[str] = None,
                  team_id_column_name: Optional[str] = None,
                  use_auto_create_performance_calculator: bool = False,
                  column_weights: Optional[Union[List[List[ColumnWeight]], list[ColumnWeight]]] = None,
                  ):
-
 
         if use_auto_create_performance_calculator and not column_weights:
             raise ValueError("If auto pre transformers are used, column weights must be specified")
@@ -44,17 +43,16 @@ class MatchPredictorFactory():
 
         self.predictor = predictor
         self.estimator = estimator
-        self.date_column_name = date_column_name
         self.other_features = other_features or []
         self.other_categorical_features = other_categorical_features or []
         self.group_predictor_by_game_team = group_predictor_by_game_team
         self.match_id_column_name = match_id_column_name
         self.team_id_column_name = team_id_column_name
 
-        self.train_split_date = train_split_date
         self.use_auto_create_performance_calculator = use_auto_create_performance_calculator
         self.performances_generator = performances_generator
-        self.column_weights = column_weights if isinstance(column_weights, list) else [column_weights] if column_weights else None
+        self.column_weights = column_weights if isinstance(column_weights, list) else [
+            column_weights] if column_weights else None
 
         if self.predictor is None:
             self.predictor = create_predictor(
@@ -70,12 +68,14 @@ class MatchPredictorFactory():
             if not self.predictor.features:
                 raise ValueError("No Features specified for estimator/predictor")
 
+
+
         if self.use_auto_create_performance_calculator:
             if not self.rating_generators:
                 raise ValueError("If auto pre transformers are used, rating generators must be specified")
             column_names = [rating_generator.column_names for rating_generator in self.rating_generators]
             self.performances_generator = auto_create_performance_generator(column_weights=self.column_weights,
-                                                                                 column_names=column_names)
+                                                                            column_names=column_names)
 
     def create(self,
                performances_generator: Optional[PerformancesGenerator] = None,
@@ -94,7 +94,5 @@ class MatchPredictorFactory():
             performances_generator=performances_generator,
             post_rating_transformers=copy.deepcopy(post_rating_transformers),
             predictor=predictor,
-            train_split_date=self.train_split_date,
             match_id_column_name=self.match_id_column_name,
-            date_column_name=self.date_column_name,
         )

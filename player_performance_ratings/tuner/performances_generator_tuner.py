@@ -7,6 +7,7 @@ import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
+from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings.data_structures import Match
 from player_performance_ratings.ratings import ColumnWeight, PerformancesGenerator
 from player_performance_ratings.ratings.enums import RatingColumnNames
@@ -39,7 +40,7 @@ class PerformancesGeneratorTuner:
         self._scores = []
 
     def tune(self, df: pd.DataFrame,
-             scorer: BaseScorer,
+             cross_validator: CrossValidator,
              match_predictor_factory: MatchPredictorFactory,
              matches: Optional[list[list[Match]]] = None,
              ) -> PerformancesGenerator:

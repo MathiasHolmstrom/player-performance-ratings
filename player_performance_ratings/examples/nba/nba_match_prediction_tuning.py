@@ -2,11 +2,14 @@ import pickle
 
 import pandas as pd
 from lightgbm import LGBMClassifier
+from sklearn.metrics import log_loss
 
-from player_performance_ratings.cross_validator.cross_validator import DayCountCrossValidator
+from player_performance_ratings.scorer.score import SklearnScorer
+
+from player_performance_ratings.cross_validator.cross_validator import MatchCountCrossValidator
 from player_performance_ratings.ratings.opponent_adjusted_rating import TeamRatingGenerator
 from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import \
-    RatingDifferencePerformancePredictor, RatingMeanPerformancePredictor
+    RatingDifferencePerformancePredictor
 
 from player_performance_ratings.transformation import LagTransformer, RollingMeanTransformer
 
@@ -14,7 +17,6 @@ from player_performance_ratings.ratings import ColumnWeight
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 
-from player_performance_ratings.scorer import LogLossScorer
 
 from player_performance_ratings import ColumnNames
 
@@ -88,12 +90,10 @@ performance_predictor = RatingDifferencePerformancePredictor(
     rating_diff_team_from_entity_coef=0.00425,
 )
 
-
 rating_generator = OpponentAdjustedRatingGenerator(column_names=column_names, team_rating_generator=TeamRatingGenerator(
     performance_predictor=performance_predictor))
 
 column_weights = [ColumnWeight(name='plus_minus', weight=1)]
-
 
 post_rating_transformers = [
     LagTransformer(
@@ -122,10 +122,6 @@ post_rating_transformers = [
     )
 ]
 
-cross_validator = DayCountCrossValidator(
-    validation_days = 30,
-    n_splits=3
-)
 
 match_predictor_factory = MatchPredictorFactory(
     post_rating_transformers=post_rating_transformers,
@@ -133,12 +129,10 @@ match_predictor_factory = MatchPredictorFactory(
     rating_generators=rating_generator,
     other_categorical_features=["location"],
     estimator=estimator,
-    date_column_name=column_names.start_date,
     column_weights=column_weights,
     group_predictor_by_game_team=True,
     team_id_column_name=column_names.team_id,
     match_id_column_name=column_names.match_id,
-    train_split_date="2022-12-11",
 )
 
 rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
@@ -158,9 +152,10 @@ predictor_tuner = PredictorTuner(
 tuner = MatchPredictorTuner(
     match_predictor_factory=match_predictor_factory,
     fit_best=True,
-    scorer=LogLossScorer(pred_column=match_predictor_factory.predictor.pred_column),
+    scorer=SklearnScorer(pred_column=match_predictor_factory.predictor.pred_column, scorer_function=log_loss),
     rating_generator_tuners=rating_generator_tuner,
     predictor_tuner=predictor_tuner,
+    date_column_name=column_names.start_date,
 )
 best_match_predictor = tuner.tune(df=df)
 df_with_minutes_prediction = best_match_predictor.generate_historical(df=df)

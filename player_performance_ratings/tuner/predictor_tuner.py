@@ -8,11 +8,10 @@ import pendulum
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
-from player_performance_ratings.data_structures import Match
+from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 
 from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
-from player_performance_ratings.scorer import BaseScorer
 
 from player_performance_ratings.tuner.utils import ParameterSearchRange, add_params_from_search_range
 
@@ -34,8 +33,8 @@ class PredictorTuner():
         self.estimator_subclass_level = estimator_subclass_level
         self.n_trials = n_trials
 
-    def tune(self, df: pd.DataFrame,  scorer: BaseScorer,
-             match_predictor_factory: MatchPredictorFactory) -> BaseMLWrapper:
+    def tune(self, df: pd.DataFrame,
+             match_predictor_factory: MatchPredictorFactory, cross_validator: CrossValidator) -> BaseMLWrapper:
 
         if not self.train_split_date:
             self.train_split_date = df.iloc[int(len(df) / 1.3)][self.date_column_name]
@@ -53,19 +52,21 @@ class PredictorTuner():
             elif self.estimator_subclass_level == 1:
                 param_names = list(
                     inspect.signature(predictor.estimator.estimator.__class__.__init__).parameters.keys())[1:]
-                params = {attr: getattr(predictor.estimator.estimator, attr) for attr in param_names if attr != 'kwargs'}
+                params = {attr: getattr(predictor.estimator.estimator, attr) for attr in param_names if
+                          attr != 'kwargs'}
                 if '_other_params' in predictor.estimator.estimator.__dict__:
                     params.update(predictor.estimator.estimator._other_params)
             elif self.estimator_subclass_level == 2:
                 param_names = list(
                     inspect.signature(predictor.estimator.estimator.estimator.__class__.__init__).parameters.keys())[1:]
-                params = {attr: getattr(predictor.estimator.estimator.estimator, attr) for attr in param_names if attr != 'kwargs'}
+                params = {attr: getattr(predictor.estimator.estimator.estimator, attr) for attr in param_names if
+                          attr != 'kwargs'}
                 if '_other_params' in predictor.estimator.estimator.estimator.__dict__:
                     params.update(predictor.estimator.estimator.estimator._other_params)
 
             else:
-                raise ValueError(f"estimator_subclass_level can't be higher than 2, got {self.estimator_subclass_level}")
-
+                raise ValueError(
+                    f"estimator_subclass_level can't be higher than 2, got {self.estimator_subclass_level}")
 
             params = add_params_from_search_range(params=params,
                                                   trial=trial,
@@ -79,18 +80,16 @@ class PredictorTuner():
                     setattr(predictor.estimator.estimator, param, params[param])
                 elif self.estimator_subclass_level == 2:
                     setattr(predictor.estimator.estimator.estimator, param, params[param])
-                elif self.estimator_subclass_level >2:
-                    raise ValueError(f"estimator_subclass_level can't be higher than 2, got {self.estimator_subclass_level}")
+                elif self.estimator_subclass_level > 2:
+                    raise ValueError(
+                        f"estimator_subclass_level can't be higher than 2, got {self.estimator_subclass_level}")
                 else:
                     setattr(predictor.estimator, param, params[param])
-            train_df = df[df[self.date_column_name] <= self.train_split_date]
-            predict_df = df[df[self.date_column_name] > self.train_split_date]
 
-            predictor.train(train_df)
-            df_with_prediction = predictor.add_prediction(predict_df)
-            return scorer.score(df=df_with_prediction, classes_=predictor.classes_)
+            match_predictor = match_predictor_factory.create(predictor=predictor)
 
-
+            return match_predictor.cross_validate(df=df, create_performance=False, create_rating_features=False,
+                                                  cross_validator=cross_validator)
 
         direction = "minimize"
         study_name = "optuna_study"
@@ -107,12 +106,12 @@ class PredictorTuner():
             if self.estimator_subclass_level == 1:
                 best_estimator_params.update(match_predictor_factory.predictor.estimator.estimator._other_params)
             elif self.estimator_subclass_level == 2:
-                best_estimator_params.update(match_predictor_factory.predictor.estimator.estimator.estimator._other_params)
+                best_estimator_params.update(
+                    match_predictor_factory.predictor.estimator.estimator.estimator._other_params)
 
         else:
             if '_other_params' in match_predictor_factory.predictor.estimator.__dict__:
                 best_estimator_params.update(match_predictor_factory.predictor.estimator._other_params)
-
 
         other_predictor_params = {attr: getattr(match_predictor_factory.predictor, attr) for attr in
                                   other_predictor_params if attr not in ('estimator')}
@@ -129,7 +128,8 @@ class PredictorTuner():
 
             estimator_class = match_predictor_factory.predictor.estimator.estimator.__class__
             parent_estimator_class = match_predictor_factory.predictor.estimator.__class__
-            parent_estimator = parent_estimator_class(estimator=estimator_class(**best_estimator_params), **other_parent_params)
+            parent_estimator = parent_estimator_class(estimator=estimator_class(**best_estimator_params),
+                                                      **other_parent_params)
             return predictor_class(estimator=parent_estimator, **other_predictor_params)
         elif self.estimator_subclass_level == 2:
             potential_parent_names = list(
