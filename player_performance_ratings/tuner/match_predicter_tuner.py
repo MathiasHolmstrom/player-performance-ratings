@@ -11,7 +11,7 @@ from player_performance_ratings.ratings import PerformancesGenerator
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 from player_performance_ratings.scorer import BaseScorer
 
-from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 from player_performance_ratings.tuner.rating_generator_tuner import RatingGeneratorTuner
 from player_performance_ratings.tuner.performances_generator_tuner import PerformancesGeneratorTuner
@@ -27,7 +27,7 @@ class MatchPredictorTuner():
 
     def __init__(self,
                  scorer: BaseScorer,
-                 match_predictor_factory: MatchPredictorFactory,
+                 match_predictor_factory: PipelineFactory,
                  performances_generator_tuner: Optional[PerformancesGeneratorTuner] = None,
                  rating_generator_tuners: Optional[Union[list[RatingGeneratorTuner], RatingGeneratorTuner]] = None,
                  predictor_tuner: Optional[PredictorTuner] = None,
@@ -158,7 +158,7 @@ class MatchPredictorTuner():
         if self.predictor_tuner:
             logging.info("Tuning Predictor")
             best_predictor = self.predictor_tuner.tune(df=df, cross_validator=self.cross_validator,
-                                                       match_predictor_factory=self.match_predictor_factory)
+                                                       pipeline_factory=self.match_predictor_factory)
         else:
             best_predictor = self.match_predictor_factory.predictor
 

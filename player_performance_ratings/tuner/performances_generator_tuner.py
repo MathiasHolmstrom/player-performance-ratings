@@ -14,7 +14,7 @@ from player_performance_ratings.ratings.enums import RatingColumnNames
 from player_performance_ratings.scorer.score import BaseScorer
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
-from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
 
 from player_performance_ratings.tuner.utils import add_params_from_search_range, ParameterSearchRange
 
@@ -41,7 +41,7 @@ class PerformancesGeneratorTuner:
 
     def tune(self, df: pd.DataFrame,
              cross_validator: CrossValidator,
-             match_predictor_factory: MatchPredictorFactory,
+             match_predictor_factory: PipelineFactory,
              ) -> PerformancesGenerator:
 
         df = df.copy()
@@ -53,7 +53,7 @@ class PerformancesGeneratorTuner:
 
         def objective(trial: BaseTrial,
                       df: pd.DataFrame,
-                      match_predictor_factory: MatchPredictorFactory,
+                      match_predictor_factory: PipelineFactory,
                       ) -> float:
 
 

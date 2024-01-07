@@ -6,12 +6,12 @@ import pytest
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.predictor.estimators import Predictor
+from player_performance_ratings.predictor import Predictor
 from player_performance_ratings.ratings import RatingColumnNames
 from player_performance_ratings.ratings.opponent_adjusted_rating import OpponentAdjustedRatingGenerator
 from player_performance_ratings.tuner import PerformancesGeneratorTuner
 
-from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
 from player_performance_ratings.tuner.utils import ParameterSearchRange
 
 
@@ -46,10 +46,10 @@ def test_transformer_tuner():
 
     rating_generators = [rating_generator1]
 
-    match_predictor_factory = MatchPredictorFactory(
+    match_predictor_factory = PipelineFactory(
         rating_generators=rating_generators,
         predictor=Predictor(estimator=LogisticRegression(), features=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED]),
-        date_column_name="start_date",
+        match_id_column_name="game_id",
     )
 
     performances_generator_tuner = PerformancesGeneratorTuner(
@@ -68,11 +68,11 @@ def test_transformer_tuner():
         }
     )
 
-    scorer = mock.Mock()
-    scorer.score.side_effect = [0.5, 0.3]
+    cross_validator = mock.Mock()
+    cross_validator.cross_validation_score.side_effect = [0.5, 0.3]
 
     tuned_model = performances_generator_tuner.tune(match_predictor_factory=copy.deepcopy(match_predictor_factory),
-                                                    df=df, scorer=scorer)
+                                                    df=df, cross_validator=cross_validator)
 
     # tests immutability of match_predictor_factory
     assert match_predictor_factory.rating_generators == rating_generators
@@ -144,10 +144,10 @@ def test_transformer_tuner_2_performances(estimator):
 
     rating_generators = [rating_generator1, rating_generator2]
 
-    match_predictor_factory = MatchPredictorFactory(
+    match_predictor_factory = PipelineFactory(
         rating_generators=rating_generators,
         estimator=LogisticRegression(),
-        date_column_name="start_date",
+        match_id_column_name="game_id",
     )
 
     performances_generator_tuner = PerformancesGeneratorTuner(
@@ -166,11 +166,11 @@ def test_transformer_tuner_2_performances(estimator):
         }
     )
 
-    scorer = mock.Mock()
-    scorer.score.side_effect = [0.5, 0.3]
+    cross_validator = mock.Mock()
+    cross_validator.cross_validation_score.side_effect = [0.5, 0.3]
 
     tuned_model = performances_generator_tuner.tune(match_predictor_factory=copy.deepcopy(match_predictor_factory),
-                                                    df=df, scorer=scorer)
+                                                    df=df, cross_validator=cross_validator)
 
     # tests immutability of match_predictor_factory
     assert match_predictor_factory.rating_generators == rating_generators

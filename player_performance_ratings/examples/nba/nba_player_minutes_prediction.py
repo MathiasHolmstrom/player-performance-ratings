@@ -6,7 +6,7 @@ from player_performance_ratings.scorer.score import SklearnScorer
 from sklearn.metrics import mean_absolute_error
 from player_performance_ratings.tuner import MatchPredictorTuner
 
-from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
 
 from player_performance_ratings.transformation import LagTransformer
 
@@ -90,7 +90,7 @@ post_rating_transformers = [
     ),
 ]
 
-match_predictor_factory = MatchPredictorFactory(
+match_predictor_factory = PipelineFactory(
     post_rating_transformers=post_rating_transformers,
     estimator=LGBMRegressor(reg_alpha=1, learning_rate=0.02, verbose=-100),
     other_categorical_features=["starting", "is_playoff"],
@@ -109,7 +109,8 @@ match_tuner = MatchPredictorTuner(
                          scorer_function=mean_absolute_error,
                          pred_column=match_predictor_factory.predictor.pred_column),
     match_predictor_factory=match_predictor_factory,
-    predictor_tuner=predictor_tuner
+    predictor_tuner=predictor_tuner,
+    date_column_name=column_names.start_date,
 )
 
 best_model = match_tuner.tune(df=df)

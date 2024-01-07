@@ -38,13 +38,11 @@ def test_match_count_cross_validator():
     predictor = mock.Mock()
     predictor.add_prediction.side_effect = [return_add_prediction1, return_add_prediction2]
 
-    cv = MatchCountCrossValidator(predictor=predictor, scorer=scorer, match_id_column_name='match_id', n_splits=2,
+    cv = MatchCountCrossValidator(scorer=scorer, match_id_column_name='match_id', n_splits=2,
                                   validation_match_count=2)
 
-    score = cv.cross_validate(df)
-
-    assert cv.scores[0] == 0.5
-    assert cv.scores[1] == 1
+    validation_df = cv.generate_validation_df(df, predictor=predictor)
+    score = cv.cross_validation_score(validation_df=validation_df)
 
     assert score == 0.75
 
@@ -93,13 +91,11 @@ def test_match_k_fold_cross_validator():
     predictor = mock.Mock()
     predictor.add_prediction.side_effect = [return_add_prediction1, return_add_prediction2]
 
-    cv = MatchKFoldCrossValidator(predictor=predictor, scorer=scorer, match_id_column_name='match_id', n_splits=2,
+    cv = MatchKFoldCrossValidator(scorer=scorer, match_id_column_name='match_id', n_splits=2,
                                   date_column_name='date', min_validation_date='2020-01-02')
 
-    score = cv.cross_validate(df)
-
-    assert cv.scores[0] == 0.5
-    assert cv.scores[1] == 1
+    validation_df = cv.generate_validation_df(df, predictor=predictor)
+    score = cv.cross_validation_score(validation_df=validation_df)
 
     assert score == 0.75
 

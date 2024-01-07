@@ -29,7 +29,7 @@ from player_performance_ratings.predictor.sklearn_models import SkLearnWrapper
 
 from player_performance_ratings.ratings.opponent_adjusted_rating import OpponentAdjustedRatingGenerator
 from player_performance_ratings.tuner import MatchPredictorTuner
-from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
 
 column_names = ColumnNames(
     team_id='team_id',
@@ -128,7 +128,7 @@ post_rating_transformers = [
 ]
 
 
-match_predictor_factory = MatchPredictorFactory(
+match_predictor_factory = PipelineFactory(
     post_rating_transformers=post_rating_transformers,
     use_auto_create_performance_calculator=True,
     rating_generators=rating_generator,

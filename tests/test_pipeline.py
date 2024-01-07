@@ -7,7 +7,7 @@ from player_performance_ratings.ratings.opponent_adjusted_rating import Opponent
 from player_performance_ratings.transformation import LagTransformer
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.predictor import MatchPredictor
+from player_performance_ratings import Pipeline
 
 
 def test_match_predictor_auto_pre_transformers():
@@ -43,8 +43,7 @@ def test_match_predictor_auto_pre_transformers():
                                                             performance="weighted_performance"
                                                         ))
 
-    match_predictor = MatchPredictor(
-        train_split_date=pd.to_datetime("2023-01-02"),
+    match_predictor = Pipeline(
         use_auto_create_performance_calculator=True,
         column_weights=column_weights,
         predictor=predictor_mock,
@@ -94,8 +93,7 @@ def test_match_predictor_multiple_rating_generators_same_performance():
     predictor_mock.add_prediction.return_value = expected_df
     predictor_mock.pred_column = 'prediction'
 
-    match_predictor = MatchPredictor(
-        train_split_date=pd.to_datetime("2023-01-02"),
+    match_predictor = Pipeline(
         use_auto_create_performance_calculator=False,
         column_weights=column_weights,
         rating_generators=[
@@ -165,8 +163,7 @@ def test_match_predictor_multiple_rating_generators_difference_performance():
     predictor_mock.pred_column = 'prediction'
     predictor_mock.add_prediction.return_value = expected_df
 
-    match_predictor = MatchPredictor(
-        train_split_date=pd.to_datetime("2023-01-02"),
+    match_predictor = Pipeline(
         use_auto_create_performance_calculator=False,
         column_weights=column_weights,
         rating_generators=[OpponentAdjustedRatingGenerator(features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
@@ -232,15 +229,13 @@ def test_match_predictor_0_rating_generators():
     lag_transformer = LagTransformer(features=["kills", "deaths"], lag_length=1, granularity=['player_id'],
                                      prefix='lag_', column_names=column_names)
 
-    match_predictor = MatchPredictor(
-        train_split_date=2,
+    match_predictor = Pipeline(
         use_auto_create_performance_calculator=False,
         column_weights=column_weights,
         rating_generators=[],
         post_rating_transformers=[
             lag_transformer],
         predictor=predictor_mock,
-        date_column_name=column_names.start_date,
     )
 
     new_df = match_predictor.generate_historical(df=df)
@@ -302,8 +297,7 @@ def test_match_predictor_generate_and_predict():
     rating_generator = OpponentAdjustedRatingGenerator(features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
                                                        column_names=column_names)
 
-    match_predictor = MatchPredictor(
-        train_split_date=pd.to_datetime("2023-01-02"),
+    match_predictor = Pipeline(
         use_auto_create_performance_calculator=True,
         column_weights=column_weights,
         predictor=predictor_mock,

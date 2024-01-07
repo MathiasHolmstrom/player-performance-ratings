@@ -10,7 +10,7 @@ from player_performance_ratings import ColumnNames
 from player_performance_ratings.ratings.opponent_adjusted_rating import OpponentAdjustedRatingGenerator
 
 from player_performance_ratings.tuner import MatchPredictorTuner, PerformancesGeneratorTuner
-from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 
 
@@ -23,7 +23,7 @@ def test_match_predictor_tuner():
 
     """
 
-    match_predictor_factory = MatchPredictorFactory(
+    match_predictor_factory = PipelineFactory(
         rating_generators=OpponentAdjustedRatingGenerator(column_names=ColumnNames(
             match_id="game_id",
             team_id="team_id",
@@ -31,7 +31,7 @@ def test_match_predictor_tuner():
             start_date="start_date",
             performance="won"
         )),
-        date_column_name="start_date",
+        match_id_column_name="game_id",
     )
 
     scorer_mock = mock.Mock()
@@ -66,6 +66,8 @@ def test_match_predictor_tuner():
         match_predictor_factory=match_predictor_factory,
         performances_generator_tuner=performances_generator_tuner,
         rating_generator_tuners=rating_generator_tuner,
+        date_column_name="start_date",
+        cv_n_splits = 1
 
     )
 

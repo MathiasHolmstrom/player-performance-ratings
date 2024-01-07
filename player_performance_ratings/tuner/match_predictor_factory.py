@@ -13,7 +13,7 @@ from player_performance_ratings.transformation.base_transformer import BaseTrans
 from player_performance_ratings.transformation.factory import auto_create_performance_generator
 
 
-class MatchPredictorFactory():
+class PipelineFactory():
 
     def __init__(self,
                  match_id_column_name: str,

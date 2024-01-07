@@ -9,7 +9,7 @@ from player_performance_ratings import ColumnNames, PredictColumnNames
 from player_performance_ratings.predictor.estimators import Predictor
 from player_performance_ratings.ratings import RatingColumnNames, OpponentAdjustedRatingGenerator, ColumnWeight
 from player_performance_ratings.tuner import MatchPredictorTuner
-from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
 from player_performance_ratings.tuner.utils import get_default_team_rating_search_range
 
 df = pd.read_pickle(r"data/game_player_subsample.pickle")
@@ -30,7 +30,7 @@ column_names = ColumnNames(
     performance="points"
 )
 
-match_predictor_factory = MatchPredictorFactory(
+match_predictor_factory = PipelineFactory(
     rating_generators=[OpponentAdjustedRatingGenerator(column_names=column_names,
                                                        features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED,
                                                                      RatingColumnNames.PLAYER_RATING_DIFFERENCE_PROJECTED])],

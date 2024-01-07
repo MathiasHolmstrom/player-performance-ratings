@@ -21,7 +21,7 @@ from player_performance_ratings.tuner import MatchPredictorTuner
 from player_performance_ratings.scorer import LogLossScorer
 
 
-from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 
 column_names = ColumnNames(
@@ -167,7 +167,7 @@ predictor = SkLearnGameTeamPredictor(features=[RatingColumnNames.RATING_DIFFEREN
                                      team_id_column='team_id', game_id_colum=column_names.rating_update_id,
                                      target='won')
 
-match_predictor_factory = MatchPredictorFactory(
+match_predictor_factory = PipelineFactory(
     column_names=column_names,
     rating_generators=rating_generator,
     pre_transformers=pre_transformers,

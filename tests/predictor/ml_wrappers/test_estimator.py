@@ -3,11 +3,11 @@ from unittest.mock import Mock
 import numpy as np
 import pandas as pd
 
-from player_performance_ratings.predictor.estimators import OrdinalClassifier
+from player_performance_ratings.predictor import OrdinalClassifier
 from sklearn.linear_model import LinearRegression
 
 from player_performance_ratings.consts import PredictColumnNames
-from player_performance_ratings.predictor.estimators.estimator import GameTeamPredictor, Predictor
+from player_performance_ratings.predictor.estimator import GameTeamPredictor, Predictor
 
 
 def test_game_team_predictor_add_prediction():

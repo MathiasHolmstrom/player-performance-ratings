@@ -22,7 +22,6 @@ class MatchCountCrossValidator(CrossValidator):
         self.validation_match_count = validation_match_count
 
     def generate_validation_df(self, df: pd.DataFrame, predictor: BaseMLWrapper) -> pd.DataFrame:
-        predictor = copy.deepcopy(predictor)
         validation_dfs = []
         df = df.assign(__cv_match_number=pd.factorize(df[self.match_id_column_name])[0])
         max_match_number = df['__cv_match_number'].max()
@@ -63,7 +62,6 @@ class MatchKFoldCrossValidator(CrossValidator):
         self.min_validation_date = min_validation_date
 
     def generate_validation_df(self, df: pd.DataFrame, predictor: BaseMLWrapper) -> pd.DataFrame:
-        predictor = copy.deepcopy(predictor)
         validation_dfs = []
 
         if not self.min_validation_date:

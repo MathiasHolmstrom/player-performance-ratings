@@ -7,7 +7,7 @@ from player_performance_ratings.transformation.pre_transformers import Symmetric
 
 from player_performance_ratings.predictor.estimators import Predictor
 from player_performance_ratings.scorer import LogLossScorer
-from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
@@ -204,7 +204,7 @@ predictor_tuner = PredictorTuner(
     date_column_name="date",
 )
 
-match_predictor_factory = MatchPredictorFactory(
+match_predictor_factory = PipelineFactory(
     rating_generators=rating_generator,
     predictor=Predictor(
         estimator=LGBMClassifier(verbose=-100),

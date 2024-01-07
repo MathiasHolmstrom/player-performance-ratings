@@ -20,7 +20,7 @@ from player_performance_ratings.ratings.opponent_adjusted_rating import \
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.scorer import BaseScorer
 
-from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
+from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
 from player_performance_ratings.tuner.utils import ParameterSearchRange, add_params_from_search_range
 
 DEFAULT_TEAM_SEARCH_RANGES = [
@@ -100,7 +100,7 @@ class RatingGeneratorTuner(ABC):
 
     @abstractmethod
     def tune(self, df: pd.DataFrame, rating_idx: int, cross_validator: CrossValidator,
-             match_predictor_factory: MatchPredictorFactory,
+             match_predictor_factory: PipelineFactory,
              matches: list[Match]) -> RatingGenerator:
         pass
 
@@ -122,7 +122,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
              df: pd.DataFrame,
              rating_idx: int,
              cross_validator: CrossValidator,
-             match_predictor_factory: MatchPredictorFactory,
+             match_predictor_factory: PipelineFactory,
              matches: list[Match]) -> OpponentAdjustedRatingGenerator:
 
         if match_predictor_factory.rating_generators:
@@ -167,7 +167,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                           rating_index: int,
                           matches: list[Match],
                           cross_validator: CrossValidator,
-                          match_predictor_factory: MatchPredictorFactory,
+                          match_predictor_factory: PipelineFactory,
                           ) -> TeamRatingGenerator:
 
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
@@ -241,7 +241,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                            rating_index: int,
                            matches: list[Match],
                            cross_validator: CrossValidator,
-                           match_predictor_factory: MatchPredictorFactory):
+                           match_predictor_factory: PipelineFactory):
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
             start_rating_generator_params = list(
                 inspect.signature(

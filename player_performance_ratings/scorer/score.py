@@ -115,14 +115,12 @@ class OrdinalLossScorer(BaseScorer):
 
         df = apply_filters(df, self.filters)
 
-        class_index = 0
-
         sum_lr = 0
 
         for class_ in self.target_range:
-            class_index += 1
+
             p_c = 'prob_under_' + str(class_ + 0.5)
-            df[p_c] = probs.apply(lambda x: x[class_index]) + df[last_column_name]
+            df[p_c] = probs.apply(lambda x: x[class_]) + df[last_column_name]
 
             count_exact = len(df[df['__target'] == class_])
             weight_class = count_exact / len(df)
