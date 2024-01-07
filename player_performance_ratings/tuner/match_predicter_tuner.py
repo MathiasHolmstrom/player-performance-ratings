@@ -6,7 +6,7 @@ import pandas as pd
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator, MatchCountCrossValidator, \
     MatchKFoldCrossValidator
-from player_performance_ratings.predictor.match_predictor import MatchPredictor
+from player_performance_ratings import Pipeline
 from player_performance_ratings.ratings import PerformancesGenerator
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 from player_performance_ratings.scorer import BaseScorer
@@ -99,7 +99,7 @@ class MatchPredictorTuner():
                     date_column_name=self.date_column_name
                 )
 
-    def tune(self, df: pd.DataFrame) -> MatchPredictor:
+    def tune(self, df: pd.DataFrame) -> Pipeline:
 
         original_df = df.copy()
 
@@ -163,7 +163,7 @@ class MatchPredictorTuner():
         else:
             best_predictor = self.match_predictor_factory.predictor
 
-        best_match_predictor = MatchPredictor(
+        best_match_predictor = Pipeline(
             rating_generators=best_rating_generators,
             performances_generator=best_performances_generator,
             post_rating_transformers=best_post_transformers,

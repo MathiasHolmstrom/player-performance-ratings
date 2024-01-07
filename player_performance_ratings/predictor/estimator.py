@@ -8,14 +8,14 @@ from player_performance_ratings.transformation.base_transformer import BaseTrans
 
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 
-from typing import Optional, Any
+from typing import Optional
 
 from sklearn.linear_model import LogisticRegression
 
 from player_performance_ratings.consts import PredictColumnNames
 
 from player_performance_ratings.data_structures import ColumnNames
-from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
+from player_performance_ratings.predictor import BaseMLWrapper
 
 
 class GameTeamPredictor(BaseMLWrapper):

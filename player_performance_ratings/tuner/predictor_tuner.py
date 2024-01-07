@@ -11,7 +11,7 @@ from optuna.trial import BaseTrial
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings.tuner.match_predictor_factory import MatchPredictorFactory
 
-from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
+from player_performance_ratings.predictor import BaseMLWrapper
 
 from player_performance_ratings.tuner.utils import ParameterSearchRange, add_params_from_search_range
 

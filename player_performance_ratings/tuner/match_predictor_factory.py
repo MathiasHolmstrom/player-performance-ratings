@@ -1,15 +1,13 @@
 import copy
 from typing import Optional, List, Union
 
-import pendulum
-from player_performance_ratings.scorer import BaseScorer
+from player_performance_ratings.pipeline import create_predictor
 
-from player_performance_ratings.cross_validator.cross_validator import CrossValidator, MatchCountCrossValidator
-from player_performance_ratings.predictor.match_predictor import create_predictor
+from player_performance_ratings.pipeline import Pipeline
 from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
 
-from player_performance_ratings.predictor import MatchPredictor
-from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
+
+from player_performance_ratings.predictor import BaseMLWrapper
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.transformation.base_transformer import BaseTransformer, BasePostTransformer
 from player_performance_ratings.transformation.factory import auto_create_performance_generator
@@ -82,14 +80,14 @@ class MatchPredictorFactory():
                rating_generators: Optional[list[RatingGenerator]] = None,
                post_rating_transformers: Optional[List[BaseTransformer]] = None,
                predictor: Optional[BaseMLWrapper] = None,
-               ) -> MatchPredictor:
+               ) -> Pipeline:
 
         rating_generators = rating_generators if rating_generators is not None else self.rating_generators
         performances_generator = performances_generator if performances_generator is not None else self.performances_generator
         post_rating_transformers = post_rating_transformers if post_rating_transformers is not None else self.post_rating_transformers
         predictor = predictor if predictor is not None else self.predictor
 
-        return MatchPredictor(
+        return Pipeline(
             rating_generators=rating_generators,
             performances_generator=performances_generator,
             post_rating_transformers=copy.deepcopy(post_rating_transformers),

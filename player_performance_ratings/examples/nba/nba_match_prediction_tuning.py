@@ -6,7 +6,6 @@ from sklearn.metrics import log_loss
 
 from player_performance_ratings.scorer.score import SklearnScorer
 
-from player_performance_ratings.cross_validator.cross_validator import MatchCountCrossValidator
 from player_performance_ratings.ratings.opponent_adjusted_rating import TeamRatingGenerator
 from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import \
     RatingDifferencePerformancePredictor
@@ -26,7 +25,7 @@ from venn_abers import VennAbersCalibrator
 
 from player_performance_ratings.consts import PredictColumnNames
 
-from player_performance_ratings.predictor.estimators.sklearn_models import SkLearnWrapper
+from player_performance_ratings.predictor.sklearn_models import SkLearnWrapper
 
 from player_performance_ratings.ratings.opponent_adjusted_rating import OpponentAdjustedRatingGenerator
 from player_performance_ratings.tuner import MatchPredictorTuner
@@ -68,14 +67,14 @@ start_rating_search_range = [
     ParameterSearchRange(
         name='league_quantile',
         type='uniform',
-        low=0.199,
-        high=0.2,
+        low=0.04,
+        high=0.3,
     ),
     ParameterSearchRange(
         name='min_count_for_percentiles',
         type='int',
-        low=99,
-        high=100,
+        low=50,
+        high=300,
     ),
 ]
 df.loc[df['minutes'] > 0, 'plus_minus_per_minute'] = df['plus_minus'] / df['minutes']
@@ -85,6 +84,12 @@ estimator = SkLearnWrapper(
     VennAbersCalibrator(
         estimator=LGBMClassifier(max_depth=2, learning_rate=0.1, n_estimators=200, verbose=-100, reg_alpha=1),
         inductive=True, cal_size=0.2, random_state=101))
+
+
+estimator = SkLearnWrapper(
+
+        estimator=LGBMClassifier(max_depth=2, learning_rate=0.1, n_estimators=200, verbose=-100, reg_alpha=1))
+
 
 performance_predictor = RatingDifferencePerformancePredictor(
     rating_diff_team_from_entity_coef=0.00425,
@@ -146,7 +151,7 @@ predictor_tuner = PredictorTuner(
     search_ranges=get_default_lgbm_classifier_search_range_by_learning_rate(learning_rate=0.03),
     n_trials=65,
     date_column_name=column_names.start_date,
-    estimator_subclass_level=2,
+    estimator_subclass_level=1,
 )
 
 tuner = MatchPredictorTuner(

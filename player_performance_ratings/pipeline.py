@@ -2,16 +2,15 @@ import logging
 from typing import List, Optional, Union
 
 import pandas as pd
-import pendulum
 from sklearn.preprocessing import OneHotEncoder
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
 
 from player_performance_ratings.consts import PredictColumnNames
-from player_performance_ratings.predictor.estimators.base_estimator import BaseMLWrapper
+from player_performance_ratings.predictor import BaseMLWrapper
 
-from player_performance_ratings.predictor.estimators import Predictor, GameTeamPredictor
+from player_performance_ratings.predictor import Predictor, GameTeamPredictor
 from player_performance_ratings.data_structures import Match
 from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
@@ -88,7 +87,7 @@ def create_predictor(
         )
 
 
-class MatchPredictor():
+class Pipeline():
 
     def __init__(self,
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
@@ -223,7 +222,8 @@ class MatchPredictor():
             df = self._add_performance(df=df, matches=None)
         if create_rating_features:
             df = self._add_rating_and_post_rating(matches=matches, df=df, store_ratings=False)
-        return cross_validator.cross_validate(df)
+        validation_predict =  cross_validator.cross_validate_predict(df)
+        return cross_validator.cross_validation_score(validation_df=validation_predict)
 
     def generate_historical(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
                             store_ratings: bool = True) -> pd.DataFrame:
