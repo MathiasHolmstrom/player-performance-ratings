@@ -66,7 +66,7 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
         '1h')
 
     league_in_df = False
-    if col_names.league in df.columns.tolist():
+    if col_names.league is not None and col_names.league in df.columns.tolist():
         if league_identifier is None:
             logging.warning("League column passed but no league_identifier passed. league will be set to None")
         else:

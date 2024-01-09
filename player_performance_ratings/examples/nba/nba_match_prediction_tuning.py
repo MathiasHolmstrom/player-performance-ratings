@@ -6,8 +6,8 @@ from sklearn.metrics import log_loss
 
 from player_performance_ratings.scorer.score import SklearnScorer
 
-from player_performance_ratings.ratings.opponent_adjusted_rating import MatchTeatingGenerator
-from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import \
+from player_performance_ratings.ratings.rating_calculators import MatchTeatingGenerator
+from player_performance_ratings.ratings.rating_calculators.performance_predictor import \
     RatingDifferencePerformancePredictor
 
 from player_performance_ratings.transformation import LagTransformer, RollingMeanTransformer
@@ -27,7 +27,7 @@ from player_performance_ratings.consts import PredictColumnNames
 
 from player_performance_ratings.predictor.sklearn_models import SkLearnWrapper
 
-from player_performance_ratings.ratings.opponent_adjusted_rating import OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings.rating_calculators import OpponentAdjustedRatingGenerator
 from player_performance_ratings.tuner import MatchPredictorTuner
 from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
 

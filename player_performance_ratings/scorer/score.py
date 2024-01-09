@@ -5,10 +5,8 @@ from typing import Optional, Callable, Union, Any
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import log_loss
 
 from player_performance_ratings.consts import PredictColumnNames
-from player_performance_ratings.ratings.enums import RatingColumnNames
 
 
 class Operator(Enum):

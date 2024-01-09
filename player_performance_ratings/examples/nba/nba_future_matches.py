@@ -5,7 +5,7 @@ from lightgbm import LGBMClassifier
 from player_performance_ratings.ratings import ColumnWeight
 
 from player_performance_ratings import ColumnNames, PredictColumnNames, Pipeline
-from player_performance_ratings.ratings.opponent_adjusted_rating import OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings.rating_calculators import OpponentAdjustedRatingGenerator
 
 df = pd.read_pickle(r"data/game_player_subsample.pickle")
 

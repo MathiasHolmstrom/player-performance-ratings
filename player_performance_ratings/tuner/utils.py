@@ -31,7 +31,7 @@ def add_params_from_search_range(trial: BaseTrial, parameter_search_range: list[
     return params
 
 def get_default_lgbm_classifier_search_range_by_learning_rate(learning_rate: float) -> list[ParameterSearchRange]:
-    min_n_estimators = min(1 / learning_rate * 7, 1000)
+    min_n_estimators = min(1 / learning_rate * 6, 1000)
 
     return [
         ParameterSearchRange(

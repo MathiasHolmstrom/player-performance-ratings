@@ -3,9 +3,9 @@ import pandas as pd
 from player_performance_ratings.data_structures import Match, MatchPlayer, MatchPerformance, MatchTeam, \
     PlayerRating, ColumnNames
 from player_performance_ratings.ratings.enums import RatingColumnNames, HistoricalRatingColumnNames
-from player_performance_ratings.ratings.opponent_adjusted_rating import MatchTeatingGenerator, StartRatingGenerator, \
+from player_performance_ratings.ratings.rating_calculators import MatchTeatingGenerator, StartRatingGenerator, \
     OpponentAdjustedRatingGenerator
-from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import \
+from player_performance_ratings.ratings.rating_calculators.performance_predictor import \
     MATCH_CONTRIBUTION_TO_SUM_VALUE
 
 

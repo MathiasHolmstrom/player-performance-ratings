@@ -119,6 +119,8 @@ match_tuner = MatchPredictorTuner(
 
 best_model = match_tuner.tune(df=df)
 
+match_tuner.cross_validator.generate_validation_df()
+
 df_with_minutes_prediction = best_model.generate_historical(df=df)
 
 pickle.dump(best_model, open("models/nba_minute_prediction", 'wb'))

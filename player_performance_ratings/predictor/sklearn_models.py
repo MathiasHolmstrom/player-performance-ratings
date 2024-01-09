@@ -25,7 +25,7 @@ class SkLearnWrapper(BaseEstimator, ClassifierMixin):
         return self.estimator.predict_proba(X)
 
 
-class OrdinalClassifier(BaseEstimator, ClassifierMixin):
+class OrdinalMultiModelClassifier(BaseEstimator, ClassifierMixin):
 
     def __init__(self,
                  estimator: Optional = None,

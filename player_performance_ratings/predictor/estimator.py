@@ -17,6 +17,48 @@ from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.predictor import BaseMLWrapper
 
+class OrdinalClassifier(BaseMLWrapper):
+
+        def __init__(self,
+                    features: list[str],
+                    target: Optional[str] = PredictColumnNames.TARGET,
+                    estimator: Optional = None,
+                    pred_column: Optional[str] = None,
+                    column_names: Optional[ColumnNames] = None,
+                    categorical_transformers: Optional[list[BaseTransformer]] = None
+                    ):
+            self._target = target
+            self.column_names = column_names
+            self._over_target_name = f"over_{self._target}"
+
+            if estimator is None:
+                logging.warning(
+                    "model is not set. Will use LGBMClassifier(max_depth=2, n_estimators=400, learning_rate=0.05)")
+
+            super().__init__(target=self._target, features=features, pred_column=pred_column,
+                            estimator=estimator or LGBMClassifier(max_depth=2, n_estimators=300, learning_rate=0.05, verbose=-100),
+                            categorical_transformers=categorical_transformers)
+
+        def train(self, df: pd.DataFrame) -> None:
+            df = self.fit_transform_categorical_transformers(df=df)
+            distinct_targets = df[self._target].unique()
+            for target in distinct_targets:
+                df.loc[df[self._target] >= target, self._over_target_name ] = 1
+                df.loc[df[self._target] < target, self._over_target_name ] = 0
+
+            if hasattr(self.estimator, "predict_proba"):
+                df = df.assign(**{self._target: df[self._target].astype('int')})
+
+            self.estimator.fit(df[self.estimator_features], df[self._over_target_name ])
+
+        def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
+            df = self.transform_categorical_transformers(df=df)
+            df = df.copy()
+
+            df[self._pred_column] = self.estimator.predict_proba(df[self.estimator_features]).tolist()
+            if len(set(df[self.pred_column].iloc[0])) == 2:
+                raise ValueError(
+                    "Too many unique values in relation to rows in")
 
 class GameTeamPredictor(BaseMLWrapper):
 

@@ -5,10 +5,10 @@ import pytest
 
 from player_performance_ratings.data_structures import MatchTeam, PreMatchPlayerRating, MatchPerformance, \
     MatchPlayer, PreMatchTeamRating, PlayerRating, TeamRatingChange, PlayerRatingChange
-from player_performance_ratings.ratings.opponent_adjusted_rating.team_rating_generator import MatchTeatingGenerator
-from player_performance_ratings.ratings.opponent_adjusted_rating.performance_predictor import RatingDifferencePerformancePredictor, \
+from player_performance_ratings.ratings.rating_calculators.team_rating_generator import MatchTeatingGenerator
+from player_performance_ratings.ratings.rating_calculators.performance_predictor import RatingDifferencePerformancePredictor, \
     MATCH_CONTRIBUTION_TO_SUM_VALUE
-from player_performance_ratings.ratings.opponent_adjusted_rating.team_rating_generator import EXPECTED_MEAN_CONFIDENCE_SUM
+from player_performance_ratings.ratings.rating_calculators.team_rating_generator import EXPECTED_MEAN_CONFIDENCE_SUM
 
 
 def test_generate_pre_match_team_rating():

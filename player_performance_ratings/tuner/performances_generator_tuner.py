@@ -8,10 +8,8 @@ from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
-from player_performance_ratings.data_structures import Match
 from player_performance_ratings.ratings import ColumnWeight, PerformancesGenerator
 from player_performance_ratings.ratings.enums import RatingColumnNames
-from player_performance_ratings.scorer.score import BaseScorer
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 from player_performance_ratings import PipelineFactory
@@ -48,7 +46,6 @@ class PerformancesGeneratorTuner:
 
         column_names = [r.column_names for r in match_predictor_factory.rating_generators]
 
-
         match_predictor_factory = copy.deepcopy(match_predictor_factory)
 
         def objective(trial: BaseTrial,
@@ -56,7 +53,7 @@ class PerformancesGeneratorTuner:
                       match_predictor_factory: PipelineFactory,
                       ) -> float:
 
-
+            best_pre_transformers = copy.deepcopy(self.pre_transformations)
             column_weights = []
             for performance_name, search_range in self.performances_weight_search_ranges.items():
                 raw_params = {}
@@ -68,10 +65,11 @@ class PerformancesGeneratorTuner:
                     self._create_column_weights(params=raw_params, remove_string=f"{performance_name}__"))
 
             col_names = [r.column_names for r in match_predictor_factory.rating_generators]
+
             performances_generator = PerformancesGenerator(
                 column_names=col_names,
                 column_weights=column_weights,
-                pre_transformations=self.pre_transformations
+                pre_transformations=best_pre_transformers
             )
             match_predictor = match_predictor_factory.create(performances_generator=performances_generator)
             return match_predictor.cross_validate_score(df=df, cross_validator=cross_validator,
@@ -115,7 +113,8 @@ class PerformancesGeneratorTuner:
 
             for param in all_params:
                 if f"{performance_name}__" in param:
-                    column_weights.append(ColumnWeight(name=param.replace(f"{performance_name}__", ""), weight=all_params[param] / sum_weights))
+                    column_weights.append(ColumnWeight(name=param.replace(f"{performance_name}__", ""),
+                                                       weight=all_params[param] / sum_weights))
 
             best_column_weights.append(column_weights)
 

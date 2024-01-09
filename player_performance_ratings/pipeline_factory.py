@@ -6,11 +6,9 @@ from player_performance_ratings.pipeline import create_predictor
 from player_performance_ratings.pipeline import Pipeline
 from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
 
-
 from player_performance_ratings.predictor import BaseMLWrapper
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.transformation.base_transformer import BaseTransformer, BasePostTransformer
-from player_performance_ratings.transformation.factory import auto_create_performance_generator
 
 
 class PipelineFactory():
@@ -46,7 +44,6 @@ class PipelineFactory():
         self.match_id_column_name = match_id_column_name
         self.team_id_column_name = team_id_column_name
 
-
         self.performances_generator = performances_generator
         self.column_weights = column_weights if isinstance(column_weights, list) else [
             column_weights] if column_weights else None
@@ -65,14 +62,9 @@ class PipelineFactory():
             if not self.predictor.features:
                 raise ValueError("No Features specified for estimator/predictor")
 
-
-
-        if self.performances_generator is None:
-            if not self.rating_generators:
-                raise ValueError("If auto pre transformers are used, rating generators must be specified")
-            column_names = [rating_generator.column_names for rating_generator in self.rating_generators]
-            self.performances_generator = auto_create_performance_generator(column_weights=self.column_weights,
-                                                                            column_names=column_names)
+        if self.performances_generator is None and self.rating_generators:
+            self.performances_generator = PerformancesGenerator(column_weights=self.column_weights,
+                                                                column_names=self.rating_generators[0].column_names)
 
     def create(self,
                performances_generator: Optional[PerformancesGenerator] = None,

@@ -3,7 +3,7 @@ from unittest.mock import Mock
 import numpy as np
 import pandas as pd
 
-from player_performance_ratings.predictor import OrdinalClassifier
+from player_performance_ratings.predictor import OrdinalMultiModelClassifier
 from sklearn.linear_model import LinearRegression
 
 from player_performance_ratings.consts import PredictColumnNames
@@ -35,7 +35,7 @@ def test_game_team_predictor_add_prediction():
 
 
 def test_game_team_predictor_multiclass_train():
-    predictor = Predictor(features=['feature1'], estimator=OrdinalClassifier())
+    predictor = Predictor(features=['feature1'], estimator=OrdinalMultiModelClassifier())
 
     df = pd.DataFrame(
         {

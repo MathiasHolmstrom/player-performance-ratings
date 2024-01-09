@@ -12,11 +12,11 @@ from optuna.trial import BaseTrial
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings.ratings import RatingColumnNames
 
-from player_performance_ratings.ratings.opponent_adjusted_rating import MatchTeatingGenerator
+from player_performance_ratings.ratings.rating_calculators import MatchTeatingGenerator
 
-from player_performance_ratings.ratings.opponent_adjusted_rating.start_rating_generator import StartRatingGenerator
-from player_performance_ratings.ratings.opponent_adjusted_rating import \
-    OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings.rating_calculators.start_rating_generator import StartRatingGenerator
+from player_performance_ratings.ratings import UpdateRatingGenerator
+
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
 from player_performance_ratings import PipelineFactory
@@ -122,14 +122,14 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
              rating_idx: int,
              cross_validator: CrossValidator,
              match_predictor_factory: PipelineFactory,
-             matches: list[Match]) -> OpponentAdjustedRatingGenerator:
+             matches: list[Match]) -> UpdateRatingGenerator:
 
         if match_predictor_factory.rating_generators:
             best_rating_generator = copy.deepcopy(match_predictor_factory.rating_generators[rating_idx])
         else:
             potential_rating_features = [v for k, v in RatingColumnNames.__dict__.items() if isinstance(v, str)]
 
-            best_rating_generator = OpponentAdjustedRatingGenerator(
+            best_rating_generator = UpdateRatingGenerator(
                 features_out=[f for f in match_predictor_factory.predictor.features if f in potential_rating_features],
                 column_names=match_predictor_factory.rating_generators[rating_idx].column_names
             )
@@ -157,12 +157,12 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                                                         )
             best_rating_generator.team_rating_generator.start_rating_generator = best_start_rating
 
-        return OpponentAdjustedRatingGenerator(match_rating_generator=best_rating_generator.team_rating_generator,
+        return UpdateRatingGenerator(match_rating_generator=best_rating_generator.team_rating_generator,
                                                column_names=best_rating_generator.column_names)
 
     def _tune_team_rating(self,
                           df: pd.DataFrame,
-                          rating_generator: OpponentAdjustedRatingGenerator,
+                          rating_generator: UpdateRatingGenerator,
                           rating_index: int,
                           matches: list[Match],
                           cross_validator: CrossValidator,
@@ -236,7 +236,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
 
     def _tune_start_rating(self,
                            df: pd.DataFrame,
-                           rating_generator: OpponentAdjustedRatingGenerator,
+                           rating_generator: UpdateRatingGenerator,
                            rating_index: int,
                            matches: list[Match],
                            cross_validator: CrossValidator,

@@ -17,7 +17,6 @@ from player_performance_ratings.ratings.match_generator import convert_df_to_mat
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
 from player_performance_ratings.transformation.base_transformer import BaseTransformer, BasePostTransformer
-from player_performance_ratings.transformation.factory import auto_create_performance_generator
 
 from player_performance_ratings.transformation.pre_transformers import ConvertDataFrameToCategoricalTransformer, \
     SkLearnTransformerWrapper
@@ -101,7 +100,6 @@ class Pipeline():
                  group_predictor_by_game_team: bool = False,
                  match_id_column_name: Optional[str] = None,
                  team_id_column_name: Optional[str] = None,
-                 use_auto_create_performance_calculator: bool = False,
                  column_weights: Optional[Union[list[list[ColumnWeight]], list[ColumnWeight]]] = None,
                  keep_features: bool = False,
                  ):
@@ -156,25 +154,12 @@ class Pipeline():
         if rating_generators is None:
             self.rating_generators: list[RatingGenerator] = []
 
-        self.auto_create_performance_calculator = use_auto_create_performance_calculator
-        if self.auto_create_performance_calculator and not column_weights:
-            raise ValueError("column_weights must be set if auto_create_pre_transformers is True")
 
         self.column_weights = column_weights
         if self.column_weights and isinstance(self.column_weights[0], ColumnWeight):
             self.column_weights = [self.column_weights]
 
-        if not self.auto_create_performance_calculator and column_weights:
-            logging.warning(
-                "column_weights is set but auto_create_pre_transformers is False. column_weights will be ignored")
-
         self.performances_generator = performances_generator
-        if self.auto_create_performance_calculator:
-            if not self.rating_generators:
-                raise ValueError("rating_generators must be set if auto_create_pre_transformers is True")
-            column_names = [r.column_names for r in self.rating_generators]
-            self.performances_generator = auto_create_performance_generator(column_weights=self.column_weights,
-                                                                            column_names=column_names)
 
         self.post_rating_transformers = post_rating_transformers or []
 

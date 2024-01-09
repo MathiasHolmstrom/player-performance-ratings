@@ -5,14 +5,13 @@ from lightgbm import LGBMClassifier
 from player_performance_ratings.transformation.pre_transformers import SymmetricDistributionTransformer, \
     NetOverPredictedTransformer
 
-from player_performance_ratings.predictor.estimators import Predictor
-from player_performance_ratings.scorer import LogLossScorer
-from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
+from player_performance_ratings.predictor import Predictor
+from player_performance_ratings import PipelineFactory
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 
-from player_performance_ratings.ratings import OpponentAdjustedRatingGenerator, RatingColumnNames
+from player_performance_ratings.ratings import UpdateRatingGenerator, RatingColumnNames
 
 from player_performance_ratings.transformation import SkLearnTransformerWrapper, MinMaxTransformer
 from sklearn.preprocessing import StandardScaler
@@ -44,7 +43,7 @@ df = (
     .loc[lambda x: x.team_count == 2]
 )
 
-rating_generator = OpponentAdjustedRatingGenerator(column_names=column_names)
+rating_generator = UpdateRatingGenerator(column_names=column_names)
 
 team_rating_search_ranges = [
     ParameterSearchRange(
@@ -213,7 +212,7 @@ match_predictor_factory = PipelineFactory(
     date_column_name="date",
 )
 
-scorer = LogLossScorer(pred_column=match_predictor_factory.predictor.pred_column)
+
 
 tuner = MatchPredictorTuner(
     performances_generator_tuner=performance_generator_tuner,

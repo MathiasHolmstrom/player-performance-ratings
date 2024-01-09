@@ -6,7 +6,7 @@ from player_performance_ratings import ColumnNames
 from player_performance_ratings.ratings import ColumnWeight, PerformancesGenerator
 from player_performance_ratings.transformation import \
     SkLearnTransformerWrapper, MinMaxTransformer
-from player_performance_ratings.transformation.factory import auto_create_performance_generator
+from player_performance_ratings.transformation.factory import auto_create_pre_performance_transformations
 
 from player_performance_ratings.transformation.pre_transformers import SymmetricDistributionTransformer, \
     NetOverPredictedTransformer
@@ -24,7 +24,7 @@ def test_auto_create_pre_transformers():
         performance="weighted_performance"
     )]
 
-    performances_generator = auto_create_performance_generator(column_weights=column_weights, column_names=column_names)
+    performances_generator = auto_create_pre_performance_transformations(column_weights=column_weights, column_names=column_names)
 
     expected_performances_generator = PerformancesGenerator(
         column_names=column_names,
@@ -61,7 +61,7 @@ def test_auto_create_pre_transformers_multiple_column_names():
         )
     ]
 
-    performances_generator = auto_create_performance_generator(column_weights=column_weights, column_names=col_names)
+    performances_generator = auto_create_pre_performance_transformations(column_weights=column_weights, column_names=col_names)
 
     expected_performances_generator = PerformancesGenerator(
         column_names=col_names,
@@ -97,7 +97,7 @@ def test_auto_create_pre_transformers_with_position():
             performance="performance",
         )]
 
-    performances_generator = auto_create_performance_generator(column_weights=column_weights, column_names=col_names)
+    performances_generator = auto_create_pre_performance_transformations(column_weights=column_weights, column_names=col_names)
 
     expected_column_weights = [[ColumnWeight(name="net_position_predicted__symmetric_position__kills", weight=0.5),
                                 ColumnWeight(name="net_position_predicted__symmetric_position__deaths", weight=0.5, lower_is_better=True)],

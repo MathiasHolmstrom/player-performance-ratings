@@ -2,7 +2,7 @@ import mock
 import pandas as pd
 from player_performance_ratings.ratings import  BayesianTimeWeightedRating, \
     RatingColumnNames, convert_df_to_matches, ColumnWeight
-from player_performance_ratings.ratings.opponent_adjusted_rating import OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings.rating_calculators import OpponentAdjustedRatingGenerator
 
 from player_performance_ratings.transformation import LagTransformer
 
