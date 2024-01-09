@@ -14,7 +14,7 @@ MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 EXPECTED_MEAN_CONFIDENCE_SUM = 30
 
 
-class TeamRatingGenerator():
+class MatchTeatingGenerator():
 
     def __init__(self,
                  start_rating_generator: Optional[StartRatingGenerator] = None,

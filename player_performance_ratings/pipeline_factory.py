@@ -26,12 +26,11 @@ class PipelineFactory():
                  other_categorical_features: Optional[list[str]] = None,
                  group_predictor_by_game_team: bool = False,
                  team_id_column_name: Optional[str] = None,
-                 use_auto_create_performance_calculator: bool = False,
                  column_weights: Optional[Union[List[List[ColumnWeight]], list[ColumnWeight]]] = None,
                  ):
 
-        if use_auto_create_performance_calculator and not column_weights:
-            raise ValueError("If auto pre transformers are used, column weights must be specified")
+        if performances_generator is None and not column_weights:
+            raise ValueError("If performance generator is None, column weights must be specified")
 
         self.rating_generators = rating_generators or []
         if isinstance(self.rating_generators, RatingGenerator):
@@ -47,7 +46,7 @@ class PipelineFactory():
         self.match_id_column_name = match_id_column_name
         self.team_id_column_name = team_id_column_name
 
-        self.use_auto_create_performance_calculator = use_auto_create_performance_calculator
+
         self.performances_generator = performances_generator
         self.column_weights = column_weights if isinstance(column_weights, list) else [
             column_weights] if column_weights else None
@@ -68,7 +67,7 @@ class PipelineFactory():
 
 
 
-        if self.use_auto_create_performance_calculator:
+        if self.performances_generator is None:
             if not self.rating_generators:
                 raise ValueError("If auto pre transformers are used, rating generators must be specified")
             column_names = [rating_generator.column_names for rating_generator in self.rating_generators]

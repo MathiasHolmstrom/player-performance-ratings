@@ -2,11 +2,13 @@ import pickle
 
 import pandas as pd
 from lightgbm import LGBMRegressor
+
+from player_performance_ratings.ratings import ColumnWeight
 from player_performance_ratings.scorer.score import SklearnScorer
 from sklearn.metrics import mean_absolute_error
 from player_performance_ratings.tuner import MatchPredictorTuner
 
-from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
+from player_performance_ratings import PipelineFactory
 
 from player_performance_ratings.transformation import LagTransformer
 
@@ -22,6 +24,8 @@ df = (
     .loc[lambda x: x.team_count == 2]
     .drop(columns=['team_count'])
 )
+
+
 
 df.loc[df['start_position'] != '', 'starting'] = 1
 df.loc[df['start_position'] == '', 'starting'] = 0
@@ -44,7 +48,7 @@ column_names = ColumnNames(
     match_id='game_id',
     start_date="start_date",
     player_id="player_id",
-    performance=None,
+    performance="player_points_per_minute",
 )
 
 lag_transformer = LagTransformer(
@@ -100,7 +104,7 @@ match_predictor_factory = PipelineFactory(
 predictor_tuner = PredictorTuner(
     search_ranges=get_default_lgbm_regressor_search_range_by_learning_rate(
         learning_rate=match_predictor_factory.estimator.learning_rate),
-    n_trials=65,
+    n_trials=25,
     date_column_name=column_names.start_date,
 )
 

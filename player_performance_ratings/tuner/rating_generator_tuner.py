@@ -12,15 +12,14 @@ from optuna.trial import BaseTrial
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings.ratings import RatingColumnNames
 
-from player_performance_ratings.ratings.opponent_adjusted_rating import TeamRatingGenerator
+from player_performance_ratings.ratings.opponent_adjusted_rating import MatchTeatingGenerator
 
 from player_performance_ratings.ratings.opponent_adjusted_rating.start_rating_generator import StartRatingGenerator
 from player_performance_ratings.ratings.opponent_adjusted_rating import \
     OpponentAdjustedRatingGenerator
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
-from player_performance_ratings.scorer import BaseScorer
 
-from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
+from player_performance_ratings import PipelineFactory
 from player_performance_ratings.tuner.utils import ParameterSearchRange, add_params_from_search_range
 
 DEFAULT_TEAM_SEARCH_RANGES = [
@@ -158,7 +157,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                                                         )
             best_rating_generator.team_rating_generator.start_rating_generator = best_start_rating
 
-        return OpponentAdjustedRatingGenerator(team_rating_generator=best_rating_generator.team_rating_generator,
+        return OpponentAdjustedRatingGenerator(match_rating_generator=best_rating_generator.team_rating_generator,
                                                column_names=best_rating_generator.column_names)
 
     def _tune_team_rating(self,
@@ -168,7 +167,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                           matches: list[Match],
                           cross_validator: CrossValidator,
                           match_predictor_factory: PipelineFactory,
-                          ) -> TeamRatingGenerator:
+                          ) -> MatchTeatingGenerator:
 
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
 
@@ -190,8 +189,8 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                     performance_predictor.__setattr__(param, params[param])
                     params.pop(param)
 
-            team_rating_generator = TeamRatingGenerator(**params,
-                                                        performance_predictor=performance_predictor)
+            team_rating_generator = MatchTeatingGenerator(**params,
+                                                          performance_predictor=performance_predictor)
 
             rating_g = copy.deepcopy(rating_generator)
             rating_g.team_rating_generator = team_rating_generator
@@ -230,10 +229,10 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
             if param in performance_predictor_params:
                 performance_predictor.__setattr__(param, best_params[param])
                 best_params.pop(param)
-        return TeamRatingGenerator(**best_params,
-                                   performance_predictor=performance_predictor,
-                                   start_rating_generator=rating_generator.team_rating_generator.start_rating_generator
-                                   )
+        return MatchTeatingGenerator(**best_params,
+                                     performance_predictor=performance_predictor,
+                                     start_rating_generator=rating_generator.team_rating_generator.start_rating_generator
+                                     )
 
     def _tune_start_rating(self,
                            df: pd.DataFrame,

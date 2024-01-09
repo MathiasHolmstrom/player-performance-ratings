@@ -5,7 +5,6 @@ from typing import Optional
 import pandas as pd
 from lightgbm import LGBMRegressor
 
-
 from player_performance_ratings.data_structures import PreMatchPlayerRating, PreMatchTeamRating
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
@@ -27,6 +26,40 @@ class PerformancePredictor(ABC):
                             ) -> float:
         pass
 
+
+class RatingNonOpponentPerformancePredictor(PerformancePredictor):
+
+    def __init__(self,
+                 coef: float = 0.005757,
+                 last_sample_count: int = 1500,
+                 min_count_for_historical_average: int = 200,
+                 historical_average_value_default: float = 1000,
+                 ):
+        self.coef = coef
+        self.last_sample_count = last_sample_count
+        self.min_count_for_historical_average = min_count_for_historical_average
+        self.historical_average_value_default = historical_average_value_default
+        if self.min_count_for_historical_average < 1:
+            raise ValueError("min_count_for_historical_average must be positive")
+        self._prev_entries_ratings = []
+
+    def predict_performance(self,
+                            player_rating: PreMatchPlayerRating,
+                            opponent_team_rating: PreMatchTeamRating,
+                            team_rating: PreMatchTeamRating) -> float:
+        start_index = max(0, len(self._prev_entries_ratings) - self.last_sample_count)
+        recent_prev_entries_ratings = self._prev_entries_ratings[start_index:]
+        if len(recent_prev_entries_ratings) > self.min_count_for_historical_average:
+            historical_average_rating = sum(recent_prev_entries_ratings) / len(recent_prev_entries_ratings)
+        else:
+            historical_average_rating = self.historical_average_value_default
+        net_mean_rating_over_historical_average = player_rating.rating_value - historical_average_rating
+
+        value = self.coef * net_mean_rating_over_historical_average
+        prediction = (math.exp(value)) / (1 + math.exp(value))
+        self._prev_entries_ratings.append(player_rating.rating_value)
+
+        return prediction
 
 
 class RatingDifferencePerformancePredictor(PerformancePredictor):

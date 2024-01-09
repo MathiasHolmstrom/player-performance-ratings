@@ -9,7 +9,7 @@ from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
-from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
+from player_performance_ratings import PipelineFactory
 
 from player_performance_ratings.predictor import BaseMLWrapper
 

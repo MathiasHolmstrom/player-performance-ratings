@@ -46,7 +46,7 @@ class StartLeagueRatingOptimizer():
                                               pred_column=self.match_predictor.predictor.pred_column)
 
     def optimize(self, df: pd.DataFrame, matches: Optional[list[Match]] = None) -> dict[str, float]:
-        start_rating_generator = self.match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator
+        start_rating_generator = self.match_predictor.rating_generator.match_rating_generator.player_rating_generator.start_rating_generator
         league_ratings = start_rating_generator.league_ratings.copy()
         start_rating_params = list(
             inspect.signature(start_rating_generator.__class__.__init__).parameters.keys())[1:]
@@ -64,12 +64,12 @@ class StartLeagueRatingOptimizer():
                 return self._league_ratings_iterations[min_idx]
 
             match_predictor = copy.deepcopy(self.match_predictor)
-            match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator = start_rating_generator
+            match_predictor.rating_generator.match_rating_generator.player_rating_generator.start_rating_generator = start_rating_generator
             df = match_predictor.generate_historical(df=df, store_ratings=False)
             score = self.scorer.score(df)
 
             if not league_ratings:
-                league_ratings = match_predictor.rating_generator.team_rating_generator.player_rating_generator.start_rating_generator.league_ratings
+                league_ratings = match_predictor.rating_generator.match_rating_generator.player_rating_generator.start_rating_generator.league_ratings
 
             self._league_ratings_iterations.append(league_ratings)
             self._scores.append(score)

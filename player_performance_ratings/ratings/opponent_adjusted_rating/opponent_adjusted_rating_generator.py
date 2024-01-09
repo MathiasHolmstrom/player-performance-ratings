@@ -5,7 +5,7 @@ import pandas as pd
 
 from player_performance_ratings.ratings import convert_df_to_matches
 from player_performance_ratings.ratings.opponent_adjusted_rating import RatingMeanPerformancePredictor
-from player_performance_ratings.ratings.opponent_adjusted_rating.team_rating_generator import TeamRatingGenerator
+from player_performance_ratings.ratings.opponent_adjusted_rating.team_rating_generator import MatchTeatingGenerator
 from player_performance_ratings.ratings.enums import RatingColumnNames, HistoricalRatingColumnNames
 
 from player_performance_ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PlayerRating, \
@@ -21,23 +21,23 @@ class OpponentAdjustedRatingGenerator(RatingGenerator):
 
     def __init__(self,
                  column_names: ColumnNames,
-                 team_rating_generator: TeamRatingGenerator = TeamRatingGenerator(),
+                 match_rating_generator: MatchTeatingGenerator = MatchTeatingGenerator(),
                  features_out: Optional[list[str]] = None,
                  ):
 
         """
 
-        :param team_rating_generator:
+        :param match_rating_generator:
             The class contains the logic for generating and updating team ratings and contains many parameters that can be tuned.
         :param features_names_created:
             If called by match_predictor, feature_names_created determines which features will be used for prediction.
             If other features such as player_rating_difference is used, it must be added to this list.
         """
         super().__init__(column_names=column_names)
-        self.team_rating_generator = team_rating_generator
+        self.team_rating_generator = match_rating_generator
 
         self._features_out = features_out if features_out is not None else [
-            RatingColumnNames.RATING_MEAN_PROJECTED] if isinstance(team_rating_generator.performance_predictor, RatingMeanPerformancePredictor) else [
+            RatingColumnNames.RATING_MEAN_PROJECTED] if isinstance(match_rating_generator.performance_predictor, RatingMeanPerformancePredictor) else [
             RatingColumnNames.RATING_DIFFERENCE_PROJECTED]
 
         # If projected participation weight is not None, then the projected ratings will be used instead of the actual ratings (which first are known after game is finished)
