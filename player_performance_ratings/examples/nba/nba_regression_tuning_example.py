@@ -47,7 +47,7 @@ rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
 )
 
 match_predictor_tuner = MatchPredictorTuner(
-    match_predictor_factory=match_predictor_factory,
+    pipeline=match_predictor_factory,
     rating_generator_tuners=rating_generator_tuner,
     scorer=SklearnScorer(pred_column=match_predictor_factory.predictor.pred_column,
                          scorer_function=mean_absolute_error),

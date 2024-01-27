@@ -151,11 +151,13 @@ class Pipeline():
         if rating_generators is None:
             self.rating_generators: list[RatingGenerator] = []
 
-        for c in post_rating_transformers:
+        self.post_rating_transformers = post_rating_transformers or []
+
+        for c in self.post_rating_transformers:
             self._estimator_features += c.features_out
-        for rating_idx, c in enumerate(rating_generators):
+        for rating_idx, c in enumerate(self.rating_generators):
             for rating_feature in c.features_out:
-                if len(rating_generators) > 1:
+                if len(self.rating_generators) > 1:
                     rating_feature_str = rating_feature + str(rating_idx)
                 else:
                     rating_feature_str = rating_feature
@@ -167,7 +169,7 @@ class Pipeline():
 
         self.performances_generator = performances_generator
         self.keep_features = keep_features
-        self.post_rating_transformers = post_rating_transformers or []
+
 
         self.predictor = predictor
 
@@ -179,6 +181,8 @@ class Pipeline():
                              matches: Optional[list[Match]] = None,
                              create_performance: bool = True,
                              create_rating_features: bool = True) -> float:
+
+
         if create_performance:
             df = self._add_performance(df=df)
         if create_rating_features:
@@ -195,6 +199,10 @@ class Pipeline():
                                    matches: Optional[list[Match]] = None,
                                    create_performance: bool = True,
                                    create_rating_features: bool = True) -> pd.DataFrame:
+
+        if self.predictor.target not in df.columns:
+            raise ValueError(f"Target {self.predictor.target } not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
+
         if create_performance:
             df = self._add_performance(df=df)
         if create_rating_features:
@@ -206,6 +214,10 @@ class Pipeline():
 
     def generate_historical(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
                             store_ratings: bool = True) -> pd.DataFrame:
+
+        if self.predictor.target not in df.columns:
+            raise ValueError(f"Target {self.predictor.target } not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
+
         ori_cols = df.columns.tolist()
         df = self._add_performance(df=df)
         df = self._add_rating(matches=matches, df=df, store_ratings=store_ratings)

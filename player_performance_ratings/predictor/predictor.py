@@ -24,7 +24,6 @@ class GameTeamPredictor(BaseMLWrapper):
     def __init__(self,
                  game_id_colum: str,
                  team_id_column: str,
-                 weight_column: Optional[str] = None,
                  target: Optional[str] = PredictColumnNames.TARGET,
                  estimator: Optional = None,
                  multiclassifier: bool = False,
@@ -40,22 +39,16 @@ class GameTeamPredictor(BaseMLWrapper):
         So if input data is at game-player, data is converted to game_team before being trained
         Similar concept if it is at a granularity below game level.
 
-        The weight_column makes it possible to weight certain rows more than others.
-        For instance, if data is on game-player level and the participation rate of players is not equal -->
-         setting participation_weight equal to weight_column will the feature values of the players with high participation_rates have higher weight before aggregating to game_team.
-
 
         :param game_id_colum:
         :param team_id_column:
         :param features:
-        :param weight_column:
         :param target:
         :param estimator:
         :param multiclassifier:
         :param pred_column:
         """
 
-        self.weight_column = weight_column
         self.game_id_colum = game_id_colum
         self.team_id_column = team_id_column
         self._target = target
@@ -73,6 +66,12 @@ class GameTeamPredictor(BaseMLWrapper):
             logging.info("target has more than 2 unique values, multiclassifier has therefore been set to True")
             self.multiclassifier = True
 
+        if hasattr(self.estimator, "predict_proba"):
+            try:
+                df[self._target] = df[self._target].astype('int')
+            except Exception:
+                pass
+
         if self._target not in df.columns:
             raise ValueError(f"target {self._target} not in df")
 
@@ -88,6 +87,12 @@ class GameTeamPredictor(BaseMLWrapper):
         :param df:
         :return: Input df with prediction column
         """
+
+        if hasattr(self.estimator, "predict_proba"):
+            try:
+                df[self._target] = df[self._target].astype('int')
+            except Exception:
+                pass
         if not self._estimator_features:
             raise ValueError("estimator_features not set. Please train first")
         df = self.transform_categorical_transformers(df=df)
@@ -100,6 +105,7 @@ class GameTeamPredictor(BaseMLWrapper):
             grouped[self._pred_column] = self.estimator.predict(grouped[self.estimator_features])
         else:
             grouped[self._pred_column] = self.estimator.predict_proba(grouped[self.estimator_features])[:, 1]
+
 
         if self.pred_column in df.columns:
             df = df.drop(columns=[self.pred_column])
@@ -118,32 +124,16 @@ class GameTeamPredictor(BaseMLWrapper):
             if df[self._target].dtype == 'object':
                 df.loc[:, self._target] = df[self._target].astype('int')
 
-        if self.weight_column:
-            for feature in numeric_features:
-                df = df.assign(**{feature: df[self.weight_column] * df[feature]})
 
-        if self.weight_column:
+
             grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
-                **{feature: 'sum' for feature in numeric_features},
+                **{feature: 'mean' for feature in numeric_features},
                 self._target: 'mean',
-                self.weight_column: 'sum',
             }).reset_index()
-
-            for feature in numeric_features:
-                grouped[feature] = grouped[feature] / grouped[self.weight_column]
-
-            grouped.drop(columns=[self.weight_column], inplace=True)
-
         else:
-            if self._target in df.columns:
-                grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
-                    **{feature: 'mean' for feature in numeric_features},
-                    self._target: 'mean',
-                }).reset_index()
-            else:
-                grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
-                    **{feature: 'mean' for feature in numeric_features}
-                }).reset_index()
+            grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
+                **{feature: 'mean' for feature in numeric_features}
+            }).reset_index()
 
         if self._target in df.columns and hasattr(self._deepest_estimator,"predict_proba") :
             grouped[self._target] = grouped[self._target].astype('int')
@@ -158,7 +148,6 @@ class GameTeamPredictor(BaseMLWrapper):
 class Predictor(BaseMLWrapper):
 
     def __init__(self,
-                 features: list[str],
                  target: Optional[str] = PredictColumnNames.TARGET,
                  estimator: Optional = None,
                  filters: Optional[list[Filter]] = None,
@@ -181,6 +170,13 @@ class Predictor(BaseMLWrapper):
                          categorical_transformers=categorical_transformers, filters=filters)
 
     def train(self, df: pd.DataFrame, estimator_features: list[str]) -> None:
+        self._estimator_features = estimator_features
+        if hasattr(self.estimator, "predict_proba"):
+            try:
+                df[self._target] = df[self._target].astype('int')
+            except Exception:
+                pass
+
         df = self.fit_transform_categorical_transformers(df=df)
         df = df.copy()
         filtered_df = apply_filters(df=df, filters=self.filters)
@@ -199,8 +195,16 @@ class Predictor(BaseMLWrapper):
         self.estimator.fit(filtered_df[self.estimator_features], filtered_df[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
+
         if not self._estimator_features:
             raise ValueError("estimator_features not set. Please train first")
+
+        if hasattr(self.estimator, "predict_proba"):
+            try:
+                df[self._target] = df[self._target].astype('int')
+            except Exception:
+                pass
+
         df = self.transform_categorical_transformers(df=df)
         df = df.copy()
         df['__id'] = range(len(df))

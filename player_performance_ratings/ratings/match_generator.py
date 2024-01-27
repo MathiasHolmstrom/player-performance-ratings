@@ -79,6 +79,7 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
                 " Will use participation_weight as projected_participation_weight")
 
     prev_match_id = None
+    prev_update_team_id= None
 
     data_dict = df.to_dict('records')
 
@@ -93,9 +94,10 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
     for row in data_dict:
         match_id = row[col_names.match_id]
         team_id = row[col_names.team_id]
+        update_team_id = row[col_names.parent_team_id]
         if team_id != prev_team_id and prev_team_id != None or prev_match_id != match_id and prev_match_id != None:
             match_team = _create_match_team(team_league_counts=team_league_counts, team_id=prev_team_id,
-                                            match_team_players=match_team_players)
+                                            match_team_players=match_team_players, update_team_id=prev_update_team_id)
             match_teams.append(match_team)
             match_team_players = []
             team_league_counts = {}
@@ -164,9 +166,11 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
 
         prev_match_id = match_id
         prev_team_id = team_id
+        prev_update_team_id = update_team_id
         prev_row = row
 
     match_team = _create_match_team(team_league_counts=team_league_counts, team_id=prev_team_id,
+                                    update_team_id=prev_update_team_id,
                                     match_team_players=match_team_players)
     match_teams.append(match_team)
     match = _create_match(league_in_df=league_in_df, row=df.iloc[len(df) - 1],
@@ -188,11 +192,12 @@ def _create_match(league_in_df, row: pd.Series, match_teams: list[MatchTeam], co
         teams=match_teams,
         day_number=int(row[HOUR_NUMBER_COLUMN_NAME] / 24),
         league=match_league,
-        update_id=row[column_names.rating_update_id]
+        update_id=row[column_names.rating_update_match_id]
     )
 
 
 def _create_match_team(team_league_counts: dict, team_id: str,
+                       update_team_id: str,
                        match_team_players: list[MatchPlayer]) -> MatchTeam:
     if team_league_counts:
         team_league = max(team_league_counts[team_id], key=team_league_counts[team_id].get)
@@ -200,6 +205,7 @@ def _create_match_team(team_league_counts: dict, team_id: str,
         team_league = None
     return MatchTeam(
         id=team_id,
+        update_id=update_team_id,
         players=match_team_players,
         league=team_league
     )

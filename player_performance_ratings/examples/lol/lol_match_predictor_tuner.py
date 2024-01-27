@@ -219,7 +219,7 @@ tuner = MatchPredictorTuner(
     rating_generator_tuners=rating_generator_tuner,
     predictor_tuner=predictor_tuner,
     fit_best=True,
-    match_predictor_factory=match_predictor_factory,
+    pipeline=match_predictor_factory,
     scorer=scorer
 )
 best_match_predictor = tuner.tune(df=df)

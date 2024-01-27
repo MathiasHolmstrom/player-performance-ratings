@@ -70,7 +70,7 @@ class GameTeamMembersColumnsTransformer(BasePostTransformer):
 
         def add_teammate_minutes(row, grouped_df):
             game_team_group = grouped_df.get_group(
-                (row[self.column_names.rating_update_id], row[self.column_names.team_id]))
+                (row[self.column_names.rating_update_match_id], row[self.column_names.team_id]))
             number = 0
             if self.sort_by:
                 game_team_group = game_team_group.sort_values(by=self.sort_by, ascending=False)
@@ -84,11 +84,11 @@ class GameTeamMembersColumnsTransformer(BasePostTransformer):
 
             return row
 
-        grouped = df.groupby([self.column_names.rating_update_id, self.column_names.team_id])
+        grouped = df.groupby([self.column_names.rating_update_match_id, self.column_names.team_id])
 
         df = df.apply(lambda row: add_teammate_minutes(row, grouped), axis=1)
         return df.sort_values(
-            by=[self.column_names.start_date, self.column_names.rating_update_id, self.column_names.team_id,
+            by=[self.column_names.start_date, self.column_names.rating_update_match_id, self.column_names.team_id,
                 self.column_names.player_id])
 
     @property
@@ -222,7 +222,7 @@ class LagTransformer(BasePostTransformer):
             self._df = pd.concat([self._df, df], axis=0)
 
         self._df = self._df.assign(
-            __id=self._df[self.column_names.rating_update_id].astype('str') + "__" + self._df[
+            __id=self._df[self.column_names.rating_update_match_id].astype('str') + "__" + self._df[
                 self.column_names.player_id].astype(
                 'str'))
         self._df = self._df.drop_duplicates(subset=['__id'], keep='last')
@@ -234,23 +234,23 @@ class LagTransformer(BasePostTransformer):
         if self._df is None:
             raise ValueError("fit_transform needs to be called before transform")
 
-        if len(df.drop_duplicates(subset=[self.column_names.player_id, self.column_names.rating_update_id])) != len(df):
+        if len(df.drop_duplicates(subset=[self.column_names.player_id, self.column_names.rating_update_match_id])) != len(df):
             raise ValueError(
-                f"Duplicated rows in df. Df must be a unique combination of {self.column_names.player_id} and {self.column_names.rating_update_id}")
+                f"Duplicated rows in df. Df must be a unique combination of {self.column_names.player_id} and {self.column_names.rating_update_match_id}")
 
         ori_cols = df.columns.tolist()
         ori_index_values = df.index.tolist()
 
         all_df = pd.concat([self._df, df], axis=0)
         all_df = all_df.assign(
-            __id=all_df[self.column_names.rating_update_id].astype('str') + "__" + all_df[
+            __id=all_df[self.column_names.rating_update_match_id].astype('str') + "__" + all_df[
                 self.column_names.player_id].astype(
                 'str'))
         all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
 
         validate_sorting(df=all_df, column_names=self.column_names)
 
-        grouped = all_df.groupby(self.granularity + [self.column_names.rating_update_id, self.column_names.start_date])[
+        grouped = all_df.groupby(self.granularity + [self.column_names.rating_update_match_id, self.column_names.start_date])[
             self.features].mean().reset_index()
 
         for days_lag in self.days_between_lags:
@@ -285,11 +285,11 @@ class LagTransformer(BasePostTransformer):
                     grouped = grouped.assign(
                         **{output_column_name: grouped.groupby(self.granularity)[feature_name].shift(lag)})
 
-        all_df = all_df.merge(grouped[self.granularity + [self.column_names.rating_update_id, *self.features_out]],
-                              on=self.granularity + [self.column_names.rating_update_id], how='left')
+        all_df = all_df.merge(grouped[self.granularity + [self.column_names.rating_update_match_id, *self.features_out]],
+                              on=self.granularity + [self.column_names.rating_update_match_id], how='left')
 
         df = df.assign(
-            __id=df[self.column_names.rating_update_id].astype('str') + "__" + df[
+            __id=df[self.column_names.rating_update_match_id].astype('str') + "__" + df[
                 self.column_names.player_id].astype(
                 'str'))
 
@@ -366,7 +366,7 @@ class LagLowerGranularityTransformer(DifferentGranularityTransformer):
         diff_granularity_df = pd.concat([self._diff_granularity_df, diff_granularity_df], axis=0)
 
         diff_granularity_df = diff_granularity_df.sort_values(
-            by=[self.column_names.start_date, self.column_names.rating_update_id, self.column_names.team_id,
+            by=[self.column_names.start_date, self.column_names.rating_update_match_id, self.column_names.team_id,
                 self.column_names.player_id])
 
         for feature_name in self.features:
@@ -380,7 +380,7 @@ class LagLowerGranularityTransformer(DifferentGranularityTransformer):
             for lag in range(1, self.lag_length + 1):
                 grouped_data = create_output_column_by_game_group(data=diff_granularity_df, feature_name=feature_name,
                                                                   weight_column=self.weight_column,
-                                                                  game_id=self.column_names.rating_update_id,
+                                                                  game_id=self.column_names.rating_update_match_id,
                                                                   granularity=self.granularity)
 
                 output_column_name = f'{self.prefix}{lag}_{feature_name}'
@@ -388,8 +388,8 @@ class LagLowerGranularityTransformer(DifferentGranularityTransformer):
                 grouped_data = grouped_data.assign(
                     **{output_column_name: grouped_data.groupby(self.granularity)[feature_name].shift(lag)})
                 game_player_df = game_player_df[[c for c in game_player_df.columns if c != output_column_name]].merge(
-                    grouped_data[[output_column_name, self.column_names.rating_update_id] + self.granularity],
-                    on=self.granularity + [self.column_names.rating_update_id], how='left')
+                    grouped_data[[output_column_name, self.column_names.rating_update_match_id] + self.granularity],
+                    on=self.granularity + [self.column_names.rating_update_match_id], how='left')
 
         return game_player_df
 
@@ -459,7 +459,7 @@ class RollingMeanTransformer(BasePostTransformer):
 
         all_df = pd.concat([self._df, df], axis=0).reset_index()
         all_df = all_df.assign(
-            __id=all_df[self.column_names.rating_update_id].astype('str') + "__" + all_df[
+            __id=all_df[self.column_names.rating_update_match_id].astype('str') + "__" + all_df[
                 self.column_names.player_id].astype(
                 'str'))
         all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
@@ -473,18 +473,18 @@ class RollingMeanTransformer(BasePostTransformer):
                 raise ValueError(
                     f'Column {output_column_name} already exists. Choose different prefix or ensure no duplication was performed')
 
-            grp = all_df.groupby(self.granularity + [self.column_names.rating_update_id])[
+            grp = all_df.groupby(self.granularity + [self.column_names.rating_update_match_id])[
                 feature_name].mean().reset_index()
 
             grp = grp.assign(**{output_column_name: grp.groupby(self.granularity)[feature_name].apply(
                 lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())})
 
-            all_df = all_df.merge(grp[self.granularity + [self.column_names.rating_update_id, output_column_name]],
-                                  on=self.granularity + [self.column_names.rating_update_id], how='left')
+            all_df = all_df.merge(grp[self.granularity + [self.column_names.rating_update_match_id, output_column_name]],
+                                  on=self.granularity + [self.column_names.rating_update_match_id], how='left')
             all_df = all_df.sort_values(by=[self.column_names.start_date, self.column_names.match_id,
                                             self.column_names.team_id, self.column_names.player_id])
         df = df.assign(
-            __id=df[self.column_names.rating_update_id].astype('str') + "__" + df[
+            __id=df[self.column_names.rating_update_match_id].astype('str') + "__" + df[
                 self.column_names.player_id].astype(
                 'str'))
 
@@ -501,7 +501,7 @@ class RollingMeanTransformer(BasePostTransformer):
             self._df = pd.concat([self._df, df], axis=0)
 
         self._df = self._df.assign(
-            __id=self._df[self.column_names.rating_update_id].astype('str') + "__" + self._df[
+            __id=self._df[self.column_names.rating_update_match_id].astype('str') + "__" + self._df[
                 self.column_names.player_id].astype(
                 'str'))
         self._df = self._df.drop_duplicates(subset=['__id'], keep='last')

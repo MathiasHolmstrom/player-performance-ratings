@@ -75,7 +75,7 @@ def test_opponent_adjusted_rating_generator_tuner_team_rating():
     cross_validator = mock.Mock()
     cross_validator.cross_validation_score.side_effect = [0.5, 0.3]
 
-    tuned_model = rating_generator_tuner.tune(match_predictor_factory=copy.deepcopy(match_predictor_factory),
+    tuned_model = rating_generator_tuner.tune(pipeline_factory=copy.deepcopy(match_predictor_factory),
                                               rating_idx=1,
                                               matches=matches, df=df, cross_validator=cross_validator)
 
@@ -154,7 +154,7 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
     cross_validator = mock.Mock()
     cross_validator.cross_validation_score.side_effect = [0.5, 0.3]
 
-    tuned_model = rating_generator_tuner.tune(match_predictor_factory=copy.deepcopy(match_predictor_factory),
+    tuned_model = rating_generator_tuner.tune(pipeline_factory=copy.deepcopy(match_predictor_factory),
                                               rating_idx=1,
                                               matches=matches, df=df, cross_validator=cross_validator)
 
@@ -247,7 +247,7 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
     cross_validator.cross_validation_score.side_effect = [0.5, 0.3, 0.5, 0.3]
 
 
-    tuned_model = rating_generator_tuner.tune(match_predictor_factory=copy.deepcopy(match_predictor_factory),
+    tuned_model = rating_generator_tuner.tune(pipeline_factory=copy.deepcopy(match_predictor_factory),
                                               rating_idx=1,
                                               matches=matches, df=df, cross_validator=cross_validator)
 

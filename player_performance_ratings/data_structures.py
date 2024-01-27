@@ -15,11 +15,23 @@ class ColumnNames:
     participation_weight: Optional[str] = None
     projected_participation_weight: Optional[str] = None
     team_players_percentage_playing_time: Optional[str] = None
-    rating_update_id: Optional[str] = None
+    rating_update_match_id: Optional[str] = None
+    parent_team_id: Optional[str] = None
 
     def __post_init__(self):
-        if self.rating_update_id is None:
-            self.rating_update_id = self.match_id
+        if self.rating_update_match_id is None:
+            self.rating_update_match_id = self.match_id
+
+        if self.parent_team_id is None:
+            self.parent_team_id = self.team_id
+
+        if self.rating_update_match_id != self.match_id and self.parent_team_id is None:
+            raise ValueError("rating_update_team_id must be passed if rating_update_match_id is passed")
+
+        if self.parent_team_id != self.team_id and self.rating_update_match_id is None:
+            raise ValueError("rating_update_match_id must be passed if rating_update_team_id is passed")
+
+
 
 
 @dataclass
@@ -154,12 +166,23 @@ class MatchTeam:
     id: str
     players: list[MatchPlayer]
     league: str = None
+    update_id: Optional[str] = None
+
+    def __post_init__(self):
+
+        if self.update_id is None:
+            self.update_id = self.id
+
 
 
 @dataclass
 class Match:
     id: str
-    update_id: str
     teams: List[MatchTeam]
     day_number: int
+    update_id: Optional[str] = None
     league: str = None
+
+    def __post_init__(self):
+        if self.update_id is None:
+            self.update_id = self.id

@@ -20,7 +20,7 @@ class PipelineFactory():
                  column_weights: Optional[Union[List[List[ColumnWeight]], list[ColumnWeight]]] = None,
                  ):
 
-        if performances_generator is None and not column_weights:
+        if rating_generators and performances_generator is None and not column_weights:
             raise ValueError("If performance generator is None, column weights must be specified")
 
         self.rating_generators = rating_generators or []

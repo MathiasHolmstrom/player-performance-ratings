@@ -71,7 +71,7 @@ def test_transformer_tuner():
     cross_validator = mock.Mock()
     cross_validator.cross_validation_score.side_effect = [0.5, 0.3]
 
-    tuned_model = performances_generator_tuner.tune(match_predictor_factory=copy.deepcopy(match_predictor_factory),
+    tuned_model = performances_generator_tuner.tune(pipeline_factory=copy.deepcopy(match_predictor_factory),
                                                     df=df, cross_validator=cross_validator)
 
     # tests immutability of match_predictor_factory
@@ -169,7 +169,7 @@ def test_transformer_tuner_2_performances(estimator):
     cross_validator = mock.Mock()
     cross_validator.cross_validation_score.side_effect = [0.5, 0.3]
 
-    tuned_model = performances_generator_tuner.tune(match_predictor_factory=copy.deepcopy(match_predictor_factory),
+    tuned_model = performances_generator_tuner.tune(pipeline_factory=copy.deepcopy(match_predictor_factory),
                                                     df=df, cross_validator=cross_validator)
 
     # tests immutability of match_predictor_factory

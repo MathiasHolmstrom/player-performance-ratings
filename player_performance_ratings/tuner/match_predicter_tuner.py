@@ -26,7 +26,7 @@ class MatchPredictorTuner():
     """
 
     def __init__(self,
-                 match_predictor_factory: PipelineFactory,
+                 pipeline: Pipeline,
                  cross_validator: CrossValidator,
                  performances_generator_tuner: Optional[PerformancesGeneratorTuner] = None,
                  rating_generator_tuners: Optional[Union[list[RatingGeneratorTuner], RatingGeneratorTuner]] = None,
@@ -36,16 +36,16 @@ class MatchPredictorTuner():
 
         """
         :param scorer: The scorer to use to evaluate the performance of the match_predictor
-        :param match_predictor_factory:
+        :param pipeline:
             The factory that creates the MatchPredictor.
             Contains the parameters to create the MatchPredictor if no parameter-tuning was done.
             Based on hyperparameter-tuning the final way the match-predictor is generated will be based on a combination of the parameters in the factory and the tuned parameters.
         :param performances_generator_tuner:
             The tuner that tunes the hyperparameters of the pre_transformers.
-            If left none or as [], the pre_transformers in the match_predictor_factory will be used.
+            If left none or as [], the pre_transformers in the pipeline_factory will be used.
         :param rating_generator_tuners:
             The tuner that tunes the hyperparameters of the rating_generators.
-            If left none or as [], the rating_generators in the match_predictor_factory will be used.
+            If left none or as [], the rating_generators in the pipeline_factory will be used.
 
         :param predictor_tuner:
             The tuner that tunes the hyperparameters of the predictor model.
@@ -54,7 +54,14 @@ class MatchPredictorTuner():
         """
 
 
-        self.match_predictor_factory = match_predictor_factory
+        self.pipeline = pipeline
+        self._pipeline_factory = PipelineFactory(
+            rating_generators=pipeline.rating_generators,
+            performances_generator=pipeline.performances_generator,
+            post_rating_transformers=pipeline.post_rating_transformers,
+            column_weights=pipeline.column_weights,
+            predictor=pipeline.predictor,
+        )
 
         self.performances_generator_tuner = performances_generator_tuner
         self.rating_generator_tuners = rating_generator_tuners or []
@@ -65,7 +72,7 @@ class MatchPredictorTuner():
         self.fit_best = fit_best
 
         if len(self.rating_generator_tuners) != len(
-                self.match_predictor_factory.rating_generators) and self.rating_generator_tuners:
+                self._pipeline_factory.rating_generators) and self.rating_generator_tuners:
             raise ValueError("Number of rating_generator_tuners must match number of rating_generators")
 
         if not self.performances_generator_tuner and not self.rating_generator_tuners and not self.predictor_tuner:
@@ -80,30 +87,30 @@ class MatchPredictorTuner():
         original_df = df.copy()
 
         column_names = [rating_generator.column_names for rating_generator in
-                        self.match_predictor_factory.rating_generators]
+                        self._pipeline_factory.rating_generators]
 
         best_performances_generator: PerformancesGenerator = copy.deepcopy(
-            self.match_predictor_factory.performances_generator)
+            self._pipeline_factory.performances_generator)
 
         untrained_best_performances_generator = copy.deepcopy(best_performances_generator)
 
         if self.performances_generator_tuner:
             logging.info("Tuning PreTransformers")
             best_performances_generator = self.performances_generator_tuner.tune(df=df,
-                                                                                 match_predictor_factory=self.match_predictor_factory,
+                                                                                 pipeline_factory=self._pipeline_factory,
                                                                                  cross_validator=self.cross_validator)
             untrained_best_performances_generator = copy.deepcopy(best_performances_generator)
         if best_performances_generator:
             df = best_performances_generator.generate(df)
 
-        best_rating_generators = copy.deepcopy(self.match_predictor_factory.rating_generators)
+        best_rating_generators = copy.deepcopy(self._pipeline_factory.rating_generators)
 
         matches = []
         for col_name in column_names:
             rating_matches = convert_df_to_matches(df=df, column_names=col_name)
             matches.append(rating_matches)
 
-        rating_generators = self.match_predictor_factory.rating_generators
+        rating_generators = self._pipeline_factory.rating_generators
         untrained_best_rating_generators = copy.deepcopy(best_rating_generators)
         for rating_idx, rating_generator in enumerate(rating_generators):
 
@@ -115,7 +122,7 @@ class MatchPredictorTuner():
                 tuned_rating_generator = rating_generator_tuner.tune(df=df, matches=matches[rating_idx],
                                                                      rating_idx=rating_idx,
                                                                      cross_validator=self.cross_validator,
-                                                                     match_predictor_factory=self.match_predictor_factory)
+                                                                     pipeline_factory=self._pipeline_factory)
 
                 best_rating_generators[rating_idx] = tuned_rating_generator
 
@@ -131,18 +138,18 @@ class MatchPredictorTuner():
                     rating_feature_str = rating_feature
                 df[rating_feature_str] = values
 
-        best_post_transformers = copy.deepcopy(self.match_predictor_factory.post_rating_transformers)
+        best_post_transformers = copy.deepcopy(self._pipeline_factory.post_rating_transformers)
         untrained_best_post_transformers= copy.deepcopy(best_post_transformers)
 
 
         if self.predictor_tuner:
             logging.info("Tuning Predictor")
             best_predictor = self.predictor_tuner.tune(df=df, cross_validator=self.cross_validator,
-                                                       pipeline_factory=self.match_predictor_factory)
+                                                       pipeline_factory=self._pipeline_factory)
             untrained_best_predictor = copy.deepcopy(best_predictor)
         else:
-            untrained_best_predictor = copy.deepcopy(self.match_predictor_factory.predictor)
-            best_predictor = copy.deepcopy(self.match_predictor_factory.predictor)
+            untrained_best_predictor = copy.deepcopy(self._pipeline_factory.predictor)
+            best_predictor = copy.deepcopy(self._pipeline_factory.predictor)
 
         self._untrained_best_model = Pipeline(
             rating_generators=[copy.deepcopy(rating_generator) for rating_generator in untrained_best_rating_generators],

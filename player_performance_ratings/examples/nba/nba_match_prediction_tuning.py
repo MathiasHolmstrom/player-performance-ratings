@@ -22,7 +22,7 @@ from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 
 
-from player_performance_ratings import ColumnNames, PipelineFactory
+from player_performance_ratings import ColumnNames, Pipeline
 
 from player_performance_ratings.tuner.utils import ParameterSearchRange, get_default_team_rating_search_range, \
     get_default_lgbm_classifier_search_range_by_learning_rate
@@ -48,9 +48,9 @@ column_names = ColumnNames(
 )
 
 df = pd.read_pickle("data/game_player_full_with_minutes_prediction.pickle")
+poss = pd.read_pickle(r"C:\Users\Admin\PycharmProjects\nba-api-wrapper\examples\data\game_player_rotations.pickle")
 
-# df = df[df['game_id'].isin(gm['game_id'].unique().tolist())]
-
+df = df[df['game_id'].isin(poss['game_id'].unique().tolist())]
 
 df[PredictColumnNames.TARGET] = df['won']
 df = df.sort_values(by=[column_names.start_date, column_names.match_id, column_names.team_id, column_names.player_id])
@@ -100,6 +100,7 @@ predictor = GameTeamPredictor(
     game_id_colum=column_names.match_id,
     team_id_column=column_names.team_id,
     categorical_transformers=[ConvertDataFrameToCategoricalTransformer(features=["location"])],
+    #weight_column="projected_participation_weight",
 )
 
 
@@ -140,8 +141,8 @@ post_rating_transformers = [
 ]
 
 
-match_predictor_factory = PipelineFactory(
-    post_rating_transformers=post_rating_transformers,
+pipeline = Pipeline(
+    #post_rating_transformers=post_rating_transformers,
     rating_generators=rating_generator,
     column_weights=column_weights,
     predictor=predictor,
@@ -154,22 +155,22 @@ rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
     start_rating_n_trials=1,
 )
 predictor_tuner = PredictorTuner(
-    default_params={'learning_rate': 0.03},
-    search_ranges=get_default_lgbm_classifier_search_range_by_learning_rate(learning_rate=0.03),
+    default_params={'learning_rate': 0.07},
+    search_ranges=get_default_lgbm_classifier_search_range_by_learning_rate(learning_rate=0.07),
     n_trials=65,
     date_column_name=column_names.start_date,
     estimator_subclass_level=1,
 )
 
 cross_validator = MatchKFoldCrossValidator(
-    scorer=SklearnScorer(pred_column=match_predictor_factory.predictor.pred_column, scorer_function=log_loss),
+    scorer=SklearnScorer(pred_column=pipeline.predictor.pred_column, scorer_function=log_loss),
     match_id_column_name=column_names.match_id,
     n_splits=5,
     date_column_name=column_names.start_date
 )
 
 tuner = MatchPredictorTuner(
-    match_predictor_factory=match_predictor_factory,
+    pipeline=pipeline,
     fit_best=True,
     cross_validator=cross_validator,
     rating_generator_tuners=rating_generator_tuner,

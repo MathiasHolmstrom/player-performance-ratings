@@ -63,7 +63,7 @@ def test_match_predictor_tuner():
 
     match_predictor_tuner = MatchPredictorTuner(
         scorer=scorer_mock,
-        match_predictor_factory=match_predictor_factory,
+        pipeline=match_predictor_factory,
         performances_generator_tuner=performances_generator_tuner,
         rating_generator_tuners=rating_generator_tuner,
         date_column_name="start_date",

@@ -39,14 +39,14 @@ class PerformancesGeneratorTuner:
 
     def tune(self, df: pd.DataFrame,
              cross_validator: CrossValidator,
-             match_predictor_factory: PipelineFactory,
+             pipeline_factory: PipelineFactory,
              ) -> PerformancesGenerator:
 
         df = df.copy()
 
-        column_names = [r.column_names for r in match_predictor_factory.rating_generators]
+        column_names = [r.column_names for r in pipeline_factory.rating_generators]
 
-        match_predictor_factory = copy.deepcopy(match_predictor_factory)
+        pipeline_factory = copy.deepcopy(pipeline_factory)
 
         def objective(trial: BaseTrial,
                       df: pd.DataFrame,
@@ -83,7 +83,7 @@ class PerformancesGeneratorTuner:
         callbacks = []
         study.optimize(
             lambda trial: objective(trial, df=df,
-                                    match_predictor_factory=match_predictor_factory),
+                                    match_predictor_factory=pipeline_factory),
             n_trials=self.n_trials, callbacks=callbacks)
 
         best_params = study.best_params

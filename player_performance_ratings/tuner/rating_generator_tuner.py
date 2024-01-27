@@ -99,7 +99,7 @@ class RatingGeneratorTuner(ABC):
 
     @abstractmethod
     def tune(self, df: pd.DataFrame, rating_idx: int, cross_validator: CrossValidator,
-             match_predictor_factory: PipelineFactory,
+             pipeline_factory: PipelineFactory,
              matches: list[Match]) -> RatingGenerator:
         pass
 
@@ -121,17 +121,17 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
              df: pd.DataFrame,
              rating_idx: int,
              cross_validator: CrossValidator,
-             match_predictor_factory: PipelineFactory,
+             pipeline_factory: PipelineFactory,
              matches: list[Match]) -> UpdateRatingGenerator:
 
-        if match_predictor_factory.rating_generators:
-            best_rating_generator = copy.deepcopy(match_predictor_factory.rating_generators[rating_idx])
+        if pipeline_factory.rating_generators:
+            best_rating_generator = copy.deepcopy(pipeline_factory.rating_generators[rating_idx])
         else:
             potential_rating_features = [v for k, v in RatingColumnNames.__dict__.items() if isinstance(v, str)]
 
             best_rating_generator = UpdateRatingGenerator(
-                features_out=[f for f in match_predictor_factory.predictor.features if f in potential_rating_features],
-                column_names=match_predictor_factory.rating_generators[rating_idx].column_names
+                features_out=[f for f in pipeline_factory.predictor.features if f in potential_rating_features],
+                column_names=pipeline_factory.rating_generators[rating_idx].column_names
             )
 
         if self.team_rating_n_trials > 0:
@@ -141,7 +141,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                                                                 rating_index=rating_idx,
                                                                 cross_validator=cross_validator,
                                                                 matches=matches,
-                                                                match_predictor_factory=match_predictor_factory)
+                                                                match_predictor_factory=pipeline_factory)
 
             best_rating_generator.team_rating_generator = best_team_rating_generator
 
@@ -153,7 +153,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                                                         rating_generator=best_rating_generator,
                                                         rating_index=rating_idx,
                                                         cross_validator=cross_validator,
-                                                        match_predictor_factory=match_predictor_factory
+                                                        match_predictor_factory=pipeline_factory
                                                         )
             best_rating_generator.team_rating_generator.start_rating_generator = best_start_rating
 
