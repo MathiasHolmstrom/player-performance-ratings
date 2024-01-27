@@ -26,16 +26,12 @@ class MatchPredictorTuner():
     """
 
     def __init__(self,
-                 scorer: BaseScorer,
                  match_predictor_factory: PipelineFactory,
+                 cross_validator: CrossValidator,
                  performances_generator_tuner: Optional[PerformancesGeneratorTuner] = None,
                  rating_generator_tuners: Optional[Union[list[RatingGeneratorTuner], RatingGeneratorTuner]] = None,
                  predictor_tuner: Optional[PredictorTuner] = None,
                  fit_best: bool = True,
-                 cv_n_splits: int = 3,
-                 cv_validation_days: Optional[int] = None,
-                 date_column_name: Optional[str] = None,
-                 cross_validator: Optional[CrossValidator] = None,
                  ):
 
         """
@@ -57,13 +53,12 @@ class MatchPredictorTuner():
         :param fit_best: Whether to refit the match_predictor with the entire training use data using best hyperparameters
         """
 
-        self.scorer = scorer
-        self.cv_n_splits = cv_n_splits
-        self.cv_validation_days = cv_validation_days
+
         self.match_predictor_factory = match_predictor_factory
-        self.date_column_name = date_column_name
+
         self.performances_generator_tuner = performances_generator_tuner
         self.rating_generator_tuners = rating_generator_tuners or []
+        self._untrained_best_model = None
         self.predictor_tuner = predictor_tuner
         if isinstance(self.rating_generator_tuners, RatingGeneratorTuner):
             self.rating_generator_tuners = [self.rating_generator_tuners]
@@ -76,27 +71,9 @@ class MatchPredictorTuner():
         if not self.performances_generator_tuner and not self.rating_generator_tuners and not self.predictor_tuner:
             raise ValueError("No tuning has been provided in config")
 
-        if cross_validator is not None:
-            self.cross_validator = cross_validator
-        else:
+        self.cross_validator = cross_validator
 
-            if self.cv_validation_days is not None:
-                self.cross_validator = MatchCountCrossValidator(
-                                                                scorer=self.scorer,
-                                                                match_id_column_name=self.match_predictor_factory.match_id_column_name,
-                                                                validation_match_count=self.cv_validation_days,
-                                                                n_splits=self.cv_n_splits)
-            else:
-                if self.date_column_name is None:
-                    raise ValueError(
-                        "date_column_name must be specified if cv_validation_days is not specified and cross_validator is not specified")
 
-                self.cross_validator = MatchKFoldCrossValidator(
-                    scorer=self.scorer,
-                    match_id_column_name=self.match_predictor_factory.match_id_column_name,
-                    n_splits=self.cv_n_splits,
-                    date_column_name=self.date_column_name
-                )
 
     def tune(self, df: pd.DataFrame) -> Pipeline:
 
@@ -108,11 +85,14 @@ class MatchPredictorTuner():
         best_performances_generator: PerformancesGenerator = copy.deepcopy(
             self.match_predictor_factory.performances_generator)
 
+        untrained_best_performances_generator = copy.deepcopy(best_performances_generator)
+
         if self.performances_generator_tuner:
             logging.info("Tuning PreTransformers")
             best_performances_generator = self.performances_generator_tuner.tune(df=df,
                                                                                  match_predictor_factory=self.match_predictor_factory,
                                                                                  cross_validator=self.cross_validator)
+            untrained_best_performances_generator = copy.deepcopy(best_performances_generator)
         if best_performances_generator:
             df = best_performances_generator.generate(df)
 
@@ -124,7 +104,7 @@ class MatchPredictorTuner():
             matches.append(rating_matches)
 
         rating_generators = self.match_predictor_factory.rating_generators
-
+        untrained_best_rating_generators = copy.deepcopy(best_rating_generators)
         for rating_idx, rating_generator in enumerate(rating_generators):
 
             if self.rating_generator_tuners:
@@ -139,6 +119,7 @@ class MatchPredictorTuner():
 
                 best_rating_generators[rating_idx] = tuned_rating_generator
 
+                untrained_best_rating_generators[rating_idx] = copy.deepcopy(tuned_rating_generator)
             match_ratings = best_rating_generators[rating_idx].generate_historical(df=df, matches=matches[rating_idx])
 
             for rating_feature in best_rating_generators[rating_idx].features_out:
@@ -151,25 +132,38 @@ class MatchPredictorTuner():
                 df[rating_feature_str] = values
 
         best_post_transformers = copy.deepcopy(self.match_predictor_factory.post_rating_transformers)
+        untrained_best_post_transformers= copy.deepcopy(best_post_transformers)
 
-        for post_rating_transformer in best_post_transformers:
-            df = post_rating_transformer.fit_transform(df)
 
         if self.predictor_tuner:
             logging.info("Tuning Predictor")
             best_predictor = self.predictor_tuner.tune(df=df, cross_validator=self.cross_validator,
                                                        pipeline_factory=self.match_predictor_factory)
+            untrained_best_predictor = copy.deepcopy(best_predictor)
         else:
-            best_predictor = self.match_predictor_factory.predictor
+            untrained_best_predictor = copy.deepcopy(self.match_predictor_factory.predictor)
+            best_predictor = copy.deepcopy(self.match_predictor_factory.predictor)
 
-        best_match_predictor = Pipeline(
+        self._untrained_best_model = Pipeline(
+            rating_generators=[copy.deepcopy(rating_generator) for rating_generator in untrained_best_rating_generators],
+            performances_generator=copy.deepcopy(untrained_best_performances_generator),
+            post_rating_transformers=[copy.deepcopy(post_rating_transformer) for post_rating_transformer in
+                                      untrained_best_post_transformers],
+            predictor=untrained_best_predictor
+        )
+        best_match_predictor =Pipeline(
             rating_generators=best_rating_generators,
             performances_generator=best_performances_generator,
             post_rating_transformers=best_post_transformers,
             predictor=best_predictor)
-
         if self.fit_best:
             logging.info("Retraining best match predictor with all data")
+
             best_match_predictor.generate_historical(df=original_df, store_ratings=True)
 
         return best_match_predictor
+
+
+    @property
+    def untrained_best_model(self):
+        return self._untrained_best_model

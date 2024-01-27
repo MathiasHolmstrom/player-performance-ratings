@@ -30,7 +30,7 @@ class PerformancePredictor(ABC):
 class RatingNonOpponentPerformancePredictor(PerformancePredictor):
 
     def __init__(self,
-                 coef: float = 0.005757,
+                 coef: float = 0.0015,
                  last_sample_count: int = 1500,
                  min_count_for_historical_average: int = 200,
                  historical_average_value_default: float = 1000,

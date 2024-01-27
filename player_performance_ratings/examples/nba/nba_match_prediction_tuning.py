@@ -2,8 +2,13 @@ import pickle
 
 import pandas as pd
 from lightgbm import LGBMClassifier
+
+from player_performance_ratings.cross_validator.cross_validator import MatchKFoldCrossValidator
+from player_performance_ratings.transformation.pre_transformers import ConvertDataFrameToCategoricalTransformer
+
 from sklearn.metrics import log_loss
 
+from player_performance_ratings.predictor import GameTeamPredictor
 from player_performance_ratings.scorer.score import SklearnScorer
 
 from player_performance_ratings.ratings.rating_calculators import MatchTeatingGenerator
@@ -12,12 +17,12 @@ from player_performance_ratings.ratings.rating_calculators.performance_predictor
 
 from player_performance_ratings.transformation import LagTransformer, RollingMeanTransformer
 
-from player_performance_ratings.ratings import ColumnWeight
+from player_performance_ratings.ratings import ColumnWeight, UpdateRatingGenerator
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 
 
-from player_performance_ratings import ColumnNames
+from player_performance_ratings import ColumnNames, PipelineFactory
 
 from player_performance_ratings.tuner.utils import ParameterSearchRange, get_default_team_rating_search_range, \
     get_default_lgbm_classifier_search_range_by_learning_rate
@@ -27,9 +32,9 @@ from player_performance_ratings.consts import PredictColumnNames
 
 from player_performance_ratings.predictor.sklearn_models import SkLearnWrapper
 
-from player_performance_ratings.ratings.rating_calculators import OpponentAdjustedRatingGenerator
+
 from player_performance_ratings.tuner import MatchPredictorTuner
-from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
+
 
 column_names = ColumnNames(
     team_id='team_id',
@@ -90,12 +95,19 @@ estimator = SkLearnWrapper(
 
         estimator=LGBMClassifier(max_depth=2, learning_rate=0.1, n_estimators=200, verbose=-100, reg_alpha=1))
 
+predictor = GameTeamPredictor(
+    estimator=estimator,
+    game_id_colum=column_names.match_id,
+    team_id_column=column_names.team_id,
+    categorical_transformers=[ConvertDataFrameToCategoricalTransformer(features=["location"])],
+)
+
 
 performance_predictor = RatingDifferencePerformancePredictor(
     rating_diff_team_from_entity_coef=0.00425,
 )
 
-rating_generator = OpponentAdjustedRatingGenerator(column_names=column_names, match_rating_generator=MatchTeatingGenerator(
+rating_generator = UpdateRatingGenerator(column_names=column_names, match_rating_generator=MatchTeatingGenerator(
     performance_predictor=performance_predictor))
 
 column_weights = [ColumnWeight(name='plus_minus', weight=1)]
@@ -130,14 +142,9 @@ post_rating_transformers = [
 
 match_predictor_factory = PipelineFactory(
     post_rating_transformers=post_rating_transformers,
-    use_auto_create_performance_calculator=True,
     rating_generators=rating_generator,
-    other_categorical_features=["location"],
-    estimator=estimator,
     column_weights=column_weights,
-    group_predictor_by_game_team=True,
-    team_id_column_name=column_names.team_id,
-    match_id_column_name=column_names.match_id,
+    predictor=predictor,
 )
 
 rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
@@ -154,13 +161,19 @@ predictor_tuner = PredictorTuner(
     estimator_subclass_level=1,
 )
 
+cross_validator = MatchKFoldCrossValidator(
+    scorer=SklearnScorer(pred_column=match_predictor_factory.predictor.pred_column, scorer_function=log_loss),
+    match_id_column_name=column_names.match_id,
+    n_splits=5,
+    date_column_name=column_names.start_date
+)
+
 tuner = MatchPredictorTuner(
     match_predictor_factory=match_predictor_factory,
     fit_best=True,
-    scorer=SklearnScorer(pred_column=match_predictor_factory.predictor.pred_column, scorer_function=log_loss),
+    cross_validator=cross_validator,
     rating_generator_tuners=rating_generator_tuner,
     predictor_tuner=predictor_tuner,
-    date_column_name=column_names.start_date,
 )
 best_match_predictor = tuner.tune(df=df)
 df_with_minutes_prediction = best_match_predictor.generate_historical(df=df)

@@ -4,6 +4,7 @@ from typing import Literal, Optional, Union, Any
 
 from optuna.trial import BaseTrial
 
+
 @dataclass
 class ParameterSearchRange:
     name: str
@@ -30,15 +31,27 @@ def add_params_from_search_range(trial: BaseTrial, parameter_search_range: list[
 
     return params
 
+
 def get_default_lgbm_classifier_search_range_by_learning_rate(learning_rate: float) -> list[ParameterSearchRange]:
-    min_n_estimators = min(1 / learning_rate * 6, 1000)
+    if learning_rate < 0.05 and learning_rate > 0.02:
+        min_n_estimators = min(1 / learning_rate * 2, 1000)
+    elif learning_rate < 0.02:
+        min_n_estimators = min(1 / learning_rate*1, 1000)
+    else:
+        min_n_estimators = min(1 / learning_rate * 4, 1000)
 
     return [
         ParameterSearchRange(
+            name='learning_rate',
+            type='uniform',
+            low=0.02,
+            high=0.1,
+        ),
+        ParameterSearchRange(
             name='n_estimators',
             type='int',
-            low=min_n_estimators,
-            high=min_n_estimators*6,
+            low=40,
+            high=800,
         ),
         ParameterSearchRange(
             name='num_leaves',
@@ -50,7 +63,7 @@ def get_default_lgbm_classifier_search_range_by_learning_rate(learning_rate: flo
             name='max_depth',
             type='int',
             low=2,
-            high=7,
+            high=10,
         ),
         ParameterSearchRange(
             name='min_child_samples',
@@ -68,8 +81,7 @@ def get_default_lgbm_classifier_search_range_by_learning_rate(learning_rate: flo
 
 
 def get_default_lgbm_regressor_search_range_by_learning_rate(learning_rate: float) -> list[ParameterSearchRange]:
-
-    min_n_estimators = min(1/learning_rate*7, 1000)
+    min_n_estimators = min(1 / learning_rate * 7, 1000)
     return [
         ParameterSearchRange(
             name='n_estimators',
@@ -139,8 +151,8 @@ def get_default_team_rating_search_range() -> list[ParameterSearchRange]:
         ParameterSearchRange(
             name='rating_change_multiplier',
             type='uniform',
-            low=30,
-            high=100
+            low=10,
+            high=80
         ),
         ParameterSearchRange(
             name='min_rating_change_multiplier_ratio',

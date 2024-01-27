@@ -1,11 +1,9 @@
-import logging
 from typing import Optional, Union
 
 import pandas as pd
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.transformation.base_transformer import BaseTransformer, \
-    DifferentGranularityTransformer, BasePostTransformer
+from player_performance_ratings.transformation.base_transformer import  DifferentGranularityTransformer, BasePostTransformer
 from player_performance_ratings.utils import validate_sorting
 
 
@@ -92,6 +90,38 @@ class GameTeamMembersColumnsTransformer(BasePostTransformer):
         return df.sort_values(
             by=[self.column_names.start_date, self.column_names.rating_update_id, self.column_names.team_id,
                 self.column_names.player_id])
+
+    @property
+    def features_out(self) -> list[str]:
+        return self._features_out
+
+
+    @property
+    def features_out(self) -> list[str]:
+        return self.features
+
+
+class NormalizerTargetColumnTransformer(BasePostTransformer):
+
+    def __init__(self, features: list[str], granularity, target_sum_column_name: str, prefix: str = "__normalized_"):
+        super().__init__(features=features)
+        self.granularity = granularity
+        self.prefix = prefix
+        self.target_sum_column_name = target_sum_column_name
+        self._features_to_normalization_target = {}
+        self._features_out  =[]
+        for feature in self.features:
+            self._features_out.append(f'{self.prefix}{feature}')
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        return self.transform(df=df)
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        for feature in self.features:
+            df[f"{feature}_sum"] = df.groupby(self.granularity)[feature].transform('sum')
+            df = df.assign(**{self.prefix + feature: df[feature] / df[f"{feature}_sum"] * df[self.target_sum_column_name]})
+            df = df.drop(columns=[f"{feature}_sum"])
+        return df
 
     @property
     def features_out(self) -> list[str]:
@@ -220,16 +250,19 @@ class LagTransformer(BasePostTransformer):
 
         validate_sorting(df=all_df, column_names=self.column_names)
 
-        grouped = all_df.groupby(self.granularity + [self.column_names.rating_update_id, self.column_names.start_date])[self.features].mean().reset_index()
+        grouped = all_df.groupby(self.granularity + [self.column_names.rating_update_id, self.column_names.start_date])[
+            self.features].mean().reset_index()
 
         for days_lag in self.days_between_lags:
             if self.future_lag:
-                grouped["shifted_days"] = grouped.groupby(self.granularity)[self.column_names.start_date].shift(-days_lag)
+                grouped["shifted_days"] = grouped.groupby(self.granularity)[self.column_names.start_date].shift(
+                    -days_lag)
                 grouped[f'{self.prefix}{days_lag}_days_ago'] = (
                         pd.to_datetime(grouped["shifted_days"]) - pd.to_datetime(
                     grouped[self.column_names.start_date])).dt.days
             else:
-                grouped["shifted_days"] = grouped.groupby(self.granularity)[self.column_names.start_date].shift(days_lag)
+                grouped["shifted_days"] = grouped.groupby(self.granularity)[self.column_names.start_date].shift(
+                    days_lag)
                 grouped[f'{self.prefix}{days_lag}_days_ago'] = (pd.to_datetime(
                     grouped[self.column_names.start_date]) - pd.to_datetime(grouped["shifted_days"])).dt.days
 
@@ -440,7 +473,8 @@ class RollingMeanTransformer(BasePostTransformer):
                 raise ValueError(
                     f'Column {output_column_name} already exists. Choose different prefix or ensure no duplication was performed')
 
-            grp = all_df.groupby(self.granularity + [self.column_names.rating_update_id])[feature_name].mean().reset_index()
+            grp = all_df.groupby(self.granularity + [self.column_names.rating_update_id])[
+                feature_name].mean().reset_index()
 
             grp = grp.assign(**{output_column_name: grp.groupby(self.granularity)[feature_name].apply(
                 lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())})
@@ -448,7 +482,7 @@ class RollingMeanTransformer(BasePostTransformer):
             all_df = all_df.merge(grp[self.granularity + [self.column_names.rating_update_id, output_column_name]],
                                   on=self.granularity + [self.column_names.rating_update_id], how='left')
             all_df = all_df.sort_values(by=[self.column_names.start_date, self.column_names.match_id,
-                                        self.column_names.team_id, self.column_names.player_id])
+                                            self.column_names.team_id, self.column_names.player_id])
         df = df.assign(
             __id=df[self.column_names.rating_update_id].astype('str') + "__" + df[
                 self.column_names.player_id].astype(

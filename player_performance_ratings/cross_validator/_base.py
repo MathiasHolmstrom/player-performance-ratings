@@ -1,6 +1,8 @@
 from abc import abstractmethod, ABC
 
 import pandas as pd
+from player_performance_ratings.transformation.base_transformer import BaseTransformer
+
 from player_performance_ratings.predictor import BaseMLWrapper
 
 from player_performance_ratings.scorer import BaseScorer
@@ -13,7 +15,12 @@ class CrossValidator(ABC):
 
 
     @abstractmethod
-    def generate_validation_df(self, df: pd.DataFrame, predictor: BaseMLWrapper) -> pd.DataFrame:
+    def generate_validation_df(self,
+                               df: pd.DataFrame,
+                               post_transformers: list[BaseTransformer],
+                               predictor: BaseMLWrapper,
+                               estimator_features: list[str],
+                               ) -> pd.DataFrame:
         pass
 
 

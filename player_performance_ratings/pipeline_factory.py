@@ -1,7 +1,6 @@
 import copy
 from typing import Optional, List, Union
 
-from player_performance_ratings.pipeline import create_predictor
 
 from player_performance_ratings.pipeline import Pipeline
 from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
@@ -14,16 +13,10 @@ from player_performance_ratings.transformation.base_transformer import BaseTrans
 class PipelineFactory():
 
     def __init__(self,
-                 match_id_column_name: str,
+                 predictor: BaseMLWrapper,
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
                  post_rating_transformers: Optional[List[BasePostTransformer]] = None,
-                 predictor: BaseMLWrapper = None,
-                 estimator: Optional = None,
-                 other_features: Optional[list[str]] = None,
-                 other_categorical_features: Optional[list[str]] = None,
-                 group_predictor_by_game_team: bool = False,
-                 team_id_column_name: Optional[str] = None,
                  column_weights: Optional[Union[List[List[ColumnWeight]], list[ColumnWeight]]] = None,
                  ):
 
@@ -37,30 +30,13 @@ class PipelineFactory():
         self.post_rating_transformers = post_rating_transformers or []
 
         self.predictor = predictor
-        self.estimator = estimator
-        self.other_features = other_features or []
-        self.other_categorical_features = other_categorical_features or []
-        self.group_predictor_by_game_team = group_predictor_by_game_team
-        self.match_id_column_name = match_id_column_name
-        self.team_id_column_name = team_id_column_name
+
 
         self.performances_generator = performances_generator
         self.column_weights = column_weights if isinstance(column_weights, list) else [
             column_weights] if column_weights else None
 
-        if self.predictor is None:
-            self.predictor = create_predictor(
-                rating_generators=self.rating_generators,
-                other_features=self.other_features,
-                other_categorical_features=self.other_categorical_features,
-                post_rating_transformers=self.post_rating_transformers,
-                estimator=estimator,
-                group_predictor_by_game_team=self.group_predictor_by_game_team,
-                match_id_column_name=self.match_id_column_name,
-                team_id_column_name=self.team_id_column_name
-            )
-            if not self.predictor.features:
-                raise ValueError("No Features specified for estimator/predictor")
+
 
         if self.performances_generator is None and self.rating_generators:
             self.performances_generator = PerformancesGenerator(column_weights=self.column_weights,
@@ -83,5 +59,4 @@ class PipelineFactory():
             performances_generator=performances_generator,
             post_rating_transformers=copy.deepcopy(post_rating_transformers),
             predictor=predictor,
-            match_id_column_name=self.match_id_column_name,
         )

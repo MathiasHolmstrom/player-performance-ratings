@@ -180,7 +180,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                                                   trial=trial,
                                                   parameter_search_range=self.team_rating_search_ranges)
 
-            performance_predictor = rating_generator.team_rating_generator.performance_predictor
+            performance_predictor = copy.deepcopy(rating_generator.team_rating_generator.performance_predictor)
             performance_predictor_params = list(
                 inspect.signature(performance_predictor.__class__.__init__).parameters.keys())[1:]
 
