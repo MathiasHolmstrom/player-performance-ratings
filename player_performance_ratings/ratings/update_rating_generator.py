@@ -95,12 +95,12 @@ class UpdateRatingGenerator(RatingGenerator):
 
         for match_idx, match in enumerate(matches):
             self._validate_match(match)
+
             pre_match_rating = PreMatchRating(
                 id=match.id,
                 teams=self._get_pre_match_team_ratings(match=match),
                 day_number=match.day_number
             )
-
             match_team_rating_changes = self._create_match_team_rating_changes(match=match,
                                                                                pre_match_rating=pre_match_rating)
             team_rating_changes += match_team_rating_changes
@@ -260,10 +260,14 @@ class UpdateRatingGenerator(RatingGenerator):
             game_team = game_player.groupby(["match_id", "team_id", "team_id_opponent"])[
                 RatingColumnNames.TEAM_RATING_PROJECTED].mean().reset_index()
 
-            game_player = game_player.merge(
+            game_team = game_team.merge(
                 game_team[["match_id", "team_id_opponent", RatingColumnNames.TEAM_RATING_PROJECTED]].rename(
                     columns={RatingColumnNames.TEAM_RATING_PROJECTED: RatingColumnNames.OPPONENT_RATING_PROJECTED}),
                 left_on=["match_id", "team_id"], right_on=["match_id", "team_id_opponent"])
+
+            game_player = game_player.merge(
+                game_team[['match_id', 'team_id', RatingColumnNames.OPPONENT_RATING_PROJECTED]],
+                on=["match_id", "team_id"])
 
             game_player[RatingColumnNames.RATING_MEAN_PROJECTED] = (game_player[
                                                                         RatingColumnNames.TEAM_RATING_PROJECTED] +
@@ -276,7 +280,8 @@ class UpdateRatingGenerator(RatingGenerator):
                              RatingColumnNames.OPPONENT_RATING_PROJECTED,
                              RatingColumnNames.RATING_MEAN_PROJECTED,
                              RatingColumnNames.PLAYER_RATING
-                             ]], on=["match_id", "player_id"])
+                             ]], on=["match_id", "player_id"], how='left')
+
 
             rating_differences_projected = (df[RatingColumnNames.TEAM_RATING_PROJECTED] - df[
                 RatingColumnNames.OPPONENT_RATING_PROJECTED]).tolist()

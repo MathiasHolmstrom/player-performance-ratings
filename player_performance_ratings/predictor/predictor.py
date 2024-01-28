@@ -106,7 +106,6 @@ class GameTeamPredictor(BaseMLWrapper):
         else:
             grouped[self._pred_column] = self.estimator.predict_proba(grouped[self.estimator_features])[:, 1]
 
-
         if self.pred_column in df.columns:
             df = df.drop(columns=[self.pred_column])
 
@@ -124,8 +123,6 @@ class GameTeamPredictor(BaseMLWrapper):
             if df[self._target].dtype == 'object':
                 df.loc[:, self._target] = df[self._target].astype('int')
 
-
-
             grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
                 **{feature: 'mean' for feature in numeric_features},
                 self._target: 'mean',
@@ -135,13 +132,14 @@ class GameTeamPredictor(BaseMLWrapper):
                 **{feature: 'mean' for feature in numeric_features}
             }).reset_index()
 
-        if self._target in df.columns and hasattr(self._deepest_estimator,"predict_proba") :
+        if self._target in df.columns and hasattr(self._deepest_estimator, "predict_proba"):
             grouped[self._target] = grouped[self._target].astype('int')
 
         grouped = grouped.merge(
             df[[self.game_id_colum, self.team_id_column, *self.estimator_categorical_features]].drop_duplicates(
                 subset=[self.game_id_colum, self.team_id_column]),
             on=[self.game_id_colum, self.team_id_column], how='inner')
+
         return grouped
 
 
@@ -181,7 +179,7 @@ class Predictor(BaseMLWrapper):
         df = df.copy()
         filtered_df = apply_filters(df=df, filters=self.filters)
         if not self.multiclassifier and len(filtered_df[self._target].unique()) > 2 and hasattr(self._deepest_estimator,
-                                                                                            "predict_proba"):
+                                                                                                "predict_proba"):
             logging.info("target has more than 2 unique values, multiclassifier has therefore been set to True")
             self.multiclassifier = True
             if len(filtered_df[self._target].unique()) > 50:
@@ -220,5 +218,5 @@ class Predictor(BaseMLWrapper):
         else:
             filtered_df[self._pred_column] = self.estimator.predict_proba(filtered_df[self.estimator_features])[:, 1]
 
-        df = df.merge(filtered_df[['__id', self._pred_column]], on = '__id', how='left')
+        df = df.merge(filtered_df[['__id', self._pred_column]], on='__id', how='left')
         return df
