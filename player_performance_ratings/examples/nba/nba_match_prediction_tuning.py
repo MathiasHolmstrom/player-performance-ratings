@@ -2,9 +2,12 @@ import pickle
 
 import pandas as pd
 from lightgbm import LGBMClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import OneHotEncoder
 
 from player_performance_ratings.cross_validator.cross_validator import MatchKFoldCrossValidator
-from player_performance_ratings.transformation.pre_transformers import ConvertDataFrameToCategoricalTransformer
+from player_performance_ratings.transformation.pre_transformers import ConvertDataFrameToCategoricalTransformer, \
+    SkLearnTransformerWrapper
 
 from sklearn.metrics import log_loss
 
@@ -48,9 +51,9 @@ column_names = ColumnNames(
 )
 
 df = pd.read_pickle("data/game_player_full_with_minutes_prediction.pickle")
-poss = pd.read_pickle(r"C:\Users\Admin\PycharmProjects\nba-api-wrapper\examples\data\game_player_rotations.pickle")
+gp_rot = pd.read_pickle(r"C:\Users\Admin\PycharmProjects\nba-api-wrapper\examples\data\game_player_rotations.pickle")
 
-df = df[df['game_id'].isin(poss['game_id'].unique().tolist())]
+df = df[df['game_id'].isin(gp_rot['game_id'].unique().tolist())]
 
 df[PredictColumnNames.TARGET] = df['won']
 df = df.sort_values(by=[column_names.start_date, column_names.match_id, column_names.team_id, column_names.player_id])
@@ -72,7 +75,7 @@ start_rating_search_range = [
     ParameterSearchRange(
         name='league_quantile',
         type='uniform',
-        low=0.04,
+        low=0.02,
         high=0.3,
     ),
     ParameterSearchRange(
@@ -91,16 +94,13 @@ estimator = SkLearnWrapper(
         inductive=True, cal_size=0.2, random_state=101))
 
 
-estimator = SkLearnWrapper(
-
-        estimator=LGBMClassifier(max_depth=2, learning_rate=0.1, n_estimators=200, verbose=-100, reg_alpha=1))
-
 predictor = GameTeamPredictor(
-    estimator=estimator,
-    game_id_colum=column_names.match_id,
-    team_id_column=column_names.team_id,
-    categorical_transformers=[ConvertDataFrameToCategoricalTransformer(features=["location"])],
-    #weight_column="projected_participation_weight",
+    estimator=SkLearnWrapper(
+    estimator=LogisticRegression()),
+    game_id_colum="game_id",
+    team_id_column="team_id",
+   # categorical_transformers=[ConvertDataFrameToCategoricalTransformer(features=["location"])],
+    categorical_transformers=[SkLearnTransformerWrapper(transformer=OneHotEncoder(),features=["location"])]
 )
 
 
@@ -151,8 +151,8 @@ pipeline = Pipeline(
 rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
     team_rating_search_ranges=get_default_team_rating_search_range(),
     start_rating_search_ranges=start_rating_search_range,
-    team_rating_n_trials=1,
-    start_rating_n_trials=1,
+    team_rating_n_trials=30,
+    start_rating_n_trials=5,
 )
 predictor_tuner = PredictorTuner(
     default_params={'learning_rate': 0.07},
@@ -174,7 +174,7 @@ tuner = MatchPredictorTuner(
     fit_best=True,
     cross_validator=cross_validator,
     rating_generator_tuners=rating_generator_tuner,
-    predictor_tuner=predictor_tuner,
+  #  predictor_tuner=predictor_tuner,
 )
 best_match_predictor = tuner.tune(df=df)
 df_with_minutes_prediction = best_match_predictor.generate_historical(df=df)

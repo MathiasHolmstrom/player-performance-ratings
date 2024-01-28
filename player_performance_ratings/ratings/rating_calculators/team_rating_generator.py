@@ -228,6 +228,7 @@ class MatchTeatingGenerator():
 
         for pre_player_rating in pre_match_team_rating.players:
 
+
             predicted_performance = self.performance_predictor.predict_performance(
                 player_rating=pre_player_rating,
                 opponent_team_rating=pre_match_opponent_team_rating,

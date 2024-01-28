@@ -71,35 +71,55 @@ class RatingDifferencePerformancePredictor(PerformancePredictor):
                  team_rating_diff_coef: float = 0.0,
                  max_predict_value: float = 1,
                  participation_weight_coef: Optional[float] = None,
-                 mean_participation_weight: Optional[float] = None,
                  ):
         self.rating_diff_coef = rating_diff_coef
         self.rating_diff_team_from_entity_coef = rating_diff_team_from_entity_coef
         self.team_rating_diff_coef = team_rating_diff_coef
         self.max_predict_value = max_predict_value
-        self.mean_participation_weight = mean_participation_weight
         self.participation_weight_coef = participation_weight_coef
-        if self.participation_weight_coef and mean_participation_weight is None:
-            raise ValueError("mean_duration must be passed if duration_column_name is passed")
+
 
     def predict_performance(self,
                             player_rating: PreMatchPlayerRating,
                             opponent_team_rating: PreMatchTeamRating,
                             team_rating: PreMatchTeamRating
                             ) -> float:
-        rating_difference = player_rating.rating_value - opponent_team_rating.rating_value
 
-        rating_diff_team_from_entity = team_rating.rating_value - player_rating.rating_value
-        team_rating_diff = team_rating.rating_value - opponent_team_rating.rating_value
+        if player_rating.match_performance.team_players_playing_time:
+            weight_team_rating = 0
+            sum_playing_time = 0
+            for team_player in team_rating.players:
+                if team_player.id in player_rating.match_performance.team_players_playing_time:
+                    weight_team_rating += team_player.rating_value * player_rating.match_performance.team_players_playing_time[team_player.id]
+                    sum_playing_time += player_rating.match_performance.team_players_playing_time[team_player.id]
+
+            team_rating_value = weight_team_rating / sum_playing_time
+
+        else:
+            team_rating_value = team_rating.rating_value
+
+        if player_rating.match_performance.opponent_players_playing_time:
+            weight_opp_rating = 0
+            sum_playing_time = 0
+            for opp_player in opponent_team_rating.players:
+                if opp_player.id in player_rating.match_performance.opponent_players_playing_time:
+                    weight_opp_rating += opp_player.rating_value * \
+                                          player_rating.match_performance.team_players_playing_time[opp_player.id]
+                    sum_playing_time += player_rating.match_performance.team_players_playing_time[opp_player.id]
+
+            opp_rating_value = weight_opp_rating / sum_playing_time
+
+        else:
+            opp_rating_value = opponent_team_rating.rating_value
+
+        rating_difference = player_rating.rating_value - opp_rating_value
+
+        rating_diff_team_from_entity = team_rating_value - player_rating.rating_value
+        team_rating_diff = team_rating_value - opp_rating_value
 
         value = self.rating_diff_coef * rating_difference + \
                 self.rating_diff_team_from_entity_coef * rating_diff_team_from_entity + team_rating_diff * self.team_rating_diff_coef
-        if self.participation_weight_coef:
-             value += value * self.participation_weight_coef * (
-                   player_rating.match_performance.participation_weight - self.mean_participation_weight)
-            #value = self.rating_diff_coef * player_rating.match_performance.participation_weight * rating_difference + \
-           #         self.rating_diff_team_from_entity_coef * player_rating.match_performance.participation_weight * rating_diff_team_from_entity \
-            #        + team_rating_diff * self.team_rating_diff_coef * player_rating.match_performance.participation_weight
+
 
         prediction = (math.exp(value)) / (1 + math.exp(value))
         if prediction > self.max_predict_value:

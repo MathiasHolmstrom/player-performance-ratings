@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import warnings
 
@@ -78,6 +79,26 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
                 "projected_participation_weight column passed but not in dataframe."
                 " Will use participation_weight as projected_participation_weight")
 
+
+    if col_names.team_players_playing_time:
+        if col_names.team_players_playing_time not in df.columns:
+            raise ValueError("team_players_playing_time column passed but not in dataframe.")
+
+        is_team_players_playing_time = True
+    else:
+        is_team_players_playing_time = False
+
+    if col_names.opponent_players_playing_time:
+        if col_names.opponent_players_playing_time not in df.columns:
+            raise ValueError("opponent_players_playing_time column passed but not in dataframe.")
+
+        is_opponent_players_playing_time = True
+    else:
+        is_opponent_players_playing_time = False
+
+
+
+
     prev_match_id = None
     prev_update_team_id= None
 
@@ -134,6 +155,21 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
         else:
             player_league = None
 
+        if is_team_players_playing_time:
+            team_players_playing_time = row[col_names.team_players_playing_time]
+        else:
+            team_players_playing_time = {}
+
+        if is_opponent_players_playing_time:
+            opponent_players_playing_time = row[col_names.opponent_players_playing_time]
+            try:
+                opponent_players_playing_time = json.loads(opponent_players_playing_time)
+            except Exception:
+                pass
+        else:
+            opponent_players_playing_time = {}
+
+
         if col_names.projected_participation_weight and col_names.participation_weight in row:
             projected_participation_weight = row[col_names.projected_participation_weight]
         elif col_names.participation_weight not in row:
@@ -143,6 +179,8 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
 
         if col_names.performance in row:
             performance = MatchPerformance(
+                team_players_playing_time = team_players_playing_time,
+                opponent_players_playing_time = opponent_players_playing_time,
                 performance_value=row[col_names.performance],
                 participation_weight=participation_weight,
                 projected_participation_weight=projected_participation_weight
