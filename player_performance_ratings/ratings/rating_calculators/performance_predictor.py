@@ -78,36 +78,44 @@ class RatingDifferencePerformancePredictor(PerformancePredictor):
         self.max_predict_value = max_predict_value
         self.participation_weight_coef = participation_weight_coef
 
-
     def predict_performance(self,
                             player_rating: PreMatchPlayerRating,
                             opponent_team_rating: PreMatchTeamRating,
                             team_rating: PreMatchTeamRating
                             ) -> float:
 
-        if player_rating.match_performance.team_players_playing_time:
+        if player_rating.match_performance.team_players_playing_time and isinstance(player_rating.match_performance.team_players_playing_time, dict):
             weight_team_rating = 0
             sum_playing_time = 0
             for team_player in team_rating.players:
-                if team_player.id in player_rating.match_performance.team_players_playing_time:
-                    weight_team_rating += team_player.rating_value * player_rating.match_performance.team_players_playing_time[team_player.id]
-                    sum_playing_time += player_rating.match_performance.team_players_playing_time[team_player.id]
+                if str(team_player.id) in player_rating.match_performance.team_players_playing_time or str(
+                        team_player.id) in player_rating.match_performance.team_players_playing_time:
+                    weight_team_rating += team_player.rating_value * \
+                                          player_rating.match_performance.team_players_playing_time[str(team_player.id)]
+                    sum_playing_time += player_rating.match_performance.team_players_playing_time[str(team_player.id)]
 
-            team_rating_value = weight_team_rating / sum_playing_time
+            if sum_playing_time > 0:
+                team_rating_value = weight_team_rating / sum_playing_time
+            else:
+                team_rating_value = team_rating.rating_value
 
         else:
             team_rating_value = team_rating.rating_value
 
-        if player_rating.match_performance.opponent_players_playing_time:
+        if player_rating.match_performance.opponent_players_playing_time and isinstance(player_rating.match_performance.team_players_playing_time, dict):
             weight_opp_rating = 0
             sum_playing_time = 0
             for opp_player in opponent_team_rating.players:
-                if opp_player.id in player_rating.match_performance.opponent_players_playing_time:
+                if str(opp_player.id) in player_rating.match_performance.opponent_players_playing_time:
                     weight_opp_rating += opp_player.rating_value * \
-                                          player_rating.match_performance.team_players_playing_time[opp_player.id]
-                    sum_playing_time += player_rating.match_performance.team_players_playing_time[opp_player.id]
-
-            opp_rating_value = weight_opp_rating / sum_playing_time
+                                         player_rating.match_performance.opponent_players_playing_time[
+                                             str(opp_player.id)]
+                    sum_playing_time += player_rating.match_performance.opponent_players_playing_time[
+                        str(opp_player.id)]
+            if sum_playing_time > 0:
+                opp_rating_value = weight_opp_rating / sum_playing_time
+            else:
+                opp_rating_value = opponent_team_rating.rating_value
 
         else:
             opp_rating_value = opponent_team_rating.rating_value
@@ -119,7 +127,6 @@ class RatingDifferencePerformancePredictor(PerformancePredictor):
 
         value = self.rating_diff_coef * rating_difference + \
                 self.rating_diff_team_from_entity_coef * rating_diff_team_from_entity + team_rating_diff * self.team_rating_diff_coef
-
 
         prediction = (math.exp(value)) / (1 + math.exp(value))
         if prediction > self.max_predict_value:

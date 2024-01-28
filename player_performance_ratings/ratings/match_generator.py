@@ -157,6 +157,10 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
 
         if is_team_players_playing_time:
             team_players_playing_time = row[col_names.team_players_playing_time]
+            try:
+                team_players_playing_time = json.loads(team_players_playing_time)
+            except Exception:
+                pass
         else:
             team_players_playing_time = {}
 

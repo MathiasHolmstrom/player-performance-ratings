@@ -24,7 +24,6 @@ from player_performance_ratings.ratings import ColumnWeight, UpdateRatingGenerat
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
 
-
 from player_performance_ratings import ColumnNames, Pipeline
 
 from player_performance_ratings.tuner.utils import ParameterSearchRange, get_default_team_rating_search_range, \
@@ -35,9 +34,7 @@ from player_performance_ratings.consts import PredictColumnNames
 
 from player_performance_ratings.predictor.sklearn_models import SkLearnWrapper
 
-
 from player_performance_ratings.tuner import MatchPredictorTuner
-
 
 column_names = ColumnNames(
     team_id='team_id',
@@ -47,7 +44,8 @@ column_names = ColumnNames(
     performance="plus_minus_per_minute",
     participation_weight="participation_weight",
     projected_participation_weight="projected_participation_weight",
-
+    team_players_playing_time="team_player_mins",
+    opponent_players_playing_time="opp_player_mins",
 )
 
 df = pd.read_pickle("data/game_player_full_with_minutes_prediction.pickle")
@@ -93,19 +91,17 @@ estimator = SkLearnWrapper(
         estimator=LGBMClassifier(max_depth=2, learning_rate=0.1, n_estimators=200, verbose=-100, reg_alpha=1),
         inductive=True, cal_size=0.2, random_state=101))
 
-
 predictor = GameTeamPredictor(
     estimator=SkLearnWrapper(
-    estimator=LogisticRegression()),
+        estimator=LogisticRegression()),
     game_id_colum="game_id",
     team_id_column="team_id",
-   # categorical_transformers=[ConvertDataFrameToCategoricalTransformer(features=["location"])],
-    categorical_transformers=[SkLearnTransformerWrapper(transformer=OneHotEncoder(),features=["location"])]
+    # categorical_transformers=[ConvertDataFrameToCategoricalTransformer(features=["location"])],
+    categorical_transformers=[SkLearnTransformerWrapper(transformer=OneHotEncoder(), features=["location"])]
 )
 
-
 performance_predictor = RatingDifferencePerformancePredictor(
-    rating_diff_team_from_entity_coef=0.00425,
+    rating_diff_team_from_entity_coef=0.0045,
 )
 
 rating_generator = UpdateRatingGenerator(column_names=column_names, match_rating_generator=MatchTeatingGenerator(
@@ -140,9 +136,8 @@ post_rating_transformers = [
     )
 ]
 
-
 pipeline = Pipeline(
-    #post_rating_transformers=post_rating_transformers,
+    # post_rating_transformers=post_rating_transformers,
     rating_generators=rating_generator,
     column_weights=column_weights,
     predictor=predictor,
@@ -174,7 +169,7 @@ tuner = MatchPredictorTuner(
     fit_best=True,
     cross_validator=cross_validator,
     rating_generator_tuners=rating_generator_tuner,
-  #  predictor_tuner=predictor_tuner,
+    #  predictor_tuner=predictor_tuner,
 )
 best_match_predictor = tuner.tune(df=df)
 df_with_minutes_prediction = best_match_predictor.generate_historical(df=df)

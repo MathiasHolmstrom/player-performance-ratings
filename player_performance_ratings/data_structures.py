@@ -14,10 +14,9 @@ class ColumnNames:
     position: Optional[str] = None
     participation_weight: Optional[str] = None
     projected_participation_weight: Optional[str] = None
-    team_players_playing_time: Optional[str] = None
     rating_update_match_id: Optional[str] = None
     parent_team_id: Optional[str] = None
-    team_players_participation_weight: Optional[str] = None
+    team_players_playing_time: Optional[str] = None
     opponent_players_playing_time: Optional[str] = None
 
     def __post_init__(self):
