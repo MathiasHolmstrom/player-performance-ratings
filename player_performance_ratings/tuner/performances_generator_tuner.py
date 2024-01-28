@@ -50,7 +50,7 @@ class PerformancesGeneratorTuner:
 
         def objective(trial: BaseTrial,
                       df: pd.DataFrame,
-                      match_predictor_factory: PipelineFactory,
+                      pipeline_factory: PipelineFactory,
                       ) -> float:
 
             best_pre_transformers = copy.deepcopy(self.pre_transformations)
@@ -64,15 +64,15 @@ class PerformancesGeneratorTuner:
                 column_weights.append(
                     self._create_column_weights(params=raw_params, remove_string=f"{performance_name}__"))
 
-            col_names = [r.column_names for r in match_predictor_factory.rating_generators]
+            col_names = [r.column_names for r in pipeline_factory.rating_generators]
 
             performances_generator = PerformancesGenerator(
                 column_names=col_names,
                 column_weights=column_weights,
                 pre_transformations=best_pre_transformers
             )
-            match_predictor = match_predictor_factory.create(performances_generator=performances_generator)
-            return match_predictor.cross_validate_score(df=df, cross_validator=cross_validator,
+            pipeline = pipeline_factory.create(performances_generator=performances_generator)
+            return pipeline.cross_validate_score(df=df, cross_validator=cross_validator,
                                                         create_performance=True, create_rating_features=True)
 
         direction = "minimize"
@@ -83,7 +83,7 @@ class PerformancesGeneratorTuner:
         callbacks = []
         study.optimize(
             lambda trial: objective(trial, df=df,
-                                    match_predictor_factory=pipeline_factory),
+                                    pipeline_factory=pipeline_factory),
             n_trials=self.n_trials, callbacks=callbacks)
 
         best_params = study.best_params

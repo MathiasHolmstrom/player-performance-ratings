@@ -139,11 +139,11 @@ class UpdateRatingGenerator(RatingGenerator):
             pre_match_player_rating_values=pre_match_player_rating_values,
             player_leagues=player_leagues,
             team_opponent_leagues=team_opponent_leagues,
+            projected_participation_weights=projected_participation_weights,
             match_ids=rating_update_match_ids,
             team_ids=rating_update_team_ids,
             team_id_opponents=rating_update_team_ids_opponent,
             player_ids=player_ids,
-            projected_participation_weights=projected_participation_weights,
         )
         potential_feature_values[HistoricalRatingColumnNames.PLAYER_RATING_DIFFERENCE] = np.array(
             pre_match_player_rating_values) - np.array(
@@ -189,6 +189,10 @@ class UpdateRatingGenerator(RatingGenerator):
         team_opponent_leagues = []
         match_ids = []
         player_leagues = []
+        projected_participation_weights = []
+        rating_update_team_ids = []
+        rating_update_team_ids_opponent = []
+        player_ids = []
 
         pre_match_team_projected_rating_values = []
 
@@ -209,6 +213,10 @@ class UpdateRatingGenerator(RatingGenerator):
                     team_opponent_leagues.append(opponent_team.league)
                     player_leagues.append(pre_match_player.league)
                     match_ids.append(match.id)
+                    rating_update_team_ids.append(match.teams[team_idx].update_id)
+                    rating_update_team_ids_opponent.append(match.teams[-team_idx + 1].update_id)
+                    projected_participation_weights.append(
+                        match.teams[team_idx].players[player_idx].performance.projected_participation_weight)
 
         potential_feature_values = self._get_shared_rating_values(
             pre_match_team_projected_rating_values=pre_match_team_projected_rating_values,
@@ -216,7 +224,11 @@ class UpdateRatingGenerator(RatingGenerator):
             pre_match_player_rating_values=pre_match_player_rating_values,
             player_leagues=player_leagues,
             team_opponent_leagues=team_opponent_leagues,
-            match_ids=match_ids
+            match_ids=match_ids,
+            projected_participation_weights=projected_participation_weights,
+            team_ids=rating_update_team_ids,
+            team_id_opponents=rating_update_team_ids_opponent,
+            player_ids=player_ids,
         )
 
         return {f: potential_feature_values[f] for f in self._features_out}
@@ -347,8 +359,7 @@ class UpdateRatingGenerator(RatingGenerator):
 
     def _validate_match(self, match: Match):
         if len(match.teams) < 2:
-            print(f"{match.id} only contains {len(match.teams)} teams")
-            raise ValueError
+            raise ValueError(f"{match.id} only contains {len(match.teams)} teams")
 
     @property
     def player_ratings(self) -> dict[str, PlayerRating]:

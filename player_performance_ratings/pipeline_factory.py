@@ -1,6 +1,8 @@
 import copy
 from typing import Optional, List, Union
 
+
+
 from player_performance_ratings import Pipeline
 from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
 
@@ -21,25 +23,24 @@ class PipelineFactory():
 
         if rating_generators and performances_generator is None and not column_weights:
             raise ValueError("If performance generator is None, column weights must be specified")
+        self.post_rating_transformers = post_rating_transformers or []
 
-        self.rating_generators = rating_generators or []
+
+        self.rating_generators = rating_generators
         if isinstance(self.rating_generators, RatingGenerator):
             self.rating_generators = [self.rating_generators]
 
-        self.post_rating_transformers = post_rating_transformers or []
-
         self.predictor = predictor
-
 
         self.performances_generator = performances_generator
         self.column_weights = column_weights if isinstance(column_weights, list) else [
             column_weights] if column_weights else None
 
-
-
         if self.performances_generator is None and self.rating_generators:
             self.performances_generator = PerformancesGenerator(column_weights=self.column_weights,
                                                                 column_names=self.rating_generators[0].column_names)
+
+
 
     def create(self,
                performances_generator: Optional[PerformancesGenerator] = None,
@@ -48,9 +49,9 @@ class PipelineFactory():
                predictor: Optional[BaseMLWrapper] = None,
                ) -> Pipeline:
 
-        rating_generators = rating_generators if rating_generators is not None else self.rating_generators
-        performances_generator = performances_generator if performances_generator is not None else self.performances_generator
-        post_rating_transformers = post_rating_transformers if post_rating_transformers is not None else self.post_rating_transformers
+        rating_generators = rating_generators if rating_generators is not None else [copy.deepcopy(r) for r in self.rating_generators]
+        performances_generator = performances_generator if performances_generator is not None else copy.deepcopy(self.performances_generator)
+        post_rating_transformers = post_rating_transformers if post_rating_transformers is not None else [copy.deepcopy(r) for r in self.post_rating_transformers]
         predictor = predictor if predictor is not None else self.predictor
 
         return Pipeline(

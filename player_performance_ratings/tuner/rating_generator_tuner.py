@@ -113,12 +113,14 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                  start_rating_search_ranges: Optional[list[ParameterSearchRange]] = None,
                  start_rating_n_trials: int = 8,
                  optimize_league_ratings: bool = False,
+                 add_league_ratings_tuning: bool = False
                  ):
         self.team_rating_search_ranges = team_rating_search_ranges or DEFAULT_TEAM_SEARCH_RANGES
         self.start_rating_search_ranges = start_rating_search_ranges or DEFAULT_START_RATING_SEARCH_RANGE
         self.team_rating_n_trials = team_rating_n_trials
         self.start_rating_n_trials = start_rating_n_trials
         self.optimize_league_ratings = optimize_league_ratings
+        self.add_league_ratings_tuning = add_league_ratings_tuning
 
     def tune(self,
              df: pd.DataFrame,

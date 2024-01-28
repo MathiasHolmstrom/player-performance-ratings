@@ -4,8 +4,8 @@ from typing import Optional, Union
 
 import pandas as pd
 
-from player_performance_ratings.cross_validator.cross_validator import CrossValidator, MatchCountCrossValidator, \
-    MatchKFoldCrossValidator
+from player_performance_ratings.cross_validator.cross_validator import CrossValidator
+
 
 from player_performance_ratings.pipeline import Pipeline
 from player_performance_ratings.ratings import PerformancesGenerator
@@ -83,7 +83,7 @@ class PipelineTuner():
 
 
 
-    def tune(self, df: pd.DataFrame) -> PipelineFactory:
+    def tune(self, df: pd.DataFrame) -> Pipeline:
 
         original_df = df.copy()
 

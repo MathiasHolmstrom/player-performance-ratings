@@ -37,11 +37,10 @@ df['__target'] = df['result']
 df = df.drop_duplicates(subset=['gameid', 'teamname', 'playername'])
 
 df = (
-    df.loc[lambda x: x.position != 'team']
-    .assign(team_count=df.groupby('gameid')['teamname'].transform('nunique'))
+    df.assign(team_count=df.groupby('gameid')['teamname'].transform('nunique'))
     .loc[lambda x: x.team_count == 2]
+    .drop(columns=['team_count'])
 )
-
 
 rating_generator = UpdateRatingGenerator(column_names=column_names)
 
