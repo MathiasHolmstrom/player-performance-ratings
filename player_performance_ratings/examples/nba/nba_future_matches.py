@@ -4,7 +4,7 @@ from lightgbm import LGBMClassifier
 
 from player_performance_ratings.ratings import ColumnWeight
 
-from player_performance_ratings import ColumnNames, PredictColumnNames, Pipeline
+from player_performance_ratings import ColumnNames, PredictColumnNames, PipelineFactory
 from player_performance_ratings.ratings.rating_calculators import OpponentAdjustedRatingGenerator
 
 df = pd.read_pickle(r"data/game_player_subsample.pickle")
@@ -31,7 +31,7 @@ column_names = ColumnNames(
     participation_weight="participation_weight",
 )
 
-match_predictor = Pipeline(
+match_predictor = PipelineFactory(
     rating_generators=[OpponentAdjustedRatingGenerator(column_names=column_names)],
     use_auto_create_performance_calculator=True,
     column_weights=[ColumnWeight(name='plus_minus', weight=1)],

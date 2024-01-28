@@ -1,9 +1,6 @@
-import logging
 from typing import List, Optional, Union
 
 import pandas as pd
-from player_performance_ratings.scorer.score import Filter
-from sklearn.preprocessing import OneHotEncoder
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
@@ -11,82 +8,13 @@ from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeig
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor import BaseMLWrapper
 
-from player_performance_ratings.predictor import Predictor, GameTeamPredictor
 from player_performance_ratings.data_structures import Match
 from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
-from player_performance_ratings.transformation.base_transformer import BaseTransformer, BasePostTransformer
+from player_performance_ratings.transformation.base_transformer import BasePostTransformer
 
-from player_performance_ratings.transformation.pre_transformers import ConvertDataFrameToCategoricalTransformer, \
-    SkLearnTransformerWrapper
-
-
-def create_predictor(
-        rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]],
-        other_features: Optional[list[str]],
-        other_categorical_features: Optional[list[str]],
-        post_rating_transformers: Optional[List[BasePostTransformer]],
-        estimator: Optional,
-        group_predictor_by_game_team: bool,
-        match_id_column_name: Optional[str],
-        team_id_column_name: Optional[str],
-        filters: Optional[list[Filter]],
-
-) -> BaseMLWrapper:
-    features = list(set(other_features + other_categorical_features)) or []
-
-    for c in post_rating_transformers:
-        features += c.features_out
-    for rating_idx, c in enumerate(rating_generators):
-        for rating_feature in c.features_out:
-            if len(rating_generators) > 1:
-                rating_feature_str = rating_feature + str(rating_idx)
-            else:
-                rating_feature_str = rating_feature
-            features.append(rating_feature_str)
-
-    logging.warning(f"predictor is not set. Will use {features} as features")
-    if other_categorical_features:
-        if estimator.__class__.__name__ in ('LGBMClassifier', 'LGBMRegressor', "XGBClassifier", "XGBRegressor"):
-            categorical_transformers = [
-                ConvertDataFrameToCategoricalTransformer(features=other_categorical_features)
-            ]
-        else:
-            categorical_transformers = [
-                SkLearnTransformerWrapper(
-                    transformer=OneHotEncoder(handle_unknown='ignore'), features=other_categorical_features)
-            ]
-    else:
-        categorical_transformers = []
-
-    if group_predictor_by_game_team:
-        match_id = rating_generators[
-            0].column_names.match_id if rating_generators else match_id_column_name
-        team_id = rating_generators[0].column_names.team_id if rating_generators else team_id_column_name
-        if match_id is None or team_id is None:
-            raise ValueError(
-                "match_id and team_id must be set if group_predictor_by_game_team is used to create predictor")
-
-        return GameTeamPredictor(
-            estimator=estimator,
-            features=features,
-            target=PredictColumnNames.TARGET,
-            game_id_colum=match_id,
-            team_id_column=team_id,
-            categorical_transformers=categorical_transformers,
-            filters=filters
-        )
-
-    else:
-        return Predictor(
-            estimator=estimator,
-            features=features,
-            target=PredictColumnNames.TARGET,
-            categorical_transformers=categorical_transformers,
-            filters=filters
-        )
 
 
 class Pipeline():

@@ -1,8 +1,7 @@
 import copy
 from typing import Optional, List, Union
 
-
-from player_performance_ratings.pipeline import Pipeline
+from player_performance_ratings import Pipeline
 from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
 
 from player_performance_ratings.predictor import BaseMLWrapper

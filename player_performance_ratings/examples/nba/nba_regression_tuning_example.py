@@ -3,12 +3,12 @@ from lightgbm import LGBMRegressor
 from sklearn.metrics import mean_absolute_error
 
 from player_performance_ratings.scorer.score import SklearnScorer
-from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
+from player_performance_ratings.tuner.rating_generator_tuner import UpdateRatingGeneratorTuner
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
 from player_performance_ratings.predictor.estimators import Predictor
 from player_performance_ratings.ratings import RatingColumnNames, OpponentAdjustedRatingGenerator, ColumnWeight
-from player_performance_ratings.tuner import MatchPredictorTuner
+from player_performance_ratings.tuner import PipelineTuner
 from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
 from player_performance_ratings.tuner.utils import get_default_team_rating_search_range
 
@@ -41,12 +41,12 @@ match_predictor_factory = PipelineFactory(
     column_weights=[ColumnWeight(name='points', weight=1)],
 )
 
-rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
+rating_generator_tuner = UpdateRatingGeneratorTuner(
     team_rating_n_trials=30,
     team_rating_search_ranges=get_default_team_rating_search_range(),
 )
 
-match_predictor_tuner = MatchPredictorTuner(
+match_predictor_tuner = PipelineTuner(
     pipeline=match_predictor_factory,
     rating_generator_tuners=rating_generator_tuner,
     scorer=SklearnScorer(pred_column=match_predictor_factory.predictor.pred_column,

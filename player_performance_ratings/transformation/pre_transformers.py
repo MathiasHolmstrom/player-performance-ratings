@@ -27,7 +27,6 @@ class ConvertDataFrameToCategoricalTransformer(BaseTransformer):
         return self.features
 
 
-
 class SklearnEstimatorImputer(BaseTransformer):
 
     def __init__(self, features: list[str], target_name: str, estimator: Optional[LGBMRegressor] = None):
@@ -147,7 +146,6 @@ class MinMaxTransformer(BaseTransformer):
                         f"This is above the allowed mean difference of {self.allowed_mean_diff}."
                         f" It is recommended to use DiminishingValueTransformer or SymmetricDistributionTransformer before MinMaxTransformer."
                         f"If positions are known use NetOverPredictedTransformer before DiminishingValueTransformer or SymmetricDistributionTransformer.")
-
 
         return df
 
@@ -281,7 +279,6 @@ class SymmetricDistributionTransformer(BaseTransformer):
             else:
                 reverse = False
 
-
             self._diminishing_value_transformer[feature][granularity_value] = DiminishingValueTransformer(
                 features=[feature],
                 reverse=reverse,
@@ -303,11 +300,18 @@ class SymmetricDistributionTransformer(BaseTransformer):
             if self.granularity:
 
                 unique_values = df["__concat_granularity"].unique()
-                for unique_value in unique_values:
-                    rows = df[df["__concat_granularity"] == unique_value]
-                    if unique_value in self._diminishing_value_transformer[feature]:
-                        rows = self._diminishing_value_transformer[feature][unique_value].transform(rows)
-                        df.loc[df["__concat_granularity"] == unique_value, out_feature] = rows[feature]
+
+                if len(self._diminishing_value_transformer[feature]) == 0:
+                    df[out_feature] = df[feature]
+                else:
+
+                    for unique_value in unique_values:
+                        rows = df[df["__concat_granularity"] == unique_value]
+
+                        if unique_value in self._diminishing_value_transformer[feature]:
+                            rows = self._diminishing_value_transformer[feature][unique_value].transform(rows)
+                            df.loc[df["__concat_granularity"] == unique_value, out_feature] = rows[feature]
+
 
             else:
                 if None in self._diminishing_value_transformer[feature]:

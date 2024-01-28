@@ -7,7 +7,7 @@ from player_performance_ratings.ratings import convert_df_to_matches
 from player_performance_ratings.ratings.rating_calculators import RatingMeanPerformancePredictor
 from player_performance_ratings.ratings.rating_calculators.performance_predictor import \
     RatingNonOpponentPerformancePredictor
-from player_performance_ratings.ratings.rating_calculators.team_rating_generator import MatchTeatingGenerator
+from player_performance_ratings.ratings.rating_calculators.team_rating_generator import MatchTeamRatingGenerator
 from player_performance_ratings.ratings.enums import RatingColumnNames, HistoricalRatingColumnNames
 
 from player_performance_ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PlayerRating, \
@@ -23,7 +23,7 @@ class UpdateRatingGenerator(RatingGenerator):
 
     def __init__(self,
                  column_names: ColumnNames,
-                 match_rating_generator: MatchTeatingGenerator = MatchTeatingGenerator(),
+                 match_rating_generator: MatchTeamRatingGenerator = MatchTeamRatingGenerator(),
                  features_out: Optional[list[str]] = None,
                  ):
 

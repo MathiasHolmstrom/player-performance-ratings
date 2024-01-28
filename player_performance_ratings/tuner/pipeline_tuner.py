@@ -6,10 +6,11 @@ import pandas as pd
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator, MatchCountCrossValidator, \
     MatchKFoldCrossValidator
-from player_performance_ratings import Pipeline
+
+from player_performance_ratings.pipeline import Pipeline
 from player_performance_ratings.ratings import PerformancesGenerator
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
-from player_performance_ratings.scorer import BaseScorer
+
 
 from player_performance_ratings import PipelineFactory
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
@@ -19,7 +20,7 @@ from player_performance_ratings.tuner.performances_generator_tuner import Perfor
 logging.basicConfig(level=logging.INFO)
 
 
-class MatchPredictorTuner():
+class PipelineTuner():
     """
     Given a search range, it will identify the best combination of pre_transformers, rating_generators and post_transformers.
     Using optuna, it will tune the hyperparameters of each transformer.
@@ -82,7 +83,7 @@ class MatchPredictorTuner():
 
 
 
-    def tune(self, df: pd.DataFrame) -> Pipeline:
+    def tune(self, df: pd.DataFrame) -> PipelineFactory:
 
         original_df = df.copy()
 

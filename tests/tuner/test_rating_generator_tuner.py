@@ -5,7 +5,7 @@ import pandas as pd
 from player_performance_ratings.predictor import Predictor
 
 from player_performance_ratings import ColumnNames, PredictColumnNames
-from player_performance_ratings.ratings.rating_calculators import MatchTeatingGenerator
+from player_performance_ratings.ratings.rating_calculators import MatchTeamRatingGenerator
 from player_performance_ratings.ratings import RatingColumnNames
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 from player_performance_ratings.ratings.rating_calculators.performance_predictor import \
@@ -13,7 +13,7 @@ from player_performance_ratings.ratings.rating_calculators.performance_predictor
 from player_performance_ratings.ratings.rating_calculators.start_rating_generator import StartRatingGenerator
 from player_performance_ratings.ratings.rating_calculators import OpponentAdjustedRatingGenerator
 from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
-from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
+from player_performance_ratings.tuner.rating_generator_tuner import UpdateRatingGeneratorTuner
 from player_performance_ratings.tuner.utils import ParameterSearchRange
 
 
@@ -34,10 +34,10 @@ def test_opponent_adjusted_rating_generator_tuner_team_rating():
         performance="won"
     )
 
-    rating_generator1 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchTeatingGenerator(
+    rating_generator1 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchTeamRatingGenerator(
         confidence_weight=0.5
     ), column_names=column_names)
-    rating_generator2 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchTeatingGenerator(
+    rating_generator2 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchTeamRatingGenerator(
         confidence_weight=0.4
     ), column_names=column_names)
     rating_generators = [rating_generator1, rating_generator2]
@@ -53,7 +53,7 @@ def test_opponent_adjusted_rating_generator_tuner_team_rating():
 
     )
 
-    rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
+    rating_generator_tuner = UpdateRatingGeneratorTuner(
         start_rating_n_trials=0,
         team_rating_n_trials=2,
         team_rating_search_ranges=team_rating_search,
@@ -107,13 +107,13 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
         performance="won"
     )
 
-    rating_generator1 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchTeatingGenerator(
+    rating_generator1 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchTeamRatingGenerator(
         confidence_weight=0.5,
         performance_predictor=RatingDifferencePerformancePredictor(
             max_predict_value=0.3
         )
     ), column_names=column_names)
-    rating_generator2 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchTeatingGenerator(
+    rating_generator2 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchTeamRatingGenerator(
         confidence_weight=0.4,
         performance_predictor=RatingDifferencePerformancePredictor(
             max_predict_value=0.4
@@ -132,7 +132,7 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
         match_id_column_name="game_id"
     )
 
-    rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
+    rating_generator_tuner = UpdateRatingGeneratorTuner(
         start_rating_n_trials=0,
         team_rating_n_trials=2,
         team_rating_search_ranges=team_rating_search,
@@ -196,7 +196,7 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
         performance="won"
     )
 
-    rating_generator1 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchTeatingGenerator(
+    rating_generator1 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchTeamRatingGenerator(
         confidence_weight=0.5,
         start_rating_generator=StartRatingGenerator(
             team_weight=0.5
@@ -204,7 +204,7 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
     ),
         column_names=column_names
     )
-    rating_generator2 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchTeatingGenerator(
+    rating_generator2 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchTeamRatingGenerator(
         confidence_weight=0.4,
         start_rating_generator=StartRatingGenerator(
             team_weight=0.4
@@ -222,7 +222,7 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
         match_id_column_name="game_id"
     )
 
-    rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
+    rating_generator_tuner = UpdateRatingGeneratorTuner(
         start_rating_n_trials=2,
         team_rating_n_trials=2,
         start_rating_search_ranges=start_rating_rating_search,

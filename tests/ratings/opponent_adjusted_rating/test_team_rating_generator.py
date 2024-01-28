@@ -5,7 +5,7 @@ import pytest
 
 from player_performance_ratings.data_structures import MatchTeam, PreMatchPlayerRating, MatchPerformance, \
     MatchPlayer, PreMatchTeamRating, PlayerRating, TeamRatingChange, PlayerRatingChange
-from player_performance_ratings.ratings.rating_calculators.team_rating_generator import MatchTeatingGenerator
+from player_performance_ratings.ratings.rating_calculators.team_rating_generator import MatchTeamRatingGenerator
 from player_performance_ratings.ratings.rating_calculators.performance_predictor import RatingDifferencePerformancePredictor, \
     MATCH_CONTRIBUTION_TO_SUM_VALUE
 from player_performance_ratings.ratings.rating_calculators.team_rating_generator import EXPECTED_MEAN_CONFIDENCE_SUM
@@ -40,7 +40,7 @@ def test_generate_pre_match_team_rating():
         ],
     )
 
-    team_rating_generator = MatchTeatingGenerator()
+    team_rating_generator = MatchTeamRatingGenerator()
 
     team_rating_generator.player_ratings = {
         "1": PlayerRating(
@@ -114,7 +114,7 @@ def test_generate_rating_change(confidence_sum):
                                                                  rating_diff_team_from_entity_coef=0.0,
                                                                  team_rating_diff_coef=0.0)
 
-    team_rating_generator = MatchTeatingGenerator(
+    team_rating_generator = MatchTeamRatingGenerator(
         confidence_weight=1,
         confidence_value_denom=50,
         confidence_max_days=100,
@@ -300,7 +300,7 @@ def test_update_by_team_rating_change():
         ]
     )
 
-    team_rating_generator = MatchTeatingGenerator()
+    team_rating_generator = MatchTeamRatingGenerator()
     original_player_ratings = {
         "1": PlayerRating(
             id="1",
@@ -392,7 +392,7 @@ def test_league_ratings_are_updated_when_player_ratings_are_updated():
 
     start_rating_mock = mock.Mock()
 
-    team_rating_generator = MatchTeatingGenerator(
+    team_rating_generator = MatchTeamRatingGenerator(
         start_rating_generator=start_rating_mock
     )
     original_player_ratings = {
@@ -449,7 +449,7 @@ def test_player_ratings_are_updated_when_league_ratings_reaches_threshold():
         ]
     )
 
-    team_rating_generator = MatchTeatingGenerator(
+    team_rating_generator = MatchTeamRatingGenerator(
     )
     original_player_ratings = {
         "1": PlayerRating(

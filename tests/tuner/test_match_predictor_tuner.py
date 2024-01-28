@@ -9,9 +9,9 @@ from skbase.testing.utils.deep_equals import deep_equals
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.ratings.rating_calculators import OpponentAdjustedRatingGenerator
 
-from player_performance_ratings.tuner import MatchPredictorTuner, PerformancesGeneratorTuner
+from player_performance_ratings.tuner import PipelineTuner, PerformancesGeneratorTuner
 from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
-from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
+from player_performance_ratings.tuner.rating_generator_tuner import UpdateRatingGeneratorTuner
 
 
 def test_match_predictor_tuner():
@@ -56,12 +56,12 @@ def test_match_predictor_tuner():
         performances_weight_search_ranges=performances_weight_search_ranges,
         n_trials=1)
 
-    rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
+    rating_generator_tuner = UpdateRatingGeneratorTuner(
         team_rating_n_trials=1,
         start_rating_n_trials=0,
     )
 
-    match_predictor_tuner = MatchPredictorTuner(
+    match_predictor_tuner = PipelineTuner(
         scorer=scorer_mock,
         pipeline=match_predictor_factory,
         performances_generator_tuner=performances_generator_tuner,
