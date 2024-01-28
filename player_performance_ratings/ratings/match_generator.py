@@ -19,7 +19,7 @@ HOUR_NUMBER_COLUMN_NAME = "hour_number"
 
 
 def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
-                          league_identifier: Optional[LeagueIdentifier] = None) -> list[Match]:
+                          league_identifier: Optional[LeagueIdentifier] = LeagueIdentifier()) -> list[Match]:
     """
     Converts a dataframe to a list of matches.
     Each dataframe row needs to be a unique combination of match_id and player_id.
@@ -66,19 +66,19 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
     df[HOUR_NUMBER_COLUMN_NAME] = (date_time - pd.Timestamp("1970-01-01").tz_localize('UTC')) // pd.Timedelta(
         '1h')
 
+    if col_names.league and col_names.league not in df.columns:
+        raise ValueError("league column passed but not in dataframe.")
+
     league_in_df = False
-    if col_names.league is not None and col_names.league in df.columns.tolist():
-        if league_identifier is None:
-            logging.warning("League column passed but no league_identifier passed. league will be set to None")
-        else:
-            league_in_df = True
+    if col_names.league is not None:
+        league_in_df = True
+
 
     if col_names.projected_participation_weight:
         if col_names.projected_participation_weight not in df.columns:
             logging.warning(
                 "projected_participation_weight column passed but not in dataframe."
                 " Will use participation_weight as projected_participation_weight")
-
 
     if col_names.team_players_playing_time:
         if col_names.team_players_playing_time not in df.columns:
@@ -96,11 +96,8 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
     else:
         is_opponent_players_playing_time = False
 
-
-
-
     prev_match_id = None
-    prev_update_team_id= None
+    prev_update_team_id = None
 
     data_dict = df.to_dict('records')
 
@@ -173,7 +170,6 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
         else:
             opponent_players_playing_time = {}
 
-
         if col_names.projected_participation_weight and col_names.participation_weight in row:
             projected_participation_weight = row[col_names.projected_participation_weight]
         elif col_names.participation_weight not in row:
@@ -183,8 +179,8 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
 
         if col_names.performance in row:
             performance = MatchPerformance(
-                team_players_playing_time = team_players_playing_time,
-                opponent_players_playing_time = opponent_players_playing_time,
+                team_players_playing_time=team_players_playing_time,
+                opponent_players_playing_time=opponent_players_playing_time,
                 performance_value=row[col_names.performance],
                 participation_weight=participation_weight,
                 projected_participation_weight=projected_participation_weight

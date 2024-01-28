@@ -3,14 +3,16 @@ import inspect
 import logging
 from dataclasses import dataclass
 
-
 import pandas as pd
-from player_performance_ratings.scorer import BaseScorer
+from player_performance_ratings.data_structures import Match
+
+from player_performance_ratings.cross_validator._base import CrossValidator
 
 from player_performance_ratings import PipelineFactory
 from player_performance_ratings.ratings.enums import RatingColumnNames, HistoricalRatingColumnNames
 from player_performance_ratings.ratings.rating_calculators.start_rating_generator import \
     StartRatingGenerator
+
 
 @dataclass
 class LeagueH2H:
@@ -24,8 +26,8 @@ class StartLeagueRatingOptimizer():
 
     def __init__(self,
                  pipeline_factory: PipelineFactory,
-                 scorer: BaseScorer,
-                 max_iterations: int = 20,
+                 cross_validator: CrossValidator,
+                 max_iterations: int = 8,
                  learning_step: int = 20,
                  weight_div: int = 500,
                  indirect_weight: float = 1.5,
@@ -35,16 +37,16 @@ class StartLeagueRatingOptimizer():
         self.max_iterations = max_iterations
         self.learning_step = learning_step
         self.weight_div = weight_div
-        self.scorer = scorer
+        self.cross_validator = cross_validator
         self.indirect_weight = indirect_weight
         self.verbose = verbose
         self._scores = []
         self._league_ratings_iterations = []
 
-
-    def optimize(self, df: pd.DataFrame, rating_model_idx: int) -> dict[str, float]:
+    def optimize(self, df: pd.DataFrame, rating_model_idx: int, matches: list[Match]) -> dict[str, float]:
         column_names = self.pipeline_factory.rating_generators[rating_model_idx].column_names
-        start_rating_generator = self.pipeline_factory.rating_generators[rating_model_idx].team_rating_generator.start_rating_generator
+        start_rating_generator = self.pipeline_factory.rating_generators[
+            rating_model_idx].team_rating_generator.start_rating_generator
         league_ratings = start_rating_generator.league_ratings.copy()
         start_rating_params = list(
             inspect.signature(start_rating_generator.__class__.__init__).parameters.keys())[1:]
@@ -64,19 +66,35 @@ class StartLeagueRatingOptimizer():
             rating_generators = copy.deepcopy(self.pipeline_factory.rating_generators)
             rating_generators[rating_model_idx].team_rating_generator.start_rating_generator = start_rating_generator
 
+            rating_values = rating_generators[rating_model_idx].generate_historical(df=df, matches=matches)
+            for rating_column, rating_value in rating_values.items():
+                df[rating_column] = rating_value
+
+            ratings_df = rating_generators[rating_model_idx].ratings_df
+            df_incl_ratings = df.merge(ratings_df[[column_names.match_id, column_names.team_id, column_names.player_id,
+                                                   HistoricalRatingColumnNames.PLAYER_RATING_CHANGE,
+                                                   RatingColumnNames.PLAYER_LEAGUE,
+                                                   RatingColumnNames.OPPONENT_LEAGUE,
+                                              ]],
+                                       on=[column_names.match_id, column_names.player_id, column_names.team_id],
+                                       how='inner')
+
+            rating_generators = copy.deepcopy(self.pipeline_factory.rating_generators)
+            rating_generators[rating_model_idx].team_rating_generator.start_rating_generator = start_rating_generator
             pipeline = self.pipeline_factory.create(rating_generators=rating_generators)
-            df = pipeline(df=df, store_ratings=False)
-            score = self.scorer.score(df)
+            score = pipeline.cross_validate_score(df=df_incl_ratings, cross_validator=self.cross_validator,
+                                                  create_performance=False, create_rating_features=False)
 
             if not league_ratings:
-                league_ratings = pipeline.rating_generators[rating_model_idx].team_rating_generator.start_rating_generator.league_ratings
+                league_ratings = pipeline.rating_generators[
+                    rating_model_idx].team_rating_generator.start_rating_generator.league_ratings
 
             self._league_ratings_iterations.append(league_ratings)
             self._scores.append(score)
             if self.verbose:
                 logging.info(f"iteration {iteration} finished. Score: {score}. best startings {league_ratings}")
 
-            league_rating_changes = (df
+            league_rating_changes = (df_incl_ratings
             .groupby([RatingColumnNames.PLAYER_LEAGUE, RatingColumnNames.OPPONENT_LEAGUE])
             .agg(
                 {
@@ -172,8 +190,10 @@ class StartLeagueRatingOptimizer():
                 start_rating_rating_change = 0
 
                 for opp_league, final_h2h in final_opp_league_h2h.items():
-                    start_rating_rating_change += final_h2h.weight / league_sum_final_weights[
-                        league] * final_h2h.mean_rating_change * self.learning_step
+                    if league_sum_final_weights[
+                        league] > 0:
+                        start_rating_rating_change += final_h2h.weight / league_sum_final_weights[
+                            league] * final_h2h.mean_rating_change * self.learning_step
 
                 league_ratings[league] += start_rating_rating_change
 

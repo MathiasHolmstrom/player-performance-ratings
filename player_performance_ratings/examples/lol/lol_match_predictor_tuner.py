@@ -34,11 +34,14 @@ df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 df['champion_position'] = df['champion'] + df['position']
 df['__target'] = df['result']
 
+df = df.drop_duplicates(subset=['gameid', 'teamname', 'playername'])
+
 df = (
     df.loc[lambda x: x.position != 'team']
     .assign(team_count=df.groupby('gameid')['teamname'].transform('nunique'))
     .loc[lambda x: x.team_count == 2]
 )
+
 
 rating_generator = UpdateRatingGenerator(column_names=column_names)
 
@@ -95,12 +98,14 @@ start_rating_search_range = [
 
 performance_generator_tuner = PerformancesGeneratorTuner(performances_weight_search_ranges=weighter_search_range,
                                                          lower_is_better_features=["deaths"],
-                                                         n_trials=20
+                                                         n_trials=1
                                                          )
 
 rating_generator_tuner = UpdateRatingGeneratorTuner(
     team_rating_search_ranges=get_default_team_rating_search_range(),
     start_rating_search_ranges=start_rating_search_range,
+    optimize_league_ratings=True,
+    team_rating_n_trials=1
 )
 
 estimator = LogisticRegression()

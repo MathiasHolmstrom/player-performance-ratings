@@ -146,7 +146,7 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                                                                 rating_index=rating_idx,
                                                                 cross_validator=cross_validator,
                                                                 matches=matches,
-                                                                match_predictor_factory=pipeline_factory)
+                                                                pipeline_factory=pipeline_factory)
 
             best_rating_generator.team_rating_generator = best_team_rating_generator
 
@@ -154,9 +154,9 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
         if self.optimize_league_ratings:
             start_rating_optimizer = StartLeagueRatingOptimizer(
                 pipeline_factory=pipeline_factory,
-                scorer=cross_validator.scorer,
+                cross_validator=cross_validator,
             )
-            optimized_league_ratings = start_rating_optimizer.optimize(df=df, rating_model_idx=rating_idx)
+            optimized_league_ratings = start_rating_optimizer.optimize(df=df, rating_model_idx=rating_idx, matches=matches)
             best_rating_generator.team_rating_generator.start_rating_generator.league_ratings = optimized_league_ratings
 
 
@@ -182,7 +182,7 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                           rating_index: int,
                           matches: list[Match],
                           cross_validator: CrossValidator,
-                          match_predictor_factory: PipelineFactory,
+                          pipeline_factory: PipelineFactory,
                           ) -> MatchTeamRatingGenerator:
 
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
@@ -210,13 +210,13 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
 
             rating_g = copy.deepcopy(rating_generator)
             rating_g.team_rating_generator = team_rating_generator
-            rating_generators = copy.deepcopy(match_predictor_factory.rating_generators)
+            rating_generators = copy.deepcopy(pipeline_factory.rating_generators)
 
             rating_generators[rating_index] = rating_g
-            match_predictor = match_predictor_factory.create(
+            pipeline = pipeline_factory.create(
                 rating_generators=rating_generators,
             )
-            return match_predictor.cross_validate_score(df=df, matches=matches, cross_validator=cross_validator,
+            return pipeline.cross_validate_score(df=df, matches=matches, cross_validator=cross_validator,
                                                                  create_performance=False)
 
         direction = "minimize"
