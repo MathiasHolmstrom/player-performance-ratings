@@ -23,14 +23,12 @@ class PerformancesGeneratorTuner:
 
     def __init__(self,
                  performances_weight_search_ranges: dict[str, list[ParameterSearchRange]],
-                 pre_transformations: Optional[list[BaseTransformer]] = None,
                  feature_names: Optional[Union[list[str], list[list[str]]]] = None,
                  lower_is_better_features: Optional[list[str]] = None,
                  n_trials: int = 30,
                  ):
 
         self.performances_weight_search_ranges = performances_weight_search_ranges
-        self.pre_transformations = pre_transformations
         self.feature_names = feature_names
         self.lower_is_better_features = lower_is_better_features
 
@@ -53,7 +51,7 @@ class PerformancesGeneratorTuner:
                       pipeline_factory: PipelineFactory,
                       ) -> float:
 
-            best_pre_transformers = copy.deepcopy(self.pre_transformations)
+            best_pre_transformers = copy.deepcopy(pipeline_factory.performances_generator.pre_transformations)
             column_weights = []
             for performance_name, search_range in self.performances_weight_search_ranges.items():
                 raw_params = {}
@@ -90,7 +88,7 @@ class PerformancesGeneratorTuner:
         best_column_weights = self._select_best_column_weights(all_params=best_params)
 
         return PerformancesGenerator(column_weights=best_column_weights, column_names=column_names,
-                                     pre_transformations=self.pre_transformations)
+                                     pre_transformations=pipeline_factory.performances_generator.pre_transformations)
 
     def _create_column_weights(self, params: dict, remove_string: str) -> list[ColumnWeight]:
 

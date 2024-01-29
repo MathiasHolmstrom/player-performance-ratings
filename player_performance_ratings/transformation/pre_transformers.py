@@ -96,10 +96,12 @@ class MinMaxTransformer(BaseTransformer):
                  features: list[str],
                  quantile: float = 0.99,
                  allowed_mean_diff: Optional[float] = 0.02,
+                 max_iterations: int = 150,
                  prefix: str = ""
                  ):
         super().__init__(features=features)
         self.quantile = quantile
+        self.max_iterations = max_iterations
         self.allowed_mean_diff = allowed_mean_diff
         self.prefix = prefix
         self._original_mean_values = {}
@@ -140,7 +142,7 @@ class MinMaxTransformer(BaseTransformer):
                     mean_value = df[self.prefix + feature].mean()
 
                     self._mean_aligning_iterations += 1
-                if self._mean_aligning_iterations > 100:
+                if self._mean_aligning_iterations > self.max_iterations:
                     raise ValueError(
                         f"MinMaxTransformer: {feature} mean value is {mean_value} after {self._mean_aligning_iterations} repetitions."
                         f"This is above the allowed mean difference of {self.allowed_mean_diff}."

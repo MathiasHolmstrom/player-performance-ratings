@@ -98,7 +98,6 @@ class Pipeline():
         self.performances_generator = performances_generator
         self.keep_features = keep_features
 
-
         self.predictor = predictor
 
         self.predictor.set_target(PredictColumnNames.TARGET)
