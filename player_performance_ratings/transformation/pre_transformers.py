@@ -250,7 +250,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
         if self.granularity:
-            df = df.assign(__concat_granularity=df[self.granularity].apply(lambda x: "_".join(x), axis=1))
+            df = df.assign(__concat_granularity=df[self.granularity].astype(str).agg('_'.join, axis=1))
 
         for feature in self.features:
             self._diminishing_value_transformer[feature] = {}
@@ -302,6 +302,10 @@ class SymmetricDistributionTransformer(BaseTransformer):
             if self.granularity:
 
                 unique_values = df["__concat_granularity"].unique()
+                if len(unique_values) > 100:
+                    logging.warning(
+                        f"SymmetricDistributionTransformer: {feature} has more than 100 unique values."
+                        f" This can lead to long runtimes. Consider setting a lower granularity")
 
                 if len(self._diminishing_value_transformer[feature]) == 0:
                     df[out_feature] = df[feature]

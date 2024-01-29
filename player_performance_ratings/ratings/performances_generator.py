@@ -107,15 +107,12 @@ class PerformancesGenerator():
                  column_weights: Union[list[list[ColumnWeight]], list[ColumnWeight]],
                  column_names: Union[list[ColumnNames], ColumnNames],
                  pre_transformations: Optional[list[BaseTransformer]] = None,
-                 add_auto_pre_transformations: bool = True,
                  ):
         self.column_names = column_names if isinstance(column_names, list) else [column_names]
         self.pre_transformations = pre_transformations or []
-        self.add_auto_pre_transformations = add_auto_pre_transformations
-        if self.add_auto_pre_transformations:
-            self.pre_transformations = auto_create_pre_performance_transformations(
-                pre_transformations=self.pre_transformations, column_weights=column_weights,
-                column_names=self.column_names)
+        self.pre_transformations = auto_create_pre_performance_transformations(
+            pre_transformations=self.pre_transformations, column_weights=column_weights,
+            column_names=self.column_names)
         self.column_weights = column_weights if isinstance(column_weights[0], list) else [column_weights]
 
     def generate(self, df):

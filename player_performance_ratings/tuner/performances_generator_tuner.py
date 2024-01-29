@@ -88,8 +88,7 @@ class PerformancesGeneratorTuner:
         best_column_weights = self._select_best_column_weights(all_params=best_params)
 
         return PerformancesGenerator(column_weights=best_column_weights, column_names=column_names,
-                                     pre_transformations=pipeline_factory.performances_generator.pre_transformations,
-                                     add_auto_pre_transformations=pipeline_factory.performances_generator.add_auto_pre_transformations)
+                                     pre_transformations=pipeline_factory.performances_generator.pre_transformations)
 
     def _create_column_weights(self, params: dict, remove_string: str) -> list[ColumnWeight]:
 

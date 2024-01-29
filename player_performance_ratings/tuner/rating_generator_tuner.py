@@ -113,7 +113,8 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                  start_rating_search_ranges: Optional[list[ParameterSearchRange]] = None,
                  start_rating_n_trials: int = 8,
                  optimize_league_ratings: bool = False,
-                 add_league_ratings_tuning: bool = False
+                 add_league_ratings_tuning: bool = False,
+                 tune_league_ratings: bool = False,
                  ):
         self.team_rating_search_ranges = team_rating_search_ranges or DEFAULT_TEAM_SEARCH_RANGES
         self.start_rating_search_ranges = start_rating_search_ranges or DEFAULT_START_RATING_SEARCH_RANGE
@@ -121,6 +122,7 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
         self.start_rating_n_trials = start_rating_n_trials
         self.optimize_league_ratings = optimize_league_ratings
         self.add_league_ratings_tuning = add_league_ratings_tuning
+        self.tune_league_ratings = tune_league_ratings
 
     def tune(self,
              df: pd.DataFrame,
@@ -133,13 +135,13 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
             best_rating_generator = copy.deepcopy(pipeline_factory.rating_generators[rating_idx])
         else:
             raise ValueError("rating_generators are not specified")
-           # potential_rating_features = [v for k, v in RatingColumnNames.__dict__.items() if isinstance(v, str)]
+        # potential_rating_features = [v for k, v in RatingColumnNames.__dict__.items() if isinstance(v, str)]
 
-           # best_rating_generator = UpdateRatingGenerator(
-               # features_out=[f for f in pipeline_factory.predictor.features if f in potential_rating_features],
-          #      features_out=pipeline_factory.predictor.features,
-          #      column_names=pipeline_factory.rating_generators[rating_idx].column_names
-          #  )
+        # best_rating_generator = UpdateRatingGenerator(
+        # features_out=[f for f in pipeline_factory.predictor.features if f in potential_rating_features],
+        #      features_out=pipeline_factory.predictor.features,
+        #      column_names=pipeline_factory.rating_generators[rating_idx].column_names
+        #  )
 
         if self.team_rating_n_trials > 0:
             logging.info("Tuning Team Rating")
@@ -152,16 +154,14 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
 
             best_rating_generator.team_rating_generator = best_team_rating_generator
 
-
         if self.optimize_league_ratings:
             start_rating_optimizer = StartLeagueRatingOptimizer(
                 pipeline_factory=pipeline_factory,
                 cross_validator=cross_validator,
             )
-            optimized_league_ratings = start_rating_optimizer.optimize(df=df, rating_model_idx=rating_idx, matches=matches)
+            optimized_league_ratings = start_rating_optimizer.optimize(df=df, rating_model_idx=rating_idx,
+                                                                       matches=matches)
             best_rating_generator.team_rating_generator.start_rating_generator.league_ratings = optimized_league_ratings
-
-
 
         if self.start_rating_n_trials > 0:
             logging.info("Tuning Start Rating")
@@ -176,7 +176,7 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
             best_rating_generator.team_rating_generator.start_rating_generator = best_start_rating
 
         return UpdateRatingGenerator(match_rating_generator=best_rating_generator.team_rating_generator,
-                                               column_names=best_rating_generator.column_names)
+                                     column_names=best_rating_generator.column_names)
 
     def _tune_team_rating(self,
                           df: pd.DataFrame,
@@ -219,7 +219,7 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                 rating_generators=rating_generators,
             )
             return pipeline.cross_validate_score(df=df, matches=matches, cross_validator=cross_validator,
-                                                                 create_performance=False)
+                                                 create_performance=False)
 
         direction = "minimize"
         study_name = "optuna_study"
@@ -266,13 +266,19 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                                             1:]
 
             params = {attr: getattr(rating_generator.team_rating_generator.start_rating_generator, attr) for attr in
-                      start_rating_generator_params}
+                      start_rating_generator_params if attr !='league_ratings'}
 
             params = add_params_from_search_range(params=params,
                                                   trial=trial,
                                                   parameter_search_range=self.start_rating_search_ranges)
 
-            start_rating_generator = StartRatingGenerator(**params)
+            league_ratings = copy.deepcopy(rating_generator.team_rating_generator.start_rating_generator.league_ratings)
+            if self.tune_league_ratings:
+                for league, start_rating in league_ratings.items():
+                    league_ratings[league] = trial.suggest_uniform(f"{league}_start_rating",
+                                                                             start_rating - 100, start_rating + 100)
+
+            start_rating_generator = StartRatingGenerator(league_ratings=league_ratings,**params)
             rating_g = copy.deepcopy(rating_generator)
             rating_g.team_rating_generator.start_rating_generator = start_rating_generator
             if match_predictor_factory.rating_generators:
@@ -285,7 +291,7 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
 
             )
             return match_predictor.cross_validate_score(df=df, matches=matches, create_performance=False,
-                                                                 cross_validator=cross_validator)
+                                                        cross_validator=cross_validator)
 
         direction = "minimize"
         study_name = "optuna_study"
