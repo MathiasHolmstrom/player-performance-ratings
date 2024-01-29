@@ -148,6 +148,7 @@ class Predictor(BaseMLWrapper):
     def __init__(self,
                  target: Optional[str] = PredictColumnNames.TARGET,
                  estimator: Optional = None,
+                 estimator_features: Optional[list[str]] = None,
                  filters: Optional[list[Filter]] = None,
                  multiclassifier: bool = False,
                  pred_column: Optional[str] = None,
@@ -157,6 +158,7 @@ class Predictor(BaseMLWrapper):
         self._target = target
         self.multiclassifier = multiclassifier
         self.column_names = column_names
+        self._estimator_features = estimator_features
 
         if estimator is None:
             logging.warning(
@@ -167,8 +169,12 @@ class Predictor(BaseMLWrapper):
                                                                verbose=-100),
                          categorical_transformers=categorical_transformers, filters=filters)
 
-    def train(self, df: pd.DataFrame, estimator_features: list[str]) -> None:
-        self._estimator_features = estimator_features
+    def train(self, df: pd.DataFrame, estimator_features: Optional[list[str]] = None) -> None:
+        if estimator_features is None and self._estimator_features is None:
+            raise ValueError("estimator features must either be passed to .train() or injected into constructor")
+        if estimator_features:
+            self._estimator_features = estimator_features
+
         if hasattr(self.estimator, "predict_proba"):
             try:
                 df[self._target] = df[self._target].astype('int')

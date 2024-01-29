@@ -240,8 +240,7 @@ class MatchTeamRatingGenerator():
             performance_difference = pre_player_rating.match_performance.performance_value - predicted_performance
             rating_change_value = performance_difference * applied_rating_change_multiplier * pre_player_rating.match_performance.participation_weight
             if math.isnan(rating_change_value):
-                logging.warning(f"rating_change_value is nan for {pre_player_rating.id}")
-                raise ValueError
+                raise ValueError(f"rating_change_value is nan for {pre_player_rating.id}")
 
             player_rating_change = PlayerRatingChange(
                 id=pre_player_rating.id,

@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -25,15 +26,17 @@ class ColumnWeight:
             raise ValueError("Weight must be less than 1")
 
 
-def auto_create_pre_performance_transformations(column_weights: list[list[ColumnWeight]],
-                                                column_names: list[ColumnNames],
-                                                ) -> list[BaseTransformer]:
+def auto_create_pre_performance_transformations(
+        pre_transformations: list[BaseTransformer],
+        column_weights: list[list[ColumnWeight]],
+        column_names: list[ColumnNames],
+) -> list[BaseTransformer]:
     """
     Creates a list of transformers that ensure the performance column is generated in a way that makes sense for the rating model.
     Ensures columns aren't too skewed, scales them to similar ranges, ensure values are between 0 and 1,
     and then weights them according to the column_weights.
     """
-    pre_transformations = []
+
     if not isinstance(column_weights[0], list):
         column_weights = [column_weights]
 
@@ -76,9 +79,9 @@ def auto_create_pre_performance_transformations(column_weights: list[list[Column
                     prefix="symmetric_position__")
                 pre_transformations.append(distribution_transformer)
                 position_features += [f for f in distribution_transformer.features_out if f not in position_features]
-                for idx2, col_weight in enumerate(column_weights[idx]):
-                    column_weights[idx][
-                        idx2].name = distribution_transformer.prefix + position_predicted_transformer.prefix + col_weight.name
+            #  for idx2, col_weight in enumerate(column_weights[idx]):
+            #        column_weights[idx][
+            #           idx2].name = distribution_transformer.prefix + position_predicted_transformer.prefix + col_weight.name
 
             else:
                 not_position_features += [c.name for c in column_weights[idx]]
@@ -104,12 +107,15 @@ class PerformancesGenerator():
                  column_weights: Union[list[list[ColumnWeight]], list[ColumnWeight]],
                  column_names: Union[list[ColumnNames], ColumnNames],
                  pre_transformations: Optional[list[BaseTransformer]] = None,
+                 add_auto_pre_transformations: bool = True,
                  ):
         self.column_names = column_names if isinstance(column_names, list) else [column_names]
-        self.pre_transformations = pre_transformations
-        if self.pre_transformations is None:
-            self.pre_transformations = auto_create_pre_performance_transformations(column_weights=column_weights,
-                                                                                   column_names=self.column_names)
+        self.pre_transformations = pre_transformations or []
+        self.add_auto_pre_transformations = add_auto_pre_transformations
+        if self.add_auto_pre_transformations:
+            self.pre_transformations = auto_create_pre_performance_transformations(
+                pre_transformations=self.pre_transformations, column_weights=column_weights,
+                column_names=self.column_names)
         self.column_weights = column_weights if isinstance(column_weights[0], list) else [column_weights]
 
     def generate(self, df):
@@ -118,16 +124,23 @@ class PerformancesGenerator():
             for pre_transformation in self.pre_transformations:
                 df = pre_transformation.fit_transform(df)
 
-            max_idx = len(self.pre_transformations) - 1
-            column_weighs_mapping = {self.pre_transformations[0].features[idx]: out_feature for idx, out_feature in
-                                     enumerate(self.pre_transformations[max_idx].features)}
-        else:
-            column_weighs_mapping = {}
-
         for idx, col_name in enumerate(self.column_names):
+            if self.pre_transformations:
+                max_idx = len(self.pre_transformations) - 1
+                column_weighs_mapping = {col_weight.name: self.pre_transformations[max_idx].features_out[idx] for
+                                         idx, col_weight in enumerate(self.column_weights[idx])}
+            else:
+                column_weighs_mapping = None
+
             df[col_name.performance] = self._weight_columns(df=df, col_name=col_name,
                                                             col_weights=self.column_weights[idx],
                                                             column_weighs_mapping=column_weighs_mapping)
+
+            if df[col_name.performance].isnull().any():
+                logging.error(
+                    f"df[{col_name.performance}] contains nan values. Make sure all column_names used in column_weights are imputed beforehand")
+                raise ValueError("performance contains nan values")
+
         return df
 
     def _weight_columns(self,
