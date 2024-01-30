@@ -113,7 +113,6 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                  start_rating_search_ranges: Optional[list[ParameterSearchRange]] = None,
                  start_rating_n_trials: int = 8,
                  optimize_league_ratings: bool = False,
-                 add_league_ratings_tuning: bool = False,
                  tune_league_ratings: bool = False,
                  ):
         self.team_rating_search_ranges = team_rating_search_ranges or DEFAULT_TEAM_SEARCH_RANGES
@@ -121,8 +120,6 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
         self.team_rating_n_trials = team_rating_n_trials
         self.start_rating_n_trials = start_rating_n_trials
         self.optimize_league_ratings = optimize_league_ratings
-        self.add_league_ratings_tuning = add_league_ratings_tuning
-        self.tune_league_ratings = tune_league_ratings
 
     def tune(self,
              df: pd.DataFrame,
@@ -273,11 +270,6 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                                                   parameter_search_range=self.start_rating_search_ranges)
 
             league_ratings = copy.deepcopy(rating_generator.team_rating_generator.start_rating_generator.league_ratings)
-            if self.tune_league_ratings:
-                for league, start_rating in league_ratings.items():
-                    league_ratings[league] = trial.suggest_uniform(f"{league}_start_rating",
-                                                                             start_rating - 100, start_rating + 100)
-
             start_rating_generator = StartRatingGenerator(league_ratings=league_ratings,**params)
             rating_g = copy.deepcopy(rating_generator)
             rating_g.team_rating_generator.start_rating_generator = start_rating_generator

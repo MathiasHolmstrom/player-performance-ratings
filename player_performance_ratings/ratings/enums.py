@@ -23,6 +23,7 @@ class RatingColumnNames:
     TIME_WEIGHTED_RATING = "time_weighted_rating"
     TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO = "time_weighted_rating_likelihood_ratio"
     TIME_WEIGHTED_RATING_EVIDENCE = "time_weighted_rating_evidence"
+    RATING_DIFFERENCE_POSITION = "rating_difference_position"
 
 
 @dataclass

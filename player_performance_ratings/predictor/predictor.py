@@ -172,7 +172,7 @@ class Predictor(BaseMLWrapper):
     def train(self, df: pd.DataFrame, estimator_features: Optional[list[str]] = None) -> None:
         if estimator_features is None and self._estimator_features is None:
             raise ValueError("estimator features must either be passed to .train() or injected into constructor")
-        if estimator_features:
+        if not self._estimator_features:
             self._estimator_features = estimator_features
 
         if hasattr(self.estimator, "predict_proba"):
