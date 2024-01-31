@@ -69,14 +69,14 @@ match_predictor = MatchPredictor(
 
 df_predictions = match_predictor.generate_historical(df=df)
 
-for idx, kills in enumerate(match_predictor.predictor.estimator.classes_):
+for idx, kills in enumerate(match_predictor._predictor.estimator.classes_):
     print(df_predictions.iloc[500]['playername'], kills,
-          df_predictions.iloc[500][match_predictor.predictor.pred_column][idx])
+          df_predictions.iloc[500][match_predictor._predictor.pred_column][idx])
 
-print(match_predictor.predictor.estimator.feature_importances_)
+print(match_predictor._predictor.estimator.feature_importances_)
 
 scorer = OrdinalLossScorer(
-    pred_column=match_predictor.predictor.pred_column,
+    pred_column=match_predictor._predictor.pred_column,
 )
 
-print(scorer.score(df_predictions, classes_=match_predictor.predictor.estimator.classes_))
+print(scorer.score(df_predictions, classes_=match_predictor._predictor.estimator.classes_))

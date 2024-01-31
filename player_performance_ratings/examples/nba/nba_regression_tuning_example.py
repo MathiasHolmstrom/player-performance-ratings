@@ -49,7 +49,7 @@ rating_generator_tuner = UpdateRatingGeneratorTuner(
 match_predictor_tuner = PipelineTuner(
     pipeline=match_predictor_factory,
     rating_generator_tuners=rating_generator_tuner,
-    scorer=SklearnScorer(pred_column=match_predictor_factory.predictor.pred_column,
+    scorer=SklearnScorer(pred_column=match_predictor_factory._predictor.pred_column,
                          scorer_function=mean_absolute_error),
 )
 

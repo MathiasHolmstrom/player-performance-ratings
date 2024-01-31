@@ -5,8 +5,9 @@ from typing import Optional, Union
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
-from player_performance_ratings.transformation.pre_transformers import NetOverPredictedTransformer, \
-    SymmetricDistributionTransformer, SkLearnTransformerWrapper, MinMaxTransformer
+from player_performance_ratings.predictor.transformer import SkLearnTransformerWrapper
+from player_performance_ratings.transformation.pre_transformers import \
+    SymmetricDistributionTransformer, MinMaxTransformer, GroupByTransformer, NetOverPredictedTransformer
 
 from player_performance_ratings import ColumnNames
 
@@ -30,6 +31,7 @@ def auto_create_pre_performance_transformations(
         pre_transformations: list[BaseTransformer],
         column_weights: list[list[ColumnWeight]],
         column_names: list[ColumnNames],
+        net_predict_transformers: Optional[list[NetOverPredictedTransformer]] = None
 ) -> list[BaseTransformer]:
     """
     Creates a list of transformers that ensure the performance column is generated in a way that makes sense for the rating model.
@@ -63,34 +65,56 @@ def auto_create_pre_performance_transformations(
                 feature = column_weight.name
                 feature_names.append(feature)
 
-            if column_names[idx].position is not None:
+            if net_predict_transformers:
                 feats = []
+                for idx in range(len(net_predict_transformers)):
+                    pre_transformations.append(net_predict_transformers[idx])
+                    feats += net_predict_transformers[idx].features_out
+
+                distribution_transformer = SymmetricDistributionTransformer(
+                    features=feats,
+                    granularity=granularity,
+                    prefix="symmetric_")
+
+                pre_transformations.append(distribution_transformer)
+
+            else:
+                feats = []
+
                 for col in column_weights[idx]:
                     if col.name not in feats:
                         feats.append(col.name)
-                position_predicted_transformer = NetOverPredictedTransformer(features=feats,
-                                                                             granularity=[column_names[idx].position],
-                                                                             prefix="net_position_predicted__")
-                pre_transformations.append(position_predicted_transformer)
 
-                distribution_transformer = SymmetricDistributionTransformer(
-                    features=position_predicted_transformer.features_out,
-                    granularity=granularity,
-                    prefix="symmetric_position__")
-                pre_transformations.append(distribution_transformer)
-                position_features += [f for f in distribution_transformer.features_out if f not in position_features]
-            #  for idx2, col_weight in enumerate(column_weights[idx]):
-            #        column_weights[idx][
-            #           idx2].name = distribution_transformer.prefix + position_predicted_transformer.prefix + col_weight.name
+                if column_names[idx].position is not None:
+                    predict_transformer = GroupByTransformer(features=feats, agg_func='mean',
+                                                             granularity=[column_names[idx].position],
+                                                             prefix="predicted_")
 
-            else:
-                not_position_features += [c.name for c in column_weights[idx]]
+                    default_net_predict_transformer = NetOverPredictedTransformer(
+                        predict_transformer=predict_transformer,
+                        prefix="net_over_predicted_",
+                        features=[predict_transformer.features_out],
+                    )
+                    pre_transformations.append(default_net_predict_transformer)
+                    distribution_transformer = SymmetricDistributionTransformer(
+                        features=feature_names,
+                        granularity=granularity,
+                        prefix="net_position_predicted__")
+                    pre_transformations.append(distribution_transformer)
+
+                else:
+                    not_position_features += [c.name for c in column_weights[idx]]
+
+            position_features += [f for f in distribution_transformer.features_out if f not in position_features]
+        #  for idx2, col_weight in enumerate(column_weights[idx]):
+        #        column_weights[idx][
+        #           idx2].name = distribution_transformer.prefix + position_predicted_transformer.prefix + col_weight.name
 
         all_feature_names = not_position_features + position_features
     else:
         not_position_features = all_feature_names
 
-    if contains_not_position:
+    if contains_not_position and net_predict_transformers is None:
         distribution_transformer = SymmetricDistributionTransformer(features=not_position_features)
         pre_transformations.append(distribution_transformer)
 
@@ -107,13 +131,16 @@ class PerformancesGenerator():
                  column_weights: Union[list[list[ColumnWeight]], list[ColumnWeight]],
                  column_names: Union[list[ColumnNames], ColumnNames],
                  pre_transformations: Optional[list[BaseTransformer]] = None,
+                 net_predict_transformers: Optional[list[NetOverPredictedTransformer]] = None,
                  ):
         self.column_names = column_names if isinstance(column_names, list) else [column_names]
+        self.column_weights = column_weights if isinstance(column_weights[0], list) else [column_weights]
+        self.net_predict_transformers = net_predict_transformers
+
         self.pre_transformations = pre_transformations or []
         self.pre_transformations = auto_create_pre_performance_transformations(
             pre_transformations=self.pre_transformations, column_weights=column_weights,
-            column_names=self.column_names)
-        self.column_weights = column_weights if isinstance(column_weights[0], list) else [column_weights]
+            column_names=self.column_names, net_predict_transformers=self.net_predict_transformers)
 
     def generate(self, df):
 

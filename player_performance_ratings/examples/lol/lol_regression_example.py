@@ -54,4 +54,4 @@ match_predictor = MatchPredictor(
 
 df_predictions = match_predictor.generate_historical(df=df)
 
-print(mean_absolute_error(df_predictions['__target'], df_predictions[match_predictor.predictor.pred_column]))
+print(mean_absolute_error(df_predictions['__target'], df_predictions[match_predictor._predictor.pred_column]))

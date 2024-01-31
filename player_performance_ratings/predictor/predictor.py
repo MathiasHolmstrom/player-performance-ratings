@@ -16,7 +16,7 @@ from sklearn.linear_model import LogisticRegression
 from player_performance_ratings.consts import PredictColumnNames
 
 from player_performance_ratings.data_structures import ColumnNames
-from player_performance_ratings.predictor._base import BaseMLWrapper
+from player_performance_ratings.predictor._base import BaseMLWrapper, PredictorTransformer
 
 
 class GameTeamPredictor(BaseMLWrapper):
@@ -28,7 +28,7 @@ class GameTeamPredictor(BaseMLWrapper):
                  estimator: Optional = None,
                  multiclassifier: bool = False,
                  pred_column: Optional[str] = None,
-                 categorical_transformers: Optional[list[BaseTransformer]] = None,
+                 categorical_transformers: Optional[list[PredictorTransformer]] = None,
                  filters: Optional[list[Filter]] = None
 
                  ):
@@ -153,7 +153,7 @@ class Predictor(BaseMLWrapper):
                  multiclassifier: bool = False,
                  pred_column: Optional[str] = None,
                  column_names: Optional[ColumnNames] = None,
-                 categorical_transformers: Optional[list[BaseTransformer]] = None
+                 categorical_transformers: Optional[list[PredictorTransformer]] = None
                  ):
         self._target = target
         self.multiclassifier = multiclassifier

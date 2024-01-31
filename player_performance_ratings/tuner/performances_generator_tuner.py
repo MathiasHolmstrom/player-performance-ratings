@@ -67,7 +67,8 @@ class PerformancesGeneratorTuner:
             performances_generator = PerformancesGenerator(
                 column_names=col_names,
                 column_weights=column_weights,
-                pre_transformations=best_pre_transformers
+                pre_transformations=best_pre_transformers,
+                net_predict_transformers=pipeline_factory.performances_generator.net_predict_transformers,
             )
             pipeline = pipeline_factory.create(performances_generator=performances_generator)
             return pipeline.cross_validate_score(df=df, cross_validator=cross_validator,

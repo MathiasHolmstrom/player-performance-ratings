@@ -1,30 +1,49 @@
 import logging
-from dataclasses import dataclass
 from typing import Optional, List
 
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
 
+from player_performance_ratings.predictor import Predictor
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 
-class ConvertDataFrameToCategoricalTransformer(BaseTransformer):
+class NetOverPredictedTransformer(BaseTransformer):
 
-    def __init__(self, features: list[str]):
+    def __init__(self,
+                 predictor: Predictor,
+                 features: list[str],
+                 prefix: str = "net_over_predicted_",
+                 ):
         super().__init__(features=features)
+        self.prefix = prefix
+        self._predictor = predictor
+        self._features_out = []
+        new_feature_name = self.prefix +  self._predictor.pred_column
+        self._features_out.append(new_feature_name)
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        self._predictor.train(df, estimator_features=self.features)
         return self.transform(df)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        for feature in self.features:
-            df = df.assign(**{feature: df[feature].astype('category')})
+        df_with_prediction = self._predictor.add_prediction(df)
+
+        return self._add_net_over_predicted(df=df_with_prediction)
+
+    def _add_net_over_predicted(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        new_feature_name = self.prefix +  self._predictor.pred_column
+        df = df.assign(**{new_feature_name: df[self._predictor.target] - df[self._predictor.pred_column]})
+        df = df.drop(columns=[self._predictor.pred_column])
+
         return df
 
     @property
     def features_out(self) -> list[str]:
-        return self.features
+        return self._features_out
 
 
 class SklearnEstimatorImputer(BaseTransformer):
@@ -52,42 +71,6 @@ class SklearnEstimatorImputer(BaseTransformer):
     @property
     def features_out(self) -> list[str]:
         return [self.target_name]
-
-
-class SkLearnTransformerWrapper(BaseTransformer):
-
-    def __init__(self, transformer, features: list[str]):
-        self.transformer = transformer
-        super().__init__(features=features)
-        self._features_out = []
-
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-
-        try:
-            transformed_values = self.transformer.fit_transform(df[self.features]).toarray()
-        except AttributeError:
-            transformed_values = self.transformer.fit_transform(df[self.features])
-            if isinstance(transformed_values, pd.DataFrame):
-                transformed_values = transformed_values.to_numpy()
-
-        self._features_out = self.transformer.get_feature_names_out().tolist()
-
-        return df.assign(
-            **{self._features_out[idx]: transformed_values[:, idx] for idx in range(len(self._features_out))})
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        try:
-            transformed_values = self.transformer.transform(df[self.features]).toarray()
-        except AttributeError:
-            transformed_values = self.transformer.transform(df[self.features])
-            if isinstance(transformed_values, pd.DataFrame):
-                transformed_values = transformed_values.to_numpy()
-        return df.assign(
-            **{self._features_out[idx]: transformed_values[:, idx] for idx in range(len(self._features_out))})
-
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out
 
 
 class MinMaxTransformer(BaseTransformer):
@@ -323,7 +306,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
                 if None in self._diminishing_value_transformer[feature]:
                     df = self._diminishing_value_transformer[feature][None].transform(df)
 
-        return df
+        return df.drop(columns=["__concat_granularity"])
 
     @property
     def features_out(self) -> list[str]:
@@ -365,45 +348,3 @@ class GroupByTransformer(BaseTransformer):
         return self._features_out
 
 
-class NetOverPredictedTransformer(BaseTransformer):
-
-    def __init__(self,
-                 features: list[str],
-                 granularity: list[str],
-                 predict_transformer: Optional[BaseTransformer] = None,
-                 prefix: str = "",
-                 ):
-        self.granularity = granularity
-        self.predict_transformer = predict_transformer or GroupByTransformer(features=features, granularity=granularity,
-                                                                             agg_func='mean')
-        self.prefix = prefix
-        super().__init__(features=features)
-        self._features_out = []
-        for idx, predicted_feature in enumerate(self.predict_transformer.features_out):
-            new_feature_name = f'{self.prefix}{self.features[idx]}'
-            self._features_out.append(new_feature_name)
-
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy()
-        df = df.assign(__id=range(1, len(df) + 1))
-        _ = self.predict_transformer.fit_transform(df)
-        return self.transform(df)
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        predicted_df = self.predict_transformer.transform(df)
-        df = df.merge(predicted_df[self.predict_transformer.features_out + ['__id']], on="__id").drop(
-            columns=["__id"])
-
-        return self._add_net_over_predicted(df=df)
-
-    def _add_net_over_predicted(self, df: pd.DataFrame) -> pd.DataFrame:
-        for idx, predicted_feature in enumerate(self.predict_transformer.features_out):
-            new_feature_name = self._features_out[idx]
-            df = df.assign(**{new_feature_name: df[self.features[idx]] - df[predicted_feature]})
-            df = df.drop(columns=[predicted_feature])
-
-        return df
-
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out

@@ -4,7 +4,23 @@ from typing import Optional
 import pandas as pd
 from player_performance_ratings.scorer.score import Filter
 
-from player_performance_ratings.transformation.base_transformer import BaseTransformer
+class PredictorTransformer(ABC):
+
+    def __init__(self, features: list[str]):
+        self.features = features
+
+    @abstractmethod
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        pass
+
+    @abstractmethod
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        pass
+
+    @property
+    @abstractmethod
+    def features_out(self) -> list[str]:
+        pass
 
 
 class BaseMLWrapper(ABC):
@@ -12,7 +28,8 @@ class BaseMLWrapper(ABC):
     def __init__(self,
                  estimator,
                  filters: Optional[list[Filter]],
-                 target: str, categorical_transformers: Optional[list[BaseTransformer]] = None,
+                 target: str,
+                 categorical_transformers: Optional[list[PredictorTransformer]] = None,
                  pred_column: Optional[str] = None,
                  ):
         self.estimator = estimator

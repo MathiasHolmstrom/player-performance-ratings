@@ -136,7 +136,7 @@ predictor_tuner = PredictorTuner(
 )
 
 cross_validator = MatchKFoldCrossValidator(
-    scorer=SklearnScorer(pred_column=pipeline.predictor.pred_column, scorer_function=log_loss),
+    scorer=SklearnScorer(pred_column=pipeline._predictor.pred_column, scorer_function=log_loss),
     match_id_column_name=column_names.match_id,
     n_splits=5,
     date_column_name=column_names.start_date
