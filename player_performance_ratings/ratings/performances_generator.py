@@ -66,7 +66,7 @@ def auto_create_pre_performance_transformations(
                 feature_names.append(feature)
 
 
-            if net_predict_transformers:
+            if net_predict_transformers is not None:
                 not_transformed_features = feature_names.copy()
                 feats = []
                 for idx in range(len(net_predict_transformers)):
