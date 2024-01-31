@@ -51,8 +51,8 @@ def auto_create_pre_performance_transformations(
     contains_position = True if any([c.position is not None for c in column_names]) else False
     contains_not_position = True if any([c.position is None for c in column_names]) else False
 
-    not_position_features = []
-    position_features = []
+    not_transformed_features = []
+    transformed_features = []
     if contains_position:
         for idx, col_weights in enumerate(column_weights):
             feature_names = []
@@ -65,18 +65,24 @@ def auto_create_pre_performance_transformations(
                 feature = column_weight.name
                 feature_names.append(feature)
 
+
             if net_predict_transformers:
+                not_transformed_features = feature_names.copy()
                 feats = []
                 for idx in range(len(net_predict_transformers)):
+
+                    if net_predict_transformers[idx]._predictor.target in not_transformed_features:
+                        not_transformed_features.remove(net_predict_transformers[idx]._predictor.target)
+
                     pre_transformations.append(net_predict_transformers[idx])
                     feats += net_predict_transformers[idx].features_out
 
                 distribution_transformer = SymmetricDistributionTransformer(
                     features=feats,
-                    granularity=granularity,
-                    prefix="symmetric_")
+                    granularity=granularity)
 
                 pre_transformations.append(distribution_transformer)
+                transformed_features += [f for f in distribution_transformer.features_out if f not in transformed_features]
 
             else:
                 feats = []
@@ -88,34 +94,34 @@ def auto_create_pre_performance_transformations(
                 if column_names[idx].position is not None:
                     predict_transformer = GroupByTransformer(features=feats, agg_func='mean',
                                                              granularity=[column_names[idx].position],
-                                                             prefix="predicted_")
+                                                             prefix="")
 
                     default_net_predict_transformer = NetOverPredictedTransformer(
                         predict_transformer=predict_transformer,
-                        prefix="net_over_predicted_",
+                        prefix="",
                         features=[predict_transformer.features_out],
                     )
                     pre_transformations.append(default_net_predict_transformer)
                     distribution_transformer = SymmetricDistributionTransformer(
                         features=feature_names,
                         granularity=granularity,
-                        prefix="net_position_predicted__")
+                        prefix="")
                     pre_transformations.append(distribution_transformer)
 
                 else:
-                    not_position_features += [c.name for c in column_weights[idx]]
+                    not_transformed_features += [c.name for c in column_weights[idx]]
 
-            position_features += [f for f in distribution_transformer.features_out if f not in position_features]
+                transformed_features += [f for f in distribution_transformer.features_out if f not in transformed_features]
         #  for idx2, col_weight in enumerate(column_weights[idx]):
         #        column_weights[idx][
         #           idx2].name = distribution_transformer.prefix + position_predicted_transformer.prefix + col_weight.name
 
-        all_feature_names = not_position_features + position_features
+        all_feature_names = not_transformed_features + transformed_features
     else:
-        not_position_features = all_feature_names
+        not_transformed_features = all_feature_names
 
     if contains_not_position and net_predict_transformers is None:
-        distribution_transformer = SymmetricDistributionTransformer(features=not_position_features)
+        distribution_transformer = SymmetricDistributionTransformer(features=not_transformed_features)
         pre_transformations.append(distribution_transformer)
 
     pre_transformations.append(

@@ -24,7 +24,6 @@ class Pipeline():
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
                  post_rating_transformers: Optional[List[BasePostTransformer]] = None,
-                 column_weights: Optional[Union[list[list[ColumnWeight]], list[ColumnWeight]]] = None,
                  keep_features: bool = False,
                  ):
 
@@ -65,11 +64,6 @@ class Pipeline():
             If true, the pre_rating_transformers will be automatically generated to ensure the performance-value is done according to good practices.
             For new users, this is recommended.
 
-        :param column_weights:
-            If auto_create_pre_transformers is True, column_weights must be set.
-            It is generally used when multiple columns are used to calculate ratings and the columns need to be weighted when converting it to a performance_value.
-            Even if only 1  feature is used but auto_create_pre_transformers is used,
-             then it must still be created in order for auto_create_pre_transformers to know which columns needs to be transformed.
 
         """
 
@@ -91,9 +85,6 @@ class Pipeline():
                     rating_feature_str = rating_feature
                 self._estimator_features.append(rating_feature_str)
 
-        self.column_weights = column_weights
-        if self.column_weights and isinstance(self.column_weights[0], ColumnWeight):
-            self.column_weights = [self.column_weights]
 
         self.performances_generator = performances_generator
         self.keep_features = keep_features

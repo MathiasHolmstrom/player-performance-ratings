@@ -14,7 +14,7 @@ class NetOverPredictedTransformer(BaseTransformer):
     def __init__(self,
                  predictor: Predictor,
                  features: list[str],
-                 prefix: str = "net_over_predicted_",
+                 prefix: str = "net_over_prediction_",
                  ):
         super().__init__(features=features)
         self.prefix = prefix
@@ -22,6 +22,8 @@ class NetOverPredictedTransformer(BaseTransformer):
         self._features_out = []
         new_feature_name = self.prefix +  self._predictor.pred_column
         self._features_out.append(new_feature_name)
+        if self.prefix is "":
+            raise ValueError("Prefix must not be empty")
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
@@ -29,12 +31,7 @@ class NetOverPredictedTransformer(BaseTransformer):
         return self.transform(df)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        df_with_prediction = self._predictor.add_prediction(df)
-
-        return self._add_net_over_predicted(df=df_with_prediction)
-
-    def _add_net_over_predicted(self, df: pd.DataFrame) -> pd.DataFrame:
-
+        df = self._predictor.add_prediction(df)
         new_feature_name = self.prefix +  self._predictor.pred_column
         df = df.assign(**{new_feature_name: df[self._predictor.target] - df[self._predictor.pred_column]})
         df = df.drop(columns=[self._predictor.pred_column])
@@ -220,7 +217,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
                  granularity: Optional[list[str]] = None,
                  skewness_allowed: float = 0.15,
                  max_iterations: int = 20,
-                 prefix: str = ""
+                 prefix: str = "symmetric_"
                  ):
         super().__init__(features=features)
         self.granularity = granularity

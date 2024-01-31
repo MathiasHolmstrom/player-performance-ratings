@@ -60,7 +60,6 @@ class PipelineTuner():
             rating_generators=pipeline.rating_generators,
             performances_generator=pipeline.performances_generator,
             post_rating_transformers=pipeline.post_rating_transformers,
-            column_weights=pipeline.column_weights,
             predictor=pipeline.predictor,
         )
 
