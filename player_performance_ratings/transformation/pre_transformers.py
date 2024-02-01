@@ -303,7 +303,9 @@ class SymmetricDistributionTransformer(BaseTransformer):
                 if None in self._diminishing_value_transformer[feature]:
                     df = self._diminishing_value_transformer[feature][None].transform(df)
 
-        return df.drop(columns=["__concat_granularity"])
+        if '__concat_granularity' in df.columns:
+            df = df.drop(columns=["__concat_granularity"])
+        return df
 
     @property
     def features_out(self) -> list[str]:

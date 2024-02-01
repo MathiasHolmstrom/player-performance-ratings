@@ -26,6 +26,7 @@ class GameTeamPredictor(BaseMLWrapper):
                  team_id_column: str,
                  target: Optional[str] = PredictColumnNames.TARGET,
                  estimator: Optional = None,
+                 estimator_features: Optional[list[str]] = None,
                  multiclassifier: bool = False,
                  pred_column: Optional[str] = None,
                  categorical_transformers: Optional[list[PredictorTransformer]] = None,
@@ -57,10 +58,12 @@ class GameTeamPredictor(BaseMLWrapper):
         super().__init__(target=self._target, pred_column=pred_column,
                          estimator=estimator or LogisticRegression(), categorical_transformers=categorical_transformers,
                          filters=filters)
-        self._estimator_features = []
+        self._estimator_features = estimator_features or []
 
-    def train(self, df: pd.DataFrame, estimator_features: list[str]) -> None:
-        self._estimator_features = estimator_features
+    def train(self, df: pd.DataFrame, estimator_features: list[Optional[str]] = None) -> None:
+        if estimator_features is None and self._estimator_features is None:
+            raise ValueError("estimator features must either be passed to .train() or injected into constructor")
+        self._estimator_features = estimator_features or self._estimator_features
         df = self.fit_transform_categorical_transformers(df=df)
         if len(df[self._target].unique()) > 2 and hasattr(self.estimator, "predict_proba"):
             logging.info("target has more than 2 unique values, multiclassifier has therefore been set to True")
@@ -78,7 +81,7 @@ class GameTeamPredictor(BaseMLWrapper):
         df = apply_filters(df=df, filters=self.filters)
 
         grouped = self._create_grouped(df)
-        self.estimator.fit(grouped[self.estimator_features], grouped[self._target])
+        self.estimator.fit(grouped[self._estimator_features], grouped[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
         """

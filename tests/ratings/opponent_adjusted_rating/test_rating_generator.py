@@ -3,7 +3,7 @@ import pandas as pd
 from player_performance_ratings.data_structures import Match, MatchPlayer, MatchPerformance, MatchTeam, \
     PlayerRating, ColumnNames
 from player_performance_ratings.ratings.enums import RatingColumnNames, HistoricalRatingColumnNames
-from player_performance_ratings.ratings.rating_calculators import MatchTeamRatingGenerator, StartRatingGenerator, \
+from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator, StartRatingGenerator, \
     OpponentAdjustedRatingGenerator
 from player_performance_ratings.ratings.rating_calculators.performance_predictor import \
     MATCH_CONTRIBUTION_TO_SUM_VALUE
@@ -135,7 +135,7 @@ def test_rating_generator_update_id_different_from_match_id():
 
     rating_generator = OpponentAdjustedRatingGenerator(
         column_names=column_names,
-        match_rating_generator=MatchTeamRatingGenerator(
+        match_rating_generator=MatchRatingGenerator(
             rating_change_multiplier=rating_change_multiplier,
             confidence_weight=0
 
@@ -250,7 +250,7 @@ def test_rating_generator_1_match():
 
     rating_generator = OpponentAdjustedRatingGenerator(
         column_names=column_names,
-        match_rating_generator=MatchTeamRatingGenerator(
+        match_rating_generator=MatchRatingGenerator(
             rating_change_multiplier=rating_change_multiplier,
             confidence_weight=0
 
@@ -319,7 +319,7 @@ def test_opponent_adjusted_rating_generator_with_projected_performance():
         column_names=column_names,
 
         features_out=[RatingColumnNames.TEAM_RATING_PROJECTED],
-        match_rating_generator=MatchTeamRatingGenerator(
+        match_rating_generator=MatchRatingGenerator(
             confidence_weight=0,
             start_rating_generator=StartRatingGenerator(
                 harcoded_start_rating=1000
@@ -367,7 +367,7 @@ def test_test_opponent_adjusted_rating_generator_with_projected_performance_feat
                       RatingColumnNames.RATING_DIFFERENCE_PROJECTED,
                       RatingColumnNames.PLAYER_RATING_DIFFERENCE_PROJECTED,
                       RatingColumnNames.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED],
-        match_rating_generator=MatchTeamRatingGenerator(
+        match_rating_generator=MatchRatingGenerator(
             confidence_weight=0,
             start_rating_generator=StartRatingGenerator(
                 harcoded_start_rating=1000
@@ -422,7 +422,7 @@ def test_opponent_adjusted_rating_generator_historical_and_future():
                       RatingColumnNames.RATING_DIFFERENCE_PROJECTED,
                       RatingColumnNames.PLAYER_RATING_DIFFERENCE_PROJECTED,
                       RatingColumnNames.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED],
-        match_rating_generator=MatchTeamRatingGenerator(
+        match_rating_generator=MatchRatingGenerator(
             confidence_weight=0,
             start_rating_generator=StartRatingGenerator(
                 harcoded_start_rating=1000

@@ -13,7 +13,7 @@ from player_performance_ratings.tuner.start_rating_optimizer import StartLeagueR
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings.ratings import RatingColumnNames
 
-from player_performance_ratings.ratings.rating_calculators import MatchTeamRatingGenerator
+from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
 
 from player_performance_ratings.ratings.rating_calculators.start_rating_generator import StartRatingGenerator
 from player_performance_ratings.ratings import UpdateRatingGenerator
@@ -113,7 +113,6 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                  start_rating_search_ranges: Optional[list[ParameterSearchRange]] = None,
                  start_rating_n_trials: int = 8,
                  optimize_league_ratings: bool = False,
-                 tune_league_ratings: bool = False,
                  ):
         self.team_rating_search_ranges = team_rating_search_ranges or DEFAULT_TEAM_SEARCH_RANGES
         self.start_rating_search_ranges = start_rating_search_ranges or DEFAULT_START_RATING_SEARCH_RANGE
@@ -182,7 +181,7 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                           matches: list[Match],
                           cross_validator: CrossValidator,
                           pipeline_factory: PipelineFactory,
-                          ) -> MatchTeamRatingGenerator:
+                          ) -> MatchRatingGenerator:
 
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
 
@@ -204,8 +203,8 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                     performance_predictor.__setattr__(param, params[param])
                     params.pop(param)
 
-            team_rating_generator = MatchTeamRatingGenerator(**params,
-                                                             performance_predictor=performance_predictor)
+            team_rating_generator = MatchRatingGenerator(**params,
+                                                         performance_predictor=performance_predictor)
 
             rating_g = copy.deepcopy(rating_generator)
             rating_g.team_rating_generator = team_rating_generator
@@ -244,10 +243,10 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
             if param in performance_predictor_params:
                 performance_predictor.__setattr__(param, best_params[param])
                 best_params.pop(param)
-        return MatchTeamRatingGenerator(**best_params,
-                                        performance_predictor=performance_predictor,
-                                        start_rating_generator=rating_generator.team_rating_generator.start_rating_generator
-                                        )
+        return MatchRatingGenerator(**best_params,
+                                    performance_predictor=performance_predictor,
+                                    start_rating_generator=rating_generator.team_rating_generator.start_rating_generator
+                                    )
 
     def _tune_start_rating(self,
                            df: pd.DataFrame,

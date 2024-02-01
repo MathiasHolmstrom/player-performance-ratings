@@ -14,7 +14,7 @@ MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 EXPECTED_MEAN_CONFIDENCE_SUM = 30
 
 
-class MatchTeamRatingGenerator():
+class MatchRatingGenerator():
 
     def __init__(self,
                  start_rating_generator: Optional[StartRatingGenerator] = None,
@@ -46,7 +46,7 @@ class MatchTeamRatingGenerator():
         :param confidence_days_ago_multiplier:
             Determinutes how much the confidence_sum is affected by how long ago the last match was.
             If a player has not played in a long time, the confidence in a players rating declines.
-            This means his future rating changes faster. A higher confidence_value_denom therefore leads to more volatile future rating changes.
+            This means his future rating changes faster. A higher confidence_days_ago_multiplier  therefore leads to more volatile future rating changes.
 
         :param confidence_max_days:
             A players confidence_sum decreases by confidence_days_ago_multiplier * min(confidence_max_days, days_ago_since_last_match).
@@ -54,7 +54,7 @@ class MatchTeamRatingGenerator():
             This ensures a non-linear relationship between inactivity and our confidence in a players rating.
 
         :param confidence_value_denom:
-            Higher confidence_value_denom results in a lower applied_rating_change_multiplier.
+            Higher confidence_value_denom results in a more volatile rating change multipler based on the confidence_sum.
 
         :param confidence_max_sum:
             The maximum confidence_sum a player can have.
@@ -174,7 +174,7 @@ class MatchTeamRatingGenerator():
 
             rating_value = self.start_rating_generator.generate_rating_value(
                 day_number=day_number,
-                match_entity=match_player,
+                match_player=match_player,
                 team_pre_match_player_ratings=team_pre_match_player_ratings,
             )
 
@@ -287,7 +287,7 @@ class MatchTeamRatingGenerator():
             self.player_ratings[id].games_played += player_rating_change.participation_weight
             self.player_ratings[id].last_match_day_number = player_rating_change.day_number
 
-            self.start_rating_generator.update_league_ratings(rating_change=player_rating_change)
+            self.start_rating_generator.update_players_to_leagues(rating_change=player_rating_change)
             self._update_league_ratings(rating_change=player_rating_change)
 
     def _update_league_ratings(self,
@@ -305,7 +305,7 @@ class MatchTeamRatingGenerator():
         self._league_rating_changes_count[league] += 1
 
         if self._league_rating_changes[league] > abs(self.league_rating_change_update_threshold):
-            for player_id in self.start_rating_generator._league_to_entity_ids[league]:
+            for player_id in self.start_rating_generator._league_to_player_ids[league]:
                 mean_rating_change = self._league_rating_changes[league] / self._league_rating_changes_count[league]
                 self.player_ratings[
                     player_id].rating_value += mean_rating_change * self.league_rating_adjustor_multiplier

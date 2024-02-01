@@ -15,7 +15,7 @@ from sklearn.metrics import log_loss
 from player_performance_ratings.predictor import GameTeamPredictor
 from player_performance_ratings.scorer.score import SklearnScorer
 
-from player_performance_ratings.ratings.rating_calculators import MatchTeamRatingGenerator
+from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
 from player_performance_ratings.ratings.rating_calculators.performance_predictor import \
     RatingDifferencePerformancePredictor
 
@@ -91,7 +91,7 @@ performance_predictor = RatingDifferencePerformancePredictor(
     rating_diff_team_from_entity_coef=0.0055,
 )
 
-rating_generator = UpdateRatingGenerator(column_names=column_names, match_rating_generator=MatchTeamRatingGenerator(
+rating_generator = UpdateRatingGenerator(column_names=column_names, match_rating_generator=MatchRatingGenerator(
     performance_predictor=performance_predictor))
 
 column_weights = [ColumnWeight(name='plus_minus', weight=1)]

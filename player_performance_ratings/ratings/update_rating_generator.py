@@ -7,7 +7,7 @@ from player_performance_ratings.ratings import convert_df_to_matches
 from player_performance_ratings.ratings.rating_calculators import RatingMeanPerformancePredictor
 from player_performance_ratings.ratings.rating_calculators.performance_predictor import \
     RatingNonOpponentPerformancePredictor
-from player_performance_ratings.ratings.rating_calculators.team_rating_generator import MatchTeamRatingGenerator
+from player_performance_ratings.ratings.rating_calculators.match_rating_generator import MatchRatingGenerator
 from player_performance_ratings.ratings.enums import RatingColumnNames, HistoricalRatingColumnNames
 
 from player_performance_ratings.data_structures import Match, PreMatchRating, PreMatchTeamRating, PlayerRating, \
@@ -23,7 +23,7 @@ class UpdateRatingGenerator(RatingGenerator):
 
     def __init__(self,
                  column_names: ColumnNames,
-                 match_rating_generator: MatchTeamRatingGenerator = MatchTeamRatingGenerator(),
+                 match_rating_generator: MatchRatingGenerator = MatchRatingGenerator(),
                  features_out: Optional[list[str]] = None,
                  distinct_positions: Optional[list[str]] = None,
                  ):
@@ -124,9 +124,7 @@ class UpdateRatingGenerator(RatingGenerator):
                 for player_idx, player_rating_change in enumerate(team_rating_change.players):
 
                     position = match.teams[team_idx].players[player_idx].position
-
                     if position:
-
                         match_position_ratings[team_idx][position] = player_rating_change.pre_match_rating_value
 
                     pre_match_team_projected_rating_values.append(
@@ -206,6 +204,7 @@ class UpdateRatingGenerator(RatingGenerator):
     def generate_future(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[
         RatingColumnNames, list[float]]:
 
+
         if matches is not None and len(matches) > 0 and not isinstance(matches[0], Match):
             raise ValueError("matches must be a list of Match objects")
 
@@ -224,10 +223,13 @@ class UpdateRatingGenerator(RatingGenerator):
         rating_update_team_ids = []
         rating_update_team_ids_opponent = []
         player_ids = []
+        position_rating_difference_values = {}
+
 
         pre_match_team_projected_rating_values = []
 
         for match_idx, match in enumerate(matches):
+            match_position_ratings = []
             self._validate_match(match)
             pre_match_rating = PreMatchRating(
                 id=match.id,
@@ -236,8 +238,12 @@ class UpdateRatingGenerator(RatingGenerator):
             )
 
             for team_idx, pre_match_team in enumerate(pre_match_rating.teams):
+                match_position_ratings.append({})
                 opponent_team = pre_match_rating.teams[-team_idx + 1]
                 for player_idx, pre_match_player in enumerate(pre_match_team.players):
+                    position = match.teams[team_idx].players[player_idx].position
+                    if position:
+                        match_position_ratings[team_idx][position] = pre_match_player.rating_value
                     pre_match_team_projected_rating_values.append(pre_match_team.projected_rating_value)
                     pre_match_player_rating_values.append(pre_match_player.rating_value)
                     pre_match_opponent_projected_rating_values.append(opponent_team.projected_rating_value)
@@ -249,7 +255,21 @@ class UpdateRatingGenerator(RatingGenerator):
                     projected_participation_weights.append(
                         match.teams[team_idx].players[player_idx].performance.projected_participation_weight)
 
+            if self.distinct_positions:
+                for team_idx in range(len(pre_match_rating.teams)):
+                    player_per_team_count = len(pre_match_rating.teams[team_idx].players)
+
+                    for position in self.distinct_positions:
+                        if position not in position_rating_difference_values:
+                            position_rating_difference_values[position] = []
+                        if position in match_position_ratings[team_idx] and position in match_position_ratings[-team_idx+1]:
+                            position_rating_difference_values[position]+= [match_position_ratings[team_idx][position] -
+                                                                           match_position_ratings[-team_idx+1][position]] * player_per_team_count
+                        else:
+                            position_rating_difference_values[position] += [0] * player_per_team_count
+
         potential_feature_values = self._get_shared_rating_values(
+            position_rating_difference_values=position_rating_difference_values,
             pre_match_team_projected_rating_values=pre_match_team_projected_rating_values,
             pre_match_opponent_projected_rating_values=pre_match_opponent_projected_rating_values,
             pre_match_player_rating_values=pre_match_player_rating_values,

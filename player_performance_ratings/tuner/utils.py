@@ -145,8 +145,8 @@ def get_default_team_rating_search_range() -> list[ParameterSearchRange]:
         ParameterSearchRange(
             name='confidence_value_denom',
             type='uniform',
-            low=50,
-            high=350
+            low=25,
+            high=120
         ),
         ParameterSearchRange(
             name='rating_change_multiplier',

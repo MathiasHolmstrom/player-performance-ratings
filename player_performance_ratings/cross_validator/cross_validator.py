@@ -70,11 +70,14 @@ class MatchKFoldCrossValidator(CrossValidator):
 
     def generate_validation_df(self,
                                df: pd.DataFrame,
-                               post_transformers: list[BaseTransformer],
                                predictor: BaseMLWrapper,
-                               estimator_features: list[str]
+                               estimator_features: Optional[list[str]] = None,
+                               post_transformers: Optional[list[BaseTransformer]] = None,
                                ) -> pd.DataFrame:
         validation_dfs = []
+
+        estimator_features = estimator_features or []
+        post_transformers = post_transformers or []
 
         if not self.min_validation_date:
             unique_dates = df[self.date_column_name].unique()
