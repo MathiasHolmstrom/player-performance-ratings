@@ -5,7 +5,8 @@ from typing import Dict, Optional, Tuple
 from player_performance_ratings.data_structures import MatchPlayer, PlayerRating, PreMatchTeamRating, \
     PreMatchPlayerRating, \
     PlayerRatingChange, Team, MatchTeam, TeamRatingChange
-from player_performance_ratings.ratings.rating_calculators.performance_predictor import RatingDifferencePerformancePredictor, \
+from player_performance_ratings.ratings.rating_calculators.performance_predictor import \
+    RatingDifferencePerformancePredictor, \
     PerformancePredictor
 from player_performance_ratings.ratings.rating_calculators.start_rating_generator import \
     StartRatingGenerator
@@ -196,16 +197,20 @@ class MatchRatingGenerator():
 
         return pre_match_player_ratings
 
-    def _generate_pre_match_team_rating_projected_value(self, pre_match_player_ratings: list[PreMatchPlayerRating]) -> float:
+    def _generate_pre_match_team_rating_projected_value(self,
+                                                        pre_match_player_ratings: list[PreMatchPlayerRating]) -> float:
         team_rating = sum(
-            player.rating_value * player.match_performance.projected_participation_weight for player in pre_match_player_ratings)
+            player.rating_value * player.match_performance.projected_participation_weight for player in
+            pre_match_player_ratings)
         sum_participation_weight = sum(
             player.match_performance.projected_participation_weight for player in pre_match_player_ratings)
 
         return team_rating / sum_participation_weight if sum_participation_weight > 0 else 0
 
-    def _generate_pre_match_team_rating_value(self, pre_match_player_ratings: list[PreMatchPlayerRating]) -> Optional[float]:
-        if len(pre_match_player_ratings) > 0 and pre_match_player_ratings[0].match_performance.participation_weight is None:
+    def _generate_pre_match_team_rating_value(self, pre_match_player_ratings: list[PreMatchPlayerRating]) -> Optional[
+        float]:
+        if len(pre_match_player_ratings) > 0 and pre_match_player_ratings[
+            0].match_performance.participation_weight is None:
             return None
         team_rating = sum(
             player.rating_value * player.match_performance.participation_weight for player in pre_match_player_ratings)
@@ -227,7 +232,6 @@ class MatchRatingGenerator():
         sum_rating_change = 0
 
         for pre_player_rating in pre_match_team_rating.players:
-
 
             predicted_performance = self.performance_predictor.predict_performance(
                 player_rating=pre_player_rating,
@@ -273,6 +277,7 @@ class MatchRatingGenerator():
 
     def update_rating_by_team_rating_change(self,
                                             team_rating_change: TeamRatingChange,
+                                            opponent_team_rating_change: TeamRatingChange
                                             ) -> None:
 
         for player_rating_change in team_rating_change.players:
@@ -288,6 +293,9 @@ class MatchRatingGenerator():
             self.player_ratings[id].last_match_day_number = player_rating_change.day_number
 
             self.start_rating_generator.update_players_to_leagues(rating_change=player_rating_change)
+            if player_rating_change.league != opponent_team_rating_change.league:
+                self.start_rating_generator.update_league_ratings(player_rating_change=player_rating_change,
+                                                                  opponent_team=opponent_team_rating_change)
             self._update_league_ratings(rating_change=player_rating_change)
 
     def _update_league_ratings(self,
@@ -316,18 +324,18 @@ class MatchRatingGenerator():
                                                     player_id: str,
                                                     ) -> float:
         min_applied_rating_change_multiplier = self.rating_change_multiplier * self.min_rating_change_multiplier_ratio
-        confidence_change_multiplier = self.rating_change_multiplier * ((EXPECTED_MEAN_CONFIDENCE_SUM - self.player_ratings[player_id].confidence_sum) / self.confidence_value_denom +1 )
+        confidence_change_multiplier = self.rating_change_multiplier * ((EXPECTED_MEAN_CONFIDENCE_SUM -
+                                                                         self.player_ratings[
+                                                                             player_id].confidence_sum) / self.confidence_value_denom + 1)
         applied_rating_change_multiplier = confidence_change_multiplier * self.confidence_weight + (
                 1 - self.confidence_weight) * self.rating_change_multiplier
         return max(min_applied_rating_change_multiplier, applied_rating_change_multiplier)
 
-
-
     def _calculate_post_match_confidence_sum(self,
-                                          entity_rating: PlayerRating,
-                                          day_number: int,
-                                          particpation_weight: float
-                                          ) -> float:
+                                             entity_rating: PlayerRating,
+                                             day_number: int,
+                                             particpation_weight: float
+                                             ) -> float:
         days_ago = self._calculate_days_ago_since_last_match(last_match_day_number=entity_rating.last_match_day_number,
                                                              day_number=day_number)
         confidence_sum_value = -min(days_ago,
