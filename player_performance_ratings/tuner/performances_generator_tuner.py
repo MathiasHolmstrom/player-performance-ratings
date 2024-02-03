@@ -68,7 +68,6 @@ class PerformancesGeneratorTuner:
                 column_names=col_names,
                 column_weights=column_weights,
                 pre_transformations=best_pre_transformers,
-                net_predict_transformers=pipeline_factory.performances_generator.net_predict_transformers,
             )
             pipeline = pipeline_factory.create(performances_generator=performances_generator)
             return pipeline.cross_validate_score(df=df, cross_validator=cross_validator,
@@ -91,7 +90,6 @@ class PerformancesGeneratorTuner:
         return PerformancesGenerator(column_weights=best_column_weights,
                                      column_names=column_names,
                                      pre_transformations=pipeline_factory.performances_generator.pre_transformations,
-                                     net_predict_transformers=pipeline_factory.performances_generator.net_predict_transformers,
                                      )
 
     def _create_column_weights(self, params: dict, remove_string: str) -> list[ColumnWeight]:
