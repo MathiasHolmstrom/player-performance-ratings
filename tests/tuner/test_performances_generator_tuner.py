@@ -7,7 +7,7 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.predictor import Predictor
-from player_performance_ratings.ratings import RatingColumnNames
+from player_performance_ratings.ratings import RatingEstimatorFeatures
 from player_performance_ratings.ratings.rating_calculators import OpponentAdjustedRatingGenerator
 from player_performance_ratings.tuner import PerformancesGeneratorTuner
 
@@ -42,13 +42,13 @@ def test_transformer_tuner():
     }
 
     rating_generator1 = OpponentAdjustedRatingGenerator(column_names=column_names,
-                                                        features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED])
+                                                        features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
 
     rating_generators = [rating_generator1]
 
     match_predictor_factory = PipelineFactory(
         rating_generators=rating_generators,
-        predictor=Predictor(estimator=LogisticRegression(), features=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED]),
+        predictor=Predictor(estimator=LogisticRegression(), features=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]),
         match_id_column_name="game_id",
     )
 
@@ -138,9 +138,9 @@ def test_transformer_tuner_2_performances(estimator):
     }
 
     rating_generator1 = OpponentAdjustedRatingGenerator(column_names=column_names1,
-                                                        features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED])
+                                                        features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
     rating_generator2 = OpponentAdjustedRatingGenerator(column_names=column_names2,
-                                                        features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED])
+                                                        features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
 
     rating_generators = [rating_generator1, rating_generator2]
 

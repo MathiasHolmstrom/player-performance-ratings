@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Union
 
 import pandas as pd
 
-from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.enums import RatingEstimatorFeatures, RatingHistoricalFeatures
 
 from player_performance_ratings.data_structures import Match, PlayerRating, \
     TeamRating, ColumnNames
@@ -16,12 +16,12 @@ class RatingGenerator(ABC):
 
     @abstractmethod
     def generate_historical(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[
-        RatingColumnNames, list[float]]:
+        RatingEstimatorFeatures, list[float]]:
         pass
 
     @abstractmethod
     def generate_future(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[
-        RatingColumnNames, list[float]]:
+        RatingEstimatorFeatures, list[float]]:
         pass
 
     @property
@@ -36,6 +36,13 @@ class RatingGenerator(ABC):
 
     @property
     @abstractmethod
-    def features_out(self) -> list[RatingColumnNames]:
+    def estimator_features_out(self) -> list[RatingEstimatorFeatures]:
         pass
+
+    @property
+    @abstractmethod
+    def features_out(self) -> list[Union[RatingEstimatorFeatures, RatingHistoricalFeatures]]:
+        pass
+
+
 

@@ -1,7 +1,7 @@
 import mock
 import pandas as pd
 from player_performance_ratings.ratings import BayesianTimeWeightedRating, \
-    RatingColumnNames, convert_df_to_matches, ColumnWeight, UpdateRatingGenerator
+    RatingEstimatorFeatures, convert_df_to_matches, ColumnWeight, UpdateRatingGenerator
 
 from player_performance_ratings.transformation import LagTransformer
 
@@ -32,8 +32,8 @@ def test_match_predictor_auto_pre_transformers():
     predictor_mock.target = "__target"
     predictor_mock.pred_column = 'prediction'
     predictor_mock.add_prediction.return_value = expected_df
-    rating_generators = UpdateRatingGenerator(features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
-                                                        column_names=ColumnNames(
+    rating_generators = UpdateRatingGenerator(estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED],
+                                              column_names=ColumnNames(
                                                             match_id="game_id",
                                                             team_id="team_id",
                                                             player_id="player_id",
@@ -47,7 +47,7 @@ def test_match_predictor_auto_pre_transformers():
         rating_generators=rating_generators,
     )
 
-    new_df = pipeline.generate_historical(df=df)
+    new_df = pipeline.train(df=df)
 
     pd.testing.assert_frame_equal(new_df, expected_df, check_like=True)
 
@@ -93,25 +93,25 @@ def test_match_predictor_multiple_rating_generators_same_performance():
     match_predictor = Pipeline(
         column_weights=column_weights,
         rating_generators=[
-            UpdateRatingGenerator(features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
-                                            column_names=column_names1),
+            UpdateRatingGenerator(estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED],
+                                  column_names=column_names1),
             BayesianTimeWeightedRating(column_names=column_names1)],
         post_rating_transformers=[],
         predictor=predictor_mock,
     )
 
-    new_df = match_predictor.generate_historical(df=df)
+    new_df = match_predictor.train(df=df)
     pd.testing.assert_frame_equal(new_df, expected_df, check_like=True)
 
     col_names_predictor_train = predictor_mock.train.call_args[0][0].columns.tolist()
 
     col_names_predictor_add = predictor_mock.add_prediction.call_args[0][0].columns.tolist()
 
-    assert RatingColumnNames.TIME_WEIGHTED_RATING + str(1) in col_names_predictor_add
-    assert RatingColumnNames.TIME_WEIGHTED_RATING + str(1) in col_names_predictor_train
+    assert RatingEstimatorFeatures.TIME_WEIGHTED_RATING + str(1) in col_names_predictor_add
+    assert RatingEstimatorFeatures.TIME_WEIGHTED_RATING + str(1) in col_names_predictor_train
 
-    assert RatingColumnNames.RATING_DIFFERENCE_PROJECTED + str(0) in col_names_predictor_add
-    assert RatingColumnNames.RATING_DIFFERENCE_PROJECTED + str(0) in col_names_predictor_train
+    assert RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED + str(0) in col_names_predictor_add
+    assert RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED + str(0) in col_names_predictor_train
 
 
 def test_match_predictor_multiple_rating_generators_difference_performance():
@@ -161,8 +161,8 @@ def test_match_predictor_multiple_rating_generators_difference_performance():
 
     match_predictor = Pipeline(
         column_weights=column_weights,
-        rating_generators=[UpdateRatingGenerator(features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
-                                                           column_names=column_names1),
+        rating_generators=[UpdateRatingGenerator(estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED],
+                                                 column_names=column_names1),
                            UpdateRatingGenerator(column_names=column_names2)],
         post_rating_transformers=[],
         predictor=predictor_mock,
@@ -171,18 +171,18 @@ def test_match_predictor_multiple_rating_generators_difference_performance():
     matches1 = convert_df_to_matches(df=df, column_names=column_names1)
     matches2 = convert_df_to_matches(df=df, column_names=column_names2)
 
-    new_df = match_predictor.generate_historical(df=df, matches=[matches1, matches2])
+    new_df = match_predictor.train(df=df, matches=[matches1, matches2])
     pd.testing.assert_frame_equal(new_df, expected_df, check_like=True)
 
     col_names_predictor_train = predictor_mock.train.call_args[0][0].columns.tolist()
 
     col_names_predictor_add = predictor_mock.add_prediction.call_args[0][0].columns.tolist()
 
-    assert RatingColumnNames.RATING_DIFFERENCE_PROJECTED + str(1) in col_names_predictor_add
-    assert RatingColumnNames.RATING_DIFFERENCE_PROJECTED + str(1) in col_names_predictor_train
+    assert RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED + str(1) in col_names_predictor_add
+    assert RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED + str(1) in col_names_predictor_train
 
-    assert RatingColumnNames.RATING_DIFFERENCE_PROJECTED + str(0) in col_names_predictor_add
-    assert RatingColumnNames.RATING_DIFFERENCE_PROJECTED + str(0) in col_names_predictor_train
+    assert RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED + str(0) in col_names_predictor_add
+    assert RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED + str(0) in col_names_predictor_train
 
 
 def test_match_predictor_0_rating_generators():
@@ -232,7 +232,7 @@ def test_match_predictor_0_rating_generators():
         predictor=predictor_mock,
     )
 
-    new_df = pipeline.generate_historical(df=df)
+    new_df = pipeline.train(df=df)
 
     pd.testing.assert_frame_equal(new_df, expected_df, check_like=True)
 
@@ -288,15 +288,15 @@ def test_match_predictor_generate_and_predict():
         start_date="start_date",
         performance="weighted_performance"
     )
-    rating_generator = UpdateRatingGenerator(features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED],
-                                                       column_names=column_names)
+    rating_generator = UpdateRatingGenerator(estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED],
+                                             column_names=column_names)
 
     pipeline = Pipeline(
         column_weights=column_weights,
         predictor=predictor_mock,
         rating_generators=rating_generator)
 
-    _ = pipeline.generate_historical(df=historical_df)
+    _ = pipeline.train(df=historical_df)
     new_df = pipeline.predict(future_df)
 
     pd.testing.assert_frame_equal(new_df, expected_future_dfdf, check_like=True)

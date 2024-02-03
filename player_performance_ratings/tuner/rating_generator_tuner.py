@@ -11,8 +11,6 @@ from optuna.trial import BaseTrial
 from player_performance_ratings.tuner.start_rating_optimizer import StartLeagueRatingOptimizer
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
-from player_performance_ratings.ratings import RatingColumnNames
-
 from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
 
 from player_performance_ratings.ratings.rating_calculators.start_rating_generator import StartRatingGenerator
@@ -156,7 +154,7 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                 cross_validator=cross_validator,
             )
             optimized_league_ratings = start_rating_optimizer.optimize(df=df, rating_model_idx=rating_idx,
-                                                                       matches=matches)
+                                                                       matches=matches, rating_generator=best_rating_generator)
             best_rating_generator.team_rating_generator.start_rating_generator.league_ratings = optimized_league_ratings
 
         if self.start_rating_n_trials > 0:

@@ -63,8 +63,10 @@ class GameTeamPredictor(BaseMLWrapper):
     def train(self, df: pd.DataFrame, estimator_features: list[Optional[str]] = None) -> None:
         if estimator_features is None and self._estimator_features is None:
             raise ValueError("estimator features must either be passed to .train() or injected into constructor")
+
         self._estimator_features = estimator_features or self._estimator_features
         df = self.fit_transform_categorical_transformers(df=df)
+
         if len(df[self._target].unique()) > 2 and hasattr(self.estimator, "predict_proba"):
             logging.info("target has more than 2 unique values, multiclassifier has therefore been set to True")
             self.multiclassifier = True
@@ -175,8 +177,7 @@ class Predictor(BaseMLWrapper):
     def train(self, df: pd.DataFrame, estimator_features: Optional[list[str]] = None) -> None:
         if estimator_features is None and self._estimator_features is None:
             raise ValueError("estimator features must either be passed to .train() or injected into constructor")
-        if not self._estimator_features:
-            self._estimator_features = estimator_features
+        self._estimator_features = estimator_features or self._estimator_features
 
         if hasattr(self.estimator, "predict_proba"):
             try:

@@ -9,7 +9,7 @@ class ColumnNames:
     match_id: str
     start_date: str
     player_id: str
-    performance: Optional[str]
+    performance: str
     league: Optional[str] = None
     position: Optional[str] = None
     participation_weight: Optional[str] = None

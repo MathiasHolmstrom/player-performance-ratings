@@ -20,19 +20,18 @@ class NetOverPredictedTransformer(BaseTransformer):
         self.prefix = prefix
         self._predictor = predictor
         self._features_out = []
-        new_feature_name = self.prefix +  self._predictor.pred_column
+        new_feature_name = self.prefix + self._predictor.pred_column
         self._features_out.append(new_feature_name)
         if self.prefix is "":
             raise ValueError("Prefix must not be empty")
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-
         self._predictor.train(df, estimator_features=self.features)
         return self.transform(df)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self._predictor.add_prediction(df)
-        new_feature_name = self.prefix +  self._predictor.pred_column
+        new_feature_name = self.prefix + self._predictor.pred_column
         df = df.assign(**{new_feature_name: df[self._predictor.target] - df[self._predictor.pred_column]})
         df = df.drop(columns=[self._predictor.pred_column])
 
@@ -70,12 +69,53 @@ class SklearnEstimatorImputer(BaseTransformer):
         return [self.target_name]
 
 
+class PartialStandardScaler(BaseTransformer):
+
+    def __init__(self,
+                 features: list[str],
+                 ratio: float = 0.55,
+                 target_mean: float = 0.5,
+                 max_value: float = 2,
+                 prefix: str = ""
+                 ):
+        super().__init__(features=features)
+        self.ratio = ratio
+        self.target_mean = target_mean
+        self.prefix = prefix
+        self.max_value = max_value
+
+        self._features_mean = {}
+        self._features_std = {}
+        self._features_out = []
+        for feature in self.features:
+            self._features_out.append(self.prefix + feature)
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        for feature in self.features:
+            self._features_mean[feature] = df[feature].mean()
+            self._features_std[feature] = df[feature].std()
+
+        return self.transform(df)
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        for feature in self.features:
+            new_feature = self.prefix + feature
+            df = df.assign(**{new_feature: ((df[feature] - self._features_mean[feature]) / self._features_std[
+                feature]) * self.ratio + self.target_mean})
+            df[new_feature] = df[new_feature].clip(-self.max_value + self.target_mean, self.max_value)
+        return df
+
+    @property
+    def features_out(self) -> list[str]:
+        return self._features_out
+
+
 class MinMaxTransformer(BaseTransformer):
 
     def __init__(self,
                  features: list[str],
-                 quantile: float = 0.99,
-                 allowed_mean_diff: Optional[float] = 0.02,
+                 quantile: float = 0.98,
+                 allowed_mean_diff: Optional[float] = 0.01,
                  max_iterations: int = 150,
                  prefix: str = ""
                  ):
@@ -345,5 +385,3 @@ class GroupByTransformer(BaseTransformer):
     @property
     def features_out(self) -> list[str]:
         return self._features_out
-
-

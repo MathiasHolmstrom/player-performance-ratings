@@ -130,19 +130,11 @@ class RatingDifferencePerformancePredictor(PerformancePredictor):
 
         prediction = (math.exp(value)) / (1 + math.exp(value))
 
-        prediction = 1 / (1 + math.exp(-rating_difference / 400))
-        if prediction > 0.98:
-            return self.max_predict_value
-        min_predict_value = 1 - 0.98
-        if prediction < min_predict_value:
-            return min_predict_value
-
-        return prediction
-
         if prediction > self.max_predict_value:
             return self.max_predict_value
         elif prediction < (1 - self.max_predict_value):
             return (1 - self.max_predict_value)
+
         return prediction
 
 

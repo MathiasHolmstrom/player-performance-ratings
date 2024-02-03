@@ -7,7 +7,7 @@ from player_performance_ratings.predictor.estimators import Predictor
 from player_performance_ratings import ColumnNames, PredictColumnNames
 
 from player_performance_ratings.predictor import MatchPredictor
-from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.enums import RatingEstimatorFeatures
 from player_performance_ratings.ratings.time_weight_ratings import BayesianTimeWeightedRating
 from player_performance_ratings.scorer.score import OrdinalLossScorer
 
@@ -55,19 +55,19 @@ match_predictor = MatchPredictor(
     predictor=Predictor(
         estimator=LGBMClassifier(verbose=-100),
         features=[
-            RatingColumnNames.TIME_WEIGHTED_RATING + "0",
-            RatingColumnNames.TIME_WEIGHTED_RATING + "1",
-            RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO + "0",
-            RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO + "1",
-            RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE + "0",
-            RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE + "1",
+            RatingEstimatorFeatures.TIME_WEIGHTED_RATING + "0",
+            RatingEstimatorFeatures.TIME_WEIGHTED_RATING + "1",
+            RatingEstimatorFeatures.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO + "0",
+            RatingEstimatorFeatures.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO + "1",
+            RatingEstimatorFeatures.TIME_WEIGHTED_RATING_EVIDENCE + "0",
+            RatingEstimatorFeatures.TIME_WEIGHTED_RATING_EVIDENCE + "1",
             "position"
         ],
         target=PredictColumnNames.TARGET,
     )
 )
 
-df_predictions = match_predictor.generate_historical(df=df)
+df_predictions = match_predictor.train(df=df)
 
 for idx, kills in enumerate(match_predictor._predictor.estimator.classes_):
     print(df_predictions.iloc[500]['playername'], kills,

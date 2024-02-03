@@ -150,7 +150,7 @@ tuner = PipelineTuner(
     predictor_tuner=predictor_tuner,
 )
 best_match_predictor = tuner.tune(df=df)
-game_player_predictions = best_match_predictor.generate_historical(df=df)
+game_player_predictions = best_match_predictor.train(df=df)
 
 pickle.dump(best_match_predictor, open("models/nba_game_winner", 'wb'))
 game_player_predictions.to_pickle("data/game_player_predictions.pickle")

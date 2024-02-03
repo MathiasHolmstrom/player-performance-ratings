@@ -67,7 +67,7 @@ class Pipeline():
 
         """
 
-        self._estimator_features = []
+        self._estimator_features = predictor._estimator_features
         self.rating_generators: list[RatingGenerator] = rating_generators if isinstance(rating_generators, list) else [
             rating_generators]
         if rating_generators is None:
@@ -76,14 +76,15 @@ class Pipeline():
         self.post_rating_transformers = post_rating_transformers or []
 
         for c in self.post_rating_transformers:
-            self._estimator_features += c.features_out
+            self._estimator_features += [f for f in c.features_out if f not in self._estimator_features]
         for rating_idx, c in enumerate(self.rating_generators):
-            for rating_feature in c.features_out:
+            for rating_feature in c.estimator_features_out:
                 if len(self.rating_generators) > 1:
                     rating_feature_str = rating_feature + str(rating_idx)
                 else:
                     rating_feature_str = rating_feature
-                self._estimator_features.append(rating_feature_str)
+                if rating_feature_str not in self._estimator_features:
+                    self._estimator_features.append(rating_feature_str)
 
 
         self.performances_generator = performances_generator
@@ -130,8 +131,8 @@ class Pipeline():
                                                       post_transformers=self.post_rating_transformers,
                                                       estimator_features=self._estimator_features)
 
-    def generate_historical(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
-                            store_ratings: bool = True) -> pd.DataFrame:
+    def train(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
+              store_ratings: bool = True) -> pd.DataFrame:
 
         if self.predictor.target not in df.columns:
             raise ValueError(f"Target {self.predictor.target } not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")

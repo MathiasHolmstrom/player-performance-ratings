@@ -28,7 +28,7 @@ class MatchRatingGenerator():
                  confidence_weight: float = 0.9,
                  min_rating_change_multiplier_ratio: float = 0.1,
                  league_rating_change_update_threshold: int = 100,
-                 league_rating_adjustor_multiplier: float = 0.1,
+                 league_rating_adjustor_multiplier: float = 0.05,
                  ):
 
         """
@@ -328,11 +328,8 @@ class MatchRatingGenerator():
 
         if self._league_rating_changes[league] > abs(self.league_rating_change_update_threshold):
             for player_id in self.start_rating_generator._league_to_player_ids[league]:
-                mean_rating_change = self._league_rating_changes[league] / self._league_rating_changes_count[league]
-            #   self.player_ratings[
-            #      player_id].rating_value += mean_rating_change * self.league_rating_adjustor_multiplier
                 self.player_ratings[
-                    player_id].rating_value += self._league_rating_changes[league] * 0.05
+                    player_id].rating_value += self._league_rating_changes[league] * self.league_rating_adjustor_multiplier
 
             self._league_rating_changes[league] = 0
 
@@ -346,15 +343,15 @@ class MatchRatingGenerator():
         applied_rating_change_multiplier = confidence_change_multiplier * self.confidence_weight + (
                 1 - self.confidence_weight) * self.rating_change_multiplier
 
-        net_certain_sum_value = self.player_ratings[
-                                    player_id].confidence_sum - 20
-        certain_factor = -(1 / (1 + math.exp(-net_certain_sum_value / 14)) - 0.5) * 2 + 1
-        certain_multiplier = certain_factor * self.rating_change_multiplier
-        multiplier = certain_multiplier * self.confidence_weight + (
-                1 - self.confidence_weight) * self.rating_change_multiplier
+       # net_certain_sum_value = self.player_ratings[
+      #                              player_id].confidence_sum - 20
+      #  certain_factor = -(1 / (1 + math.exp(-net_certain_sum_value / 14)) - 0.5) * 2 + 1
+     #   certain_multiplier = certain_factor * self.rating_change_multiplier
+      #  multiplier = certain_multiplier * self.confidence_weight + (
+      #          1 - self.confidence_weight) * self.rating_change_multiplier
 
-        min_rating_change_multiplier = self.rating_change_multiplier * self.min_rating_change_multiplier_ratio
-        return max(min_rating_change_multiplier, multiplier)
+     #   min_rating_change_multiplier = self.rating_change_multiplier * self.min_rating_change_multiplier_ratio
+        return max(min_applied_rating_change_multiplier, applied_rating_change_multiplier)
 
     #     return max(min_applied_rating_change_multiplier, applied_rating_change_multiplier)
 

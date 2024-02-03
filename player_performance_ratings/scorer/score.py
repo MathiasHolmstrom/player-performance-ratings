@@ -93,14 +93,14 @@ class OrdinalLossScorer(BaseScorer):
 
     def __init__(self,
                  pred_column: str,
-                 potential_targets: list[int],
+                 targets_to_measure: list[int],
                  target: Optional[str] = PredictColumnNames.TARGET,
                  granularity: Optional[list[str]] = None,
                  filters: Optional[list[Filter]] = None
                  ):
 
         self.pred_column_name = pred_column
-        self.target_range = potential_targets
+        self.targets_to_measure = targets_to_measure
         self.granularity = granularity
         super().__init__(target=target, pred_column=pred_column, filters=filters, granularity=granularity)
 
@@ -110,12 +110,12 @@ class OrdinalLossScorer(BaseScorer):
         df = apply_filters(df, self.filters)
         df.reset_index(drop=True, inplace=True)
         probs = df[self.pred_column_name]
-        last_column_name = f'prob_under_{self.target_range[0]-0.5}'
+        last_column_name = f'prob_under_{self.targets_to_measure[0] - 0.5}'
         df[last_column_name] = probs.apply(lambda x: x[0])
 
         sum_lr = 0
 
-        for idx, class_ in enumerate(self.target_range[1:]):
+        for idx, class_ in enumerate(self.targets_to_measure[1:]):
 
             p_c = 'prob_under_' + str(class_ + 0.5)
             df[p_c] = probs.apply(lambda x: x[idx+1]) + df[last_column_name]

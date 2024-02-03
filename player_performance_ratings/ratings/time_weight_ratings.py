@@ -1,12 +1,12 @@
 import math
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
 
 from player_performance_ratings.data_structures import Match, ColumnNames, TeamRating, PlayerRating
 from player_performance_ratings.ratings import convert_df_to_matches
-from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.enums import RatingEstimatorFeatures, RatingHistoricalFeatures
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
 
@@ -67,9 +67,9 @@ class BayesianTimeWeightedRating(RatingGenerator):
         self.prior_granularity_count_max = prior_granularity_count_max
         self.by_league = prior_by_league
         self.by_position = prior_by_position
-        self._features_out = features_created or [RatingColumnNames.TIME_WEIGHTED_RATING,
-                                                  RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE,
-                                                  RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO]
+        self._features_out = features_created or [RatingEstimatorFeatures.TIME_WEIGHTED_RATING,
+                                                  RatingEstimatorFeatures.TIME_WEIGHTED_RATING_EVIDENCE,
+                                                  RatingEstimatorFeatures.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO]
 
         self.player_performances: dict[str, list[float]] = {}
         self.player_days: dict[str, list[int]] = {}
@@ -77,7 +77,7 @@ class BayesianTimeWeightedRating(RatingGenerator):
         self._granularity_ratings: dict[str, list[float]] = {}
         self._granularity_players: dict[str, list[str]] = {}
 
-    def generate_historical(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[RatingColumnNames, list[float]]:
+    def generate_historical(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[RatingEstimatorFeatures, list[float]]:
 
         if matches is None and df is None:
             raise ValueError("If matches is not passed, df and column names must be massed")
@@ -99,9 +99,9 @@ class BayesianTimeWeightedRating(RatingGenerator):
             mean_performance_value = sum_mean_performance_value / count
 
         ratings = {
-            RatingColumnNames.TIME_WEIGHTED_RATING: [],
-            RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO: [],
-            RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE: [],
+            RatingEstimatorFeatures.TIME_WEIGHTED_RATING: [],
+            RatingEstimatorFeatures.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO: [],
+            RatingEstimatorFeatures.TIME_WEIGHTED_RATING_EVIDENCE: [],
         }
 
         for match in matches:
@@ -133,14 +133,14 @@ class BayesianTimeWeightedRating(RatingGenerator):
                     self.player_days[team_player.id].append(match.day_number)
                     self.player_performances[team_player.id].append(team_player.performance.performance_value)
 
-                    ratings[RatingColumnNames.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO].append(likelihood_ratio)
-                    ratings[RatingColumnNames.TIME_WEIGHTED_RATING].append(posterior_rating)
-                    ratings[RatingColumnNames.TIME_WEIGHTED_RATING_EVIDENCE].append(evidence_performances)
+                    ratings[RatingEstimatorFeatures.TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO].append(likelihood_ratio)
+                    ratings[RatingEstimatorFeatures.TIME_WEIGHTED_RATING].append(posterior_rating)
+                    ratings[RatingEstimatorFeatures.TIME_WEIGHTED_RATING_EVIDENCE].append(evidence_performances)
 
         return ratings
 
     def generate_future(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[
-        RatingColumnNames, list[float]]:
+        RatingEstimatorFeatures, list[float]]:
         pass
 
     def _generate_base_prior(self, player_id: str, base_prior_value: float, league: Optional[str],
@@ -197,5 +197,9 @@ class BayesianTimeWeightedRating(RatingGenerator):
         return self.team_ratings
 
     @property
-    def features_out(self) -> list[str]:
+    def estimator_features_out(self) -> list[RatingEstimatorFeatures]:
+        return self._features_out
+
+    @property
+    def features_out(self) -> list[Union[RatingEstimatorFeatures, RatingHistoricalFeatures]]:
         return self._features_out

@@ -46,7 +46,7 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
         raise ValueError("projected_participation_weight column passed but not participation_weight column")
 
     if column_names.performance in df.columns:
-      #  if max(df[column_names.performance]) > 1.001 or min(df[column_names.performance]) < -0.001:
+   #     if max(df[column_names.performance]) > 1.001 or min(df[column_names.performance]) < -0.001:
       #      raise ValueError("performance column must be between 0 and 1")
 
         mean_performance = df[column_names.performance].mean()

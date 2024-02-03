@@ -9,14 +9,14 @@ from optuna.trial import BaseTrial
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings.ratings import ColumnWeight, PerformancesGenerator
-from player_performance_ratings.ratings.enums import RatingColumnNames
+from player_performance_ratings.ratings.enums import RatingEstimatorFeatures
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 from player_performance_ratings import PipelineFactory
 
 from player_performance_ratings.tuner.utils import add_params_from_search_range, ParameterSearchRange
 
-RC = RatingColumnNames
+RC = RatingEstimatorFeatures
 
 
 class PerformancesGeneratorTuner:

@@ -32,13 +32,7 @@ def add_params_from_search_range(trial: BaseTrial, parameter_search_range: list[
     return params
 
 
-def get_default_lgbm_classifier_search_range_by_learning_rate(learning_rate: float) -> list[ParameterSearchRange]:
-    if learning_rate < 0.05 and learning_rate > 0.02:
-        min_n_estimators = min(1 / learning_rate * 2, 1000)
-    elif learning_rate < 0.02:
-        min_n_estimators = min(1 / learning_rate*1, 1000)
-    else:
-        min_n_estimators = min(1 / learning_rate * 4, 1000)
+def get_default_lgbm_classifier_search_range() -> list[ParameterSearchRange]:
 
     return [
         ParameterSearchRange(
