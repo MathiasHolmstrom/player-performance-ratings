@@ -27,7 +27,6 @@ class StartRatingGenerator():
                  max_days_ago_league_entities: int = 120,
                  min_match_count_team_rating: int = 2,
                  harcoded_start_rating: Optional[float] = None,
-                 rating_regularizer: float = 0.05,
                  ):
 
         self.league_ratings = league_ratings or {}
@@ -38,7 +37,6 @@ class StartRatingGenerator():
         self.max_days_ago_league_entities = max_days_ago_league_entities
         self.min_match_count_team_rating = min_match_count_team_rating
         self.harcoded_start_rating = harcoded_start_rating
-        self.rating_regularizer = rating_regularizer
         if self.harcoded_start_rating is not None:
             logging.warning(
                 f"Hardcoded start ratings are used."
@@ -157,22 +155,6 @@ class StartRatingGenerator():
                 del data_structure[player_index]
 
             self._player_to_league[id] = league
-
-
-    def update_league_ratings(self,
-                              player_rating_change: PlayerRatingChange,
-                              opponent_team: TeamRatingChange,
-                              ) -> Dict[str, float]:
-
-        if player_rating_change.league == opponent_team.league:
-            return self.league_ratings
-        rating_change = player_rating_change.rating_change_value
-        if player_rating_change.league not in self.league_ratings:
-            self.league_ratings[player_rating_change.league] = 0
-        self.league_ratings[player_rating_change.league] += rating_change * self.rating_regularizer
-
-        return self.league_ratings
-
 
     @property
     def league_player_ratings(self) -> dict[str, list]:

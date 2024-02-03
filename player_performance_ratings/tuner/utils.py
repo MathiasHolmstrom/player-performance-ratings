@@ -133,8 +133,8 @@ def get_default_team_rating_search_range() -> list[ParameterSearchRange]:
         ParameterSearchRange(
             name='confidence_max_days',
             type='uniform',
-            low=40,
-            high=150,
+            low=60,
+            high=220,
         ),
         ParameterSearchRange(
             name='confidence_max_sum',

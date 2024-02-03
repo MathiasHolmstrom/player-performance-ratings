@@ -204,7 +204,8 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                     params.pop(param)
 
             team_rating_generator = MatchRatingGenerator(**params,
-                                                         performance_predictor=performance_predictor)
+                                                         performance_predictor=performance_predictor,
+                                                         start_rating_generator=copy.deepcopy(rating_generator.team_rating_generator.start_rating_generator))
 
             rating_g = copy.deepcopy(rating_generator)
             rating_g.team_rating_generator = team_rating_generator

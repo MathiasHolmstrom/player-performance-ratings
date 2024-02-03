@@ -122,12 +122,12 @@ def auto_create_pre_performance_transformations(
 
     if contains_not_position and net_predict_transformers is None:
         distribution_transformer = SymmetricDistributionTransformer(features=not_transformed_features)
-        pre_transformations.append(distribution_transformer)
+   #     pre_transformations.append(distribution_transformer)
 
-    pre_transformations.append(
-        SkLearnTransformerWrapper(transformer=StandardScaler(), features=all_feature_names))
+ #   pre_transformations.append(
+  #      SkLearnTransformerWrapper(transformer=StandardScaler(), features=all_feature_names))
 
-    pre_transformations.append(MinMaxTransformer(features=all_feature_names))
+  #  pre_transformations.append(MinMaxTransformer(features=all_feature_names))
     return pre_transformations
 
 
