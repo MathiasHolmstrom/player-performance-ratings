@@ -132,7 +132,7 @@ cross_validator = MatchKFoldCrossValidator(
 )
 
 tuner = PipelineTuner(
-    performances_generator_tuner=performance_generator_tuner,
+    performances_generator_tuners=performance_generator_tuner,
     rating_generator_tuners=rating_generator_tuner,
   #  predictor_tuner=predictor_tuner,
     fit_best=True,

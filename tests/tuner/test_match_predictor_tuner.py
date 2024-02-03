@@ -64,7 +64,7 @@ def test_match_predictor_tuner():
     match_predictor_tuner = PipelineTuner(
         scorer=scorer_mock,
         pipeline=match_predictor_factory,
-        performances_generator_tuner=performances_generator_tuner,
+        performances_generator_tuners=performances_generator_tuner,
         rating_generator_tuners=rating_generator_tuner,
         date_column_name="start_date",
         cv_n_splits = 1

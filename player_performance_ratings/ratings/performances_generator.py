@@ -30,7 +30,7 @@ class ColumnWeight:
 
 def auto_create_pre_performance_transformations(
         pre_transformations: list[BaseTransformer],
-        column_weights: list[list[ColumnWeight]],
+        column_weights: Union[list[list[ColumnWeight]], list[ColumnWeight]],
         column_names: list[ColumnNames],
 ) -> list[BaseTransformer]:
     """
@@ -58,7 +58,6 @@ def auto_create_pre_performance_transformations(
             features_in = []
             for column_weight in col_weights:
                 features_in.append(column_weight.name)
-                feature = column_weight.name
                 not_transformed_features.remove(column_weight.name)
 
             distribution_transformer = SymmetricDistributionTransformer(
@@ -90,6 +89,8 @@ class PerformancesGenerator():
                  ):
         self.column_names = column_names if isinstance(column_names, list) else [column_names]
         self.column_weights = column_weights if isinstance(column_weights[0], list) else [column_weights]
+        if len(self.column_names) != len(self.column_weights):
+            raise ValueError("column_names and column_weights must be the same length, and both equal to the number of rating generators")
         self.auto_transform_performance = auto_transform_performance
 
         self.pre_transformations = pre_transformations or []

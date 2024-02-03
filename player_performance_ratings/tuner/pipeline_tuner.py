@@ -29,8 +29,8 @@ class PipelineTuner():
     def __init__(self,
                  pipeline: Pipeline,
                  cross_validator: CrossValidator,
-                 performances_generator_tuner: Optional[PerformancesGeneratorTuner] = None,
-                 rating_generator_tuners: Optional[Union[list[RatingGeneratorTuner], RatingGeneratorTuner]] = None,
+                 performances_generator_tuners: Optional[Union[list[Optional[PerformancesGeneratorTuner]],PerformancesGeneratorTuner]] = None,
+                 rating_generator_tuners: Optional[Union[list[Optional[RatingGeneratorTuner]], RatingGeneratorTuner]] = None,
                  predictor_tuner: Optional[PredictorTuner] = None,
                  fit_best: bool = True,
                  ):
@@ -41,7 +41,7 @@ class PipelineTuner():
             The factory that creates the MatchPredictor.
             Contains the parameters to create the MatchPredictor if no parameter-tuning was done.
             Based on hyperparameter-tuning the final way the match-predictor is generated will be based on a combination of the parameters in the factory and the tuned parameters.
-        :param performances_generator_tuner:
+        :param performances_generator_tuners:
             The tuner that tunes the hyperparameters of the pre_transformers.
             If left none or as [], the pre_transformers in the pipeline_factory will be used.
         :param rating_generator_tuners:
@@ -63,7 +63,7 @@ class PipelineTuner():
             predictor=pipeline.predictor,
         )
 
-        self.performances_generator_tuner = performances_generator_tuner
+        self.performances_generator_tuners = performances_generator_tuners
         self.rating_generator_tuners = rating_generator_tuners or []
         self._untrained_best_model = None
         self.predictor_tuner = predictor_tuner
@@ -75,7 +75,7 @@ class PipelineTuner():
                 self._pipeline_factory.rating_generators) and self.rating_generator_tuners:
             raise ValueError("Number of rating_generator_tuners must match number of rating_generators")
 
-        if not self.performances_generator_tuner and not self.rating_generator_tuners and not self.predictor_tuner:
+        if not self.performances_generator_tuners and not self.rating_generator_tuners and not self.predictor_tuner:
             raise ValueError("No tuning has been provided in config")
 
         self.cross_validator = cross_validator
@@ -94,11 +94,15 @@ class PipelineTuner():
 
         untrained_best_performances_generator = copy.deepcopy(best_performances_generator)
 
-        if self.performances_generator_tuner:
-            logging.info("Tuning PreTransformers")
-            best_performances_generator = self.performances_generator_tuner.tune(df=df,
-                                                                                 pipeline_factory=self._pipeline_factory,
-                                                                                 cross_validator=self.cross_validator)
+        if self.performances_generator_tuners:
+            for rating_idx, performances_generator_tuner in enumerate(self.performances_generator_tuners):
+                if performances_generator_tuner is None:
+                    continue
+                logging.info("Tuning PreTransformers")
+                best_performances_generator = performances_generator_tuner.tune(df=df,
+                                                                                      rating_idx=rating_idx,
+                                                                                      pipeline_factory=self._pipeline_factory,
+                                                                                      cross_validator=self.cross_validator)
             untrained_best_performances_generator = copy.deepcopy(best_performances_generator)
         if best_performances_generator:
             df = best_performances_generator.generate(df)
@@ -116,6 +120,8 @@ class PipelineTuner():
 
             if self.rating_generator_tuners:
                 rating_generator_tuner = self.rating_generator_tuners[rating_idx]
+                if rating_generator_tuner is None:
+                    continue
 
                 rating_matches = convert_df_to_matches(df=df, column_names=column_names[rating_idx])
                 matches.append(rating_matches)
