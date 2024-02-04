@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Any
 from dataclasses_json import DataClassJsonMixin
 
 
@@ -18,6 +18,7 @@ class ColumnNames:
     parent_team_id: Optional[str] = None
     team_players_playing_time: Optional[str] = None
     opponent_players_playing_time: Optional[str] = None
+    other_values: Optional[list[str]] = None
 
     def __post_init__(self):
         if self.rating_update_match_id is None:
@@ -82,6 +83,7 @@ class PreMatchPlayerRating:
     league: Optional[str]
     position: Optional[str]
     match_performance: MatchPerformance
+    other: Optional[dict[str, Any]] = None
 
 
 @dataclass
@@ -91,6 +93,7 @@ class PreMatchTeamRating:
     rating_value: Optional[float]
     projected_rating_value: float
     league: Optional[str]
+
 
 
 @dataclass
@@ -164,6 +167,7 @@ class MatchPlayer:
     position: Optional[str] = None
     team_players_participation_weight: Optional[dict[str, float]] = None
     opponent_players_participation_weight: Optional[dict[str, float]] = None
+    others: Optional[dict[str, Any]] = None
 
 
 @dataclass

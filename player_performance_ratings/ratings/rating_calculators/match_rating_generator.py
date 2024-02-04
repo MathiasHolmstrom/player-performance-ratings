@@ -165,7 +165,8 @@ class MatchRatingGenerator():
                     match_performance=match_player.performance,
                     games_played=player_rating.games_played,
                     league=match_player.league,
-                    position=match_player.position
+                    position=match_player.position,
+                    other=match_player.others
                 )
 
             else:
@@ -205,7 +206,8 @@ class MatchRatingGenerator():
                 match_performance=match_player.performance,
                 games_played=self.player_ratings[match_player.id].games_played,
                 league=match_player.league,
-                position=match_player.position
+                position=match_player.position,
+                other=match_player.others
             )
 
             pre_match_player_ratings.append(pre_match_player_rating)

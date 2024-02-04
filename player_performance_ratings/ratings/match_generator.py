@@ -195,12 +195,17 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
                 projected_participation_weight=participation_weight
             )
 
+        others = {}
+        if col_names.other_values:
+            for other_col in col_names.other_values:
+                others[other_col] = row[other_col]
+
         match_player = MatchPlayer(
             id=player_id,
             league=player_league,
             performance=performance,
             position=position,
-
+            others=others
         )
         match_team_players.append(match_player)
 

@@ -58,7 +58,9 @@ class RatioTeamPredictorTransformer(BasePostTransformer):
         self.team_total_prediction_column = team_total_prediction_column
         self.prefix = prefix
         self.predictor._pred_column = f"__prediction__{self.predictor.target}"
-        self._features_out = [self.predictor.target + prefix, self.predictor.target + prefix + "_team_total_multiplied"]
+        self._features_out = [self.predictor.target + prefix]
+        if self.team_total_prediction_column:
+            self._features_out.append(self.predictor.target + prefix + "_team_total_multiplied")
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         self.predictor.train(df=df, estimator_features=self.features)
@@ -71,7 +73,7 @@ class RatioTeamPredictorTransformer(BasePostTransformer):
         df[self._features_out[0]] = df[self.predictor.pred_column] / df[self.predictor.pred_column + "_sum"]
         if self.team_total_prediction_column:
             df = df.assign(**{self.predictor.target + self.prefix + "_team_total_multiplied": df[self._features_out[
-                                                                                                  0]] * df[
+                0]] * df[
                                                                                                   self.team_total_prediction_column]})
         return df.drop(columns=[self.predictor.pred_column + "_sum", self.predictor.pred_column])
 

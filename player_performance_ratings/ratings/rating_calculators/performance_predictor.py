@@ -2,6 +2,7 @@ import math
 from abc import ABC, abstractmethod
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
 
@@ -25,6 +26,76 @@ class PerformancePredictor(ABC):
                             team_rating: PreMatchTeamRating
                             ) -> float:
         pass
+
+
+class RatingMeanCustomOpponentRatingPerformancePredictor(PerformancePredictor):
+
+    def __init__(self,
+                 opponent_rating_column_name: str,
+                 opponent_rating_std: float,
+                 opponent_rating_mean: float,
+                 player_rating_expected_mean: float = 1000,
+                 min_count: int = 500,
+                 coef: float = 0.005757,
+                 ):
+        self.opponent_rating_column_name = opponent_rating_column_name
+        self.opponent_rating_std = opponent_rating_std
+        self.opponent_rating_mean = opponent_rating_mean
+        self.player_rating_expected_mean = player_rating_expected_mean
+        self.min_count = min_count
+        self.coef = coef
+        self._player_ratings = []
+        self._backup_performance_predictor = RatingNonOpponentPerformancePredictor()
+        self._sum_rating = 0
+        self._rating_count = 0
+
+    def predict_performance(self,
+                            player_rating: PreMatchPlayerRating,
+                            opponent_team_rating: PreMatchTeamRating,
+                            team_rating: PreMatchTeamRating
+                            ) -> float:
+
+        mean_opponent_rating = sum(
+            [opponent_player.rating_value for opponent_player in opponent_team_rating.players]) / len(
+            opponent_team_rating.players)
+
+        if len(self._player_ratings) == 0:
+            actual_player_rating_mean = 0
+            weight_actual_data = 0
+            actual_player_rating_std = 0
+        else:
+            weight_actual_data = min(1, len(self._player_ratings) / 3000)
+            actual_player_rating_mean = sum(self._player_ratings) / len(self._player_ratings)
+            actual_player_rating_std = np.array(self._player_ratings).std()
+        player_rating_mean = (
+                                     1 - weight_actual_data) * self.player_rating_expected_mean + weight_actual_data * actual_player_rating_mean
+
+        player_rating_std = (
+                                        1 - weight_actual_data) * self.opponent_rating_std + weight_actual_data * actual_player_rating_std
+        opponent_rating_adjusted = (
+                                               mean_opponent_rating - self.opponent_rating_mean + player_rating_mean) / self.opponent_rating_std * player_rating_std
+
+        if len(self._player_ratings) < self.min_count:
+
+            predicted_performance = self._backup_performance_predictor.predict_performance(player_rating=player_rating,
+                                                                                           opponent_team_rating=opponent_team_rating,
+                                                                                           team_rating=team_rating)
+
+
+        else:
+            historical_average_rating = self._sum_rating / self._rating_count
+
+            net_mean_rating_over_historical_average = player_rating.rating_value * 0.5 + opponent_rating_adjusted * 0.5 - historical_average_rating
+
+            value = self.coef * net_mean_rating_over_historical_average
+            predicted_performance = (math.exp(value)) / (1 + math.exp(value))
+
+        self._sum_rating += player_rating.rating_value * 0.5 + opponent_rating_adjusted * 0.5
+        self._rating_count += 1
+
+        self._player_ratings.append(player_rating.rating_value)
+
+        return predicted_performance
 
 
 class RatingNonOpponentPerformancePredictor(PerformancePredictor):
@@ -84,7 +155,8 @@ class RatingDifferencePerformancePredictor(PerformancePredictor):
                             team_rating: PreMatchTeamRating
                             ) -> float:
 
-        if player_rating.match_performance.team_players_playing_time and isinstance(player_rating.match_performance.team_players_playing_time, dict):
+        if player_rating.match_performance.team_players_playing_time and isinstance(
+                player_rating.match_performance.team_players_playing_time, dict):
             weight_team_rating = 0
             sum_playing_time = 0
             for team_player in team_rating.players:
@@ -102,7 +174,8 @@ class RatingDifferencePerformancePredictor(PerformancePredictor):
         else:
             team_rating_value = team_rating.rating_value
 
-        if player_rating.match_performance.opponent_players_playing_time and isinstance(player_rating.match_performance.team_players_playing_time, dict):
+        if player_rating.match_performance.opponent_players_playing_time and isinstance(
+                player_rating.match_performance.team_players_playing_time, dict):
             weight_opp_rating = 0
             sum_playing_time = 0
             for opp_player in opponent_team_rating.players:
