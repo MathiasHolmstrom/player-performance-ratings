@@ -176,7 +176,6 @@ class PipelineTuner():
         )
         if self.fit_best:
             logging.info("Retraining best match predictor with all data")
-            print(best_match_predictor.rating_generators[0].player_ratings)
             best_match_predictor.train(df=original_df, store_ratings=True)
 
         return best_match_predictor

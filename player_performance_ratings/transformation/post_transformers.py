@@ -42,6 +42,44 @@ class PredictorTransformer(BasePostTransformer):
         return [f'{self.predictor.pred_column}']
 
 
+class RatioTeamPredictorTransformer(BasePostTransformer):
+    def __init__(self,
+                 features: list[str],
+                 predictor: BaseMLWrapper,
+                 game_id: str,
+                 team_id: str,
+                 team_total_prediction_column: Optional[str] = None,
+                 prefix: str = "_ratio_team"
+                 ):
+        super().__init__(features=features)
+        self.predictor = predictor
+        self.game_id = game_id
+        self.team_id = team_id
+        self.team_total_prediction_column = team_total_prediction_column
+        self.prefix = prefix
+        self.predictor._pred_column = f"__prediction__{self.predictor.target}"
+        self._features_out = [self.predictor.target + prefix, self.predictor.target + prefix + "_team_total_multiplied"]
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        self.predictor.train(df=df, estimator_features=self.features)
+        return self.transform(df)
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = self.predictor.add_prediction(df=df)
+        df[self.predictor.pred_column + "_sum"] = df.groupby([self.game_id, self.team_id])[
+            self.predictor.pred_column].transform('sum')
+        df[self._features_out[0]] = df[self.predictor.pred_column] / df[self.predictor.pred_column + "_sum"]
+        if self.team_total_prediction_column:
+            df = df.assign(**{self.predictor.target + self.prefix + "_team_total_multiplied": df[self._features_out[
+                                                                                                  0]] * df[
+                                                                                                  self.team_total_prediction_column]})
+        return df.drop(columns=[self.predictor.pred_column + "_sum", self.predictor.pred_column])
+
+    @property
+    def features_out(self) -> list[str]:
+        return self._features_out
+
+
 class SklearnPredictorTransformer(BasePostTransformer):
 
     def __init__(self, estimator, features: list[str], target: str, train_date: str, date_column_name: str,
@@ -251,7 +289,8 @@ class LagTransformer(BasePostTransformer):
             self._df = pd.concat([self._df, df], axis=0)
 
         self._df = self._df.assign(
-            __id=self._df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id, self.column_names.player_id]].agg('__'.join, axis=1))
+            __id=self._df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id,
+                           self.column_names.player_id]].agg('__'.join, axis=1))
         self._df = self._df.drop_duplicates(subset=['__id'], keep='last')
 
         transformed_df = self.transform(pd.DataFrame(df))
@@ -269,7 +308,8 @@ class LagTransformer(BasePostTransformer):
             raise ValueError("fit_transform needs to be called before transform")
 
         if len(df.drop_duplicates(
-                subset=[self.column_names.player_id, self.column_names.parent_team_id ,self.column_names.rating_update_match_id])) != len(df):
+                subset=[self.column_names.player_id, self.column_names.parent_team_id,
+                        self.column_names.rating_update_match_id])) != len(df):
             raise ValueError(
                 f"Duplicated rows in df. Df must be a unique combination of {self.column_names.player_id} and {self.column_names.rating_update_match_id}")
 
@@ -278,7 +318,8 @@ class LagTransformer(BasePostTransformer):
 
         all_df = pd.concat([self._df, df], axis=0)
         all_df = all_df.assign(
-            __id=all_df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id, self.column_names.player_id]].agg('__'.join, axis=1))
+            __id=all_df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id,
+                         self.column_names.player_id]].agg('__'.join, axis=1))
         all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
 
         validate_sorting(df=all_df, column_names=self.column_names)
@@ -324,7 +365,8 @@ class LagTransformer(BasePostTransformer):
             on=self.granularity + [self.column_names.rating_update_match_id], how='left')
 
         df = df.assign(
-            __id=df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id, self.column_names.player_id]].agg('__'.join, axis=1))
+            __id=df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id,
+                     self.column_names.player_id]].agg('__'.join, axis=1))
 
         transformed_df = all_df[all_df['__id'].isin(df['__id'].unique().tolist())][ori_cols + self._features_out]
         transformed_df.index = ori_index_values
@@ -476,7 +518,7 @@ class RollingMeanTransformer(BasePostTransformer):
         """
 
         super().__init__(features=features)
-        self.granularity = granularity
+        self.granularity = granularity or [column_names.player_id]
         if isinstance(self.granularity, str):
             self.granularity = [self.granularity]
         self.window = window
@@ -501,7 +543,8 @@ class RollingMeanTransformer(BasePostTransformer):
             self._df = pd.concat([self._df, df], axis=0)
 
         self._df = self._df.assign(
-            __id=self._df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id, self.column_names.player_id]].agg('__'.join, axis=1))
+            __id=self._df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id,
+                           self.column_names.player_id]].agg('__'.join, axis=1))
         self._df = self._df.drop_duplicates(subset=['__id'], keep='last')
 
         transformed_df = self.transform(pd.DataFrame(df))
@@ -523,7 +566,8 @@ class RollingMeanTransformer(BasePostTransformer):
 
         all_df = pd.concat([self._df, df], axis=0).reset_index()
         all_df = all_df.assign(
-            __id=all_df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id, self.column_names.player_id]].agg('__'.join, axis=1))
+            __id=all_df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id,
+                         self.column_names.player_id]].agg('__'.join, axis=1))
         all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
 
         validate_sorting(df=all_df, column_names=self.column_names)
@@ -547,7 +591,8 @@ class RollingMeanTransformer(BasePostTransformer):
             all_df = all_df.sort_values(by=[self.column_names.start_date, self.column_names.match_id,
                                             self.column_names.team_id, self.column_names.player_id])
         df = df.assign(
-            __id=df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id, self.column_names.player_id]].agg('__'.join, axis=1))
+            __id=df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id,
+                     self.column_names.player_id]].agg('__'.join, axis=1))
         transformed_df = all_df[all_df['__id'].isin(df['__id'].unique().tolist())][ori_cols + self._features_out]
         transformed_df.index = ori_index_values
         return transformed_df[list(set(ori_cols + self._features_out))]
