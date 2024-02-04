@@ -93,7 +93,7 @@ class OrdinalLossScorer(BaseScorer):
 
     def __init__(self,
                  pred_column: str,
-                 targets_to_measure: list[int],
+                 targets_to_measure: Optional[list[int]] = None,
                  target: Optional[str] = PredictColumnNames.TARGET,
                  granularity: Optional[list[str]] = None,
                  filters: Optional[list[Filter]] = None
@@ -105,7 +105,9 @@ class OrdinalLossScorer(BaseScorer):
         super().__init__(target=target, pred_column=pred_column, filters=filters, granularity=granularity)
 
     def score(self, df: pd.DataFrame) -> float:
-
+        if self.targets_to_measure is None:
+            self.targets_to_measure = df[self.target].unique().tolist()
+        self.targets_to_measure.sort()
         df = df.copy()
         df = apply_filters(df, self.filters)
         df.reset_index(drop=True, inplace=True)

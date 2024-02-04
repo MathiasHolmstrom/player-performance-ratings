@@ -163,7 +163,7 @@ class Predictor(BaseMLWrapper):
         self._target = target
         self.multiclassifier = multiclassifier
         self.column_names = column_names
-        self._estimator_features = estimator_features
+        self._estimator_features = estimator_features or []
 
         if estimator is None:
             logging.warning(

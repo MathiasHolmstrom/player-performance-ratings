@@ -18,11 +18,10 @@ class PipelineFactory():
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
                  post_rating_transformers: Optional[List[BasePostTransformer]] = None,
-                 column_weights: Optional[Union[List[List[ColumnWeight]], list[ColumnWeight]]] = None,
                  ):
 
-        if rating_generators and performances_generator is None and not column_weights:
-            raise ValueError("If performance generator is None, column weights must be specified")
+        if rating_generators and performances_generator is None:
+            raise ValueError("If rating_generators is used, performances_generator must be specified")
         self.post_rating_transformers = post_rating_transformers or []
 
 
@@ -31,15 +30,7 @@ class PipelineFactory():
             self.rating_generators = [self.rating_generators]
 
         self.predictor = predictor
-
         self.performances_generator = performances_generator
-        self.column_weights = column_weights if isinstance(column_weights, list) else [
-            column_weights] if column_weights else None
-
-        if self.performances_generator is None and self.rating_generators:
-            self.performances_generator = PerformancesGenerator(column_weights=self.column_weights,
-                                                                column_names=self.rating_generators[0].column_names)
-
 
 
     def create(self,

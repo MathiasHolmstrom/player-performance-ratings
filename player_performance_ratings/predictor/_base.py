@@ -39,8 +39,12 @@ class BaseMLWrapper(ABC):
         self.categorical_transformers = categorical_transformers
         self._estimator_categorical_features = []
         self._deepest_estimator = self.estimator
+        iterations = 0
         while hasattr(self._deepest_estimator , "estimator"):
             self._deepest_estimator  = self._deepest_estimator.estimator
+            iterations += 1
+            if iterations > 10:
+                raise ValueError("estimator is too deep")
 
     @abstractmethod
     def train(self, df: pd.DataFrame, estimator_features: list[str]) -> None:

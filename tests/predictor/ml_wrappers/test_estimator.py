@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor import GameTeamPredictor, OrdinalClassifier, Predictor
@@ -56,13 +56,11 @@ def test_game_team_predictor_multiclass_train():
 
 def test_game_team_predictor_game_player():
     """
-    When weight_column is used -->
-      the injected model.train() should be called with weighted * feature1 grouped by game_id, team_id
     """
 
     mock_model = Mock()
-
-    predictor = GameTeamPredictor(game_id_colum='game_id', team_id_column='team_id', estimator=mock_model, weight_column='weight')
+    mock_model.estimator = LogisticRegression()
+    predictor = GameTeamPredictor(game_id_colum='game_id', team_id_column='team_id', estimator=mock_model)
 
     df = pd.DataFrame(
         {
@@ -70,14 +68,13 @@ def test_game_team_predictor_game_player():
             'team_id': [1, 1, 2, 2],
             "player_id": [1, 2, 3, 4],
             'feature1': [0.1, 0.5, 0.3, 0.4],
-            'weight': [0.3, 0.8, 0.6, 0.45],
             "__target": [1, 1, 0, 0]
         }
     )
 
     predictor.train(df, estimator_features=['feature1'])
-    feature_team1 = (0.1 * 0.3 + 0.5 * 0.8) / (0.3 + 0.8)
-    feature_team2 = (0.3 * 0.6 + 0.4 * 0.45) / (0.6 + 0.45)
+    feature_team1 = (0.1 * 0.5 + 0.5 * 0.5) / (0.5 + 0.5)
+    feature_team2 = (0.3 * 0.5 + 0.4 * 0.5) / (0.5 + 0.5)
 
     expected_features = pd.DataFrame(
         {'feature1': [feature_team1, feature_team2],
@@ -87,42 +84,6 @@ def test_game_team_predictor_game_player():
     pd.testing.assert_frame_equal(mock_model.fit.call_args[0][0], expected_features, check_like=True)
     assert mock_model.fit.call_args[0][1].tolist() == [1, 0]
 
-
-def test_game_team_predictor_with_weight():
-    """
-    When sub-game are used the same player can exist multiple times in the same game_id for the same team_id.
-    In this case the weighted average should be calculated for each player and then the average of the players.
-    The calculation should be the same as if it was different players on the same team
-    -->
-
-    """
-
-    mock_model = Mock()
-
-    predictor = GameTeamPredictor(game_id_colum='game_id', team_id_column='team_id',estimator=mock_model, weight_column='weight')
-
-    df = pd.DataFrame(
-        {
-            'game_id': [1, 1, 1, 1],
-            'sub_game_id': [1, 1, 2, 2],
-            'team_id': [1, 1, 1, 1],
-            "player_id": [1, 2, 1, 1],
-            'feature1': [100, -100, 150, 40],
-            'weight': [0.3, 0.8, 0.3, 0.3],
-            "__target": [1, 1, 1, 1]
-        }
-    )
-
-    predictor.train(df, estimator_features=['feature1'])
-    expected_feature_team1 = (0.1 * 0.3 + 0.5 * 0.8 + 0.1 * 0.6 + 0.5 * 0.2) / (0.3 + 0.8 + 0.6 + 0.2)
-
-    expected_features = pd.DataFrame(
-        {'feature1': [expected_feature_team1],
-         }
-    )
-
-    pd.testing.assert_frame_equal(mock_model.fit.call_args[0][0], expected_features, check_like=True)
-    assert mock_model.fit.call_args[0][1].tolist() == [1]
 
 
 def test_game_team_predictor_regressor():

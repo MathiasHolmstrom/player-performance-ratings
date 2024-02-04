@@ -259,6 +259,7 @@ class UpdateRatingGenerator(RatingGenerator):
                     team_leagues.append(pre_match_team.league)
                     player_leagues.append(pre_match_player.league)
                     match_ids.append(match.id)
+                    player_ids.append(pre_match_player.id)
                     rating_update_team_ids.append(match.teams[team_idx].update_id)
                     rating_update_team_ids_opponent.append(match.teams[-team_idx + 1].update_id)
                     projected_participation_weights.append(

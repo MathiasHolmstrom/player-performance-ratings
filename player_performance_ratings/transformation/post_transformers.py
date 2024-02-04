@@ -232,6 +232,14 @@ class LagTransformer(BasePostTransformer):
             self._features_out.append(f'{self.prefix}{days_lag}_days_ago')
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.assign(**{self.column_names.player_id: lambda x: x[self.column_names.player_id].astype('str')})
+        df = df.assign(**{
+            self.column_names.rating_update_match_id: lambda x: x[self.column_names.rating_update_match_id].astype(
+                'str')})
+        df = df.assign(**{
+            self.column_names.parent_team_id: lambda x: x[self.column_names.parent_team_id].astype(
+                'str')})
+
         validate_sorting(df=df, column_names=self.column_names)
         for feature_out in self._features_out:
             if feature_out in df.columns:
@@ -250,6 +258,13 @@ class LagTransformer(BasePostTransformer):
         return transformed_df
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.assign(**{self.column_names.player_id: lambda x: x[self.column_names.player_id].astype('str')})
+        df = df.assign(**{
+            self.column_names.rating_update_match_id: lambda x: x[self.column_names.rating_update_match_id].astype(
+                'str')})
+        df = df.assign(**{
+            self.column_names.parent_team_id: lambda x: x[self.column_names.parent_team_id].astype(
+                'str')})
         if self._df is None:
             raise ValueError("fit_transform needs to be called before transform")
 
@@ -472,7 +487,13 @@ class RollingMeanTransformer(BasePostTransformer):
         self._features_out = [f'{self.prefix}{self.window}_{c}' for c in self.features]
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-
+        df = df.assign(**{self.column_names.player_id: lambda x: x[self.column_names.player_id].astype('str')})
+        df = df.assign(**{
+            self.column_names.rating_update_match_id: lambda x: x[self.column_names.rating_update_match_id].astype(
+                'str')})
+        df = df.assign(**{
+            self.column_names.parent_team_id: lambda x: x[self.column_names.parent_team_id].astype(
+                'str')})
         validate_sorting(df=df, column_names=self.column_names)
         if self._df is None:
             self._df = df
@@ -487,6 +508,13 @@ class RollingMeanTransformer(BasePostTransformer):
         return transformed_df
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.assign(**{self.column_names.player_id: lambda x: x[self.column_names.player_id].astype('str')})
+        df = df.assign(**{
+            self.column_names.rating_update_match_id: lambda x: x[self.column_names.rating_update_match_id].astype(
+                'str')})
+        df = df.assign(**{
+            self.column_names.parent_team_id: lambda x: x[self.column_names.parent_team_id].astype(
+                'str')})
         if self._df is None:
             raise ValueError("fit_transform needs to be called before transform")
 

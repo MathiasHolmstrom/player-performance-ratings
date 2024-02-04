@@ -63,7 +63,9 @@ class PipelineTuner():
             predictor=pipeline.predictor,
         )
 
-        self.performances_generator_tuners = performances_generator_tuners
+        self.performances_generator_tuners = performances_generator_tuners or []
+        if isinstance(self.performances_generator_tuners, PerformancesGeneratorTuner):
+            self.performances_generator_tuners = [self.performances_generator_tuners]
         self.rating_generator_tuners = rating_generator_tuners or []
         self._untrained_best_model = None
         self.predictor_tuner = predictor_tuner
@@ -165,13 +167,16 @@ class PipelineTuner():
             predictor=untrained_best_predictor
         )
         best_match_predictor =Pipeline(
-            rating_generators=best_rating_generators,
-            performances_generator=best_performances_generator,
-            post_rating_transformers=best_post_transformers,
-            predictor=best_predictor)
+            rating_generators=[copy.deepcopy(rating_generator) for rating_generator in
+                               untrained_best_rating_generators],
+            performances_generator=copy.deepcopy(untrained_best_performances_generator),
+            post_rating_transformers=[copy.deepcopy(post_rating_transformer) for post_rating_transformer in
+                                      untrained_best_post_transformers],
+            predictor=untrained_best_predictor
+        )
         if self.fit_best:
             logging.info("Retraining best match predictor with all data")
-
+            print(best_match_predictor.rating_generators[0].player_ratings)
             best_match_predictor.train(df=original_df, store_ratings=True)
 
         return best_match_predictor

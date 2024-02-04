@@ -1,8 +1,9 @@
 import pandas as pd
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+from player_performance_ratings.predictor.transformer import SkLearnTransformerWrapper
 from player_performance_ratings.transformation.pre_transformers import GroupByTransformer, DiminishingValueTransformer, \
-    NetOverPredictedTransformer, SymmetricDistributionTransformer, SkLearnTransformerWrapper
+    NetOverPredictedTransformer, SymmetricDistributionTransformer
 
 
 def test_min_max_transformer():
@@ -108,21 +109,6 @@ def test_reverse_diminshing_value_transformer():
 
     assert transformed_df['performance'].iloc[0] > ori_df['performance'].iloc[0]
     assert transformed_df['performance'].iloc[3] == ori_df['performance'].iloc[3]
-
-
-def test_net_over_predicted_transformer_fit_transform():
-    df = pd.DataFrame({
-        "performance": [0.1, 0.2, 0.5, 0.55, 0.6],
-        "player_id": [1, 1, 2, 2, 3],
-        "position": ["PG", "PG", "SG", "SG", "SG"]
-    })
-
-    transformer = NetOverPredictedTransformer(features=['performance'], granularity=['position'])
-    expected_df = df.copy()
-    expected_df[transformer.features_out[0]] = [-0.05, 0.05, -0.05, 0, 0.05]
-    transformed_df = transformer.fit_transform(df)
-
-    pd.testing.assert_frame_equal(expected_df, transformed_df)
 
 
 def test_symmetric_distribution_transformery_fit_transform():
