@@ -92,8 +92,8 @@ class PartialStandardScaler(BaseTransformer):
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         for feature in self.features:
-            self._features_mean[feature] = df[feature].mean()
-            self._features_std[feature] = df[feature].std()
+            self._features_mean[feature] = df[feature].replace([np.inf, -np.inf], np.nan).mean()
+            self._features_std[feature] = df[feature].replace([np.inf, -np.inf], np.nan).std()
 
         return self.transform(df)
 

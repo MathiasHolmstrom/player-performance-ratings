@@ -280,7 +280,6 @@ class LagTransformer(BasePostTransformer):
             self.column_names.parent_team_id: lambda x: x[self.column_names.parent_team_id].astype(
                 'str')})
 
-        validate_sorting(df=df, column_names=self.column_names)
         for feature_out in self._features_out:
             if feature_out in df.columns:
                 raise ValueError(
@@ -324,11 +323,12 @@ class LagTransformer(BasePostTransformer):
                          self.column_names.player_id]].agg('__'.join, axis=1))
         all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
 
-        validate_sorting(df=all_df, column_names=self.column_names)
-
         grouped = \
             all_df.groupby(self.granularity + [self.column_names.rating_update_match_id, self.column_names.start_date])[
                 self.features].mean().reset_index()
+
+        grouped = grouped.sort_values([self.column_names.start_date, self.column_names.rating_update_match_id])
+
 
         for days_lag in self.days_between_lags:
             if self.future_lag:
@@ -572,7 +572,6 @@ class RollingMeanTransformer(BasePostTransformer):
                          self.column_names.player_id]].agg('__'.join, axis=1))
         all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
 
-        validate_sorting(df=all_df, column_names=self.column_names)
 
         for feature_name in self.features:
 
@@ -581,8 +580,10 @@ class RollingMeanTransformer(BasePostTransformer):
                 raise ValueError(
                     f'Column {output_column_name} already exists. Choose different prefix or ensure no duplication was performed')
 
-            grp = all_df.groupby(self.granularity + [self.column_names.rating_update_match_id])[
-                feature_name].mean().reset_index()
+            agg_dict = {feature_name: 'mean', self.column_names.start_date: 'first'}
+            grp = all_df.groupby(self.granularity+ [self.column_names.rating_update_match_id]).agg(
+                agg_dict).reset_index()
+            grp.sort_values(by=[self.column_names.start_date, self.column_names.rating_update_match_id], inplace=True)
 
             grp = grp.assign(**{output_column_name: grp.groupby(self.granularity)[feature_name].apply(
                 lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())})

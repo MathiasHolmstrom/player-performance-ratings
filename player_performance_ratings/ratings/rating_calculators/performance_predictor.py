@@ -1,4 +1,5 @@
 import math
+import time
 from abc import ABC, abstractmethod
 from typing import Optional
 
@@ -35,8 +36,8 @@ class RatingMeanCustomOpponentRatingPerformancePredictor(PerformancePredictor):
                  opponent_rating_std: float,
                  opponent_rating_mean: float,
                  player_rating_expected_mean: float = 1000,
-                 min_count: int = 500,
-                 coef: float = 0.005757,
+                 min_count: int = 2500,
+                 coef: float = 0.001757,
                  ):
         self.opponent_rating_column_name = opponent_rating_column_name
         self.opponent_rating_std = opponent_rating_std
@@ -48,6 +49,8 @@ class RatingMeanCustomOpponentRatingPerformancePredictor(PerformancePredictor):
         self._backup_performance_predictor = RatingNonOpponentPerformancePredictor()
         self._sum_rating = 0
         self._rating_count = 0
+        self._actual_player_rating_std = 0
+        self._actual_player_rating_mean = 0
 
     def predict_performance(self,
                             player_rating: PreMatchPlayerRating,
@@ -55,28 +58,32 @@ class RatingMeanCustomOpponentRatingPerformancePredictor(PerformancePredictor):
                             team_rating: PreMatchTeamRating
                             ) -> float:
 
-        mean_opponent_rating = sum(
+        opponent_team_rating_value = sum(
             [opponent_player.rating_value for opponent_player in opponent_team_rating.players]) / len(
             opponent_team_rating.players)
 
         if len(self._player_ratings) == 0:
             actual_player_rating_mean = 0
             weight_actual_data = 0
-            actual_player_rating_std = 0
         else:
-            weight_actual_data = min(1, len(self._player_ratings) / 3000)
-            actual_player_rating_mean = sum(self._player_ratings) / len(self._player_ratings)
-            actual_player_rating_std = np.array(self._player_ratings).std()
+            weight_actual_data = min(1, len(self._player_ratings) / 4000)
+
+
+            if len(self._player_ratings) % 200 == 0 and len(
+                    self._player_ratings) >= self.min_count or self._actual_player_rating_std == 0 and len(
+                    self._player_ratings) >= self.min_count:
+                self._actual_player_rating_std = np.array(self._player_ratings).std()
+                self._actual_player_rating_mean = sum(self._player_ratings) / len(self._player_ratings)
+
         player_rating_mean = (
-                                     1 - weight_actual_data) * self.player_rating_expected_mean + weight_actual_data * actual_player_rating_mean
+                                     1 - weight_actual_data) * self.player_rating_expected_mean + weight_actual_data * self._actual_player_rating_mean
 
         player_rating_std = (
-                                        1 - weight_actual_data) * self.opponent_rating_std + weight_actual_data * actual_player_rating_std
+                                    1 - weight_actual_data) * self.opponent_rating_std + weight_actual_data * self._actual_player_rating_std
         opponent_rating_adjusted = (
-                                               mean_opponent_rating - self.opponent_rating_mean + player_rating_mean) / self.opponent_rating_std * player_rating_std
+                                           opponent_team_rating_value - self.opponent_rating_mean + player_rating_mean) / self.opponent_rating_std * player_rating_std
 
         if len(self._player_ratings) < self.min_count:
-
             predicted_performance = self._backup_performance_predictor.predict_performance(player_rating=player_rating,
                                                                                            opponent_team_rating=opponent_team_rating,
                                                                                            team_rating=team_rating)
@@ -84,9 +91,7 @@ class RatingMeanCustomOpponentRatingPerformancePredictor(PerformancePredictor):
 
         else:
             historical_average_rating = self._sum_rating / self._rating_count
-
             net_mean_rating_over_historical_average = player_rating.rating_value * 0.5 + opponent_rating_adjusted * 0.5 - historical_average_rating
-
             value = self.coef * net_mean_rating_over_historical_average
             predicted_performance = (math.exp(value)) / (1 + math.exp(value))
 
@@ -94,7 +99,9 @@ class RatingMeanCustomOpponentRatingPerformancePredictor(PerformancePredictor):
         self._rating_count += 1
 
         self._player_ratings.append(player_rating.rating_value)
-
+       # print(predicted_performance, self._backup_performance_predictor.predict_performance(player_rating=player_rating,
+     #                                                                                      opponent_team_rating=opponent_team_rating,
+      #                                                                                     team_rating=team_rating))
         return predicted_performance
 
 

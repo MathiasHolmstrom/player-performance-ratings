@@ -55,6 +55,7 @@ class PlayerRating(DataClassJsonMixin):
     last_match_day_number: int = None
     confidence_sum: float = 0
     prev_rating_changes: List[float] = None
+    most_recent_team_id: Optional[str] = None
 
 
 @dataclass

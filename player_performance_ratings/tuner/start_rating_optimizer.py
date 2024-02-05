@@ -72,7 +72,7 @@ class StartLeagueRatingOptimizer():
             rating_generators = copy.deepcopy(self.pipeline_factory.rating_generators)
             rating_generators[rating_model_idx] = rating_generator_used
 
-            rating_values = rating_generators[rating_model_idx].train(df=df, matches=matches)
+            rating_values = rating_generators[rating_model_idx].generate_historical(df=df, matches=matches)
             for rating_column, rating_value in rating_values.items():
                 df[rating_column] = rating_value
 

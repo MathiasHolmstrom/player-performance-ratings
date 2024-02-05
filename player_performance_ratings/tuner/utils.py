@@ -33,7 +33,6 @@ def add_params_from_search_range(trial: BaseTrial, parameter_search_range: list[
 
 
 def get_default_lgbm_classifier_search_range() -> list[ParameterSearchRange]:
-
     return [
         ParameterSearchRange(
             name='learning_rate',
@@ -74,14 +73,20 @@ def get_default_lgbm_classifier_search_range() -> list[ParameterSearchRange]:
     ]
 
 
-def get_default_lgbm_regressor_search_range_by_learning_rate(learning_rate: float) -> list[ParameterSearchRange]:
-    min_n_estimators = min(1 / learning_rate * 7, 1000)
+def get_default_lgbm_regressor_search_range() -> list[ParameterSearchRange]:
+
     return [
+        ParameterSearchRange(
+            name='learning_rate',
+            type='uniform',
+            low=0.02,
+            high=0.1,
+        ),
         ParameterSearchRange(
             name='n_estimators',
             type='int',
-            low=min_n_estimators,
-            high=min_n_estimators * 7,
+            low=50,
+            high=1000,
         ),
         ParameterSearchRange(
             name='num_leaves',
@@ -153,5 +158,11 @@ def get_default_team_rating_search_range() -> list[ParameterSearchRange]:
             type='uniform',
             low=0.02,
             high=0.2,
+        ),
+        ParameterSearchRange(
+            name='team_id_change_certain_sum_increase',
+            type='uniform',
+            low=0,
+            high=15,
         )
     ]

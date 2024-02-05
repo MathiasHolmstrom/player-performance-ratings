@@ -29,6 +29,7 @@ class MatchRatingGenerator():
                  min_rating_change_multiplier_ratio: float = 0.1,
                  league_rating_change_update_threshold: int = 100,
                  league_rating_adjustor_multiplier: float = 0.05,
+                 team_id_change_certain_sum_increase: float = 3
                  ):
 
         """
@@ -98,6 +99,7 @@ class MatchRatingGenerator():
         self._league_rating_changes_count: dict[str, float] = {}
         self.performance_predictor = performance_predictor or RatingDifferencePerformancePredictor()
         self.start_rating_generator = start_rating_generator or StartRatingGenerator()
+        self.team_id_change_certain_sum_increase = team_id_change_certain_sum_increase
 
         self._teams: dict[str, Team] = {}
 
@@ -131,7 +133,7 @@ class MatchRatingGenerator():
         else:
             pre_match_player_ratings = new_player_pre_match_ratings
 
-       # pre_match_player_ratings += new_player_pre_match_ratings
+        # pre_match_player_ratings += new_player_pre_match_ratings
         pre_match_team_rating_value = self._generate_pre_match_team_rating_value(
             pre_match_player_ratings=pre_match_player_ratings)
         pre_match_team_rating_projected_value = self._generate_pre_match_team_rating_projected_value(
@@ -257,7 +259,7 @@ class MatchRatingGenerator():
             )
 
             applied_rating_change_multiplier = self._calculate_applied_rating_change_multiplier(
-                player_id=pre_player_rating.id)
+                player_id=pre_player_rating.id, team_id=pre_match_team_rating.id)
             performance_difference = pre_player_rating.match_performance.performance_value - predicted_performance
             rating_change_value = performance_difference * applied_rating_change_multiplier * pre_player_rating.match_performance.participation_weight
             if math.isnan(rating_change_value):
@@ -274,7 +276,7 @@ class MatchRatingGenerator():
                 pre_match_rating_value=pre_player_rating.rating_value
             )
             player_rating_changes.append(player_rating_change)
-           # print(day_number, player_rating_change.id, player_rating_change.rating_change_value)
+            # print(day_number, player_rating_change.id, player_rating_change.rating_change_value)
             sum_predicted_performance += player_rating_change.predicted_performance * pre_player_rating.match_performance.participation_weight
             sum_performance_value += pre_player_rating.match_performance.performance_value * pre_player_rating.match_performance.participation_weight
             sum_rating_change += player_rating_change.rating_change_value * pre_player_rating.match_performance.participation_weight
@@ -309,6 +311,7 @@ class MatchRatingGenerator():
             self.player_ratings[id].rating_value += player_rating_change.rating_change_value
             self.player_ratings[id].games_played += player_rating_change.participation_weight
             self.player_ratings[id].last_match_day_number = player_rating_change.day_number
+            self.player_ratings[id].most_recent_team_id = team_rating_change.id
 
             self.start_rating_generator.update_players_to_leagues(rating_change=player_rating_change)
             if player_rating_change.league != opponent_team_rating_change.league:
@@ -331,13 +334,19 @@ class MatchRatingGenerator():
         if self._league_rating_changes[league] > abs(self.league_rating_change_update_threshold):
             for player_id in self.start_rating_generator._league_to_player_ids[league]:
                 self.player_ratings[
-                    player_id].rating_value += self._league_rating_changes[league] * self.league_rating_adjustor_multiplier
+                    player_id].rating_value += self._league_rating_changes[
+                                                   league] * self.league_rating_adjustor_multiplier
 
             self._league_rating_changes[league] = 0
 
     def _calculate_applied_rating_change_multiplier(self,
                                                     player_id: str,
+                                                    team_id: str,
                                                     ) -> float:
+        if self.player_ratings[player_id].most_recent_team_id and self.player_ratings[
+            player_id].most_recent_team_id != team_id:
+            self.player_ratings[player_id].confidence_sum -= self.team_id_change_certain_sum_increase
+
         min_applied_rating_change_multiplier = self.rating_change_multiplier * self.min_rating_change_multiplier_ratio
         confidence_change_multiplier = self.rating_change_multiplier * ((EXPECTED_MEAN_CONFIDENCE_SUM -
                                                                          self.player_ratings[
@@ -345,14 +354,14 @@ class MatchRatingGenerator():
         applied_rating_change_multiplier = confidence_change_multiplier * self.confidence_weight + (
                 1 - self.confidence_weight) * self.rating_change_multiplier
 
-       # net_certain_sum_value = self.player_ratings[
-      #                              player_id].confidence_sum - 20
-      #  certain_factor = -(1 / (1 + math.exp(-net_certain_sum_value / 14)) - 0.5) * 2 + 1
-     #   certain_multiplier = certain_factor * self.rating_change_multiplier
-      #  multiplier = certain_multiplier * self.confidence_weight + (
-      #          1 - self.confidence_weight) * self.rating_change_multiplier
+        # net_certain_sum_value = self.player_ratings[
+        #                              player_id].confidence_sum - 20
+        #  certain_factor = -(1 / (1 + math.exp(-net_certain_sum_value / 14)) - 0.5) * 2 + 1
+        #   certain_multiplier = certain_factor * self.rating_change_multiplier
+        #  multiplier = certain_multiplier * self.confidence_weight + (
+        #          1 - self.confidence_weight) * self.rating_change_multiplier
 
-     #   min_rating_change_multiplier = self.rating_change_multiplier * self.min_rating_change_multiplier_ratio
+        #   min_rating_change_multiplier = self.rating_change_multiplier * self.min_rating_change_multiplier_ratio
         return max(min_applied_rating_change_multiplier, applied_rating_change_multiplier)
 
     #     return max(min_applied_rating_change_multiplier, applied_rating_change_multiplier)
