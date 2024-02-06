@@ -322,6 +322,9 @@ class LagTransformer(BasePostTransformer):
             __id=all_df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id,
                          self.column_names.player_id]].agg('__'.join, axis=1))
         all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
+        if self.column_names.participation_weight:
+            for feature in self.features:
+                all_df = all_df.assign(**{feature: all_df[feature]*all_df[self.column_names.participation_weight]})
 
         grouped = \
             all_df.groupby(self.granularity + [self.column_names.rating_update_match_id, self.column_names.start_date])[
@@ -573,7 +576,12 @@ class RollingMeanTransformer(BasePostTransformer):
         all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
 
 
+
         for feature_name in self.features:
+
+            if self.column_names.participation_weight:
+                all_df = all_df.assign(
+                    **{feature_name: all_df[feature_name] * all_df[self.column_names.participation_weight]})
 
             output_column_name = f'{self.prefix}{self.window}_{feature_name}'
             if output_column_name in all_df.columns:

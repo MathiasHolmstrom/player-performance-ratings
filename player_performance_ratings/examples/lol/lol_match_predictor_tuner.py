@@ -3,7 +3,6 @@ import pickle
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
-from player_performance_ratings.transformation.pre_transformers import ConvertDataFrameToCategoricalTransformer
 
 from player_performance_ratings.scorer.score import SklearnScorer
 from sklearn.metrics import log_loss
