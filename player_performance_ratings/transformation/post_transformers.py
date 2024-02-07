@@ -712,9 +712,11 @@ class RollingMeanDaysTransformer(BasePostTransformer):
             if self.add_count:
                 df1[f'{self.prefix}{day}_count'] = df1[f'{self.prefix}{day}_{self.features[0]}_count']
                 df1 = df1.drop(columns=[f'{self.prefix}{day}_{feature_name}_count' for feature_name in self.features])
-                df1[f'{self.prefix}{day}_count'] = df1[f'{self.prefix}{day}_count'].fillna(0)
+
 
             all_df = all_df.join(df1[[c for c in df1.columns if c in self.features_out]], on=[self.column_names.start_date, *self.granularity])
+            if self.add_count:
+                all_df[f'{self.prefix}{day}_count'] = all_df[f'{self.prefix}{day}_count'].fillna(0)
 
         all_df = all_df.sort_values(by=[self.column_names.start_date, self.column_names.match_id,
                                         self.column_names.team_id, self.column_names.player_id])

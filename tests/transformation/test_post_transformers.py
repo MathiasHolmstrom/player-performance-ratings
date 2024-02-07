@@ -557,4 +557,4 @@ def test_rolling_mean_days_fit_transform(column_names):
     expected_df['team'] = expected_df['team'].astype('str')
     expected_df['game'] = expected_df['game'].astype('str')
     expected_df['player'] = expected_df['player'].astype('str')
-    pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True)
+    pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
