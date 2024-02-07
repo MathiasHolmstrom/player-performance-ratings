@@ -1,5 +1,6 @@
 from typing import Optional, Union
 
+import numpy as np
 import pandas as pd
 
 from player_performance_ratings import ColumnNames
@@ -324,14 +325,13 @@ class LagTransformer(BasePostTransformer):
         all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
         if self.column_names.participation_weight:
             for feature in self.features:
-                all_df = all_df.assign(**{feature: all_df[feature]*all_df[self.column_names.participation_weight]})
+                all_df = all_df.assign(**{feature: all_df[feature] * all_df[self.column_names.participation_weight]})
 
         grouped = \
             all_df.groupby(self.granularity + [self.column_names.rating_update_match_id, self.column_names.start_date])[
                 self.features].mean().reset_index()
 
         grouped = grouped.sort_values([self.column_names.start_date, self.column_names.rating_update_match_id])
-
 
         for days_lag in self.days_between_lags:
             if self.future_lag:
@@ -575,8 +575,6 @@ class RollingMeanTransformer(BasePostTransformer):
                          self.column_names.player_id]].agg('__'.join, axis=1))
         all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
 
-
-
         for feature_name in self.features:
 
             if self.column_names.participation_weight:
@@ -589,7 +587,7 @@ class RollingMeanTransformer(BasePostTransformer):
                     f'Column {output_column_name} already exists. Choose different prefix or ensure no duplication was performed')
 
             agg_dict = {feature_name: 'mean', self.column_names.start_date: 'first'}
-            grp = all_df.groupby(self.granularity+ [self.column_names.rating_update_match_id]).agg(
+            grp = all_df.groupby(self.granularity + [self.column_names.rating_update_match_id]).agg(
                 agg_dict).reset_index()
             grp.sort_values(by=[self.column_names.start_date, self.column_names.rating_update_match_id], inplace=True)
 
@@ -607,6 +605,126 @@ class RollingMeanTransformer(BasePostTransformer):
         transformed_df = all_df[all_df['__id'].isin(df['__id'].unique().tolist())][ori_cols + self._features_out]
         transformed_df.index = ori_index_values
         return transformed_df[list(set(ori_cols + self._features_out))]
+
+    @property
+    def features_out(self) -> list[str]:
+        return self._features_out
+
+
+class RollingMeanDaysTransformer(BasePostTransformer):
+
+    def __init__(self,
+                 features: list[str],
+                 days: Union[int, list[int]],
+                 column_names: ColumnNames,
+                 granularity: Union[list[str], str] = None,
+                 add_count: bool = False,
+                 prefix: str = 'rolling_mean_days_'):
+        super().__init__(features=features)
+        self.features = features
+        self.days = days
+        if isinstance(self.days, int):
+            self.days = [self.days]
+        self.column_names = column_names
+        self.granularity = granularity or [self.column_names.player_id]
+        self.add_count = add_count
+        self.prefix = prefix
+        self._features_out = []
+        self._df = None
+
+        for day in self.days:
+            for feature_name in self.features:
+                self._features_out.append(f'{self.prefix}{day}_{feature_name}')
+            if self.add_count:
+                self._features_out.append(f'{self.prefix}{day}_count')
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        df = df.assign(**{self.column_names.player_id: lambda x: x[self.column_names.player_id].astype('str')})
+        df = df.assign(**{
+            self.column_names.rating_update_match_id: lambda x: x[self.column_names.rating_update_match_id].astype(
+                'str')})
+        df = df.assign(**{
+            self.column_names.parent_team_id: lambda x: x[self.column_names.parent_team_id].astype(
+                'str')})
+
+        validate_sorting(df=df, column_names=self.column_names)
+        if self._df is None:
+            self._df = df
+        else:
+            self._df = pd.concat([self._df, df], axis=0)
+
+        self._df = self._df.assign(
+            __id=self._df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id,
+                           self.column_names.player_id]].agg('__'.join, axis=1))
+        self._df = self._df.drop_duplicates(subset=['__id'], keep='last')
+
+        transformed_df = self.transform(df)
+        return transformed_df
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        if self._df is None:
+            raise ValueError("fit_transform needs to be called before transform")
+
+        df = df.assign(**{self.column_names.player_id: lambda x: x[self.column_names.player_id].astype('str')})
+        df = df.assign(**{
+            self.column_names.rating_update_match_id: lambda x: x[self.column_names.rating_update_match_id].astype(
+                'str')})
+        df = df.assign(**{
+            self.column_names.parent_team_id: lambda x: x[self.column_names.parent_team_id].astype(
+                'str')})
+        df= df.assign(
+            __id=df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id,
+                           self.column_names.player_id]].agg('__'.join, axis=1))
+
+        all_df = pd.concat([self._df, df], axis=0).reset_index()
+        all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
+
+        ori_cols = df.columns.tolist()
+        ori_index_values = df.index.tolist()
+
+        for feature_name in self.features:
+
+            if self.column_names.participation_weight:
+                all_df = all_df.assign(
+                    **{feature_name: all_df[feature_name] * all_df[self.column_names.participation_weight]})
+
+        for day in self.days:
+
+            df1 = (all_df.groupby([self.column_names.start_date, *self.granularity])[self.features]
+                   .agg(['sum', 'size'])
+                   .unstack()
+                   .asfreq('d', fill_value=np.nan)
+                   .rolling(window=day, min_periods=1)
+                   .sum()
+                   .shift()
+                   .stack()
+                   )
+            feats = []
+            for feature_name in self.features:
+                feats.append(f'{self.prefix}{day}_{feature_name}_sum')
+                feats.append(f'{self.prefix}{day}_{feature_name}_count')
+
+            df1.columns = feats
+            for feature_name in self.features:
+                df1[f'{self.prefix}{day}_{feature_name}'] = df1[f'{self.prefix}{day}_{feature_name}_sum'] / df1[f'{self.prefix}{day}_{feature_name}_count']
+
+            if self.add_count:
+                df1[f'{self.prefix}{day}_count'] = df1[f'{self.prefix}{day}_{self.features[0]}_count']
+                df1 = df1.drop(columns=[f'{self.prefix}{day}_{feature_name}_count' for feature_name in self.features])
+                df1[f'{self.prefix}{day}_count'] = df1[f'{self.prefix}{day}_count'].fillna(0)
+
+            all_df = all_df.join(df1[[c for c in df1.columns if c in self.features_out]], on=[self.column_names.start_date, *self.granularity])
+
+        all_df = all_df.sort_values(by=[self.column_names.start_date, self.column_names.match_id,
+                                        self.column_names.team_id, self.column_names.player_id])
+
+        df = df.assign(
+            __id=df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id,
+                     self.column_names.player_id]].agg('__'.join, axis=1))
+        transformed_df = all_df[all_df['__id'].isin(df['__id'].unique().tolist())][ori_cols + self._features_out]
+        transformed_df.index = ori_index_values
+        return transformed_df[list(set(ori_cols + self._features_out))].drop(columns=['__id'])
 
     @property
     def features_out(self) -> list[str]:
