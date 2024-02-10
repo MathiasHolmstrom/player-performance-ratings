@@ -64,6 +64,12 @@ DEFAULT_TEAM_SEARCH_RANGES = [
         low=0.05,
         high=0.2,
     ),
+    ParameterSearchRange(
+        name='team_id_change_confidence_sum_decrease',
+        type='uniform',
+        low=0,
+        high=10,
+    ),
 ]
 
 DEFAULT_START_RATING_SEARCH_RANGE = [

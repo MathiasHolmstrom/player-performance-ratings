@@ -160,7 +160,7 @@ def get_default_team_rating_search_range() -> list[ParameterSearchRange]:
             high=0.2,
         ),
         ParameterSearchRange(
-            name='team_id_change_certain_sum_increase',
+            name='team_id_change_confidence_sum_decrease',
             type='uniform',
             low=0,
             high=15,

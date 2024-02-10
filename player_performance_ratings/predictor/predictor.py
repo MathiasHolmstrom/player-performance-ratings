@@ -68,7 +68,6 @@ class GameTeamPredictor(BaseMLWrapper):
         df = self.fit_transform_categorical_transformers(df=df)
 
         if len(df[self._target].unique()) > 2 and hasattr(self.estimator, "predict_proba"):
-            logging.info("target has more than 2 unique values, multiclassifier has therefore been set to True")
             self.multiclassifier = True
 
         if hasattr(self.estimator, "predict_proba"):
@@ -190,7 +189,6 @@ class Predictor(BaseMLWrapper):
         filtered_df = apply_filters(df=df, filters=self.filters)
         if not self.multiclassifier and len(filtered_df[self._target].unique()) > 2 and hasattr(self._deepest_estimator,
                                                                                                 "predict_proba"):
-            logging.info("target has more than 2 unique values, multiclassifier has therefore been set to True")
             self.multiclassifier = True
             if len(filtered_df[self._target].unique()) > 50:
                 logging.warning(

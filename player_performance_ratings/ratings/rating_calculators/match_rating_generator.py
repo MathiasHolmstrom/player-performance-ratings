@@ -29,7 +29,7 @@ class MatchRatingGenerator():
                  min_rating_change_multiplier_ratio: float = 0.1,
                  league_rating_change_update_threshold: int = 100,
                  league_rating_adjustor_multiplier: float = 0.05,
-                 team_id_change_certain_sum_increase: float = 3
+                 team_id_change_confidence_sum_decrease: float = 3
                  ):
 
         """
@@ -99,7 +99,7 @@ class MatchRatingGenerator():
         self._league_rating_changes_count: dict[str, float] = {}
         self.performance_predictor = performance_predictor or RatingDifferencePerformancePredictor()
         self.start_rating_generator = start_rating_generator or StartRatingGenerator()
-        self.team_id_change_certain_sum_increase = team_id_change_certain_sum_increase
+        self.team_id_change_confidence_sum_decrease = team_id_change_confidence_sum_decrease
 
         self._teams: dict[str, Team] = {}
 
@@ -345,7 +345,7 @@ class MatchRatingGenerator():
                                                     ) -> float:
         if self.player_ratings[player_id].most_recent_team_id and self.player_ratings[
             player_id].most_recent_team_id != team_id:
-            self.player_ratings[player_id].confidence_sum -= self.team_id_change_certain_sum_increase
+            self.player_ratings[player_id].confidence_sum -= self.team_id_change_confidence_sum_decrease
 
         min_applied_rating_change_multiplier = self.rating_change_multiplier * self.min_rating_change_multiplier_ratio
         confidence_change_multiplier = self.rating_change_multiplier * ((EXPECTED_MEAN_CONFIDENCE_SUM -

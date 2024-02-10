@@ -145,6 +145,8 @@ class PerformancesGenerator():
             df[f'weight__{column_weight.name}'] / df['sum_cols_weights']
             drop_cols.append(f'weight__{column_weight.name}')
 
+        sum_weight = sum([w.weight for w in col_weights])
+
         for column_weight in col_weights:
 
             if column_weighs_mapping:
@@ -153,10 +155,10 @@ class PerformancesGenerator():
                 feature_name = column_weight.name
 
             if column_weight.lower_is_better:
-                df[f"__{col_name.performance}"] += df[f'weight__{column_weight.name}'] * (
+                df[f"__{col_name.performance}"] += df[f'weight__{column_weight.name}']/sum_weight * (
                         1 - df[feature_name])
             else:
-                df[f"__{col_name.performance}"] += df[f'weight__{column_weight.name}'] * df[feature_name]
+                df[f"__{col_name.performance}"] += df[f'weight__{column_weight.name}']/sum_weight * df[feature_name]
 
         return df[f"__{col_name.performance}"]
 
