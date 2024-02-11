@@ -28,7 +28,7 @@ class StartLeagueRatingOptimizer():
     def __init__(self,
                  pipeline_factory: PipelineFactory,
                  cross_validator: CrossValidator,
-                 max_iterations: int = 14,
+                 max_iterations: int = 2,
                  learning_step: int = 20,
                  weight_div: int = 500,
                  indirect_weight: float = 1.5,
@@ -95,7 +95,7 @@ class StartLeagueRatingOptimizer():
                 league_ratings = pipeline.rating_generators[
                     rating_model_idx].team_rating_generator.start_rating_generator.league_ratings
 
-            self._league_ratings_iterations.append(league_ratings)
+            self._league_ratings_iterations.append(copy.deepcopy(league_ratings))
             self._scores.append(score)
             if self.verbose:
                 logging.info(f"iteration {iteration} finished. Score: {score}. best startings {league_ratings}")

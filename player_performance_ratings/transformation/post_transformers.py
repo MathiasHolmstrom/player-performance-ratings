@@ -694,7 +694,6 @@ class RollingMeanDaysTransformer(BasePostTransformer):
 
         all_df[self.column_names.start_date] = pd.to_datetime(all_df[self.column_names.start_date]).dt.date
 
-        #all_df = all_df.head(100)
         for day in self.days:
 
             df1 = (all_df

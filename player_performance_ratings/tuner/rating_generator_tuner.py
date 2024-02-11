@@ -88,14 +88,14 @@ DEFAULT_START_RATING_SEARCH_RANGE = [
     ParameterSearchRange(
         name='team_rating_subtract',
         type='int',
-        low=20,
-        high=300
+        low=0,
+        high=200
     ),
     ParameterSearchRange(
         name='team_weight',
         type='uniform',
         low=0,
-        high=0.7
+        high=1
     )
 ]
 
