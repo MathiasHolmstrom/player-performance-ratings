@@ -76,7 +76,7 @@ class Pipeline():
         self.post_rating_transformers = post_rating_transformers or []
 
         for c in self.post_rating_transformers:
-            self._estimator_features += [f for f in c.features_out if f not in self._estimator_features]
+            self._estimator_features += [f for f in c.estimator_features_out if f not in self._estimator_features]
         for rating_idx, c in enumerate(self.rating_generators):
             for rating_feature in c.estimator_features_out:
                 if len(self.rating_generators) > 1:

@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from enum import Enum
 from typing import Optional, Union
 
 import numpy as np
@@ -26,7 +28,7 @@ def create_output_column_by_game_group(data: pd.DataFrame, feature_name: str,
 
 class PredictorTransformer(BasePostTransformer):
 
-    def __init__(self, predictor: BaseMLWrapper, features: list[str]):
+    def __init__(self, predictor: BaseMLWrapper, features: list[str] = None):
         self.predictor = predictor
         super().__init__(features=features)
 
@@ -673,9 +675,9 @@ class RollingMeanDaysTransformer(BasePostTransformer):
         df = df.assign(**{
             self.column_names.parent_team_id: lambda x: x[self.column_names.parent_team_id].astype(
                 'str')})
-        df= df.assign(
+        df = df.assign(
             __id=df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id,
-                           self.column_names.player_id]].agg('__'.join, axis=1))
+                     self.column_names.player_id]].agg('__'.join, axis=1))
 
         all_df = pd.concat([self._df, df], axis=0).reset_index()
         all_df = all_df.drop_duplicates(subset=['__id'], keep='last')
@@ -689,9 +691,14 @@ class RollingMeanDaysTransformer(BasePostTransformer):
                 all_df = all_df.assign(
                     **{feature_name: all_df[feature_name] * all_df[self.column_names.participation_weight]})
 
+
+        all_df[self.column_names.start_date] = pd.to_datetime(all_df[self.column_names.start_date]).dt.date
+
+        #all_df = all_df.head(100)
         for day in self.days:
 
-            df1 = (all_df.groupby([self.column_names.start_date, *self.granularity])[self.features]
+            df1 = (all_df
+                   .groupby([self.column_names.start_date, *self.granularity])[self.features]
                    .agg(['sum', 'size'])
                    .unstack()
                    .asfreq('d', fill_value=np.nan)
@@ -707,14 +714,16 @@ class RollingMeanDaysTransformer(BasePostTransformer):
 
             df1.columns = feats
             for feature_name in self.features:
-                df1[f'{self.prefix}{day}_{feature_name}'] = df1[f'{self.prefix}{day}_{feature_name}_sum'] / df1[f'{self.prefix}{day}_{feature_name}_count']
+                df1[f'{self.prefix}{day}_{feature_name}'] = df1[f'{self.prefix}{day}_{feature_name}_sum'] / df1[
+                    f'{self.prefix}{day}_{feature_name}_count']
 
             if self.add_count:
                 df1[f'{self.prefix}{day}_count'] = df1[f'{self.prefix}{day}_{self.features[0]}_count']
                 df1 = df1.drop(columns=[f'{self.prefix}{day}_{feature_name}_count' for feature_name in self.features])
 
-
-            all_df = all_df.join(df1[[c for c in df1.columns if c in self.features_out]], on=[self.column_names.start_date, *self.granularity])
+            all_df[self.column_names.start_date] = pd.to_datetime(all_df[self.column_names.start_date])
+            all_df = all_df.join(df1[[c for c in df1.columns if c in self.features_out]],
+                                 on=[self.column_names.start_date, *self.granularity])
             if self.add_count:
                 all_df[f'{self.prefix}{day}_count'] = all_df[f'{self.prefix}{day}_count'].fillna(0)
 
@@ -731,3 +740,41 @@ class RollingMeanDaysTransformer(BasePostTransformer):
     @property
     def features_out(self) -> list[str]:
         return self._features_out
+
+
+class Operation(Enum):
+    SUBTRACT = "subtract"
+
+
+@dataclass
+class ModifyOperation:
+    feature1: str
+    operation: Operation
+    feature2: str
+    new_column_name: Optional[str] = None
+
+    def __post_init__(self):
+        if self.operation == Operation.SUBTRACT and not self.new_column_name:
+            self.new_column_name = f"{self.feature1}_minus_{self.feature2}"
+
+
+class ModifierTransformer(BasePostTransformer):
+
+    def __init__(self,
+                 modify_operations: list[ModifyOperation],
+                 features: list[str] = None,
+                 are_estimator_features: bool = True,
+                 ):
+        super().__init__(features=features, are_estimator_features=are_estimator_features)
+        self.modify_operations = modify_operations
+        self._features_out = [operation.new_column_name for operation in self.modify_operations]
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        return self.transform(df)
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        for operation in self.modify_operations:
+            if operation.operation == Operation.SUBTRACT:
+                df[operation.new_column_name] = df[operation.feature1] - df[operation.feature2]
+
+        return df
