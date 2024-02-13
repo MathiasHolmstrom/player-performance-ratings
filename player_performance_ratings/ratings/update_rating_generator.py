@@ -61,7 +61,7 @@ class UpdateRatingGenerator(RatingGenerator):
 
         self.ratings_df = None
 
-    def generate_historical(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[Union[
+    def generate_historical(self, df: Optional[pd.DataFrame] = None, matches: Optional[list[Match]] = None) -> dict[Union[
                                                                                                                         RatingEstimatorFeatures, RatingHistoricalFeatures], list[float]]:
 
         """
@@ -212,7 +212,7 @@ class UpdateRatingGenerator(RatingGenerator):
 
         return {f: potential_feature_values[f] for f in self.estimator_features_return + self._historical_features_out}
 
-    def generate_future(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[Union[
+    def generate_future(self, df: Optional[pd.DataFrame] = None, matches: Optional[list[Match]] = None) -> dict[Union[
                                                                                                                     RatingEstimatorFeatures, RatingHistoricalFeatures], list[float]]:
 
         if matches is not None and len(matches) > 0 and not isinstance(matches[0], Match):

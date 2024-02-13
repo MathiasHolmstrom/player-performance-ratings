@@ -77,7 +77,7 @@ class BayesianTimeWeightedRating(RatingGenerator):
         self._granularity_ratings: dict[str, list[float]] = {}
         self._granularity_players: dict[str, list[str]] = {}
 
-    def generate_historical(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[RatingEstimatorFeatures, list[float]]:
+    def generate_historical(self, df: Optional[pd.DataFrame] = None, matches: Optional[list[Match]] = None) -> dict[RatingEstimatorFeatures, list[float]]:
 
         if matches is None and df is None:
             raise ValueError("If matches is not passed, df and column names must be massed")
@@ -141,7 +141,7 @@ class BayesianTimeWeightedRating(RatingGenerator):
 
     def generate_future(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[
         RatingEstimatorFeatures, list[float]]:
-        pass
+        raise NotImplementedError("This method is not implemented")
 
     def _generate_base_prior(self, player_id: str, base_prior_value: float, league: Optional[str],
                              position: Optional[str]) -> float:

@@ -15,12 +15,12 @@ class RatingGenerator(ABC):
         self.column_names = column_names
 
     @abstractmethod
-    def generate_historical(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[
+    def generate_historical(self, df: Optional[pd.DataFrame] = None, matches: Optional[list[Match]] = None) -> dict[
         RatingEstimatorFeatures, list[float]]:
         pass
 
     @abstractmethod
-    def generate_future(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[
+    def generate_future(self, df: Optional[pd.DataFrame] = None, matches: Optional[list[Match]] = None) -> dict[
         RatingEstimatorFeatures, list[float]]:
         pass
 
