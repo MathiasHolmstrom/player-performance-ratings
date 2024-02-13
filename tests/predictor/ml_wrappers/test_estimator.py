@@ -13,6 +13,7 @@ from player_performance_ratings.predictor import GameTeamPredictor, OrdinalClass
 def test_game_team_predictor_add_prediction():
     mock_model = Mock()
     mock_model.predict_proba.return_value = np.array([[0.2, 0.8], [0.6, 0.4], [0.3, 0.7]])
+    mock_model.estimator = LogisticRegression()
 
     predictor = GameTeamPredictor(game_id_colum='game_id', team_id_column='team_id', estimator=mock_model)
     predictor._estimator_features = ['feature1', 'feature2']

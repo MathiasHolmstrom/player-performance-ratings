@@ -53,20 +53,26 @@ def test_convert_df_to_matches():
                         MatchPlayer(
                             id="3",
                             league="league1",
+                            others={},
                             performance=MatchPerformance(
                                participation_weight=1,
                                 performance_value=1,
-                                projected_participation_weight=1
+                                projected_participation_weight=1,
+                                opponent_players_playing_time={},
+                                team_players_playing_time={}
 
                             )
                         ),
                         MatchPlayer(
                             id="4",
                             league="league1",
+                            others={},
                             performance=MatchPerformance(
                                 participation_weight=1,
                                 performance_value=1,
-                                projected_participation_weight=1
+                                projected_participation_weight=1,
+                                opponent_players_playing_time={},
+                                team_players_playing_time={}
 
                             )
                         )
@@ -80,20 +86,26 @@ def test_convert_df_to_matches():
                         MatchPlayer(
                             league="league1",
                             id="5",
+                            others={},
                             performance=MatchPerformance(
                                 participation_weight=1,
                                 performance_value=0,
-                                projected_participation_weight=1
+                                projected_participation_weight=1,
+                                opponent_players_playing_time={},
+                                team_players_playing_time={}
 
                             )
                         ),
                         MatchPlayer(
                             league="league1",
                             id="6",
+                            others={},
                             performance=MatchPerformance(
                                 participation_weight=1,
                                 performance_value=0,
-                                projected_participation_weight=1
+                                projected_participation_weight=1,
+                                opponent_players_playing_time={},
+                                team_players_playing_time={}
 
                             )
                         )
@@ -114,19 +126,25 @@ def test_convert_df_to_matches():
                         MatchPlayer(
                             id="3",
                             league="league1",
+                            others={},
                             performance=MatchPerformance(
                                 participation_weight=1,
                                 performance_value=1,
-                                projected_participation_weight=1
+                                projected_participation_weight=1,
+                                opponent_players_playing_time={},
+                                team_players_playing_time={}
                             )
                         ),
                         MatchPlayer(
                             id="4",
                             league="league1",
+                            others={},
                             performance=MatchPerformance(
                                 participation_weight=1,
                                 performance_value=1,
-                                projected_participation_weight=1
+                                projected_participation_weight=1,
+                                opponent_players_playing_time={},
+                                team_players_playing_time={}
                             )
                         )
                     ]
@@ -139,19 +157,25 @@ def test_convert_df_to_matches():
                         MatchPlayer(
                             id="5",
                             league="league1",
+                            others={},
                             performance=MatchPerformance(
                                 participation_weight=1,
                                 performance_value=0,
-                                projected_participation_weight=1
+                                projected_participation_weight=1,
+                                opponent_players_playing_time={},
+                                team_players_playing_time={}
                             )
                         ),
                         MatchPlayer(
                             id="6",
                             league="league1",
+                            others={},
                             performance=MatchPerformance(
                                 participation_weight=1,
                                 performance_value=0,
-                                projected_participation_weight=1
+                                projected_participation_weight=1,
+                                opponent_players_playing_time={},
+                                team_players_playing_time={}
                             )
                         )
                     ]
@@ -160,5 +184,5 @@ def test_convert_df_to_matches():
             day_number=18629,
         )
     ]
-    assert matches == expected_matches
 
+    assert matches == expected_matches

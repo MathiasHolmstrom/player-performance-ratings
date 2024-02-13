@@ -49,7 +49,7 @@ def auto_create_pre_performance_transformations(
 
 
     for idx, col_weights in enumerate(column_weights):
-        not_transformed_features += [c.name for c in column_weights[idx]]
+        not_transformed_features += [c.name for c in column_weights[idx] if c.name not in not_transformed_features]
 
 
         if column_names[idx].position is not None:
@@ -61,18 +61,18 @@ def auto_create_pre_performance_transformations(
 
             distribution_transformer = SymmetricDistributionTransformer(
                 features=features_in,
-                granularity=granularity)
+                granularity=granularity, prefix="")
             transformed_features += [distribution_transformer.prefix + f for f in distribution_transformer.features]
             pre_transformations.append(distribution_transformer)
 
 
     if contains_not_position:
-        distribution_transformer = SymmetricDistributionTransformer(features=not_transformed_features)
+        distribution_transformer = SymmetricDistributionTransformer(features=not_transformed_features, prefix="")
         pre_transformations.append(distribution_transformer)
 
     all_features = transformed_features + not_transformed_features
 
-    pre_transformations.append(PartialStandardScaler(features=all_features, ratio=1, max_value=9999, target_mean=0))
+    pre_transformations.append(PartialStandardScaler(features=all_features, ratio=1, max_value=9999, target_mean=0, prefix=""))
     pre_transformations.append(MinMaxTransformer(features=all_features))
 
     return pre_transformations
