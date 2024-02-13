@@ -9,7 +9,7 @@ class InputColumnNames:
 
 
 @dataclass
-class RatingColumnNames:
+class RatingEstimatorFeatures:
     PLAYER_RATING = 'player_rating'
     PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED = "player_rating_difference_from_team_projected"
     OPPONENT_RATING_PROJECTED = "opponent_rating_projected"
@@ -17,16 +17,18 @@ class RatingColumnNames:
     PLAYER_RATING_DIFFERENCE_PROJECTED = 'player_rating_difference_projected'
     RATING_DIFFERENCE_PROJECTED = 'rating_difference_projected'
     RATING_MEAN_PROJECTED = 'rating_mean_projected'
+    TEAM_LEAGUE = "team_league"
     PLAYER_LEAGUE = "player_league"
     OPPONENT_LEAGUE = "opponent_league"
     MATCH_ID = "match_id"
     TIME_WEIGHTED_RATING = "time_weighted_rating"
     TIME_WEIGHTED_RATING_LIKELIHOOD_RATIO = "time_weighted_rating_likelihood_ratio"
     TIME_WEIGHTED_RATING_EVIDENCE = "time_weighted_rating_evidence"
+    RATING_DIFFERENCE_POSITION = "rating_difference_position"
 
 
 @dataclass
-class HistoricalRatingColumnNames:
+class RatingHistoricalFeatures:
     PERFORMANCE = "performance"
     RATING_DIFFERENCE = 'rating_difference'
     PLAYER_RATING_DIFFERENCE = 'player_rating_difference'

@@ -1,31 +1,45 @@
 import logging
-from dataclasses import dataclass
 from typing import Optional, List
 
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
 
+from player_performance_ratings.predictor import Predictor
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 
-class ConvertDataFrameToCategoricalTransformer(BaseTransformer):
+class NetOverPredictedTransformer(BaseTransformer):
 
-    def __init__(self, features: list[str]):
+    def __init__(self,
+                 predictor: Predictor,
+                 features: list[str],
+                 prefix: str = "net_over_prediction_",
+                 ):
         super().__init__(features=features)
+        self.prefix = prefix
+        self._predictor = predictor
+        self._features_out = []
+        new_feature_name = self.prefix + self._predictor.pred_column
+        self._features_out.append(new_feature_name)
+        if self.prefix is "":
+            raise ValueError("Prefix must not be empty")
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        self._predictor.train(df, estimator_features=self.features)
         return self.transform(df)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        for feature in self.features:
-            df = df.assign(**{feature: df[feature].astype('category')})
+        df = self._predictor.add_prediction(df)
+        new_feature_name = self.prefix + self._predictor.pred_column
+        df = df.assign(**{new_feature_name: df[self._predictor.target] - df[self._predictor.pred_column]})
+        df = df.drop(columns=[self._predictor.pred_column])
+
         return df
 
     @property
     def features_out(self) -> list[str]:
-        return self.features
-
+        return self._features_out
 
 
 class SklearnEstimatorImputer(BaseTransformer):
@@ -55,36 +69,41 @@ class SklearnEstimatorImputer(BaseTransformer):
         return [self.target_name]
 
 
-class SkLearnTransformerWrapper(BaseTransformer):
+class PartialStandardScaler(BaseTransformer):
 
-    def __init__(self, transformer, features: list[str]):
-        self.transformer = transformer
+    def __init__(self,
+                 features: list[str],
+                 ratio: float = 0.55,
+                 target_mean: float = 0.5,
+                 max_value: float = 2,
+                 prefix: str = ""
+                 ):
         super().__init__(features=features)
+        self.ratio = ratio
+        self.target_mean = target_mean
+        self.prefix = prefix
+        self.max_value = max_value
+
+        self._features_mean = {}
+        self._features_std = {}
         self._features_out = []
+        for feature in self.features:
+            self._features_out.append(self.prefix + feature)
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        for feature in self.features:
+            self._features_mean[feature] = df[feature].replace([np.inf, -np.inf], np.nan).mean()
+            self._features_std[feature] = df[feature].replace([np.inf, -np.inf], np.nan).std()
 
-        try:
-            transformed_values = self.transformer.fit_transform(df[self.features]).toarray()
-        except AttributeError:
-            transformed_values = self.transformer.fit_transform(df[self.features])
-            if isinstance(transformed_values, pd.DataFrame):
-                transformed_values = transformed_values.to_numpy()
-
-        self._features_out = self.transformer.get_feature_names_out().tolist()
-
-        return df.assign(
-            **{self._features_out[idx]: transformed_values[:, idx] for idx in range(len(self._features_out))})
+        return self.transform(df)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        try:
-            transformed_values = self.transformer.transform(df[self.features]).toarray()
-        except AttributeError:
-            transformed_values = self.transformer.transform(df[self.features])
-            if isinstance(transformed_values, pd.DataFrame):
-                transformed_values = transformed_values.to_numpy()
-        return df.assign(
-            **{self._features_out[idx]: transformed_values[:, idx] for idx in range(len(self._features_out))})
+        for feature in self.features:
+            new_feature = self.prefix + feature
+            df = df.assign(**{new_feature: ((df[feature] - self._features_mean[feature]) / self._features_std[
+                feature]) * self.ratio + self.target_mean})
+            df[new_feature] = df[new_feature].clip(-self.max_value + self.target_mean, self.max_value)
+        return df
 
     @property
     def features_out(self) -> list[str]:
@@ -95,12 +114,14 @@ class MinMaxTransformer(BaseTransformer):
 
     def __init__(self,
                  features: list[str],
-                 quantile: float = 0.99,
-                 allowed_mean_diff: Optional[float] = 0.02,
+                 quantile: float = 0.98,
+                 allowed_mean_diff: Optional[float] = 0.01,
+                 max_iterations: int = 150,
                  prefix: str = ""
                  ):
         super().__init__(features=features)
         self.quantile = quantile
+        self.max_iterations = max_iterations
         self.allowed_mean_diff = allowed_mean_diff
         self.prefix = prefix
         self._original_mean_values = {}
@@ -141,13 +162,11 @@ class MinMaxTransformer(BaseTransformer):
                     mean_value = df[self.prefix + feature].mean()
 
                     self._mean_aligning_iterations += 1
-                if self._mean_aligning_iterations > 100:
+                if self._mean_aligning_iterations > self.max_iterations and abs(0.5 - mean_value) > self.allowed_mean_diff :
                     raise ValueError(
                         f"MinMaxTransformer: {feature} mean value is {mean_value} after {self._mean_aligning_iterations} repetitions."
                         f"This is above the allowed mean difference of {self.allowed_mean_diff}."
-                        f" It is recommended to use DiminishingValueTransformer or SymmetricDistributionTransformer before MinMaxTransformer."
-                        f"If positions are known use NetOverPredictedTransformer before DiminishingValueTransformer or SymmetricDistributionTransformer.")
-
+                        f" It is recommended to use DiminishingValueTransformer or SymmetricDistributionTransformer before MinMaxTransformer.")
 
         return df
 
@@ -237,7 +256,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
                  granularity: Optional[list[str]] = None,
                  skewness_allowed: float = 0.15,
                  max_iterations: int = 20,
-                 prefix: str = ""
+                 prefix: str = "symmetric_"
                  ):
         super().__init__(features=features)
         self.granularity = granularity
@@ -250,7 +269,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
         if self.granularity:
-            df = df.assign(__concat_granularity=df[self.granularity].apply(lambda x: "_".join(x), axis=1))
+            df = df.assign(__concat_granularity=df[self.granularity].astype(str).agg('_'.join, axis=1))
 
         for feature in self.features:
             self._diminishing_value_transformer[feature] = {}
@@ -281,7 +300,6 @@ class SymmetricDistributionTransformer(BaseTransformer):
             else:
                 reverse = False
 
-
             self._diminishing_value_transformer[feature][granularity_value] = DiminishingValueTransformer(
                 features=[feature],
                 reverse=reverse,
@@ -303,16 +321,29 @@ class SymmetricDistributionTransformer(BaseTransformer):
             if self.granularity:
 
                 unique_values = df["__concat_granularity"].unique()
-                for unique_value in unique_values:
-                    rows = df[df["__concat_granularity"] == unique_value]
-                    if unique_value in self._diminishing_value_transformer[feature]:
-                        rows = self._diminishing_value_transformer[feature][unique_value].transform(rows)
+                if len(unique_values) > 100:
+                    logging.warning(
+                        f"SymmetricDistributionTransformer: {feature} has more than 100 unique values."
+                        f" This can lead to long runtimes. Consider setting a lower granularity")
+
+                if len(self._diminishing_value_transformer[feature]) == 0:
+                    df[out_feature] = df[feature]
+                else:
+
+                    for unique_value in unique_values:
+                        rows = df[df["__concat_granularity"] == unique_value]
+
+                        if unique_value in self._diminishing_value_transformer[feature]:
+                            rows = self._diminishing_value_transformer[feature][unique_value].transform(rows)
+
                         df.loc[df["__concat_granularity"] == unique_value, out_feature] = rows[feature]
 
             else:
                 if None in self._diminishing_value_transformer[feature]:
                     df = self._diminishing_value_transformer[feature][None].transform(df)
 
+        if '__concat_granularity' in df.columns:
+            df = df.drop(columns=["__concat_granularity"])
         return df
 
     @property
@@ -349,50 +380,6 @@ class GroupByTransformer(BaseTransformer):
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         return df.merge(self._grouped, on=self.granularity, how='left')
-
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out
-
-
-class NetOverPredictedTransformer(BaseTransformer):
-
-    def __init__(self,
-                 features: list[str],
-                 granularity: list[str],
-                 predict_transformer: Optional[BaseTransformer] = None,
-                 prefix: str = "",
-                 ):
-        self.granularity = granularity
-        self.predict_transformer = predict_transformer or GroupByTransformer(features=features, granularity=granularity,
-                                                                             agg_func='mean')
-        self.prefix = prefix
-        super().__init__(features=features)
-        self._features_out = []
-        for idx, predicted_feature in enumerate(self.predict_transformer.features_out):
-            new_feature_name = f'{self.prefix}{self.features[idx]}'
-            self._features_out.append(new_feature_name)
-
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy()
-        df = df.assign(__id=range(1, len(df) + 1))
-        _ = self.predict_transformer.fit_transform(df)
-        return self.transform(df)
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        predicted_df = self.predict_transformer.transform(df)
-        df = df.merge(predicted_df[self.predict_transformer.features_out + ['__id']], on="__id").drop(
-            columns=["__id"])
-
-        return self._add_net_over_predicted(df=df)
-
-    def _add_net_over_predicted(self, df: pd.DataFrame) -> pd.DataFrame:
-        for idx, predicted_feature in enumerate(self.predict_transformer.features_out):
-            new_feature_name = self._features_out[idx]
-            df = df.assign(**{new_feature_name: df[self.features[idx]] - df[predicted_feature]})
-            df = df.drop(columns=[predicted_feature])
-
-        return df
 
     @property
     def features_out(self) -> list[str]:

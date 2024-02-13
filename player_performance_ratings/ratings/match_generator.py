@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import warnings
 
@@ -18,7 +19,7 @@ HOUR_NUMBER_COLUMN_NAME = "hour_number"
 
 
 def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
-                          league_identifier: Optional[LeagueIdentifier] = None) -> list[Match]:
+                          league_identifier: Optional[LeagueIdentifier] = LeagueIdentifier()) -> list[Match]:
     """
     Converts a dataframe to a list of matches.
     Each dataframe row needs to be a unique combination of match_id and player_id.
@@ -45,8 +46,8 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
         raise ValueError("projected_participation_weight column passed but not participation_weight column")
 
     if column_names.performance in df.columns:
-        if max(df[column_names.performance]) > 1.001 or min(df[column_names.performance]) < -0.001:
-            raise ValueError("performance column must be between 0 and 1")
+   #     if max(df[column_names.performance]) > 1.001 or min(df[column_names.performance]) < -0.001:
+      #      raise ValueError("performance column must be between 0 and 1")
 
         mean_performance = df[column_names.performance].mean()
 
@@ -65,12 +66,13 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
     df[HOUR_NUMBER_COLUMN_NAME] = (date_time - pd.Timestamp("1970-01-01").tz_localize('UTC')) // pd.Timedelta(
         '1h')
 
+    if col_names.league and col_names.league not in df.columns:
+        raise ValueError("league column passed but not in dataframe.")
+
     league_in_df = False
-    if col_names.league is not None and col_names.league in df.columns.tolist():
-        if league_identifier is None:
-            logging.warning("League column passed but no league_identifier passed. league will be set to None")
-        else:
-            league_in_df = True
+    if col_names.league is not None:
+        league_in_df = True
+
 
     if col_names.projected_participation_weight:
         if col_names.projected_participation_weight not in df.columns:
@@ -78,8 +80,27 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
                 "projected_participation_weight column passed but not in dataframe."
                 " Will use participation_weight as projected_participation_weight")
 
-    prev_match_id = None
+    if col_names.team_players_playing_time:
+        if col_names.team_players_playing_time not in df.columns:
+            raise ValueError("team_players_playing_time column passed but not in dataframe.")
 
+        is_team_players_playing_time = True
+    else:
+        is_team_players_playing_time = False
+
+    if col_names.opponent_players_playing_time:
+        if col_names.opponent_players_playing_time not in df.columns:
+            raise ValueError("opponent_players_playing_time column passed but not in dataframe.")
+
+        is_opponent_players_playing_time = True
+    else:
+        is_opponent_players_playing_time = False
+
+    prev_match_id = None
+    prev_update_team_id = None
+
+    if len(df.columns) > 35:
+        logging.warning(f"Dataframe column count {len(df.columns)} is high. Consider removing unneeded columns to speed up processing itme")
     data_dict = df.to_dict('records')
 
     matches = []
@@ -93,9 +114,10 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
     for row in data_dict:
         match_id = row[col_names.match_id]
         team_id = row[col_names.team_id]
+        update_team_id = row[col_names.parent_team_id]
         if team_id != prev_team_id and prev_team_id != None or prev_match_id != match_id and prev_match_id != None:
             match_team = _create_match_team(team_league_counts=team_league_counts, team_id=prev_team_id,
-                                            match_team_players=match_team_players)
+                                            match_team_players=match_team_players, update_team_id=prev_update_team_id)
             match_teams.append(match_team)
             match_team_players = []
             team_league_counts = {}
@@ -132,6 +154,24 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
         else:
             player_league = None
 
+        if is_team_players_playing_time:
+            team_players_playing_time = row[col_names.team_players_playing_time]
+            try:
+                team_players_playing_time = json.loads(team_players_playing_time)
+            except Exception:
+                pass
+        else:
+            team_players_playing_time = {}
+
+        if is_opponent_players_playing_time:
+            opponent_players_playing_time = row[col_names.opponent_players_playing_time]
+            try:
+                opponent_players_playing_time = json.loads(opponent_players_playing_time)
+            except Exception:
+                pass
+        else:
+            opponent_players_playing_time = {}
+
         if col_names.projected_participation_weight and col_names.participation_weight in row:
             projected_participation_weight = row[col_names.projected_participation_weight]
         elif col_names.participation_weight not in row:
@@ -141,6 +181,8 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
 
         if col_names.performance in row:
             performance = MatchPerformance(
+                team_players_playing_time=team_players_playing_time,
+                opponent_players_playing_time=opponent_players_playing_time,
                 performance_value=row[col_names.performance],
                 participation_weight=participation_weight,
                 projected_participation_weight=projected_participation_weight
@@ -153,20 +195,27 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
                 projected_participation_weight=participation_weight
             )
 
+        others = {}
+        if col_names.other_values:
+            for other_col in col_names.other_values:
+                others[other_col] = row[other_col]
+
         match_player = MatchPlayer(
             id=player_id,
             league=player_league,
             performance=performance,
             position=position,
-
+            others=others
         )
         match_team_players.append(match_player)
 
         prev_match_id = match_id
         prev_team_id = team_id
+        prev_update_team_id = update_team_id
         prev_row = row
 
     match_team = _create_match_team(team_league_counts=team_league_counts, team_id=prev_team_id,
+                                    update_team_id=prev_update_team_id,
                                     match_team_players=match_team_players)
     match_teams.append(match_team)
     match = _create_match(league_in_df=league_in_df, row=df.iloc[len(df) - 1],
@@ -188,11 +237,12 @@ def _create_match(league_in_df, row: pd.Series, match_teams: list[MatchTeam], co
         teams=match_teams,
         day_number=int(row[HOUR_NUMBER_COLUMN_NAME] / 24),
         league=match_league,
-        update_id=row[column_names.rating_update_id]
+        update_id=row[column_names.rating_update_match_id]
     )
 
 
 def _create_match_team(team_league_counts: dict, team_id: str,
+                       update_team_id: str,
                        match_team_players: list[MatchPlayer]) -> MatchTeam:
     if team_league_counts:
         team_league = max(team_league_counts[team_id], key=team_league_counts[team_id].get)
@@ -200,6 +250,7 @@ def _create_match_team(team_league_counts: dict, team_id: str,
         team_league = None
     return MatchTeam(
         id=team_id,
+        update_id=update_team_id,
         players=match_team_players,
         league=team_league
     )

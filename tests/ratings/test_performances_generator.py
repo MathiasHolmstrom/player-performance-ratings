@@ -1,10 +1,76 @@
 import pandas as pd
-
-from player_performance_ratings.transformation import MinMaxTransformer
+from deepdiff import DeepDiff
+from sklearn.preprocessing import StandardScaler
 
 from player_performance_ratings import ColumnNames
+from player_performance_ratings.predictor.transformer import SkLearnTransformerWrapper
+from player_performance_ratings.ratings import ColumnWeight, PerformancesGenerator
+from player_performance_ratings.ratings.performances_generator import auto_create_pre_performance_transformations
+from player_performance_ratings.transformation import \
+    MinMaxTransformer
 
-from player_performance_ratings.ratings.performances_generator import PerformancesGenerator, ColumnWeight
+from player_performance_ratings.transformation.pre_transformers import SymmetricDistributionTransformer, \
+    PartialStandardScaler
+
+
+def test_auto_create_pre_transformers():
+    column_weights = [[ColumnWeight(name="kills", weight=0.5),
+                       ColumnWeight(name="deaths", weight=0.5, lower_is_better=True)]]
+
+    column_names = [ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="start_date",
+        performance="weighted_performance"
+    )]
+
+    pre_transformations = auto_create_pre_performance_transformations(column_weights=column_weights,
+                                                                      column_names=column_names, pre_transformations=[])
+
+    expected_pre_transformations = [
+        SymmetricDistributionTransformer(features=["kills", "deaths"], prefix=""),
+        PartialStandardScaler(features=["kills", "deaths"], ratio=1, max_value=9999, target_mean=0, prefix=""),
+        MinMaxTransformer(features=["kills", "deaths"])
+    ]
+
+    diff = DeepDiff(pre_transformations, expected_pre_transformations)
+    assert diff == {}
+
+
+def test_auto_create_pre_transformers_multiple_column_names():
+    column_weights = [[ColumnWeight(name="kills", weight=0.5),
+                       ColumnWeight(name="deaths", weight=0.5, lower_is_better=True)],
+                      [ColumnWeight(name="kills", weight=1)]]
+
+    col_names = [
+        ColumnNames(
+            match_id="game_id",
+            team_id="team_id",
+            player_id="player_id",
+            start_date="start_date",
+            performance="weighted_performance"
+        ),
+        ColumnNames(
+            match_id="game_id",
+            team_id="team_id",
+            player_id="player_id",
+            start_date="start_date",
+            performance="performance"
+        )
+    ]
+
+    pre_transformations = auto_create_pre_performance_transformations(column_weights=column_weights,
+                                                                      column_names=col_names, pre_transformations=[])
+
+    expected_pre_transformations = [
+        SymmetricDistributionTransformer(features=["kills", "deaths"], prefix=""),
+        PartialStandardScaler(features=["kills", "deaths"], ratio=1, max_value=9999,
+                              target_mean=0, prefix=""),
+        MinMaxTransformer(features=["kills", "deaths"])]
+
+    diff = DeepDiff(pre_transformations, expected_pre_transformations)
+    assert diff == {}
 
 
 def test_performances_generator():

@@ -14,9 +14,6 @@ exploded = possessions.explode(['lineup_offense']).rename(columns={'lineup_offen
 exploded['net_seconds'] = exploded['seconds_played_end'] - exploded['seconds_played_start']
 grp = exploded.groupby(['game_id', 'player_id'])['points', 'net_seconds'].sum().reset_index()
 
-q = df[df['game_id']=='0011900062']
-q[q['player_id']==203924]
-
 
 q2 = possessions[possessions['game_id']=='0011900062']
 

@@ -7,11 +7,14 @@ import pandas as pd
 import pendulum
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
+from player_performance_ratings.transformation.base_transformer import BasePostTransformer
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings import PipelineFactory
 
 from player_performance_ratings.predictor import BaseMLWrapper
+from player_performance_ratings.ratings import PerformancesGenerator
+from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
 from player_performance_ratings.tuner.utils import ParameterSearchRange, add_params_from_search_range
 
@@ -23,18 +26,28 @@ class PredictorTuner():
                  date_column_name: str,
                  train_split_date: Optional[pendulum.datetime] = None,
                  default_params: Optional[dict] = None,
-                 estimator_subclass_level: int = 0,
                  n_trials: int = 30
                  ):
         self.search_ranges = search_ranges
         self.date_column_name = date_column_name
         self.train_split_date = train_split_date
         self.default_params = default_params or {}
-        self.estimator_subclass_level = estimator_subclass_level
         self.n_trials = n_trials
 
+
+
     def tune(self, df: pd.DataFrame,
-             pipeline_factory: PipelineFactory, cross_validator: CrossValidator) -> BaseMLWrapper:
+             pipeline_factory: PipelineFactory,
+             cross_validator: CrossValidator,
+             best_post_rating_transformers: Optional[list[BasePostTransformer]] = None,
+             ) -> BaseMLWrapper:
+
+        deepest_estimator =pipeline_factory.predictor.estimator
+        estimator_subclass_level = 0
+        while hasattr(deepest_estimator, "estimator"):
+            deepest_estimator = deepest_estimator.estimator
+            estimator_subclass_level += 1
+
 
         if not self.train_split_date:
             self.train_split_date = df.iloc[int(len(df) / 1.3)][self.date_column_name]
@@ -43,20 +56,20 @@ class PredictorTuner():
 
             predictor = pipeline_factory.predictor
 
-            if self.estimator_subclass_level == 0:
+            if estimator_subclass_level == 0:
                 param_names = list(
                     inspect.signature(predictor.estimator.__class__.__init__).parameters.keys())[1:]
                 params = {attr: getattr(predictor.estimator, attr) for attr in param_names if attr != 'kwargs'}
                 if '_other_params' in predictor.estimator.__dict__:
                     params.update(predictor.estimator._other_params)
-            elif self.estimator_subclass_level == 1:
+            elif estimator_subclass_level == 1:
                 param_names = list(
                     inspect.signature(predictor.estimator.estimator.__class__.__init__).parameters.keys())[1:]
                 params = {attr: getattr(predictor.estimator.estimator, attr) for attr in param_names if
                           attr != 'kwargs'}
                 if '_other_params' in predictor.estimator.estimator.__dict__:
                     params.update(predictor.estimator.estimator._other_params)
-            elif self.estimator_subclass_level == 2:
+            elif estimator_subclass_level == 2:
                 param_names = list(
                     inspect.signature(predictor.estimator.estimator.estimator.__class__.__init__).parameters.keys())[1:]
                 params = {attr: getattr(predictor.estimator.estimator.estimator, attr) for attr in param_names if
@@ -66,7 +79,7 @@ class PredictorTuner():
 
             else:
                 raise ValueError(
-                    f"estimator_subclass_level can't be higher than 2, got {self.estimator_subclass_level}")
+                    f"estimator_subclass_level can't be higher than 2, got {estimator_subclass_level}")
 
             params = add_params_from_search_range(params=params,
                                                   trial=trial,
@@ -76,17 +89,17 @@ class PredictorTuner():
 
             predictor = copy.deepcopy(pipeline_factory.predictor)
             for param in params:
-                if self.estimator_subclass_level == 1:
+                if estimator_subclass_level == 1:
                     setattr(predictor.estimator.estimator, param, params[param])
-                elif self.estimator_subclass_level == 2:
+                elif estimator_subclass_level == 2:
                     setattr(predictor.estimator.estimator.estimator, param, params[param])
-                elif self.estimator_subclass_level > 2:
+                elif estimator_subclass_level > 2:
                     raise ValueError(
-                        f"estimator_subclass_level can't be higher than 2, got {self.estimator_subclass_level}")
+                        f"estimator_subclass_level can't be higher than 2, got {estimator_subclass_level}")
                 else:
                     setattr(predictor.estimator, param, params[param])
 
-            pipeline = pipeline_factory.create(predictor=predictor)
+            pipeline = pipeline_factory.create(predictor=predictor, post_rating_transformers=best_post_rating_transformers)
             return pipeline.cross_validate_score(df=df, create_performance=False, create_rating_features=False,
                                                                  cross_validator=cross_validator)
 
@@ -101,10 +114,10 @@ class PredictorTuner():
         other_predictor_params = list(
             inspect.signature(pipeline_factory.predictor.__class__.__init__).parameters.keys())[1:]
 
-        if self.estimator_subclass_level > 0:
-            if self.estimator_subclass_level == 1:
+        if estimator_subclass_level > 0:
+            if estimator_subclass_level == 1:
                 best_estimator_params.update(pipeline_factory.predictor.estimator.estimator._other_params)
-            elif self.estimator_subclass_level == 2:
+            elif estimator_subclass_level == 2:
                 best_estimator_params.update(
                     pipeline_factory.predictor.estimator.estimator.estimator._other_params)
 
@@ -116,7 +129,7 @@ class PredictorTuner():
                                   other_predictor_params if attr not in ('estimator')}
 
         predictor_class = pipeline_factory.predictor.__class__
-        if self.estimator_subclass_level == 1:
+        if estimator_subclass_level == 1:
 
             potential_parent_names = list(
                 inspect.signature(
@@ -130,7 +143,7 @@ class PredictorTuner():
             parent_estimator = parent_estimator_class(estimator=estimator_class(**best_estimator_params),
                                                       **other_parent_params)
             return predictor_class(estimator=parent_estimator, **other_predictor_params)
-        elif self.estimator_subclass_level == 2:
+        elif estimator_subclass_level == 2:
             potential_parent_names = list(
                 inspect.signature(
                     pipeline_factory.predictor.estimator.estimator.__class__.__init__).parameters.keys())[1:]
@@ -146,10 +159,10 @@ class PredictorTuner():
             parent_parent_estimator = parent_parent_estimator_class(estimator=parent_estimator)
             return predictor_class(estimator=parent_parent_estimator, **other_predictor_params)
 
-        elif self.estimator_subclass_level == 0:
+        elif estimator_subclass_level == 0:
 
             estimator_class = pipeline_factory.predictor.estimator.__class__
             return predictor_class(estimator=estimator_class(**best_estimator_params), **other_predictor_params)
 
         else:
-            raise ValueError(f"estimator_subclass_level can't be higher than 2, got {self.estimator_subclass_level}")
+            raise ValueError(f"estimator_subclass_level can't be higher than 2, got {estimator_subclass_level}")

@@ -1,3 +1,3 @@
 from .base_tuner import BaseTuner
 from .performances_generator_tuner import PerformancesGeneratorTuner
-from .match_predicter_tuner import MatchPredictorTuner
+from .pipeline_tuner import PipelineTuner

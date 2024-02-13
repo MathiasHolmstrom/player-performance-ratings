@@ -24,8 +24,11 @@ class SkLearnWrapper(BaseEstimator, ClassifierMixin):
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         return self.estimator.predict_proba(X)
 
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        return self.estimator.predict(X)
 
-class OrdinalMultiModelClassifier(BaseEstimator, ClassifierMixin):
+
+class OrdinalClassifier(BaseEstimator, ClassifierMixin):
 
     def __init__(self,
                  estimator: Optional = None,

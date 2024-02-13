@@ -5,7 +5,8 @@ from typing import Dict, Optional, Tuple
 from player_performance_ratings.data_structures import MatchPlayer, PlayerRating, PreMatchTeamRating, \
     PreMatchPlayerRating, \
     PlayerRatingChange, Team, MatchTeam, TeamRatingChange
-from player_performance_ratings.ratings.rating_calculators.performance_predictor import RatingDifferencePerformancePredictor, \
+from player_performance_ratings.ratings.rating_calculators.performance_predictor import \
+    RatingDifferencePerformancePredictor, \
     PerformancePredictor
 from player_performance_ratings.ratings.rating_calculators.start_rating_generator import \
     StartRatingGenerator
@@ -14,7 +15,7 @@ MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 EXPECTED_MEAN_CONFIDENCE_SUM = 30
 
 
-class MatchTeatingGenerator():
+class MatchRatingGenerator():
 
     def __init__(self,
                  start_rating_generator: Optional[StartRatingGenerator] = None,
@@ -26,8 +27,9 @@ class MatchTeatingGenerator():
                  confidence_max_sum: float = 150,
                  confidence_weight: float = 0.9,
                  min_rating_change_multiplier_ratio: float = 0.1,
-                 league_rating_change_update_threshold: int = 250,
-                 league_rating_adjustor_multiplier: float = 5,
+                 league_rating_change_update_threshold: float = 100,
+                 league_rating_adjustor_multiplier: float = 0.05,
+                 team_id_change_confidence_sum_decrease: float = 3
                  ):
 
         """
@@ -46,7 +48,7 @@ class MatchTeatingGenerator():
         :param confidence_days_ago_multiplier:
             Determinutes how much the confidence_sum is affected by how long ago the last match was.
             If a player has not played in a long time, the confidence in a players rating declines.
-            This means his future rating changes faster. A higher confidence_value_denom therefore leads to more volatile future rating changes.
+            This means his future rating changes faster. A higher confidence_days_ago_multiplier  therefore leads to more volatile future rating changes.
 
         :param confidence_max_days:
             A players confidence_sum decreases by confidence_days_ago_multiplier * min(confidence_max_days, days_ago_since_last_match).
@@ -54,7 +56,7 @@ class MatchTeatingGenerator():
             This ensures a non-linear relationship between inactivity and our confidence in a players rating.
 
         :param confidence_value_denom:
-            Higher confidence_value_denom results in a lower applied_rating_change_multiplier.
+            Higher confidence_value_denom results in a more volatile rating change multipler based on the confidence_sum.
 
         :param confidence_max_sum:
             The maximum confidence_sum a player can have.
@@ -97,6 +99,7 @@ class MatchTeatingGenerator():
         self._league_rating_changes_count: dict[str, float] = {}
         self.performance_predictor = performance_predictor or RatingDifferencePerformancePredictor()
         self.start_rating_generator = start_rating_generator or StartRatingGenerator()
+        self.team_id_change_confidence_sum_decrease = team_id_change_confidence_sum_decrease
 
         self._teams: dict[str, Team] = {}
 
@@ -108,14 +111,29 @@ class MatchTeatingGenerator():
             player_ids=[p.id for p in match_team.players]
         )
 
-        pre_match_player_ratings, pre_match_player_rating_values, new_players = self._get_pre_match_player_ratings_and_new_players(
+        existing_pre_match_player_ratings, pre_match_player_rating_values, new_players = self._get_pre_match_player_ratings_and_new_players(
             team=match_team)
 
         new_player_pre_match_ratings = self._generate_new_player_pre_match_ratings(day_number=day_number,
                                                                                    new_players=new_players,
-                                                                                   team_pre_match_player_ratings=pre_match_player_ratings)
+                                                                                   team_pre_match_player_ratings=existing_pre_match_player_ratings)
+        if len(new_player_pre_match_ratings) > 0 and len(existing_pre_match_player_ratings) > 0:
 
-        pre_match_player_ratings += new_player_pre_match_ratings
+            pre_match_player_ratings = []
+            for match_player in match_team.players:
+
+                pre_match_player = [p for p in new_player_pre_match_ratings if p.id == match_player.id]
+                if len(pre_match_player) == 0:
+                    pre_match_player = [p for p in existing_pre_match_player_ratings if p.id == match_player.id]
+
+                pre_match_player_ratings.append(pre_match_player[0])
+
+        elif len(new_player_pre_match_ratings) == 0:
+            pre_match_player_ratings = existing_pre_match_player_ratings
+        else:
+            pre_match_player_ratings = new_player_pre_match_ratings
+
+        # pre_match_player_ratings += new_player_pre_match_ratings
         pre_match_team_rating_value = self._generate_pre_match_team_rating_value(
             pre_match_player_ratings=pre_match_player_ratings)
         pre_match_team_rating_projected_value = self._generate_pre_match_team_rating_projected_value(
@@ -149,7 +167,8 @@ class MatchTeatingGenerator():
                     match_performance=match_player.performance,
                     games_played=player_rating.games_played,
                     league=match_player.league,
-                    position=match_player.position
+                    position=match_player.position,
+                    other=match_player.others
                 )
 
             else:
@@ -174,7 +193,7 @@ class MatchTeatingGenerator():
 
             rating_value = self.start_rating_generator.generate_rating_value(
                 day_number=day_number,
-                match_entity=match_player,
+                match_player=match_player,
                 team_pre_match_player_ratings=team_pre_match_player_ratings,
             )
 
@@ -189,23 +208,28 @@ class MatchTeatingGenerator():
                 match_performance=match_player.performance,
                 games_played=self.player_ratings[match_player.id].games_played,
                 league=match_player.league,
-                position=match_player.position
+                position=match_player.position,
+                other=match_player.others
             )
 
             pre_match_player_ratings.append(pre_match_player_rating)
 
         return pre_match_player_ratings
 
-    def _generate_pre_match_team_rating_projected_value(self, pre_match_player_ratings: list[PreMatchPlayerRating]) -> float:
+    def _generate_pre_match_team_rating_projected_value(self,
+                                                        pre_match_player_ratings: list[PreMatchPlayerRating]) -> float:
         team_rating = sum(
-            player.rating_value * player.match_performance.projected_participation_weight for player in pre_match_player_ratings)
+            player.rating_value * player.match_performance.projected_participation_weight for player in
+            pre_match_player_ratings)
         sum_participation_weight = sum(
             player.match_performance.projected_participation_weight for player in pre_match_player_ratings)
 
         return team_rating / sum_participation_weight if sum_participation_weight > 0 else 0
 
-    def _generate_pre_match_team_rating_value(self, pre_match_player_ratings: list[PreMatchPlayerRating]) -> Optional[float]:
-        if len(pre_match_player_ratings) > 0 and pre_match_player_ratings[0].match_performance.participation_weight is None:
+    def _generate_pre_match_team_rating_value(self, pre_match_player_ratings: list[PreMatchPlayerRating]) -> Optional[
+        float]:
+        if len(pre_match_player_ratings) > 0 and pre_match_player_ratings[
+            0].match_performance.participation_weight is None:
             return None
         team_rating = sum(
             player.rating_value * player.match_performance.participation_weight for player in pre_match_player_ratings)
@@ -235,12 +259,11 @@ class MatchTeatingGenerator():
             )
 
             applied_rating_change_multiplier = self._calculate_applied_rating_change_multiplier(
-                player_id=pre_player_rating.id)
+                player_id=pre_player_rating.id, team_id=pre_match_team_rating.id)
             performance_difference = pre_player_rating.match_performance.performance_value - predicted_performance
             rating_change_value = performance_difference * applied_rating_change_multiplier * pre_player_rating.match_performance.participation_weight
             if math.isnan(rating_change_value):
-                logging.warning(f"rating_change_value is nan for {pre_player_rating.id}")
-                raise ValueError
+                raise ValueError(f"rating_change_value is nan for {pre_player_rating.id}")
 
             player_rating_change = PlayerRatingChange(
                 id=pre_player_rating.id,
@@ -253,6 +276,7 @@ class MatchTeatingGenerator():
                 pre_match_rating_value=pre_player_rating.rating_value
             )
             player_rating_changes.append(player_rating_change)
+            # print(day_number, player_rating_change.id, player_rating_change.rating_change_value)
             sum_predicted_performance += player_rating_change.predicted_performance * pre_player_rating.match_performance.participation_weight
             sum_performance_value += pre_player_rating.match_performance.performance_value * pre_player_rating.match_performance.participation_weight
             sum_rating_change += player_rating_change.rating_change_value * pre_player_rating.match_performance.participation_weight
@@ -273,6 +297,7 @@ class MatchTeatingGenerator():
 
     def update_rating_by_team_rating_change(self,
                                             team_rating_change: TeamRatingChange,
+                                            opponent_team_rating_change: TeamRatingChange
                                             ) -> None:
 
         for player_rating_change in team_rating_change.players:
@@ -286,13 +311,15 @@ class MatchTeatingGenerator():
             self.player_ratings[id].rating_value += player_rating_change.rating_change_value
             self.player_ratings[id].games_played += player_rating_change.participation_weight
             self.player_ratings[id].last_match_day_number = player_rating_change.day_number
+            self.player_ratings[id].most_recent_team_id = team_rating_change.id
 
-            self.start_rating_generator.update_league_ratings(rating_change=player_rating_change)
-            self._update_league_ratings(rating_change=player_rating_change)
+            self.start_rating_generator.update_players_to_leagues(rating_change=player_rating_change)
+            if player_rating_change.league != opponent_team_rating_change.league:
+                self._update_player_ratings_from_league_changes(rating_change=player_rating_change)
 
-    def _update_league_ratings(self,
-                               rating_change: PlayerRatingChange
-                               ):
+    def _update_player_ratings_from_league_changes(self,
+                                                   rating_change: PlayerRatingChange
+                                                   ):
 
         league = rating_change.league
 
@@ -305,29 +332,45 @@ class MatchTeatingGenerator():
         self._league_rating_changes_count[league] += 1
 
         if self._league_rating_changes[league] > abs(self.league_rating_change_update_threshold):
-            for player_id in self.start_rating_generator._league_to_entity_ids[league]:
-                mean_rating_change = self._league_rating_changes[league] / self._league_rating_changes_count[league]
+            for player_id in self.start_rating_generator._league_to_player_ids[league]:
                 self.player_ratings[
-                    player_id].rating_value += mean_rating_change * self.league_rating_adjustor_multiplier
+                    player_id].rating_value += self._league_rating_changes[
+                                                   league] * self.league_rating_adjustor_multiplier
 
             self._league_rating_changes[league] = 0
 
     def _calculate_applied_rating_change_multiplier(self,
                                                     player_id: str,
+                                                    team_id: str,
                                                     ) -> float:
+        if self.player_ratings[player_id].most_recent_team_id and self.player_ratings[
+            player_id].most_recent_team_id != team_id:
+            self.player_ratings[player_id].confidence_sum -= self.team_id_change_confidence_sum_decrease
+
         min_applied_rating_change_multiplier = self.rating_change_multiplier * self.min_rating_change_multiplier_ratio
-        confidence_change_multiplier = self.rating_change_multiplier * ((EXPECTED_MEAN_CONFIDENCE_SUM - self.player_ratings[player_id].confidence_sum) / self.confidence_value_denom +1 )
+        confidence_change_multiplier = self.rating_change_multiplier * ((EXPECTED_MEAN_CONFIDENCE_SUM -
+                                                                         self.player_ratings[
+                                                                             player_id].confidence_sum) / self.confidence_value_denom + 1)
         applied_rating_change_multiplier = confidence_change_multiplier * self.confidence_weight + (
                 1 - self.confidence_weight) * self.rating_change_multiplier
+
+        # net_certain_sum_value = self.player_ratings[
+        #                              player_id].confidence_sum - 20
+        #  certain_factor = -(1 / (1 + math.exp(-net_certain_sum_value / 14)) - 0.5) * 2 + 1
+        #   certain_multiplier = certain_factor * self.rating_change_multiplier
+        #  multiplier = certain_multiplier * self.confidence_weight + (
+        #          1 - self.confidence_weight) * self.rating_change_multiplier
+
+        #   min_rating_change_multiplier = self.rating_change_multiplier * self.min_rating_change_multiplier_ratio
         return max(min_applied_rating_change_multiplier, applied_rating_change_multiplier)
 
-
+    #     return max(min_applied_rating_change_multiplier, applied_rating_change_multiplier)
 
     def _calculate_post_match_confidence_sum(self,
-                                          entity_rating: PlayerRating,
-                                          day_number: int,
-                                          particpation_weight: float
-                                          ) -> float:
+                                             entity_rating: PlayerRating,
+                                             day_number: int,
+                                             particpation_weight: float
+                                             ) -> float:
         days_ago = self._calculate_days_ago_since_last_match(last_match_day_number=entity_rating.last_match_day_number,
                                                              day_number=day_number)
         confidence_sum_value = -min(days_ago,

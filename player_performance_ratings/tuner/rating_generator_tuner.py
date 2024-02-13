@@ -8,11 +8,10 @@ import optuna
 import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
+from player_performance_ratings.tuner.start_rating_optimizer import StartLeagueRatingOptimizer
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
-from player_performance_ratings.ratings import RatingColumnNames
-
-from player_performance_ratings.ratings.rating_calculators import MatchTeatingGenerator
+from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
 
 from player_performance_ratings.ratings.rating_calculators.start_rating_generator import StartRatingGenerator
 from player_performance_ratings.ratings import UpdateRatingGenerator
@@ -65,6 +64,12 @@ DEFAULT_TEAM_SEARCH_RANGES = [
         low=0.05,
         high=0.2,
     ),
+    ParameterSearchRange(
+        name='team_id_change_confidence_sum_decrease',
+        type='uniform',
+        low=0,
+        high=10,
+    ),
 ]
 
 DEFAULT_START_RATING_SEARCH_RANGE = [
@@ -72,7 +77,7 @@ DEFAULT_START_RATING_SEARCH_RANGE = [
         name='league_quantile',
         type='uniform',
         low=0.12,
-        high=.4,
+        high=.5,
     ),
     ParameterSearchRange(
         name='min_count_for_percentiles',
@@ -83,14 +88,14 @@ DEFAULT_START_RATING_SEARCH_RANGE = [
     ParameterSearchRange(
         name='team_rating_subtract',
         type='int',
-        low=20,
-        high=300
+        low=0,
+        high=200
     ),
     ParameterSearchRange(
         name='team_weight',
         type='uniform',
         low=0,
-        high=0.7
+        high=1
     )
 ]
 
@@ -99,40 +104,44 @@ class RatingGeneratorTuner(ABC):
 
     @abstractmethod
     def tune(self, df: pd.DataFrame, rating_idx: int, cross_validator: CrossValidator,
-             match_predictor_factory: PipelineFactory,
+             pipeline_factory: PipelineFactory,
              matches: list[Match]) -> RatingGenerator:
         pass
 
 
-class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
+class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
 
     def __init__(self,
                  team_rating_search_ranges: Optional[list[ParameterSearchRange]] = None,
                  team_rating_n_trials: int = 30,
                  start_rating_search_ranges: Optional[list[ParameterSearchRange]] = None,
                  start_rating_n_trials: int = 8,
+                 optimize_league_ratings: bool = False,
                  ):
         self.team_rating_search_ranges = team_rating_search_ranges or DEFAULT_TEAM_SEARCH_RANGES
         self.start_rating_search_ranges = start_rating_search_ranges or DEFAULT_START_RATING_SEARCH_RANGE
         self.team_rating_n_trials = team_rating_n_trials
         self.start_rating_n_trials = start_rating_n_trials
+        self.optimize_league_ratings = optimize_league_ratings
 
     def tune(self,
              df: pd.DataFrame,
              rating_idx: int,
              cross_validator: CrossValidator,
-             match_predictor_factory: PipelineFactory,
+             pipeline_factory: PipelineFactory,
              matches: list[Match]) -> UpdateRatingGenerator:
 
-        if match_predictor_factory.rating_generators:
-            best_rating_generator = copy.deepcopy(match_predictor_factory.rating_generators[rating_idx])
+        if pipeline_factory.rating_generators:
+            best_rating_generator = copy.deepcopy(pipeline_factory.rating_generators[rating_idx])
         else:
-            potential_rating_features = [v for k, v in RatingColumnNames.__dict__.items() if isinstance(v, str)]
+            raise ValueError("rating_generators are not specified")
+        # potential_rating_features = [v for k, v in RatingColumnNames.__dict__.items() if isinstance(v, str)]
 
-            best_rating_generator = UpdateRatingGenerator(
-                features_out=[f for f in match_predictor_factory.predictor.features if f in potential_rating_features],
-                column_names=match_predictor_factory.rating_generators[rating_idx].column_names
-            )
+        # best_rating_generator = UpdateRatingGenerator(
+        # features_out=[f for f in pipeline_factory.predictor.features if f in potential_rating_features],
+        #      features_out=pipeline_factory.predictor.features,
+        #      column_names=pipeline_factory.rating_generators[rating_idx].column_names
+        #  )
 
         if self.team_rating_n_trials > 0:
             logging.info("Tuning Team Rating")
@@ -141,9 +150,19 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                                                                 rating_index=rating_idx,
                                                                 cross_validator=cross_validator,
                                                                 matches=matches,
-                                                                match_predictor_factory=match_predictor_factory)
+                                                                pipeline_factory=pipeline_factory)
 
             best_rating_generator.team_rating_generator = best_team_rating_generator
+
+        if self.optimize_league_ratings:
+            start_rating_optimizer = StartLeagueRatingOptimizer(
+                pipeline_factory=pipeline_factory,
+                cross_validator=cross_validator,
+            )
+            optimized_league_ratings = start_rating_optimizer.optimize(df=df, rating_model_idx=rating_idx,
+                                                                       matches=matches,
+                                                                       rating_generator=best_rating_generator)
+            best_rating_generator.team_rating_generator.start_rating_generator.league_ratings = optimized_league_ratings
 
         if self.start_rating_n_trials > 0:
             logging.info("Tuning Start Rating")
@@ -153,12 +172,14 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                                                         rating_generator=best_rating_generator,
                                                         rating_index=rating_idx,
                                                         cross_validator=cross_validator,
-                                                        match_predictor_factory=match_predictor_factory
+                                                        match_predictor_factory=pipeline_factory
                                                         )
             best_rating_generator.team_rating_generator.start_rating_generator = best_start_rating
 
         return UpdateRatingGenerator(match_rating_generator=best_rating_generator.team_rating_generator,
-                                               column_names=best_rating_generator.column_names)
+                                     column_names=best_rating_generator.column_names,
+                                     estimator_features_pass_through=best_rating_generator._estimator_features_pass_through,
+                                     estimator_features_out=best_rating_generator._estimator_features_out)
 
     def _tune_team_rating(self,
                           df: pd.DataFrame,
@@ -166,8 +187,8 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                           rating_index: int,
                           matches: list[Match],
                           cross_validator: CrossValidator,
-                          match_predictor_factory: PipelineFactory,
-                          ) -> MatchTeatingGenerator:
+                          pipeline_factory: PipelineFactory,
+                          ) -> MatchRatingGenerator:
 
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
 
@@ -180,7 +201,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                                                   trial=trial,
                                                   parameter_search_range=self.team_rating_search_ranges)
 
-            performance_predictor = rating_generator.team_rating_generator.performance_predictor
+            performance_predictor = copy.deepcopy(rating_generator.team_rating_generator.performance_predictor)
             performance_predictor_params = list(
                 inspect.signature(performance_predictor.__class__.__init__).parameters.keys())[1:]
 
@@ -189,19 +210,21 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                     performance_predictor.__setattr__(param, params[param])
                     params.pop(param)
 
-            team_rating_generator = MatchTeatingGenerator(**params,
-                                                          performance_predictor=performance_predictor)
+            team_rating_generator = MatchRatingGenerator(**params,
+                                                         performance_predictor=performance_predictor,
+                                                         start_rating_generator=copy.deepcopy(
+                                                             rating_generator.team_rating_generator.start_rating_generator))
 
             rating_g = copy.deepcopy(rating_generator)
             rating_g.team_rating_generator = team_rating_generator
-            rating_generators = copy.deepcopy(match_predictor_factory.rating_generators)
+            rating_generators = copy.deepcopy(pipeline_factory.rating_generators)
 
             rating_generators[rating_index] = rating_g
-            match_predictor = match_predictor_factory.create(
+            pipeline = pipeline_factory.create(
                 rating_generators=rating_generators,
             )
-            return match_predictor.cross_validate_score(df=df, matches=matches, cross_validator=cross_validator,
-                                                                 create_performance=False)
+            return pipeline.cross_validate_score(df=df, matches=matches, cross_validator=cross_validator,
+                                                 create_performance=False)
 
         direction = "minimize"
         study_name = "optuna_study"
@@ -229,10 +252,10 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
             if param in performance_predictor_params:
                 performance_predictor.__setattr__(param, best_params[param])
                 best_params.pop(param)
-        return MatchTeatingGenerator(**best_params,
-                                     performance_predictor=performance_predictor,
-                                     start_rating_generator=rating_generator.team_rating_generator.start_rating_generator
-                                     )
+        return MatchRatingGenerator(**best_params,
+                                    performance_predictor=performance_predictor,
+                                    start_rating_generator=rating_generator.team_rating_generator.start_rating_generator
+                                    )
 
     def _tune_start_rating(self,
                            df: pd.DataFrame,
@@ -248,13 +271,14 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
                                             1:]
 
             params = {attr: getattr(rating_generator.team_rating_generator.start_rating_generator, attr) for attr in
-                      start_rating_generator_params}
+                      start_rating_generator_params if attr != 'league_ratings'}
 
             params = add_params_from_search_range(params=params,
                                                   trial=trial,
                                                   parameter_search_range=self.start_rating_search_ranges)
 
-            start_rating_generator = StartRatingGenerator(**params)
+            league_ratings = copy.deepcopy(rating_generator.team_rating_generator.start_rating_generator.league_ratings)
+            start_rating_generator = StartRatingGenerator(league_ratings=league_ratings, **params)
             rating_g = copy.deepcopy(rating_generator)
             rating_g.team_rating_generator.start_rating_generator = start_rating_generator
             if match_predictor_factory.rating_generators:
@@ -267,7 +291,7 @@ class OpponentAdjustedRatingGeneratorTuner(RatingGeneratorTuner):
 
             )
             return match_predictor.cross_validate_score(df=df, matches=matches, create_performance=False,
-                                                                 cross_validator=cross_validator)
+                                                        cross_validator=cross_validator)
 
         direction = "minimize"
         study_name = "optuna_study"
