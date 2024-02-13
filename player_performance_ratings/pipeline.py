@@ -3,7 +3,7 @@ from typing import List, Optional, Union
 import pandas as pd
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
-from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
+from player_performance_ratings.ratings import PerformancesGenerator
 
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor import BaseMLWrapper

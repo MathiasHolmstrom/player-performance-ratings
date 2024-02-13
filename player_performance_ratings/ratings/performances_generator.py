@@ -7,7 +7,6 @@ import pandas as pd
 from player_performance_ratings.transformation.pre_transformers import \
     SymmetricDistributionTransformer, MinMaxTransformer, PartialStandardScaler
 
-PartialStandardScaler
 
 from player_performance_ratings import ColumnNames
 
