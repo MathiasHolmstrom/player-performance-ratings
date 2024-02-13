@@ -80,7 +80,7 @@ def test_opponent_adjusted_rating_generator_tuner_team_rating():
     assert pipeline_factory.rating_generators == rating_generators
 
     # Second model has lowest score so it should be equal to confidence weight of that model
-    assert tuned_model.team_rating_generator.confidence_weight == 0.4
+    assert tuned_model.match_rating_generator.confidence_weight == 0.4
 
     # ratings should be reset
     assert tuned_model.player_ratings == {}
@@ -156,8 +156,8 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
     assert match_predictor_factory.rating_generators == rating_generators
 
     # Second model has lowest score
-    assert tuned_model.team_rating_generator.performance_predictor.max_predict_value == 0.4
-    assert tuned_model.team_rating_generator.confidence_weight == 0.4
+    assert tuned_model.match_rating_generator.performance_predictor.max_predict_value == 0.4
+    assert tuned_model.match_rating_generator.confidence_weight == 0.4
 
     # ratings should be reset
     assert tuned_model.player_ratings == {}
@@ -247,8 +247,8 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
     assert match_predictor_factory.rating_generators == rating_generators
 
     # Second model has lowest score so it should be equal to confidence weight of that model and team_weight
-    assert tuned_model.team_rating_generator.start_rating_generator.team_weight == 0.4
-    assert tuned_model.team_rating_generator.confidence_weight == 0.4
+    assert tuned_model.match_rating_generator.start_rating_generator.team_weight == 0.4
+    assert tuned_model.match_rating_generator.confidence_weight == 0.4
 
     # ratings should be reset
     assert tuned_model.player_ratings == {}

@@ -48,7 +48,7 @@ class StartLeagueRatingOptimizer():
                  matches: list[Match]) -> dict[str, float]:
 
         column_names = rating_generator.column_names
-        start_rating_generator = rating_generator.team_rating_generator.start_rating_generator
+        start_rating_generator = rating_generator.match_rating_generator.start_rating_generator
         league_ratings = start_rating_generator.league_ratings.copy()
         start_rating_params = list(
             inspect.signature(start_rating_generator.__class__.__init__).parameters.keys())[1:]
@@ -67,7 +67,7 @@ class StartLeagueRatingOptimizer():
                 logging.info(f"best start rating params {self._league_ratings_iterations[min_idx]}")
                 return self._league_ratings_iterations[min_idx]
 
-            rating_generator_used.team_rating_generator.start_rating_generator = start_rating_generator
+            rating_generator_used.match_rating_generator.start_rating_generator = start_rating_generator
 
             rating_generators = copy.deepcopy(self.pipeline_factory.rating_generators)
             rating_generators[rating_model_idx] = rating_generator_used
@@ -86,7 +86,7 @@ class StartLeagueRatingOptimizer():
                                        how='inner')
 
             rating_generators = copy.deepcopy(self.pipeline_factory.rating_generators)
-            rating_generators[rating_model_idx].team_rating_generator.start_rating_generator = start_rating_generator
+            rating_generators[rating_model_idx].match_rating_generator.start_rating_generator = start_rating_generator
             pipeline = self.pipeline_factory.create(rating_generators=rating_generators)
             score = pipeline.cross_validate_score(df=df_incl_ratings, cross_validator=self.cross_validator,
                                                   create_performance=False, create_rating_features=False)

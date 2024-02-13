@@ -152,7 +152,7 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                                                                 matches=matches,
                                                                 pipeline_factory=pipeline_factory)
 
-            best_rating_generator.team_rating_generator = best_team_rating_generator
+            best_rating_generator.match_rating_generator = best_team_rating_generator
 
         if self.optimize_league_ratings:
             start_rating_optimizer = StartLeagueRatingOptimizer(
@@ -162,7 +162,7 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
             optimized_league_ratings = start_rating_optimizer.optimize(df=df, rating_model_idx=rating_idx,
                                                                        matches=matches,
                                                                        rating_generator=best_rating_generator)
-            best_rating_generator.team_rating_generator.start_rating_generator.league_ratings = optimized_league_ratings
+            best_rating_generator.match_rating_generator.start_rating_generator.league_ratings = optimized_league_ratings
 
         if self.start_rating_n_trials > 0:
             logging.info("Tuning Start Rating")
@@ -174,9 +174,9 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                                                         cross_validator=cross_validator,
                                                         match_predictor_factory=pipeline_factory
                                                         )
-            best_rating_generator.team_rating_generator.start_rating_generator = best_start_rating
+            best_rating_generator.match_rating_generator.start_rating_generator = best_start_rating
 
-        return UpdateRatingGenerator(match_rating_generator=best_rating_generator.team_rating_generator,
+        return UpdateRatingGenerator(match_rating_generator=best_rating_generator.match_rating_generator,
                                      column_names=best_rating_generator.column_names,
                                      estimator_features_pass_through=best_rating_generator._estimator_features_pass_through,
                                      estimator_features_out=best_rating_generator._estimator_features_out)
@@ -193,15 +193,15 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
 
             team_rating_generator_params = list(
-                inspect.signature(rating_generator.team_rating_generator.__class__.__init__).parameters.keys())[1:]
+                inspect.signature(rating_generator.match_rating_generator.__class__.__init__).parameters.keys())[1:]
 
-            params = {attr: getattr(rating_generator.team_rating_generator, attr) for attr in
+            params = {attr: getattr(rating_generator.match_rating_generator, attr) for attr in
                       team_rating_generator_params if attr not in ('performance_predictor', 'start_rating_generator')}
             params = add_params_from_search_range(params=params,
                                                   trial=trial,
                                                   parameter_search_range=self.team_rating_search_ranges)
 
-            performance_predictor = copy.deepcopy(rating_generator.team_rating_generator.performance_predictor)
+            performance_predictor = copy.deepcopy(rating_generator.match_rating_generator.performance_predictor)
             performance_predictor_params = list(
                 inspect.signature(performance_predictor.__class__.__init__).parameters.keys())[1:]
 
@@ -213,10 +213,10 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
             team_rating_generator = MatchRatingGenerator(**params,
                                                          performance_predictor=performance_predictor,
                                                          start_rating_generator=copy.deepcopy(
-                                                             rating_generator.team_rating_generator.start_rating_generator))
+                                                             rating_generator.match_rating_generator.start_rating_generator))
 
             rating_g = copy.deepcopy(rating_generator)
-            rating_g.team_rating_generator = team_rating_generator
+            rating_g.match_rating_generator = team_rating_generator
             rating_generators = copy.deepcopy(pipeline_factory.rating_generators)
 
             rating_generators[rating_index] = rating_g
@@ -236,15 +236,15 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
 
         best_params = study.best_params
         team_rating_generator_params = list(
-            inspect.signature(rating_generator.team_rating_generator.__class__.__init__).parameters.keys())[1:]
-        other_params = {attr: getattr(rating_generator.team_rating_generator, attr) for attr in
+            inspect.signature(rating_generator.match_rating_generator.__class__.__init__).parameters.keys())[1:]
+        other_params = {attr: getattr(rating_generator.match_rating_generator, attr) for attr in
                         team_rating_generator_params
                         if attr not in ('performance_predictor', 'start_rating_generator')}
         for param in other_params:
             if param not in best_params:
                 best_params[param] = other_params[param]
 
-        performance_predictor = rating_generator.team_rating_generator.performance_predictor
+        performance_predictor = rating_generator.match_rating_generator.performance_predictor
         performance_predictor_params = list(
             inspect.signature(performance_predictor.__class__.__init__).parameters.keys())[1:]
 
@@ -254,7 +254,7 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                 best_params.pop(param)
         return MatchRatingGenerator(**best_params,
                                     performance_predictor=performance_predictor,
-                                    start_rating_generator=rating_generator.team_rating_generator.start_rating_generator
+                                    start_rating_generator=rating_generator.match_rating_generator.start_rating_generator
                                     )
 
     def _tune_start_rating(self,
@@ -267,20 +267,20 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
             start_rating_generator_params = list(
                 inspect.signature(
-                    rating_generator.team_rating_generator.start_rating_generator.__class__.__init__).parameters.keys())[
+                    rating_generator.match_rating_generator.start_rating_generator.__class__.__init__).parameters.keys())[
                                             1:]
 
-            params = {attr: getattr(rating_generator.team_rating_generator.start_rating_generator, attr) for attr in
+            params = {attr: getattr(rating_generator.match_rating_generator.start_rating_generator, attr) for attr in
                       start_rating_generator_params if attr != 'league_ratings'}
 
             params = add_params_from_search_range(params=params,
                                                   trial=trial,
                                                   parameter_search_range=self.start_rating_search_ranges)
 
-            league_ratings = copy.deepcopy(rating_generator.team_rating_generator.start_rating_generator.league_ratings)
+            league_ratings = copy.deepcopy(rating_generator.match_rating_generator.start_rating_generator.league_ratings)
             start_rating_generator = StartRatingGenerator(league_ratings=league_ratings, **params)
             rating_g = copy.deepcopy(rating_generator)
-            rating_g.team_rating_generator.start_rating_generator = start_rating_generator
+            rating_g.match_rating_generator.start_rating_generator = start_rating_generator
             if match_predictor_factory.rating_generators:
                 rating_generators = copy.deepcopy(match_predictor_factory.rating_generators)
                 rating_generators[rating_index] = rating_g
@@ -302,9 +302,9 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
         study.optimize(lambda trial: objective(trial, df), n_trials=self.start_rating_n_trials, callbacks=callbacks)
         start_rating_generator_params = list(
             inspect.signature(
-                rating_generator.team_rating_generator.start_rating_generator.__class__.__init__).parameters.keys())[1:]
+                rating_generator.match_rating_generator.start_rating_generator.__class__.__init__).parameters.keys())[1:]
 
-        other_params = {attr: getattr(rating_generator.team_rating_generator.start_rating_generator, attr) for attr in
+        other_params = {attr: getattr(rating_generator.match_rating_generator.start_rating_generator, attr) for attr in
                         start_rating_generator_params}
 
         best_params = study.best_params

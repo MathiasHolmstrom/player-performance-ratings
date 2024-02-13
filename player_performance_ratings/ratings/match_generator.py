@@ -45,15 +45,19 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
     if column_names.participation_weight is None and column_names.projected_participation_weight is not None:
         raise ValueError("projected_participation_weight column passed but not participation_weight column")
 
-    if column_names.performance in df.columns:
-   #     if max(df[column_names.performance]) > 1.001 or min(df[column_names.performance]) < -0.001:
-      #      raise ValueError("performance column must be between 0 and 1")
+    if column_names.performance not in df.columns:
+        logging.error(
+            f"{column_names.performance} needs to exist in dataframe. Either correct the naming or use performances-generator to generate the performance-column.")
+        raise ValueError(f"performance column {column_names.performance} not in dataframe.")
 
-        mean_performance = df[column_names.performance].mean()
+    if max(df[column_names.performance]) > 1.001 or min(df[column_names.performance]) < -0.001:
+        raise ValueError("performance column must be between 0 and 1")
 
-        if abs(mean_performance - 0.5) > 0.05:
-            logging.warning(
-                f"mean performance is {mean_performance} which is far from 0.5. It is recommended to do further pre_transformations of the performance column")
+    mean_performance = df[column_names.performance].mean()
+
+    if abs(mean_performance - 0.5) > 0.05:
+        logging.warning(
+            f"mean performance is {mean_performance} which is far from 0.5. It is recommended to do further pre_transformations of the performance column")
 
     validate_sorting(df=df, column_names=column_names)
 
@@ -72,7 +76,6 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
     league_in_df = False
     if col_names.league is not None:
         league_in_df = True
-
 
     if col_names.projected_participation_weight:
         if col_names.projected_participation_weight not in df.columns:
@@ -100,7 +103,8 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
     prev_update_team_id = None
 
     if len(df.columns) > 35:
-        logging.warning(f"Dataframe column count {len(df.columns)} is high. Consider removing unneeded columns to speed up processing itme")
+        logging.warning(
+            f"Dataframe column count {len(df.columns)} is high. Consider removing unneeded columns to speed up processing itme")
     data_dict = df.to_dict('records')
 
     matches = []
