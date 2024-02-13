@@ -1,11 +1,13 @@
 from typing import Optional
 
 import pandas as pd
+
+from player_performance_ratings.scorer.score import BaseScorer
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 from player_performance_ratings.cross_validator._base import CrossValidator
 from player_performance_ratings.predictor import BaseMLWrapper
-from player_performance_ratings.scorer import BaseScorer
+
 
 
 class MatchCountCrossValidator(CrossValidator):

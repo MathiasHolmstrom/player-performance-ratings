@@ -1,11 +1,12 @@
 from abc import abstractmethod, ABC
 
 import pandas as pd
+
+from player_performance_ratings.scorer.score import BaseScorer
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 from player_performance_ratings.predictor import BaseMLWrapper
 
-from player_performance_ratings.scorer import BaseScorer
 
 
 class CrossValidator(ABC):
