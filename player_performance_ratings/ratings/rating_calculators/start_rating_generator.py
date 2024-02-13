@@ -4,15 +4,16 @@ from dataclasses import dataclass
 import numpy as np
 from typing import Dict, Any, List, Optional
 
-from player_performance_ratings.data_structures import MatchPlayer, PreMatchPlayerRating, PlayerRatingChange
+from player_performance_ratings.data_structures import MatchPlayer, PreMatchPlayerRating, PlayerRatingChange, MatchTeam, \
+    TeamRatingChange
 
 DEFAULT_START_RATING = 1000
 
 
 @dataclass
-class LeagueEntityRatings:
+class LeaguePlayerRatings:
     league: str
-    entity_ratings: List[float]
+    ratings: List[float]
 
 
 class StartRatingGenerator():
@@ -20,7 +21,7 @@ class StartRatingGenerator():
     def __init__(self,
                  league_ratings: Optional[dict[str, float]] = None,
                  league_quantile: float = 0.2,
-                 min_count_for_percentiles: int = 100,
+                 min_count_for_percentiles: int = 50,
                  team_rating_subtract: float = 80,
                  team_weight: float = 0,
                  max_days_ago_league_entities: int = 120,
@@ -42,25 +43,25 @@ class StartRatingGenerator():
                 f" This will usually result in worse accuracy when new players are expected to perform worse")
 
         self._league_to_last_day_number: Dict[str, List[Any]] = {}
-        self._league_to_entity_ids: Dict[str, List[str]] = {}
+        self._league_to_player_ids: Dict[str, List[str]] = {}
         self._league_player_ratings: dict[str, list] = {}
-        self._entity_to_league: Dict[str, str] = {}
+        self._player_to_league: Dict[str, str] = {}
 
     def generate_rating_value(self,
                               day_number: int,
-                              match_entity: MatchPlayer,
+                              match_player: MatchPlayer,
                               team_pre_match_player_ratings: list[PreMatchPlayerRating],
                               ) -> float:
 
         if self.harcoded_start_rating is not None:
             return self.harcoded_start_rating
 
-        league = match_entity.league
+        league = match_player.league
         if league not in self.league_ratings:
             self.league_ratings[league] = DEFAULT_START_RATING
 
-        if league not in self._league_to_entity_ids:
-            self._league_to_entity_ids[league] = []
+        if league not in self._league_to_player_ids:
+            self._league_to_player_ids[league] = []
             self._league_to_last_day_number[league] = []
 
         if league not in self._league_player_ratings:
@@ -94,66 +95,66 @@ class StartRatingGenerator():
                                       match_day_number: int,
                                       league: str,
                                       ) -> float:
-        new_entity_ratings = self._get_new_entities_ratings(
+        new_player_ratings = self._get_new_players_ratings(
             match_day_number=match_day_number,
             league=league,
         )
-        region_entity_count = len(new_entity_ratings)
-        if region_entity_count < self.min_count_for_percentiles:
+        region_player_count = len(new_player_ratings)
+        if region_player_count < self.min_count_for_percentiles:
             return self.league_ratings[league]
         else:
-            return self._start_rating_value_for_above_threshold(new_entity_ratings)
+            return self._start_rating_value_for_above_threshold(new_player_ratings)
 
-    def _get_new_entities_ratings(self,
-                                  match_day_number: int,
-                                  league: str,
-                                  ) -> List[float]:
-        entity_ratings: List[float] = []
+    def _get_new_players_ratings(self,
+                                 match_day_number: int,
+                                 league: str,
+                                 ) -> List[float]:
+        player_ratings: List[float] = []
 
         for index, last_day_number in enumerate(self._league_to_last_day_number[league]):
             days_ago = match_day_number - last_day_number
 
             if days_ago <= self.max_days_ago_league_entities:
-                entity_ratings.append(self._league_player_ratings[
+                player_ratings.append(self._league_player_ratings[
                                           league][index])
 
-        return entity_ratings
+        return player_ratings
 
-    def _start_rating_value_for_above_threshold(self, entity_ratings: List) -> float:
-        percentile = np.percentile(entity_ratings, self.league_quantile * 100)
+    def _start_rating_value_for_above_threshold(self, player_ratings: List) -> float:
+        percentile = np.percentile(player_ratings, self.league_quantile * 100)
         return percentile
 
-    def update_league_ratings(self, rating_change: PlayerRatingChange):
+    def update_players_to_leagues(self, rating_change: PlayerRatingChange):
         league = rating_change.league
         id = rating_change.id
         day_number = rating_change.day_number
         rating_value = rating_change.pre_match_rating_value + rating_change.rating_change_value
 
         league_data = self._league_player_ratings.setdefault(league, [])
-        league_entity_ids = self._league_to_entity_ids.setdefault(league, [])
+        league_player_ids = self._league_to_player_ids.setdefault(league, [])
         league_last_day_numbers = self._league_to_last_day_number.setdefault(league, [])
 
-        if id not in league_entity_ids:
+        if id not in league_player_ids:
             league_data.append(rating_value)
-            league_entity_ids.append(id)
+            league_player_ids.append(id)
             league_last_day_numbers.append(day_number)
-            self._entity_to_league[id] = league
+            self._player_to_league[id] = league
         else:
 
-            index = league_entity_ids.index(id)
+            index = league_player_ids.index(id)
             league_last_day_numbers[index] = day_number
             league_data[index] = rating_value
 
-        current_entity_league = self._entity_to_league.get(id, league)
-        if league != current_entity_league:
-            entity_index = self._league_to_entity_ids[current_entity_league].index(id)
+        current_player_league = self._player_to_league.get(id, league)
+        if league != current_player_league:
+            player_index = self._league_to_player_ids[current_player_league].index(id)
 
-            for data_structure in (self._league_player_ratings[current_entity_league],
-                                   self._league_to_last_day_number[current_entity_league],
-                                   self._league_to_entity_ids[current_entity_league]):
-                del data_structure[entity_index]
+            for data_structure in (self._league_player_ratings[current_player_league],
+                                   self._league_to_last_day_number[current_player_league],
+                                   self._league_to_player_ids[current_player_league]):
+                del data_structure[player_index]
 
-            self._entity_to_league[id] = league
+            self._player_to_league[id] = league
 
     @property
     def league_player_ratings(self) -> dict[str, list]:

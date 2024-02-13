@@ -2,16 +2,17 @@ import copy
 
 import mock
 import pandas as pd
+
+from player_performance_ratings.predictor import Predictor
 from player_performance_ratings.tuner.utils import ParameterSearchRange
 from skbase.testing.utils.deep_equals import deep_equals
 
+from player_performance_ratings import ColumnNames, Pipeline
+from player_performance_ratings.ratings import UpdateRatingGenerator, PerformancesGenerator, ColumnWeight
 
-from player_performance_ratings import ColumnNames
-from player_performance_ratings.ratings.rating_calculators import OpponentAdjustedRatingGenerator
+from player_performance_ratings.tuner import PipelineTuner, PerformancesGeneratorTuner
 
-from player_performance_ratings.tuner import MatchPredictorTuner, PerformancesGeneratorTuner
-from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
-from player_performance_ratings.tuner.rating_generator_tuner import OpponentAdjustedRatingGeneratorTuner
+from player_performance_ratings.tuner.rating_generator_tuner import UpdateRatingGeneratorTuner
 
 
 def test_match_predictor_tuner():
@@ -23,21 +24,25 @@ def test_match_predictor_tuner():
 
     """
 
-    match_predictor_factory = PipelineFactory(
-        rating_generators=OpponentAdjustedRatingGenerator(column_names=ColumnNames(
+    col_names = ColumnNames(
             match_id="game_id",
             team_id="team_id",
             player_id="player_id",
             start_date="start_date",
             performance="won"
-        )),
-        match_id_column_name="game_id",
+        )
+
+    pipeline = Pipeline(
+        rating_generators=UpdateRatingGenerator(column_names=col_names),
+        predictor=Predictor(),
+        performances_generator=PerformancesGenerator(column_weights=[ColumnWeight(name="won", weight=1)], column_names=col_names),
+
     )
 
-    scorer_mock = mock.Mock()
-    scorer_mock.score.side_effect = [0.5, 0.2, 0.3]
+    cv_mock = mock.Mock()
+    cv_mock.cross_validation_score.side_effect = [0.5, 0.2, 0.3]
 
-    original_match_predictor_factory = copy.deepcopy(match_predictor_factory)
+    original_pipeline = copy.deepcopy(pipeline)
 
     performances_weight_search_ranges = {
         "performance":
@@ -56,18 +61,17 @@ def test_match_predictor_tuner():
         performances_weight_search_ranges=performances_weight_search_ranges,
         n_trials=1)
 
-    rating_generator_tuner = OpponentAdjustedRatingGeneratorTuner(
+    rating_generator_tuner = UpdateRatingGeneratorTuner(
         team_rating_n_trials=1,
         start_rating_n_trials=0,
     )
 
-    match_predictor_tuner = MatchPredictorTuner(
-        scorer=scorer_mock,
-        match_predictor_factory=match_predictor_factory,
-        performances_generator_tuner=performances_generator_tuner,
+    pipeline_tuner = PipelineTuner(
+        cross_validator=cv_mock,
+        pipeline=pipeline,
+        performances_generator_tuners=performances_generator_tuner,
         rating_generator_tuners=rating_generator_tuner,
-        date_column_name="start_date",
-        cv_n_splits = 1
+
 
     )
 
@@ -84,8 +88,7 @@ def test_match_predictor_tuner():
         }
     )
 
-    best_rating_model = match_predictor_tuner.tune(df=df)
-    deep_equals(match_predictor_factory, original_match_predictor_factory)
-    assert deep_equals(best_rating_model.rating_generators, match_predictor_factory.rating_generators) == False
-    assert deep_equals(best_rating_model.performances_generator, match_predictor_factory.performances_generator) == False
-
+    best_rating_model = pipeline_tuner.tune(df=df)
+    deep_equals(pipeline, original_pipeline)
+    assert deep_equals(best_rating_model.rating_generators, pipeline.rating_generators) == False
+    assert deep_equals(best_rating_model.performances_generator, pipeline.performances_generator) == False

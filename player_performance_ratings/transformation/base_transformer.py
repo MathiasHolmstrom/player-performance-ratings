@@ -24,9 +24,10 @@ class BaseTransformer(ABC):
 
 class BasePostTransformer(ABC):
 
-    def __init__(self, features: list[str], features_to_remove:Optional[list[str]]=None):
+    def __init__(self, features: list[str], are_estimator_features:bool =True):
         self.features = features
-        self._features_to_remove = features_to_remove or []
+        self._are_estimator_features = are_estimator_features
+        self._features_out = []
 
     @abstractmethod
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -37,14 +38,14 @@ class BasePostTransformer(ABC):
         pass
 
     @property
-    @abstractmethod
     def features_out(self) -> list[str]:
-        pass
+        return self._features_out
 
     @property
-    def features_to_remove(self) -> list[str]:
-        return self._features_to_remove
-
+    def estimator_features_out(self) -> list[str]:
+        if self._are_estimator_features:
+            return self.features_out
+        return []
 
 
 class DifferentGranularityTransformer(ABC):

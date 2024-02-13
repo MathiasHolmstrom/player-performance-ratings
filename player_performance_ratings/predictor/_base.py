@@ -2,26 +2,52 @@ from abc import abstractmethod, ABC
 from typing import Optional
 
 import pandas as pd
-from player_performance_ratings.transformation.base_transformer import BaseTransformer
+from player_performance_ratings.scorer.score import Filter
+
+class PredictorTransformer(ABC):
+
+    def __init__(self, features: list[str]):
+        self.features = features
+
+    @abstractmethod
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        pass
+
+    @abstractmethod
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        pass
+
+    @property
+    @abstractmethod
+    def features_out(self) -> list[str]:
+        pass
 
 
 class BaseMLWrapper(ABC):
 
     def __init__(self,
-                 estimator, features: list[str],
-                 target: str, categorical_transformers: Optional[list[BaseTransformer]] = None,
-                 pred_column: Optional[str] = None
+                 estimator,
+                 filters: Optional[list[Filter]],
+                 target: str,
+                 categorical_transformers: Optional[list[PredictorTransformer]] = None,
+                 pred_column: Optional[str] = None,
                  ):
         self.estimator = estimator
-        self.features = features
+        self.filters = filters or []
         self._target = target
         self._pred_column = pred_column or f"{self._target}_prediction"
         self.categorical_transformers = categorical_transformers
-        self._estimator_features = self.features
         self._estimator_categorical_features = []
+        self._deepest_estimator = self.estimator
+        iterations = 0
+        while hasattr(self._deepest_estimator , "estimator"):
+            self._deepest_estimator  = self._deepest_estimator.estimator
+            iterations += 1
+            if iterations > 10:
+                raise ValueError("estimator is too deep")
 
     @abstractmethod
-    def train(self, df: pd.DataFrame) -> None:
+    def train(self, df: pd.DataFrame, estimator_features: list[str]) -> None:
         pass
 
     @abstractmethod

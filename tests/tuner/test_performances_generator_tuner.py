@@ -5,13 +5,13 @@ import pandas as pd
 import pytest
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
-from player_performance_ratings import ColumnNames
+from player_performance_ratings import ColumnNames, Pipeline, PipelineFactory
 from player_performance_ratings.predictor import Predictor
-from player_performance_ratings.ratings import RatingColumnNames
-from player_performance_ratings.ratings.rating_calculators import OpponentAdjustedRatingGenerator
+from player_performance_ratings.ratings import RatingEstimatorFeatures, UpdateRatingGenerator, PerformancesGenerator, \
+    ColumnWeight
+
 from player_performance_ratings.tuner import PerformancesGeneratorTuner
 
-from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
 from player_performance_ratings.tuner.utils import ParameterSearchRange
 
 
@@ -41,15 +41,18 @@ def test_transformer_tuner():
             ]
     }
 
-    rating_generator1 = OpponentAdjustedRatingGenerator(column_names=column_names,
-                                                        features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED])
+    rating_generator1 = UpdateRatingGenerator(column_names=column_names,
+                                              estimator_features_out=[
+                                                  RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
 
     rating_generators = [rating_generator1]
 
-    match_predictor_factory = PipelineFactory(
+    pipeline_factory = PipelineFactory(
         rating_generators=rating_generators,
-        predictor=Predictor(estimator=LogisticRegression(), features=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED]),
-        match_id_column_name="game_id",
+        predictor=Predictor(estimator=LogisticRegression(),
+                            estimator_features=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]),
+        performances_generator=PerformancesGenerator(column_weights=[ColumnWeight(name="won", weight=1)],
+                                                     column_names=column_names),
     )
 
     performances_generator_tuner = PerformancesGeneratorTuner(
@@ -71,11 +74,11 @@ def test_transformer_tuner():
     cross_validator = mock.Mock()
     cross_validator.cross_validation_score.side_effect = [0.5, 0.3]
 
-    tuned_model = performances_generator_tuner.tune(match_predictor_factory=copy.deepcopy(match_predictor_factory),
-                                                    df=df, cross_validator=cross_validator)
+    tuned_model = performances_generator_tuner.tune(pipeline_factory=copy.deepcopy(pipeline_factory),
+                                                    df=df, cross_validator=cross_validator, rating_idx=0)
 
     # tests immutability of match_predictor_factory
-    assert match_predictor_factory.rating_generators == rating_generators
+    assert pipeline_factory.rating_generators == rating_generators
 
     # assert best model belongs in search range
     assert tuned_model.column_weights[0][0].weight >= 0.1
@@ -137,17 +140,24 @@ def test_transformer_tuner_2_performances(estimator):
 
     }
 
-    rating_generator1 = OpponentAdjustedRatingGenerator(column_names=column_names1,
-                                                        features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED])
-    rating_generator2 = OpponentAdjustedRatingGenerator(column_names=column_names2,
-                                                        features_out=[RatingColumnNames.RATING_DIFFERENCE_PROJECTED])
+    rating_generator1 = UpdateRatingGenerator(column_names=column_names1,
+                                              estimator_features_out=[
+                                                  RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+    rating_generator2 = UpdateRatingGenerator(column_names=column_names2,
+                                              estimator_features_out=[
+                                                  RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
 
     rating_generators = [rating_generator1, rating_generator2]
 
     match_predictor_factory = PipelineFactory(
         rating_generators=rating_generators,
-        estimator=LogisticRegression(),
-        match_id_column_name="game_id",
+        predictor=Predictor(estimator=estimator,
+                            estimator_features=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]),
+        performances_generator=PerformancesGenerator(
+            column_weights=[[ColumnWeight(name="kills", weight=1), ColumnWeight(name="won", weight=1)],
+                            [ColumnWeight(name="kills", weight=1), ColumnWeight(name="won", weight=1)]],
+            column_names=[column_names1, column_names2]),
+
     )
 
     performances_generator_tuner = PerformancesGeneratorTuner(
@@ -169,8 +179,8 @@ def test_transformer_tuner_2_performances(estimator):
     cross_validator = mock.Mock()
     cross_validator.cross_validation_score.side_effect = [0.5, 0.3]
 
-    tuned_model = performances_generator_tuner.tune(match_predictor_factory=copy.deepcopy(match_predictor_factory),
-                                                    df=df, cross_validator=cross_validator)
+    tuned_model = performances_generator_tuner.tune(pipeline_factory=copy.deepcopy(match_predictor_factory),
+                                                    df=df, cross_validator=cross_validator, rating_idx=0)
 
     # tests immutability of match_predictor_factory
     assert match_predictor_factory.rating_generators == rating_generators

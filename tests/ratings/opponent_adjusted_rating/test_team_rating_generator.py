@@ -5,10 +5,12 @@ import pytest
 
 from player_performance_ratings.data_structures import MatchTeam, PreMatchPlayerRating, MatchPerformance, \
     MatchPlayer, PreMatchTeamRating, PlayerRating, TeamRatingChange, PlayerRatingChange
-from player_performance_ratings.ratings.rating_calculators.team_rating_generator import MatchTeatingGenerator
+from player_performance_ratings.ratings.rating_calculators.match_rating_generator import EXPECTED_MEAN_CONFIDENCE_SUM, \
+    MatchRatingGenerator
+
 from player_performance_ratings.ratings.rating_calculators.performance_predictor import RatingDifferencePerformancePredictor, \
     MATCH_CONTRIBUTION_TO_SUM_VALUE
-from player_performance_ratings.ratings.rating_calculators.team_rating_generator import EXPECTED_MEAN_CONFIDENCE_SUM
+
 
 
 def test_generate_pre_match_team_rating():
@@ -40,7 +42,7 @@ def test_generate_pre_match_team_rating():
         ],
     )
 
-    team_rating_generator = MatchTeatingGenerator()
+    team_rating_generator = MatchRatingGenerator()
 
     team_rating_generator.player_ratings = {
         "1": PlayerRating(
@@ -114,7 +116,7 @@ def test_generate_rating_change(confidence_sum):
                                                                  rating_diff_team_from_entity_coef=0.0,
                                                                  team_rating_diff_coef=0.0)
 
-    team_rating_generator = MatchTeatingGenerator(
+    team_rating_generator = MatchRatingGenerator(
         confidence_weight=1,
         confidence_value_denom=50,
         confidence_max_days=100,
@@ -269,6 +271,9 @@ def test_update_by_team_rating_change():
 
     """
 
+    opponent_team_rating_change_mock = mock.Mock()
+    opponent_team_rating_change_mock.league = None
+
     team_rating_change = TeamRatingChange(
         id="1",
         league=None,
@@ -300,7 +305,7 @@ def test_update_by_team_rating_change():
         ]
     )
 
-    team_rating_generator = MatchTeatingGenerator()
+    team_rating_generator = MatchRatingGenerator()
     original_player_ratings = {
         "1": PlayerRating(
             id="1",
@@ -320,7 +325,7 @@ def test_update_by_team_rating_change():
         )
     }
     team_rating_generator.player_ratings = copy.deepcopy(original_player_ratings)
-    team_rating_generator.update_rating_by_team_rating_change(team_rating_change=team_rating_change)
+    team_rating_generator.update_rating_by_team_rating_change(team_rating_change=team_rating_change,opponent_team_rating_change=opponent_team_rating_change_mock)
 
     expected_player1_confidence_sum = original_player_ratings[
                                           "1"].confidence_sum - 1 * team_rating_generator.confidence_days_ago_multiplier + \
@@ -339,6 +344,7 @@ def test_update_by_team_rating_change():
             last_match_day_number=1,
             confidence_sum=expected_player1_confidence_sum,
             prev_rating_changes=[],
+            most_recent_team_id="1"
         ),
         "2": PlayerRating(
             id="2",
@@ -347,6 +353,7 @@ def test_update_by_team_rating_change():
             last_match_day_number=1,
             confidence_sum=expected_player2_confidence_sum,
             prev_rating_changes=[],
+            most_recent_team_id="1"
         )
     }
 
@@ -355,9 +362,13 @@ def test_update_by_team_rating_change():
 
 def test_league_ratings_are_updated_when_player_ratings_are_updated():
     """
-    When player ratings are updated, league_ratings should also be updated accordingly
-
+    When following criteria are met:
+    1. Player league and opponent league differ
+    -> league_ratings should also be updated accordingly
     """
+
+    opponent_team_rating_change_mock = mock.Mock()
+    opponent_team_rating_change_mock.league = "league2"
 
     team_rating_change = TeamRatingChange(
         id="1",
@@ -392,8 +403,9 @@ def test_league_ratings_are_updated_when_player_ratings_are_updated():
 
     start_rating_mock = mock.Mock()
 
-    team_rating_generator = MatchTeatingGenerator(
-        start_rating_generator=start_rating_mock
+    team_rating_generator = MatchRatingGenerator(
+        start_rating_generator=start_rating_mock,
+        league_rating_change_update_threshold=100
     )
     original_player_ratings = {
         "1": PlayerRating(
@@ -414,9 +426,7 @@ def test_league_ratings_are_updated_when_player_ratings_are_updated():
         )
     }
     team_rating_generator.player_ratings = copy.deepcopy(original_player_ratings)
-    team_rating_generator.update_rating_by_team_rating_change(team_rating_change=team_rating_change)
-
-    assert start_rating_mock.update_league_ratings.call_count == 2
+    team_rating_generator.update_rating_by_team_rating_change(team_rating_change=team_rating_change, opponent_team_rating_change=opponent_team_rating_change_mock)
 
     assert team_rating_generator._league_rating_changes["league1"] == team_rating_change.players[
         0].rating_change_value + team_rating_change.players[1].rating_change_value
@@ -424,8 +434,6 @@ def test_league_ratings_are_updated_when_player_ratings_are_updated():
 
 def test_player_ratings_are_updated_when_league_ratings_reaches_threshold():
     """
-
-
     """
 
     team_rating_change = TeamRatingChange(
@@ -449,7 +457,8 @@ def test_player_ratings_are_updated_when_league_ratings_reaches_threshold():
         ]
     )
 
-    team_rating_generator = MatchTeatingGenerator(
+    team_rating_generator = MatchRatingGenerator(
+        league_rating_change_update_threshold=1
     )
     original_player_ratings = {
         "1": PlayerRating(
@@ -470,9 +479,12 @@ def test_player_ratings_are_updated_when_league_ratings_reaches_threshold():
     expected_new_player_rating = original_player_ratings["1"].rating_value + team_rating_change.players[
         0].rating_change_value + (team_rating_generator.league_rating_change_update_threshold - 4 +
                                   team_rating_change.players[
-                                      0].rating_change_value) / 2 * team_rating_generator.league_rating_adjustor_multiplier
+                                      0].rating_change_value)  * team_rating_generator.league_rating_adjustor_multiplier
 
-    team_rating_generator.update_rating_by_team_rating_change(team_rating_change=team_rating_change)
+    opponent_team_rating_change_mock = mock.Mock()
+    opponent_team_rating_change_mock.league = "league2"
+
+    team_rating_generator.update_rating_by_team_rating_change(team_rating_change=team_rating_change, opponent_team_rating_change=opponent_team_rating_change_mock)
 
     assert team_rating_generator._league_rating_changes["league1"] == 0
     assert team_rating_generator.player_ratings["1"].rating_value == expected_new_player_rating

@@ -1,8 +1,6 @@
-import logging
 from typing import List, Optional, Union
 
 import pandas as pd
-from sklearn.preprocessing import OneHotEncoder
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
@@ -10,97 +8,22 @@ from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeig
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor import BaseMLWrapper
 
-from player_performance_ratings.predictor import Predictor, GameTeamPredictor
 from player_performance_ratings.data_structures import Match
 from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
-from player_performance_ratings.transformation.base_transformer import BaseTransformer, BasePostTransformer
+from player_performance_ratings.transformation.base_transformer import BasePostTransformer
 
-from player_performance_ratings.transformation.pre_transformers import ConvertDataFrameToCategoricalTransformer, \
-    SkLearnTransformerWrapper
-
-
-def create_predictor(
-        rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]],
-        other_features: Optional[list[str]],
-        other_categorical_features: Optional[list[str]],
-        post_rating_transformers: Optional[List[BasePostTransformer]],
-        estimator: Optional,
-        group_predictor_by_game_team: bool,
-        match_id_column_name: Optional[str],
-        team_id_column_name: Optional[str],
-
-) -> BaseMLWrapper:
-    features = list(set(other_features + other_categorical_features)) or []
-
-    for c in post_rating_transformers:
-        features += c.features_out
-    for rating_idx, c in enumerate(rating_generators):
-        for rating_feature in c.features_out:
-            if len(rating_generators) > 1:
-                rating_feature_str = rating_feature + str(rating_idx)
-            else:
-                rating_feature_str = rating_feature
-            features.append(rating_feature_str)
-
-    logging.warning(f"predictor is not set. Will use {features} as features")
-    if other_categorical_features:
-        if estimator.__class__.__name__ in ('LGBMClassifier', 'LGBMRegressor', "XGBClassifier", "XGBRegressor"):
-            categorical_transformers = [
-                ConvertDataFrameToCategoricalTransformer(features=other_categorical_features)
-            ]
-        else:
-            categorical_transformers = [
-                SkLearnTransformerWrapper(
-                    transformer=OneHotEncoder(handle_unknown='ignore'), features=other_categorical_features)
-            ]
-    else:
-        categorical_transformers = []
-
-    if group_predictor_by_game_team:
-        match_id = rating_generators[
-            0].column_names.match_id if rating_generators else match_id_column_name
-        team_id = rating_generators[0].column_names.team_id if rating_generators else team_id_column_name
-        if match_id is None or team_id is None:
-            raise ValueError(
-                "match_id and team_id must be set if group_predictor_by_game_team is used to create predictor")
-
-        return GameTeamPredictor(
-            estimator=estimator,
-            features=features,
-            target=PredictColumnNames.TARGET,
-            game_id_colum=match_id,
-            team_id_column=team_id,
-            categorical_transformers=categorical_transformers
-        )
-
-
-    else:
-        return Predictor(
-            estimator=estimator,
-            features=features,
-            target=PredictColumnNames.TARGET,
-            categorical_transformers=categorical_transformers
-        )
 
 
 class Pipeline():
 
     def __init__(self,
+                 predictor: BaseMLWrapper,
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
                  post_rating_transformers: Optional[List[BasePostTransformer]] = None,
-                 predictor: [Optional[BaseMLWrapper]] = None,
-                 estimator: Optional = None,
-                 estimator_or_transformers: Optional[Union[BaseMLWrapper, List[BaseTransformer]]] = None,
-                 other_features: Optional[list[str]] = None,
-                 other_categorical_features: Optional[list[str]] = None,
-                 group_predictor_by_game_team: bool = False,
-                 match_id_column_name: Optional[str] = None,
-                 team_id_column_name: Optional[str] = None,
-                 column_weights: Optional[Union[list[list[ColumnWeight]], list[ColumnWeight]]] = None,
                  keep_features: bool = False,
                  ):
 
@@ -141,58 +64,33 @@ class Pipeline():
             If true, the pre_rating_transformers will be automatically generated to ensure the performance-value is done according to good practices.
             For new users, this is recommended.
 
-        :param column_weights:
-            If auto_create_pre_transformers is True, column_weights must be set.
-            It is generally used when multiple columns are used to calculate ratings and the columns need to be weighted when converting it to a performance_value.
-            Even if only 1  feature is used but auto_create_pre_transformers is used,
-             then it must still be created in order for auto_create_pre_transformers to know which columns needs to be transformed.
 
         """
 
+        self._estimator_features = predictor._estimator_features
         self.rating_generators: list[RatingGenerator] = rating_generators if isinstance(rating_generators, list) else [
             rating_generators]
         if rating_generators is None:
             self.rating_generators: list[RatingGenerator] = []
 
-
-        self.column_weights = column_weights
-        if self.column_weights and isinstance(self.column_weights[0], ColumnWeight):
-            self.column_weights = [self.column_weights]
-
-        self.performances_generator = performances_generator
-
         self.post_rating_transformers = post_rating_transformers or []
 
-        self.predictor = predictor
-        self.other_features = other_features or []
-        self.other_categorical_features = other_categorical_features or []
-        self.group_predictor_by_game_team = group_predictor_by_game_team
-        self.estimator_or_transformers = estimator_or_transformers
-        self.match_id_column_name = match_id_column_name
-        self.team_id_column_name = team_id_column_name
+        for c in self.post_rating_transformers:
+            self._estimator_features += [f for f in c.estimator_features_out if f not in self._estimator_features]
+        for rating_idx, c in enumerate(self.rating_generators):
+            for rating_feature in c.estimator_features_out:
+                if len(self.rating_generators) > 1:
+                    rating_feature_str = rating_feature + str(rating_idx)
+                else:
+                    rating_feature_str = rating_feature
+                if rating_feature_str not in self._estimator_features:
+                    self._estimator_features.append(rating_feature_str)
+
+
+        self.performances_generator = performances_generator
         self.keep_features = keep_features
 
-        if self.predictor is not None and estimator is not None:
-            logging.warning(
-                "predictor and estimator is set. estimator will be ignored. If it's intended to be used, either inject it into predictor or remove predictor")
-
-        if self.predictor is not None and self.other_features:
-            logging.warning(
-                "predictor and other_features is set. other_features will be ignored. If it's intended to be used, either inject it into predictor or remove predictor")
-
-        if self.predictor is None:
-            self.predictor = create_predictor(
-                rating_generators=self.rating_generators,
-                other_features=self.other_features,
-                other_categorical_features=self.other_categorical_features,
-                post_rating_transformers=self.post_rating_transformers,
-                estimator=estimator,
-                group_predictor_by_game_team=self.group_predictor_by_game_team,
-                match_id_column_name=self.match_id_column_name,
-                team_id_column_name=self.team_id_column_name
-            )
-            if not self.predictor.features:
-                raise ValueError("No Features specified for estimator/predictor")
+        self.predictor = predictor
 
         self.predictor.set_target(PredictColumnNames.TARGET)
 
@@ -202,12 +100,16 @@ class Pipeline():
                              matches: Optional[list[Match]] = None,
                              create_performance: bool = True,
                              create_rating_features: bool = True) -> float:
-        if create_performance:
-            df = self._add_performance(df=df, matches=None)
-        if create_rating_features:
-            df = self._add_rating_and_post_rating(matches=matches, df=df, store_ratings=False)
 
-        validation_df = cross_validator.generate_validation_df(df=df, predictor=self.predictor)
+
+        if create_performance:
+            df = self._add_performance(df=df)
+        if create_rating_features:
+            df = self._add_rating(matches=matches, df=df, store_ratings=False)
+
+        validation_df = cross_validator.generate_validation_df(df=df, predictor=self.predictor,
+                                                               post_transformers=self.post_rating_transformers,
+                                                               estimator_features=self._estimator_features)
         return cross_validator.cross_validation_score(validation_df=validation_df)
 
     def generate_cross_validate_df(self,
@@ -216,28 +118,40 @@ class Pipeline():
                                    matches: Optional[list[Match]] = None,
                                    create_performance: bool = True,
                                    create_rating_features: bool = True) -> pd.DataFrame:
+
+        if self.predictor.target not in df.columns:
+            raise ValueError(f"Target {self.predictor.target } not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
+
         if create_performance:
-            df = self._add_performance(df=df, matches=None)
+            df = self._add_performance(df=df)
         if create_rating_features:
-            df = self._add_rating_and_post_rating(matches=matches, df=df, store_ratings=False)
+            df = self._add_rating(matches=matches, df=df, store_ratings=False)
 
-        return cross_validator.generate_validation_df(df=df, predictor=self.predictor)
+        return cross_validator.generate_validation_df(df=df, predictor=self.predictor,
+                                                      post_transformers=self.post_rating_transformers,
+                                                      estimator_features=self._estimator_features)
 
-    def generate_historical(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
-                            store_ratings: bool = True) -> pd.DataFrame:
+    def train(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
+              store_ratings: bool = True) -> pd.DataFrame:
+
+        if self.predictor.target not in df.columns:
+            raise ValueError(f"Target {self.predictor.target } not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
+
         ori_cols = df.columns.tolist()
-        df = self._add_performance(df=df, matches=matches)
-        df = self._add_rating_and_post_rating(matches=matches, df=df, store_ratings=store_ratings)
+        df = self._add_performance(df=df)
+        df = self._add_rating(matches=matches, df=df, store_ratings=store_ratings)
 
-        self.predictor.train(df)
+        for post_rating_transformer in self.post_rating_transformers:
+            df = post_rating_transformer.fit_transform(df)
+
+        self.predictor.train(df, estimator_features=self._estimator_features)
         df = self.predictor.add_prediction(df)
         if not self.keep_features:
             df = df[ori_cols + [self.predictor.pred_column]]
 
         return df
 
-    def _add_performance(self, df: pd.DataFrame,
-                         matches: Optional[Union[list[Match], list[list[Match]]]]) -> pd.DataFrame:
+    def _add_performance(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
 
         if self.predictor.pred_column in df.columns:
@@ -254,7 +168,7 @@ class Pipeline():
 
         return df
 
-    def _add_rating_and_post_rating(self, matches: Optional[list[Match]], df: pd.DataFrame, store_ratings: bool = True):
+    def _add_rating(self, matches: Optional[list[Match]], df: pd.DataFrame, store_ratings: bool = True):
 
         if matches:
             if isinstance(matches[0], Match):
@@ -280,9 +194,6 @@ class Pipeline():
                 else:
                     rating_feature_str = rating_feature
                 df[rating_feature_str] = values
-
-        for post_rating_transformer in self.post_rating_transformers:
-            df = post_rating_transformer.fit_transform(df)
 
         return df
 

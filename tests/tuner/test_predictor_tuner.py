@@ -3,10 +3,11 @@ from unittest import mock
 import pandas as pd
 from deepdiff import DeepDiff
 
+from player_performance_ratings import PipelineFactory
 from player_performance_ratings.predictor import Predictor
 from sklearn.linear_model import LogisticRegression
 
-from player_performance_ratings.tuner.match_predictor_factory import PipelineFactory
+
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 from player_performance_ratings.tuner.utils import ParameterSearchRange
 
@@ -24,9 +25,8 @@ def test_predictor_tuner():
         }
     )
 
-    match_predictor_factory = PipelineFactory(
-        predictor=Predictor(estimator=LogisticRegression(), features=["rating_difference"], target="__target"),
-        match_id_column_name="game_id",
+    predictor_factory = PipelineFactory(
+        predictor=Predictor(estimator=LogisticRegression(), estimator_features=["rating_difference"], target="__target"),
     )
 
     search_ranges = [
@@ -42,13 +42,13 @@ def test_predictor_tuner():
     cross_validator = mock.Mock()
     cross_validator.cross_validation_score.side_effect = [0.5, 0.3]
     best_predictor = predictor_tuner.tune(df=df, cross_validator=cross_validator,
-                                          pipeline_factory=match_predictor_factory)
+                                          pipeline_factory=predictor_factory)
 
-    expected_best_predictor = Predictor(estimator=LogisticRegression(C=0.5), features=["rating_difference"],
+    expected_best_predictor = Predictor(estimator=LogisticRegression(C=0.5), estimator_features=["rating_difference"],
                                         target="__target")
 
     diff = DeepDiff(best_predictor.estimator, expected_best_predictor.estimator)
     assert diff == {}
 
-    assert expected_best_predictor.features == best_predictor.features
+    assert expected_best_predictor.estimator_features == best_predictor.estimator_features
     assert expected_best_predictor.target == best_predictor.target

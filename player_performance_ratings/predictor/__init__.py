@@ -1,3 +1,3 @@
 from ._base import BaseMLWrapper
-from .estimator import Predictor, GameTeamPredictor
-from .sklearn_models import SkLearnWrapper, OrdinalMultiModelClassifier
+from .predictor import Predictor, GameTeamPredictor
+from .sklearn_models import SkLearnWrapper, OrdinalClassifier
