@@ -162,7 +162,7 @@ class MinMaxTransformer(BaseTransformer):
                     mean_value = df[self.prefix + feature].mean()
 
                     self._mean_aligning_iterations += 1
-                if self._mean_aligning_iterations > self.max_iterations:
+                if self._mean_aligning_iterations > self.max_iterations and abs(0.5 - mean_value) > self.allowed_mean_diff :
                     raise ValueError(
                         f"MinMaxTransformer: {feature} mean value is {mean_value} after {self._mean_aligning_iterations} repetitions."
                         f"This is above the allowed mean difference of {self.allowed_mean_diff}."

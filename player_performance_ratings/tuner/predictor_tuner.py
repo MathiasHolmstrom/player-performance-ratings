@@ -7,11 +7,14 @@ import pandas as pd
 import pendulum
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
+from player_performance_ratings.transformation.base_transformer import BasePostTransformer
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings import PipelineFactory
 
 from player_performance_ratings.predictor import BaseMLWrapper
+from player_performance_ratings.ratings import PerformancesGenerator
+from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
 from player_performance_ratings.tuner.utils import ParameterSearchRange, add_params_from_search_range
 
@@ -34,7 +37,10 @@ class PredictorTuner():
 
 
     def tune(self, df: pd.DataFrame,
-             pipeline_factory: PipelineFactory, cross_validator: CrossValidator) -> BaseMLWrapper:
+             pipeline_factory: PipelineFactory,
+             cross_validator: CrossValidator,
+             best_post_rating_transformers: Optional[list[BasePostTransformer]] = None,
+             ) -> BaseMLWrapper:
 
         deepest_estimator =pipeline_factory.predictor.estimator
         estimator_subclass_level = 0
@@ -93,7 +99,7 @@ class PredictorTuner():
                 else:
                     setattr(predictor.estimator, param, params[param])
 
-            pipeline = pipeline_factory.create(predictor=predictor)
+            pipeline = pipeline_factory.create(predictor=predictor, post_rating_transformers=best_post_rating_transformers)
             return pipeline.cross_validate_score(df=df, create_performance=False, create_rating_features=False,
                                                                  cross_validator=cross_validator)
 

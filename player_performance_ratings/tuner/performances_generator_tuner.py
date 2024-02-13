@@ -42,6 +42,9 @@ class PerformancesGeneratorTuner:
              pipeline_factory: PipelineFactory,
              ) -> PerformancesGenerator:
 
+        if pipeline_factory.performances_generator is None:
+            raise ValueError("pipeline_factory.performances_generator is None. Please provide a performances_generator.")
+
         df = df.copy()
 
         column_names = [r.column_names for r in pipeline_factory.rating_generators]

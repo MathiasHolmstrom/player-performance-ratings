@@ -26,6 +26,7 @@ class UpdateRatingGenerator(RatingGenerator):
                  match_rating_generator: MatchRatingGenerator = MatchRatingGenerator(),
                  estimator_features_out: Optional[list[RatingEstimatorFeatures]] = None,
                  historical_features_out: Optional[list[RatingHistoricalFeatures]] = None,
+                 estimator_features_pass_through: Optional[list[RatingEstimatorFeatures]] = None,
                  distinct_positions: Optional[list[str]] = None,
                  ):
 
@@ -40,6 +41,7 @@ class UpdateRatingGenerator(RatingGenerator):
         super().__init__(column_names=column_names)
         self.team_rating_generator = match_rating_generator
         self.distinct_positions = distinct_positions
+        self._estimator_features_pass_through = estimator_features_pass_through or []
 
         self._estimator_features_out = estimator_features_out if estimator_features_out is not None else [
             RatingEstimatorFeatures.RATING_MEAN_PROJECTED] if isinstance(match_rating_generator.performance_predictor,
@@ -208,7 +210,7 @@ class UpdateRatingGenerator(RatingGenerator):
                 [self.column_names.team_id, self.column_names.player_id, self.column_names.match_id]].assign(
                 **potential_feature_values)
 
-        return {f: potential_feature_values[f] for f in self._estimator_features_out + self._historical_features_out}
+        return {f: potential_feature_values[f] for f in self.estimator_features_return + self._historical_features_out}
 
     def generate_future(self, matches: Optional[list[Match]] = None, df: Optional[pd.DataFrame] = None) -> dict[Union[
                                                                                                                     RatingEstimatorFeatures, RatingHistoricalFeatures], list[float]]:
@@ -295,7 +297,7 @@ class UpdateRatingGenerator(RatingGenerator):
             team_leagues=team_leagues,
         )
 
-        return {f: potential_feature_values[f] for f in self._estimator_features_out + self._historical_features_out}
+        return {f: potential_feature_values[f] for f in self.estimator_features_return + self._historical_features_out}
 
     def _get_shared_rating_values(self,
                                   position_rating_difference_values: dict[str, list[float]],
@@ -462,3 +464,9 @@ class UpdateRatingGenerator(RatingGenerator):
     @property
     def features_out(self) -> list[Union[RatingEstimatorFeatures, RatingHistoricalFeatures]]:
         return self._estimator_features_out + self._historical_features_out
+
+    @property
+    def estimator_features_return(self) -> list[RatingEstimatorFeatures]:
+        if self._estimator_features_pass_through:
+            return list(set(self._estimator_features_pass_through + self.estimator_features_out))
+        return self.estimator_features_out

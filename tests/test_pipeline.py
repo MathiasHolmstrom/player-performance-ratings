@@ -1,7 +1,7 @@
 import mock
 import pandas as pd
 from player_performance_ratings.ratings import BayesianTimeWeightedRating, \
-    RatingEstimatorFeatures, convert_df_to_matches, ColumnWeight, UpdateRatingGenerator
+    RatingEstimatorFeatures, convert_df_to_matches, ColumnWeight, UpdateRatingGenerator, PerformancesGenerator
 
 from player_performance_ratings.transformation import LagTransformer
 
@@ -31,6 +31,7 @@ def test_match_predictor_auto_pre_transformers():
     predictor_mock = mock.Mock()
     predictor_mock.target = "__target"
     predictor_mock.pred_column = 'prediction'
+    predictor_mock._estimator_features = [RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]
     predictor_mock.add_prediction.return_value = expected_df
     rating_generators = UpdateRatingGenerator(estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED],
                                               column_names=ColumnNames(
@@ -42,9 +43,9 @@ def test_match_predictor_auto_pre_transformers():
                                                         ))
 
     pipeline = Pipeline(
-        column_weights=column_weights,
         predictor=predictor_mock,
         rating_generators=rating_generators,
+        performances_generator=PerformancesGenerator(column_weights=column_weights, column_names=rating_generators.column_names)
     )
 
     new_df = pipeline.train(df=df)
@@ -73,11 +74,6 @@ def test_match_predictor_multiple_rating_generators_same_performance():
         performance="performance"
     )
 
-    column_weights = [
-        ColumnWeight(name="kills", weight=0.6),
-        ColumnWeight(name="deaths", weight=0.4, lower_is_better=True)
-    ]
-
     df = df.sort_values(
         by=[column_names1.start_date, column_names1.match_id,
             column_names1.team_id, column_names1.player_id])
@@ -89,15 +85,16 @@ def test_match_predictor_multiple_rating_generators_same_performance():
     predictor_mock.target = "__target"
     predictor_mock.add_prediction.return_value = expected_df
     predictor_mock.pred_column = 'prediction'
+    predictor_mock._estimator_features = [RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]
 
     match_predictor = Pipeline(
-        column_weights=column_weights,
         rating_generators=[
             UpdateRatingGenerator(estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED],
                                   column_names=column_names1),
             BayesianTimeWeightedRating(column_names=column_names1)],
         post_rating_transformers=[],
         predictor=predictor_mock,
+
     )
 
     new_df = match_predictor.train(df=df)
@@ -142,10 +139,7 @@ def test_match_predictor_multiple_rating_generators_difference_performance():
         performance="performance2"
     )
 
-    column_weights = [
-        ColumnWeight(name="kills", weight=0.6),
-        ColumnWeight(name="deaths", weight=0.4, lower_is_better=True)
-    ]
+
 
     df = df.sort_values(
         by=[column_names1.start_date, column_names1.match_id,
@@ -158,9 +152,9 @@ def test_match_predictor_multiple_rating_generators_difference_performance():
     predictor_mock.target = "__target"
     predictor_mock.pred_column = 'prediction'
     predictor_mock.add_prediction.return_value = expected_df
+    predictor_mock._estimator_features = [RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]
 
     match_predictor = Pipeline(
-        column_weights=column_weights,
         rating_generators=[UpdateRatingGenerator(estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED],
                                                  column_names=column_names1),
                            UpdateRatingGenerator(column_names=column_names2)],
@@ -212,6 +206,7 @@ def test_match_predictor_0_rating_generators():
     predictor_mock.target = "__target"
     predictor_mock.pred_column = 'prediction'
     predictor_mock.add_prediction.return_value = expected_df
+    predictor_mock._estimator_features = [RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]
 
     column_names = ColumnNames(
         match_id="game_id",
@@ -225,7 +220,6 @@ def test_match_predictor_0_rating_generators():
                                      prefix='lag_', column_names=column_names)
 
     pipeline = Pipeline(
-        column_weights=column_weights,
         rating_generators=[],
         post_rating_transformers=[
             lag_transformer],
@@ -265,8 +259,9 @@ def test_match_predictor_generate_and_predict():
         }
     )
 
-    expected_future_dfdf = future_df.copy()
-    expected_future_dfdf["prediction"] = [0.5, 0.5, 0.5, 0.5]
+    expected_future_df = future_df.copy()
+    expected_future_df["prediction"] = [0.5, 0.5, 0.5, 0.5]
+
 
     column_weights = [
         ColumnWeight(name="kills", weight=0.6),
@@ -279,7 +274,10 @@ def test_match_predictor_generate_and_predict():
     predictor_mock = mock.Mock()
     predictor_mock.target = "__target"
     predictor_mock.pred_column = 'prediction'
-    predictor_mock.add_prediction.side_effect = [historical_df_mock_return_with_prediction, expected_future_dfdf]
+    predictor_mock.add_prediction.side_effect = [historical_df_mock_return_with_prediction, expected_future_df]
+    predictor_mock._estimator_features = [RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]
+
+
 
     column_names = ColumnNames(
         match_id="game_id",
@@ -292,13 +290,13 @@ def test_match_predictor_generate_and_predict():
                                              column_names=column_names)
 
     pipeline = Pipeline(
-        column_weights=column_weights,
+        performances_generator=PerformancesGenerator(column_weights=column_weights, column_names=column_names),
         predictor=predictor_mock,
         rating_generators=rating_generator)
 
     _ = pipeline.train(df=historical_df)
     new_df = pipeline.predict(future_df)
 
-    pd.testing.assert_frame_equal(new_df, expected_future_dfdf, check_like=True)
+    pd.testing.assert_frame_equal(new_df, expected_future_df, check_like=True)
 
     assert len(pipeline.performances_generator.pre_transformations) > 0

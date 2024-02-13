@@ -4,7 +4,7 @@ import mock
 import pandas as pd
 from player_performance_ratings.predictor import Predictor
 
-from player_performance_ratings import ColumnNames, PredictColumnNames, Pipeline, PipelineFactory
+from player_performance_ratings import ColumnNames, PredictColumnNames, PipelineFactory
 from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
 from player_performance_ratings.ratings import RatingEstimatorFeatures, UpdateRatingGenerator
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
@@ -104,13 +104,13 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
         performance="won"
     )
 
-    rating_generator1 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchRatingGenerator(
+    rating_generator1 = UpdateRatingGenerator(match_rating_generator=MatchRatingGenerator(
         confidence_weight=0.5,
         performance_predictor=RatingDifferencePerformancePredictor(
             max_predict_value=0.3
         )
     ), column_names=column_names)
-    rating_generator2 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchRatingGenerator(
+    rating_generator2 = UpdateRatingGenerator(match_rating_generator=MatchRatingGenerator(
         confidence_weight=0.4,
         performance_predictor=RatingDifferencePerformancePredictor(
             max_predict_value=0.4
@@ -121,13 +121,10 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
 
     match_predictor_factory = PipelineFactory(
         rating_generators=rating_generators,
-
         predictor=Predictor(
-            features=[f"{RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED}0", f"{RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED}1"],
+            estimator_features=[f"{RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED}0", f"{RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED}1"],
             target=PredictColumnNames.TARGET
-        ),
-        match_id_column_name="game_id"
-    )
+        ),    )
 
     rating_generator_tuner = UpdateRatingGeneratorTuner(
         start_rating_n_trials=0,
@@ -193,7 +190,7 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
         performance="won"
     )
 
-    rating_generator1 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchRatingGenerator(
+    rating_generator1 = UpdateRatingGenerator(match_rating_generator=MatchRatingGenerator(
         confidence_weight=0.5,
         start_rating_generator=StartRatingGenerator(
             team_weight=0.5
@@ -201,7 +198,7 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
     ),
         column_names=column_names
     )
-    rating_generator2 = OpponentAdjustedRatingGenerator(match_rating_generator=MatchRatingGenerator(
+    rating_generator2 = UpdateRatingGenerator(match_rating_generator=MatchRatingGenerator(
         confidence_weight=0.4,
         start_rating_generator=StartRatingGenerator(
             team_weight=0.4
@@ -213,10 +210,9 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
     match_predictor_factory = PipelineFactory(
         rating_generators=rating_generators,
         predictor=Predictor(
-            features=[f"{RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED}0", f"{RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED}1"],
+            estimator_features=[f"{RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED}0", f"{RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED}1"],
             target=PredictColumnNames.TARGET
         ),
-        match_id_column_name="game_id"
     )
 
     rating_generator_tuner = UpdateRatingGeneratorTuner(
@@ -239,7 +235,6 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
 
     matches = convert_df_to_matches(df=df, column_names=column_names)
 
-    scorer = mock.Mock()
     cross_validator = mock.Mock()
     cross_validator.cross_validation_score.side_effect = [0.5, 0.3, 0.5, 0.3]
 

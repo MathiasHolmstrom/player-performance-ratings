@@ -27,7 +27,7 @@ class MatchRatingGenerator():
                  confidence_max_sum: float = 150,
                  confidence_weight: float = 0.9,
                  min_rating_change_multiplier_ratio: float = 0.1,
-                 league_rating_change_update_threshold: int = 100,
+                 league_rating_change_update_threshold: float = 100,
                  league_rating_adjustor_multiplier: float = 0.05,
                  team_id_change_confidence_sum_decrease: float = 3
                  ):

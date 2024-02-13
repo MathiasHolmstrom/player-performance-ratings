@@ -20,12 +20,10 @@ class PipelineFactory():
                  post_rating_transformers: Optional[List[BasePostTransformer]] = None,
                  ):
 
-        if rating_generators and performances_generator is None:
-            raise ValueError("If rating_generators is used, performances_generator must be specified")
         self.post_rating_transformers = post_rating_transformers or []
 
 
-        self.rating_generators = rating_generators
+        self.rating_generators = rating_generators or []
         if isinstance(self.rating_generators, RatingGenerator):
             self.rating_generators = [self.rating_generators]
 

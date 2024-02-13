@@ -9,6 +9,7 @@ from player_performance_ratings.transformation.pre_transformers import GroupByTr
 def test_min_max_transformer():
     pass
 
+
 def test_sklearn_transformer_wrapper_one_hot_encoder():
     sklearn_transformer = OneHotEncoder(handle_unknown='ignore')
 
@@ -166,7 +167,7 @@ def test_symmetric_distribution_transformer_with_granularity_fit_transform():
     })
 
     transformer = SymmetricDistributionTransformer(features=["performance"], granularity=["position"],
-                                                   max_iterations=40)
+                                                   max_iterations=40, prefix="")
     transformed_df = transformer.fit_transform(df)
-    assert abs(df.loc[lambda x: x.position == 'SG']["performance"].skew()) > transformer.skewness_allowed
+    assert abs(df[lambda x: x.position == 'SG']["performance"].skew()) > transformer.skewness_allowed
     assert abs(transformed_df.loc[lambda x: x.position == 'SG']["performance"].skew()) < transformer.skewness_allowed
