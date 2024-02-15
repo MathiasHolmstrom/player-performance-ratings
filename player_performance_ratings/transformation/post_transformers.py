@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.predictor import Predictor, BaseMLWrapper
+from player_performance_ratings.predictor import Predictor, BasePredictor
 from player_performance_ratings.transformation.base_transformer import DifferentGranularityTransformer, \
     BasePostTransformer
 from player_performance_ratings.utils import validate_sorting
@@ -26,9 +26,21 @@ def create_output_column_by_game_group(data: pd.DataFrame, feature_name: str,
     return data
 
 
+def add_opponent_features(df: pd.DataFrame, column_names: ColumnNames, features: list[str]) -> pd.DataFrame:
+    team_features = df.groupby([column_names.team_id, column_names.rating_update_match_id])[
+        features].mean().reset_index()
+    df_opponent_feature = team_features.rename(
+        columns={**{column_names.team_id: 'opponent_team_id'},
+                 **{f: f"{f}_opponent" for f in features}}
+    )
+    df = df.merge(df_opponent_feature, on=[column_names.match_id], suffixes=('', '_team_sum'))
+    return df[df[column_names.team_id] != df['opponent_team_id']].drop(
+        columns=['opponent_team_id'])
+
+
 class PredictorTransformer(BasePostTransformer):
 
-    def __init__(self, predictor: BaseMLWrapper, features: list[str] = None):
+    def __init__(self, predictor: BasePredictor, features: list[str] = None):
         self.predictor = predictor
         super().__init__(features=features)
 
@@ -48,7 +60,7 @@ class PredictorTransformer(BasePostTransformer):
 class RatioTeamPredictorTransformer(BasePostTransformer):
     def __init__(self,
                  features: list[str],
-                 predictor: BaseMLWrapper,
+                 predictor: BasePredictor,
                  game_id: str,
                  team_id: str,
                  team_total_prediction_column: Optional[str] = None,
@@ -232,6 +244,7 @@ class LagTransformer(BasePostTransformer):
                  days_between_lags: Optional[list[int]] = None,
                  prefix: str = 'lag_',
                  future_lag: bool = False,
+                 add_opponent: bool = False,
                  ):
 
         """
@@ -265,14 +278,20 @@ class LagTransformer(BasePostTransformer):
         self.days_between_lags = days_between_lags or []
         self.prefix = prefix
         self.future_lag = future_lag
+        self.add_opponent = add_opponent
         self._features_out = []
         self._df = None
+
         for feature_name in self.features:
             for lag in range(1, self.lag_length + 1):
                 self._features_out.append(f'{self.prefix}{lag}_{feature_name}')
+                if self.add_opponent:
+                    self._features_out.append(f'{self.prefix}{lag}_{feature_name}_opponent')
 
         for days_lag in self.days_between_lags:
             self._features_out.append(f'{self.prefix}{days_lag}_days_ago')
+            if self.add_opponent:
+                self._features_out.append(f'{self.prefix}{days_lag}_days_ago_opponent')
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.assign(**{self.column_names.player_id: lambda x: x[self.column_names.player_id].astype('str')})
@@ -367,9 +386,23 @@ class LagTransformer(BasePostTransformer):
                     grouped = grouped.assign(
                         **{output_column_name: grouped.groupby(self.granularity)[feature_name].shift(lag)})
 
+        feats = []
+        if self.add_opponent:
+            feats = []
+            for feature_name in self.features:
+                for lag in range(1, self.lag_length + 1):
+                    feats.append(f'{self.prefix}{lag}_{feature_name}_opponent')
+
+            for days_lag in self.days_between_lags:
+                feats.append(f'{self.prefix}{days_lag}_days_ago_opponent')
+
+        feats_out = [f for f in self.features_out if f not in feats]
+
         all_df = all_df.merge(
-            grouped[self.granularity + [self.column_names.rating_update_match_id, *self.features_out]],
+            grouped[self.granularity + [self.column_names.rating_update_match_id, *feats_out]],
             on=self.granularity + [self.column_names.rating_update_match_id], how='left')
+
+        all_df = add_opponent_features(df=all_df, column_names=self.column_names, features=feats_out)
 
         df = df.assign(
             __id=df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id,
@@ -621,6 +654,7 @@ class RollingMeanDaysTransformer(BasePostTransformer):
                  column_names: ColumnNames,
                  granularity: Union[list[str], str] = None,
                  add_count: bool = False,
+                 add_opponent: bool = False,
                  prefix: str = 'rolling_mean_days_'):
         super().__init__(features=features)
         self.features = features
@@ -630,6 +664,7 @@ class RollingMeanDaysTransformer(BasePostTransformer):
         self.column_names = column_names
         self.granularity = granularity or [self.column_names.player_id]
         self.add_count = add_count
+        self.add_opponent = add_opponent
         self.prefix = prefix
         self._features_out = []
         self._df = None
@@ -637,8 +672,14 @@ class RollingMeanDaysTransformer(BasePostTransformer):
         for day in self.days:
             for feature_name in self.features:
                 self._features_out.append(f'{self.prefix}{day}_{feature_name}')
+                if self.add_opponent:
+                    self._features_out.append(f'{self.prefix}{day}_{feature_name}_opponent')
+
             if self.add_count:
                 self._features_out.append(f'{self.prefix}{day}_count')
+
+                if self.add_opponent:
+                    self._features_out.append(f'{self.prefix}{day}_count_opponent')
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
@@ -665,6 +706,7 @@ class RollingMeanDaysTransformer(BasePostTransformer):
         return transformed_df
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+
         if self._df is None:
             raise ValueError("fit_transform needs to be called before transform")
 
@@ -691,40 +733,22 @@ class RollingMeanDaysTransformer(BasePostTransformer):
                 all_df = all_df.assign(
                     **{feature_name: all_df[feature_name] * all_df[self.column_names.participation_weight]})
 
-
         all_df[self.column_names.start_date] = pd.to_datetime(all_df[self.column_names.start_date]).dt.date
 
         for day in self.days:
+            prefix_day = f'{self.prefix}{day}'
+            all_df = self._add_rolling_feature(all_df=all_df, day=day, granularity=self.granularity,
+                                               prefix_day=prefix_day)
 
-            df1 = (all_df
-                   .groupby([self.column_names.start_date, *self.granularity])[self.features]
-                   .agg(['sum', 'size'])
-                   .unstack()
-                   .asfreq('d', fill_value=np.nan)
-                   .rolling(window=day, min_periods=1)
-                   .sum()
-                   .shift()
-                   .stack()
-                   )
+        if self.add_opponent:
             feats = []
-            for feature_name in self.features:
-                feats.append(f'{self.prefix}{day}_{feature_name}_sum')
-                feats.append(f'{self.prefix}{day}_{feature_name}_count')
+            for day in self.days:
+                for feature_name in self.features:
+                    feats.append(f'{self.prefix}{day}_{feature_name}')
+                if self.add_count:
+                    feats.append(f'{self.prefix}{day}_count')
 
-            df1.columns = feats
-            for feature_name in self.features:
-                df1[f'{self.prefix}{day}_{feature_name}'] = df1[f'{self.prefix}{day}_{feature_name}_sum'] / df1[
-                    f'{self.prefix}{day}_{feature_name}_count']
-
-            if self.add_count:
-                df1[f'{self.prefix}{day}_count'] = df1[f'{self.prefix}{day}_{self.features[0]}_count']
-                df1 = df1.drop(columns=[f'{self.prefix}{day}_{feature_name}_count' for feature_name in self.features])
-
-            all_df[self.column_names.start_date] = pd.to_datetime(all_df[self.column_names.start_date])
-            all_df = all_df.join(df1[[c for c in df1.columns if c in self.features_out]],
-                                 on=[self.column_names.start_date, *self.granularity])
-            if self.add_count:
-                all_df[f'{self.prefix}{day}_count'] = all_df[f'{self.prefix}{day}_count'].fillna(0)
+            all_df = add_opponent_features(df=all_df, column_names=self.column_names, features=feats)
 
         all_df = all_df.sort_values(by=[self.column_names.start_date, self.column_names.match_id,
                                         self.column_names.team_id, self.column_names.player_id])
@@ -735,6 +759,39 @@ class RollingMeanDaysTransformer(BasePostTransformer):
         transformed_df = all_df[all_df['__id'].isin(df['__id'].unique().tolist())][ori_cols + self._features_out]
         transformed_df.index = ori_index_values
         return transformed_df[list(set(ori_cols + self._features_out))].drop(columns=['__id'])
+
+    def _add_rolling_feature(self, all_df: pd.DataFrame, day: int, granularity: list[str], prefix_day: str):
+        df1 = (all_df
+               .groupby([self.column_names.start_date, *granularity])[self.features]
+               .agg(['sum', 'size'])
+               .unstack()
+               .asfreq('d', fill_value=np.nan)
+               .rolling(window=day, min_periods=1)
+               .sum()
+               .shift()
+               .stack()
+               )
+        feats = []
+        for feature_name in self.features:
+            feats.append(f'{prefix_day}_{feature_name}_sum')
+            feats.append(f'{prefix_day}_{feature_name}_count')
+
+        df1.columns = feats
+        for feature_name in self.features:
+            df1[f'{prefix_day}_{feature_name}'] = df1[f'{prefix_day}_{feature_name}_sum'] / df1[
+                f'{prefix_day}_{feature_name}_count']
+
+        if self.add_count:
+            df1[f'{prefix_day}_count'] = df1[f'{prefix_day}_{self.features[0]}_count']
+            df1 = df1.drop(columns=[f'{prefix_day}_{feature_name}_count' for feature_name in self.features])
+
+        all_df[self.column_names.start_date] = pd.to_datetime(all_df[self.column_names.start_date])
+        all_df = all_df.join(df1[[c for c in df1.columns if c in self.features_out]],
+                             on=[self.column_names.start_date, *granularity])
+        if self.add_count:
+            all_df[f'{prefix_day}_count'] = all_df[f'{prefix_day}_count'].fillna(0)
+
+        return all_df
 
     @property
     def features_out(self) -> list[str]:

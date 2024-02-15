@@ -6,7 +6,7 @@ from player_performance_ratings.scorer.score import BaseScorer
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 from player_performance_ratings.cross_validator._base import CrossValidator
-from player_performance_ratings.predictor import BaseMLWrapper
+from player_performance_ratings.predictor import BasePredictor
 
 
 
@@ -25,7 +25,7 @@ class MatchCountCrossValidator(CrossValidator):
     def generate_validation_df(self,
                                df: pd.DataFrame,
                                post_transformers: list[BaseTransformer],
-                               predictor: BaseMLWrapper,
+                               predictor: BasePredictor,
                                estimator_features: list[str]) -> pd.DataFrame:
         validation_dfs = []
         df = df.assign(__cv_match_number=pd.factorize(df[self.match_id_column_name])[0])
@@ -71,7 +71,7 @@ class MatchKFoldCrossValidator(CrossValidator):
 
     def generate_validation_df(self,
                                df: pd.DataFrame,
-                               predictor: BaseMLWrapper,
+                               predictor: BasePredictor,
                                estimator_features: Optional[list[str]] = None,
                                post_transformers: Optional[list[BaseTransformer]] = None,
                                ) -> pd.DataFrame:

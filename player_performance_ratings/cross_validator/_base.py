@@ -5,7 +5,7 @@ import pandas as pd
 from player_performance_ratings.scorer.score import BaseScorer
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
-from player_performance_ratings.predictor import BaseMLWrapper
+from player_performance_ratings.predictor import BasePredictor
 
 
 
@@ -19,7 +19,7 @@ class CrossValidator(ABC):
     def generate_validation_df(self,
                                df: pd.DataFrame,
                                post_transformers: list[BaseTransformer],
-                               predictor: BaseMLWrapper,
+                               predictor: BasePredictor,
                                estimator_features: list[str],
                                ) -> pd.DataFrame:
         pass

@@ -6,7 +6,7 @@ from typing import Optional, List, Union
 from player_performance_ratings import Pipeline
 from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
 
-from player_performance_ratings.predictor import BaseMLWrapper
+from player_performance_ratings.predictor import BasePredictor
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.transformation.base_transformer import BaseTransformer, BasePostTransformer
 
@@ -14,7 +14,7 @@ from player_performance_ratings.transformation.base_transformer import BaseTrans
 class PipelineFactory():
 
     def __init__(self,
-                 predictor: BaseMLWrapper,
+                 predictor: BasePredictor,
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
                  post_rating_transformers: Optional[List[BasePostTransformer]] = None,
@@ -35,7 +35,7 @@ class PipelineFactory():
                performances_generator: Optional[PerformancesGenerator] = None,
                rating_generators: Optional[list[RatingGenerator]] = None,
                post_rating_transformers: Optional[List[BaseTransformer]] = None,
-               predictor: Optional[BaseMLWrapper] = None,
+               predictor: Optional[BasePredictor] = None,
                ) -> Pipeline:
 
         rating_generators = rating_generators if rating_generators is not None else [copy.deepcopy(r) for r in self.rating_generators]

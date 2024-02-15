@@ -12,7 +12,7 @@ from player_performance_ratings.transformation.base_transformer import BasePostT
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings import PipelineFactory
 
-from player_performance_ratings.predictor import BaseMLWrapper
+from player_performance_ratings.predictor import BasePredictor
 from player_performance_ratings.ratings import PerformancesGenerator
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
@@ -40,7 +40,7 @@ class PredictorTuner():
              pipeline_factory: PipelineFactory,
              cross_validator: CrossValidator,
              best_post_rating_transformers: Optional[list[BasePostTransformer]] = None,
-             ) -> BaseMLWrapper:
+             ) -> BasePredictor:
 
         deepest_estimator =pipeline_factory.predictor.estimator
         estimator_subclass_level = 0

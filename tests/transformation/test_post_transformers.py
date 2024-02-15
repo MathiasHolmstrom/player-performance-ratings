@@ -560,7 +560,6 @@ def test_rolling_mean_days_fit_transform(column_names):
     pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
-
 def test_rolling_mean_days_fit_transform_40_days(column_names):
     df = pd.DataFrame(
         {
@@ -596,3 +595,41 @@ def test_rolling_mean_days_fit_transform_40_days(column_names):
     expected_df['player'] = expected_df['player'].astype('str')
     pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
+
+def test_rolling_mean_days_fit_transform_opponent(column_names):
+    df = pd.DataFrame(
+        {
+            'player': ['a', 'b', "c", "d", 'a', 'b', "c", "d"],
+            "game": [1, 1, 1, 1, 2, 2, 2, 2],
+            'points': [1, 1.5, 2, 3, 2, 4, 1, 2],
+            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"),
+                           pd.to_datetime("2023-01-01"),
+                           pd.to_datetime("2023-01-01"),
+                           pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-02"),
+                           pd.to_datetime("2023-01-02"),
+                           pd.to_datetime("2023-01-02"),],
+            "team": [1, 1, 2, 2, 1, 1, 2, 2],
+        }
+    )
+
+    original_df = df.copy()
+
+    rolling_mean_transformation = RollingMeanDaysTransformer(
+        features=['points'],
+        days=10,
+        granularity=['player'],
+        column_names=column_names,
+        add_opponent=True
+    )
+
+    transformed_df = rolling_mean_transformation.fit_transform(df)
+
+    expected_df = original_df.assign(**{
+        rolling_mean_transformation.features_out[0]: [None, None, None, None, 1, 1.5, 2, 3],
+        rolling_mean_transformation.features_out[1]: [None, None, None, None, 2.5, 2.5, 1.25, 1.25],
+    })
+
+    expected_df['team'] = expected_df['team'].astype('str')
+    expected_df['game'] = expected_df['game'].astype('str')
+    expected_df['player'] = expected_df['player'].astype('str')
+    pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)

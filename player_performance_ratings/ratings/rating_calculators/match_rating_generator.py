@@ -276,7 +276,6 @@ class MatchRatingGenerator():
                 pre_match_rating_value=pre_player_rating.rating_value
             )
             player_rating_changes.append(player_rating_change)
-            # print(day_number, player_rating_change.id, player_rating_change.rating_change_value)
             sum_predicted_performance += player_rating_change.predicted_performance * pre_player_rating.match_performance.participation_weight
             sum_performance_value += pre_player_rating.match_performance.performance_value * pre_player_rating.match_performance.participation_weight
             sum_rating_change += player_rating_change.rating_change_value * pre_player_rating.match_performance.participation_weight

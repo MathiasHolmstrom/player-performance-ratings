@@ -23,7 +23,7 @@ class PredictorTransformer(ABC):
         pass
 
 
-class BaseMLWrapper(ABC):
+class BasePredictor(ABC):
 
     def __init__(self,
                  estimator,

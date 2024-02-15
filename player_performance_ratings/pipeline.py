@@ -6,7 +6,7 @@ from player_performance_ratings.cross_validator.cross_validator import CrossVali
 from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
 
 from player_performance_ratings.consts import PredictColumnNames
-from player_performance_ratings.predictor import BaseMLWrapper
+from player_performance_ratings.predictor import BasePredictor
 
 from player_performance_ratings.data_structures import Match
 from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
@@ -20,7 +20,7 @@ from player_performance_ratings.transformation.base_transformer import BasePostT
 class Pipeline():
 
     def __init__(self,
-                 predictor: BaseMLWrapper,
+                 predictor: BasePredictor,
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
                  post_rating_transformers: Optional[List[BasePostTransformer]] = None,
@@ -81,6 +81,7 @@ class Pipeline():
             for rating_feature in c.estimator_features_out:
                 if len(self.rating_generators) > 1:
                     rating_feature_str = rating_feature + str(rating_idx)
+
                 else:
                     rating_feature_str = rating_feature
                 if rating_feature_str not in self._estimator_features:
@@ -206,7 +207,7 @@ class Pipeline():
             matches = convert_df_to_matches(column_names=rating_column_names, df=df,
                                             league_identifier=LeagueIdentifier())
 
-            match_ratings = rating_generator.generate_future(matches, df=df)
+            match_ratings = rating_generator.generate_future(matches=matches, df=df)
             for rating_feature in rating_generator.features_out:
                 values = match_ratings[rating_feature]
 

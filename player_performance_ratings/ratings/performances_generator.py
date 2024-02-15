@@ -88,8 +88,11 @@ class PerformancesGenerator():
                  ):
         self.column_names = column_names if isinstance(column_names, list) else [column_names]
         self.column_weights = column_weights if isinstance(column_weights[0], list) else [column_weights]
-        if len(self.column_names) != len(self.column_weights):
-            raise ValueError("column_names and column_weights must be the same length, and both equal to the number of rating generators")
+        if len(self.column_names) > len(self.column_weights):
+            raise ValueError("There cannot be more column names items than column weights items")
+        elif len(self.column_names) < len(self.column_weights):
+            for _ in range(len(self.column_weights) - len(self.column_names)):
+                self.column_names.append(self.column_names[0])
         self.auto_transform_performance = auto_transform_performance
 
         self.pre_transformations = pre_transformations or []

@@ -16,10 +16,10 @@ from sklearn.linear_model import LogisticRegression
 from player_performance_ratings.consts import PredictColumnNames
 
 from player_performance_ratings.data_structures import ColumnNames
-from player_performance_ratings.predictor._base import BaseMLWrapper, PredictorTransformer
+from player_performance_ratings.predictor._base import BasePredictor, PredictorTransformer
 
 
-class GameTeamPredictor(BaseMLWrapper):
+class GameTeamPredictor(BasePredictor):
 
     def __init__(self,
                  game_id_colum: str,
@@ -65,6 +65,11 @@ class GameTeamPredictor(BaseMLWrapper):
             raise ValueError("estimator features must either be passed to .train() or injected into constructor")
 
         self._estimator_features = estimator_features or self._estimator_features
+
+        for feature in self._estimator_features:
+            if df[feature].dtype == 'category' and feature not in self.estimator_categorical_features:
+                self.estimator_categorical_features.append(feature)
+
         df = self.fit_transform_categorical_transformers(df=df)
 
         if len(df[self._target].unique()) > 2 and hasattr(self.estimator, "predict_proba"):
@@ -147,7 +152,7 @@ class GameTeamPredictor(BaseMLWrapper):
         return grouped
 
 
-class Predictor(BaseMLWrapper):
+class Predictor(BasePredictor):
 
     def __init__(self,
                  target: Optional[str] = PredictColumnNames.TARGET,
