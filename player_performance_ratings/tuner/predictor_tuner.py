@@ -13,8 +13,7 @@ from player_performance_ratings.cross_validator.cross_validator import CrossVali
 from player_performance_ratings import PipelineFactory
 
 from player_performance_ratings.predictor import BasePredictor
-from player_performance_ratings.ratings import PerformancesGenerator
-from player_performance_ratings.ratings.rating_generator import RatingGenerator
+
 
 from player_performance_ratings.tuner.utils import ParameterSearchRange, add_params_from_search_range
 
@@ -23,18 +22,12 @@ class PredictorTuner():
 
     def __init__(self,
                  search_ranges: list[ParameterSearchRange],
-                 date_column_name: str,
-                 train_split_date: Optional[pendulum.datetime] = None,
                  default_params: Optional[dict] = None,
                  n_trials: int = 30
                  ):
         self.search_ranges = search_ranges
-        self.date_column_name = date_column_name
-        self.train_split_date = train_split_date
         self.default_params = default_params or {}
         self.n_trials = n_trials
-
-
 
     def tune(self, df: pd.DataFrame,
              pipeline_factory: PipelineFactory,
@@ -42,15 +35,11 @@ class PredictorTuner():
              best_post_rating_transformers: Optional[list[BasePostTransformer]] = None,
              ) -> BasePredictor:
 
-        deepest_estimator =pipeline_factory.predictor.estimator
+        deepest_estimator = pipeline_factory.predictor.estimator
         estimator_subclass_level = 0
         while hasattr(deepest_estimator, "estimator"):
             deepest_estimator = deepest_estimator.estimator
             estimator_subclass_level += 1
-
-
-        if not self.train_split_date:
-            self.train_split_date = df.iloc[int(len(df) / 1.3)][self.date_column_name]
 
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
 
@@ -99,9 +88,10 @@ class PredictorTuner():
                 else:
                     setattr(predictor.estimator, param, params[param])
 
-            pipeline = pipeline_factory.create(predictor=predictor, post_rating_transformers=best_post_rating_transformers)
+            pipeline = pipeline_factory.create(predictor=predictor,
+                                               post_rating_transformers=best_post_rating_transformers)
             return pipeline.cross_validate_score(df=df, create_performance=False, create_rating_features=False,
-                                                                 cross_validator=cross_validator)
+                                                 cross_validator=cross_validator)
 
         direction = "minimize"
         study_name = "optuna_study"

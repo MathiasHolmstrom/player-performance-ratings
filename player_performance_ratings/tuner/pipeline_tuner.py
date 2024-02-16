@@ -3,6 +3,7 @@ import logging
 from typing import Optional, Union
 
 import pandas as pd
+from player_performance_ratings.tuner.utils import get_default_lgbm_classifier_search_range
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 
@@ -26,7 +27,7 @@ class PipelineTuner():
 
     def __init__(self,
                  pipeline: Pipeline,
-                 cross_validator: CrossValidator,
+                 cross_validator: Optional[CrossValidator] = None,
                  performances_generator_tuners: Optional[
                      Union[list[Optional[PerformancesGeneratorTuner]], PerformancesGeneratorTuner]] = None,
                  rating_generator_tuners: Optional[
@@ -76,12 +77,23 @@ class PipelineTuner():
                 self._pipeline_factory.rating_generators) and self.rating_generator_tuners:
             raise ValueError("Number of rating_generator_tuners must match number of rating_generators")
 
-        if not self.performances_generator_tuners and not self.rating_generator_tuners and not self.predictor_tuner:
-            raise ValueError("No tuning has been provided in config")
+
+        if not self.pipeline.rating_generators and not self.pipeline.performances_generator and not self.predictor_tuner:
+
+            if "LGBM" in self.pipeline.predictor.deepest_estimator.__class__.__name__:
+                self.predictor_tuner = PredictorTuner(search_ranges=get_default_lgbm_classifier_search_range())
+                logging.info("No tuning has been provided in config, using default LGBM search range")
+            else:
+                raise ValueError("No tuning has been provided in config")
+
+
 
         self.cross_validator = cross_validator
 
     def tune(self, df: pd.DataFrame) -> Pipeline:
+
+        if self.cross_validator is None:
+            self.cross_validator = self.pipeline.create_default_cross_validator(df)
 
         original_df = df.copy()
 

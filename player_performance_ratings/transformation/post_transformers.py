@@ -33,9 +33,13 @@ def add_opponent_features(df: pd.DataFrame, column_names: ColumnNames, features:
         columns={**{column_names.team_id: 'opponent_team_id'},
                  **{f: f"{f}_opponent" for f in features}}
     )
-    df = df.merge(df_opponent_feature, on=[column_names.match_id], suffixes=('', '_team_sum'))
-    return df[df[column_names.team_id] != df['opponent_team_id']].drop(
+    new_df = df.merge(df_opponent_feature, on=[column_names.match_id], suffixes=('', '_team_sum'))
+    new_df = new_df[new_df[column_names.team_id] != new_df['opponent_team_id']].drop(
         columns=['opponent_team_id'])
+
+    new_feats = [f"{f}_opponent" for f in features]
+    return df.merge(new_df[[column_names.match_id, column_names.team_id, column_names.player_id, *new_feats]],
+                    on=[column_names.match_id, column_names.team_id, column_names.player_id], how='left')
 
 
 class PredictorTransformer(BasePostTransformer):
@@ -123,63 +127,10 @@ class SklearnPredictorTransformer(BasePostTransformer):
         return [f'{self.feature_out}']
 
 
-class GameTeamMembersColumnsTransformer(BasePostTransformer):
-
-    def __init__(self, column_names: ColumnNames, features: list[str], players_per_match_per_team_count: int,
-                 sort_by: Optional[list[str]] = None):
-        super().__init__(features=features)
-        self.column_names = column_names
-        self.players_per_match_per_team_count = players_per_match_per_team_count
-        self.sort_by = sort_by
-        self._features_out = []
-        for number in range(1, self.players_per_match_per_team_count + 1):
-            for feature in self.features:
-                feature_name = f'team_player{number}_{feature}'
-                self._features_out.append(feature_name)
-
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        return self.transform(df=df)
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-
-        df = df.copy()
-
-        def add_teammate_minutes(row, grouped_df):
-            game_team_group = grouped_df.get_group(
-                (row[self.column_names.rating_update_match_id], row[self.column_names.team_id]))
-            number = 0
-            if self.sort_by:
-                game_team_group = game_team_group.sort_values(by=self.sort_by, ascending=False)
-
-            for index, teammate in game_team_group.iterrows():
-                if teammate[self.column_names.player_id] != row[self.column_names.player_id]:
-                    number += 1
-                    for feature in self.features:
-                        feature_name = f'team_player{number}_{feature}'
-                        row[feature_name] = teammate[feature]
-
-            return row
-
-        grouped = df.groupby([self.column_names.rating_update_match_id, self.column_names.team_id])
-
-        df = df.apply(lambda row: add_teammate_minutes(row, grouped), axis=1)
-        return df.sort_values(
-            by=[self.column_names.start_date, self.column_names.rating_update_match_id, self.column_names.team_id,
-                self.column_names.player_id])
-
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out
-
-    @property
-    def features_out(self) -> list[str]:
-        return self.features
-
-
 class NormalizerTargetColumnTransformer(BasePostTransformer):
 
     def __init__(self, features: list[str], granularity, target_sum_column_name: str, prefix: str = "__normalized_"):
-        super().__init__(features=features)
+        super().__init__(features=features, column_names=None)
         self.granularity = granularity
         self.prefix = prefix
         self.target_sum_column_name = target_sum_column_name
@@ -208,7 +159,7 @@ class NormalizerTransformer(BasePostTransformer):
 
     def __init__(self, features: list[str], granularity, target_mean: Optional[float] = None,
                  create_target_as_mean: bool = False):
-        super().__init__(features=features)
+        super().__init__(features=features, column_names=None)
         self.granularity = granularity
         self.target_mean = target_mean
         self.create_target_as_mean = create_target_as_mean
@@ -397,7 +348,8 @@ class LagTransformer(BasePostTransformer):
             grouped[self.granularity + [self.column_names.rating_update_match_id, *feats_out]],
             on=self.granularity + [self.column_names.rating_update_match_id], how='left')
 
-        all_df = add_opponent_features(df=all_df, column_names=self.column_names, features=feats_out)
+        if self.add_opponent:
+            all_df = add_opponent_features(df=all_df, column_names=self.column_names, features=feats_out)
 
         df = df.assign(
             __id=df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id,
@@ -651,12 +603,11 @@ class RollingMeanDaysTransformer(BasePostTransformer):
                  add_count: bool = False,
                  add_opponent: bool = False,
                  prefix: str = 'rolling_mean_days_'):
-        super().__init__(features=features)
+        super().__init__(features=features, column_names=column_names)
         self.features = features
         self.days = days
         if isinstance(self.days, int):
             self.days = [self.days]
-        self.column_names = column_names
         self.granularity = granularity or [self.column_names.player_id]
         self.add_count = add_count
         self.add_opponent = add_opponent

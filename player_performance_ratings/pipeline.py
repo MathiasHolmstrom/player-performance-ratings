@@ -107,7 +107,7 @@ class Pipeline():
                              create_rating_features: bool = True) -> float:
 
         if cross_validator is None:
-            cross_validator = self._create_default_cross_validator(df=df)
+            cross_validator = self.create_default_cross_validator(df=df)
 
         if create_performance:
             df = self._add_performance(df=df)
@@ -127,7 +127,7 @@ class Pipeline():
                                    create_rating_features: bool = True) -> pd.DataFrame:
 
         if cross_validator is None:
-            cross_validator = self._create_default_cross_validator(df=df)
+            cross_validator = self.create_default_cross_validator(df=df)
 
 
         if self.predictor.target not in df.columns:
@@ -142,7 +142,7 @@ class Pipeline():
                                                       post_transformers=self.post_rating_transformers,
                                                       estimator_features=self._estimator_features)
 
-    def _create_default_cross_validator(self, df: pd.DataFrame) -> CrossValidator:
+    def create_default_cross_validator(self, df: pd.DataFrame) -> CrossValidator:
         if self.rating_generators:
             column_names = self.rating_generators[0].column_names
         elif self.post_rating_transformers:
@@ -162,7 +162,7 @@ class Pipeline():
                 scorer = SklearnScorer(scorer_function=log_loss, pred_column=self.predictor.pred_column)
                 logging.info("Using log_loss as scorer")
 
-        cross_validator = MatchKFoldCrossValidator(
+        return MatchKFoldCrossValidator(
             date_column_name=column_names.start_date,
             match_id_column_name=column_names.rating_update_match_id,
             scorer=scorer,

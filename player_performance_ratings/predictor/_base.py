@@ -58,10 +58,14 @@ class BasePredictor(ABC):
 
     @property
     def estimator_type(self) -> str:
-        if hasattr(self.estimator, "predict_proba"):
+        if hasattr(self._deepest_estimator , "predict_proba"):
             return "classifier"
         return "regressor"
 
+
+    @property
+    def deepest_estimator(self) -> object:
+        return self._deepest_estimator
 
     @abstractmethod
     def train(self, df: pd.DataFrame, estimator_features: list[str]) -> None:
