@@ -1,8 +1,10 @@
+import logging
 from abc import abstractmethod, ABC
 from typing import Optional
 
 import pandas as pd
 from player_performance_ratings.scorer.score import Filter
+
 
 class PredictorTransformer(ABC):
 
@@ -28,23 +30,38 @@ class BasePredictor(ABC):
     def __init__(self,
                  estimator,
                  filters: Optional[list[Filter]],
+                 estimator_features: list[str],
                  target: str,
                  categorical_transformers: Optional[list[PredictorTransformer]] = None,
                  pred_column: Optional[str] = None,
                  ):
+        self._estimator_features = estimator_features or []
         self.estimator = estimator
         self.filters = filters or []
         self._target = target
         self._pred_column = pred_column or f"{self._target}_prediction"
-        self.categorical_transformers = categorical_transformers
+        self.categorical_transformers = categorical_transformers or []
         self._estimator_categorical_features = []
         self._deepest_estimator = self.estimator
+        for cat_transformer in self.categorical_transformers:
+            for cat_feature in cat_transformer.features_out:
+                if cat_feature not in self._estimator_features:
+                    logging.info(f"adding {cat_feature} to estimator_features")
+                    self._estimator_features.append(cat_feature)
+
         iterations = 0
-        while hasattr(self._deepest_estimator , "estimator"):
-            self._deepest_estimator  = self._deepest_estimator.estimator
+        while hasattr(self._deepest_estimator, "estimator"):
+            self._deepest_estimator = self._deepest_estimator.estimator
             iterations += 1
             if iterations > 10:
                 raise ValueError("estimator is too deep")
+
+    @property
+    def estimator_type(self) -> str:
+        if hasattr(self.estimator, "predict_proba"):
+            return "classifier"
+        return "regressor"
+
 
     @abstractmethod
     def train(self, df: pd.DataFrame, estimator_features: list[str]) -> None:

@@ -57,8 +57,7 @@ class GameTeamPredictor(BasePredictor):
         self.multiclassifier = multiclassifier
         super().__init__(target=self._target, pred_column=pred_column,
                          estimator=estimator or LogisticRegression(), categorical_transformers=categorical_transformers,
-                         filters=filters)
-        self._estimator_features = estimator_features or []
+                         filters=filters, estimator_features=estimator_features)
 
     def train(self, df: pd.DataFrame, estimator_features: list[Optional[str]] = None) -> None:
         if estimator_features is None and self._estimator_features is None:
@@ -167,7 +166,6 @@ class Predictor(BasePredictor):
         self._target = target
         self.multiclassifier = multiclassifier
         self.column_names = column_names
-        self._estimator_features = estimator_features or []
 
         if estimator is None:
             logging.warning(
@@ -176,7 +174,8 @@ class Predictor(BasePredictor):
         super().__init__(target=self._target, pred_column=pred_column,
                          estimator=estimator or LGBMClassifier(max_depth=2, n_estimators=300, learning_rate=0.05,
                                                                verbose=-100),
-                         categorical_transformers=categorical_transformers, filters=filters)
+                         categorical_transformers=categorical_transformers, filters=filters,
+                         estimator_features=estimator_features)
 
     def train(self, df: pd.DataFrame, estimator_features: Optional[list[str]] = None) -> None:
         if estimator_features is None and self._estimator_features is None:

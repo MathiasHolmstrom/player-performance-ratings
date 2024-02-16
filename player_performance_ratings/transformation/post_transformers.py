@@ -271,8 +271,7 @@ class LagTransformer(BasePostTransformer):
             Prefix for the new lag columns
         """
 
-        super().__init__(features=features)
-        self.column_names = column_names
+        super().__init__(features=features, column_names=column_names)
         self.granularity = granularity or [self.column_names.player_id]
         self.lag_length = lag_length
         self.days_between_lags = days_between_lags or []
@@ -386,17 +385,13 @@ class LagTransformer(BasePostTransformer):
                     grouped = grouped.assign(
                         **{output_column_name: grouped.groupby(self.granularity)[feature_name].shift(lag)})
 
-        feats = []
-        if self.add_opponent:
-            feats = []
-            for feature_name in self.features:
-                for lag in range(1, self.lag_length + 1):
-                    feats.append(f'{self.prefix}{lag}_{feature_name}_opponent')
+        feats_out = []
+        for feature_name in self.features:
+            for lag in range(1, self.lag_length + 1):
+                feats_out.append(f'{self.prefix}{lag}_{feature_name}')
 
-            for days_lag in self.days_between_lags:
-                feats.append(f'{self.prefix}{days_lag}_days_ago_opponent')
-
-        feats_out = [f for f in self.features_out if f not in feats]
+        for days_lag in self.days_between_lags:
+            feats_out.append(f'{self.prefix}{days_lag}_days_ago')
 
         all_df = all_df.merge(
             grouped[self.granularity + [self.column_names.rating_update_match_id, *feats_out]],

@@ -1,8 +1,12 @@
+import logging
 from typing import List, Optional, Union
 
 import pandas as pd
+from sklearn.metrics import log_loss, mean_absolute_error
 
-from player_performance_ratings.cross_validator.cross_validator import CrossValidator
+from player_performance_ratings.scorer import SklearnScorer, OrdinalLossScorer
+
+from player_performance_ratings.cross_validator.cross_validator import CrossValidator, MatchKFoldCrossValidator
 from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
 
 from player_performance_ratings.consts import PredictColumnNames
@@ -97,11 +101,13 @@ class Pipeline():
 
     def cross_validate_score(self,
                              df: pd.DataFrame,
-                             cross_validator: CrossValidator,
+                             cross_validator: Optional[CrossValidator] = None,
                              matches: Optional[list[Match]] = None,
                              create_performance: bool = True,
                              create_rating_features: bool = True) -> float:
 
+        if cross_validator is None:
+            cross_validator = self._create_default_cross_validator(df=df)
 
         if create_performance:
             df = self._add_performance(df=df)
@@ -115,10 +121,14 @@ class Pipeline():
 
     def generate_cross_validate_df(self,
                                    df: pd.DataFrame,
-                                   cross_validator: CrossValidator,
+                                   cross_validator: Optional[CrossValidator] = None,
                                    matches: Optional[list[Match]] = None,
                                    create_performance: bool = True,
                                    create_rating_features: bool = True) -> pd.DataFrame:
+
+        if cross_validator is None:
+            cross_validator = self._create_default_cross_validator(df=df)
+
 
         if self.predictor.target not in df.columns:
             raise ValueError(f"Target {self.predictor.target } not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
@@ -131,6 +141,32 @@ class Pipeline():
         return cross_validator.generate_validation_df(df=df, predictor=self.predictor,
                                                       post_transformers=self.post_rating_transformers,
                                                       estimator_features=self._estimator_features)
+
+    def _create_default_cross_validator(self, df: pd.DataFrame) -> CrossValidator:
+        if self.rating_generators:
+            column_names = self.rating_generators[0].column_names
+        elif self.post_rating_transformers:
+            column_names = self.post_rating_transformers[0].column_names
+        else:
+            raise ValueError(
+                "No column_names defined. Either rating_generators or post_rating_transformers must be defined.")
+
+        if self.predictor.estimator_type == "regressor":
+            scorer = SklearnScorer(scorer_function=mean_absolute_error, pred_column=self.predictor.pred_column)
+            logging.info("Using mean_absolute_error as scorer")
+        else:
+            if len(df[PredictColumnNames.TARGET].unique()) > 2:
+                scorer = OrdinalLossScorer(pred_column=self.predictor.pred_column)
+                logging.info("Using ordinal loss as scorer")
+            else:
+                scorer = SklearnScorer(scorer_function=log_loss, pred_column=self.predictor.pred_column)
+                logging.info("Using log_loss as scorer")
+
+        cross_validator = MatchKFoldCrossValidator(
+            date_column_name=column_names.start_date,
+            match_id_column_name=column_names.rating_update_match_id,
+            scorer=scorer,
+        )
 
     def train(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
               store_ratings: bool = True) -> pd.DataFrame:
