@@ -711,7 +711,8 @@ class RollingMeanDaysTransformer(BasePostTransformer):
 
         if len(granularity) > 1:
             granularity_concat = '__'.join(granularity)
-            all_df[granularity_concat] = all_df[granularity].agg('__'.join, axis=1)
+            temporary_str_df = all_df[granularity].astype(str)
+            all_df['granularity_concat'] = temporary_str_df.agg('__'.join, axis=1)
         else:
             granularity_concat = granularity[0]
 
