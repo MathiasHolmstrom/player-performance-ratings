@@ -12,6 +12,10 @@ def validate_sorting(df: pd.DataFrame, column_names: ColumnNames) -> None:
         for column in [column_names.match_id, column_names.team_id, column_names.player_id]:
             df = df.assign(**{column: df[column].astype('str')})
 
+        df_sorted = df.sort_values(
+            by=[column_names.start_date, column_names.match_id,
+                column_names.team_id, column_names.player_id])
+
         if df.equals(df_sorted):
             return
         for column in [column_names.match_id, column_names.team_id, column_names.player_id]:
@@ -19,6 +23,10 @@ def validate_sorting(df: pd.DataFrame, column_names: ColumnNames) -> None:
                 df = df.assign(**{column: df[column].astype('int')})
             except:
                 pass
+
+        df_sorted = df.sort_values(
+            by=[column_names.start_date, column_names.match_id,
+                column_names.team_id, column_names.player_id])
 
         if df.equals(df_sorted):
             return
