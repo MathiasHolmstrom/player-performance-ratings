@@ -231,4 +231,4 @@ class Predictor(BasePredictor):
             filtered_df[self._pred_column] = self.estimator.predict_proba(filtered_df[self.estimator_features])[:, 1]
 
         df = df.merge(filtered_df[['__id', self._pred_column]], on='__id', how='left')
-        return df
+        return df.drop(columns=['__id'])

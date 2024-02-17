@@ -524,7 +524,6 @@ class RollingMeanTransformer(BasePostTransformer):
         df = df.assign(**{
             self.column_names.parent_team_id: lambda x: x[self.column_names.parent_team_id].astype(
                 'str')})
-        validate_sorting(df=df, column_names=self.column_names)
         if self._df is None:
             self._df = df
         else:

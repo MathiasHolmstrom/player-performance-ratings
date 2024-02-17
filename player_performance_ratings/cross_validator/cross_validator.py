@@ -74,8 +74,10 @@ class MatchKFoldCrossValidator(CrossValidator):
                                predictor: BasePredictor,
                                estimator_features: Optional[list[str]] = None,
                                post_transformers: Optional[list[BaseTransformer]] = None,
+                               keep_features: bool = False,
                                ) -> pd.DataFrame:
         validation_dfs = []
+        ori_cols = df.columns.tolist()
 
         estimator_features = estimator_features or []
         post_transformers = post_transformers or []
@@ -120,4 +122,8 @@ class MatchKFoldCrossValidator(CrossValidator):
                 validation_df = df[(df['__cv_match_number'] >= train_cut_off_match_number) & (
                         df['__cv_match_number'] < train_cut_off_match_number + step_matches)]
 
-        return pd.concat(validation_dfs).drop(columns=['__cv_match_number'])
+        concat_validation_df =  pd.concat(validation_dfs).drop(columns=['__cv_match_number'])
+        if not keep_features:
+            concat_validation_df = concat_validation_df[ori_cols + [predictor.pred_column]]
+
+        return concat_validation_df

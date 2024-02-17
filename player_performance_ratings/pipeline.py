@@ -27,7 +27,6 @@ class Pipeline():
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
                  post_rating_transformers: Optional[List[BasePostTransformer]] = None,
-                 keep_features: bool = False,
                  ):
 
         """
@@ -91,7 +90,6 @@ class Pipeline():
                     self._estimator_features.append(rating_feature_str)
 
         self.performances_generator = performances_generator
-        self.keep_features = keep_features
 
         self.predictor = predictor
 
@@ -124,7 +122,9 @@ class Pipeline():
                                    column_names: Optional[ColumnNames] = None,
                                    matches: Optional[list[Match]] = None,
                                    create_performance: bool = True,
-                                   create_rating_features: bool = True) -> pd.DataFrame:
+                                   create_rating_features: bool = True,
+                                   keep_features: bool = False
+                                   ) -> pd.DataFrame:
 
         if cross_validator is None:
             cross_validator = self.create_default_cross_validator(df=df, column_names=column_names)
@@ -140,7 +140,7 @@ class Pipeline():
 
         return cross_validator.generate_validation_df(df=df, predictor=self.predictor,
                                                       post_transformers=self.post_rating_transformers,
-                                                      estimator_features=self._estimator_features)
+                                                      estimator_features=self._estimator_features, keep_features=keep_features)
 
     def create_default_cross_validator(self, df: pd.DataFrame, column_names: ColumnNames) -> CrossValidator:
 
@@ -184,7 +184,7 @@ class Pipeline():
         )
 
     def train(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
-              store_ratings: bool = True) -> pd.DataFrame:
+              store_ratings: bool = True, keep_features: bool = False) -> pd.DataFrame:
 
         if self.predictor.target not in df.columns:
             raise ValueError(
@@ -199,7 +199,7 @@ class Pipeline():
 
         self.predictor.train(df, estimator_features=self._estimator_features)
         df = self.predictor.add_prediction(df)
-        if not self.keep_features:
+        if not keep_features:
             df = df[ori_cols + [self.predictor.pred_column]]
 
         return df
@@ -250,7 +250,7 @@ class Pipeline():
 
         return df
 
-    def predict(self, df: pd.DataFrame) -> pd.DataFrame:
+    def predict(self, df: pd.DataFrame, keep_features: bool = False) -> pd.DataFrame:
         df = df.copy()
         ori_cols = df.columns.tolist()
         for rating_idx, rating_generator in enumerate(self.rating_generators):
@@ -274,7 +274,7 @@ class Pipeline():
 
         df = self.predictor.add_prediction(df)
 
-        if not self.keep_features:
+        if not keep_features:
             df = df[ori_cols + [self.predictor.pred_column]]
         return df
 

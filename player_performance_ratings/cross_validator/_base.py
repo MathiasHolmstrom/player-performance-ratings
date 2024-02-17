@@ -21,6 +21,7 @@ class CrossValidator(ABC):
                                post_transformers: list[BaseTransformer],
                                predictor: BasePredictor,
                                estimator_features: list[str],
+                               keep_features: bool,
                                ) -> pd.DataFrame:
         pass
 
