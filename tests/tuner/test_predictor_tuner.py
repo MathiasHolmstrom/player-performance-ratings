@@ -37,8 +37,7 @@ def test_predictor_tuner():
         )
     ]
 
-    predictor_tuner = PredictorTuner(search_ranges=search_ranges, n_trials=2, date_column_name="start_date",
-                                     train_split_date="2020-01-01")
+    predictor_tuner = PredictorTuner(search_ranges=search_ranges, n_trials=2)
     cross_validator = mock.Mock()
     cross_validator.cross_validation_score.side_effect = [0.5, 0.3]
     best_predictor = predictor_tuner.tune(df=df, cross_validator=cross_validator,
