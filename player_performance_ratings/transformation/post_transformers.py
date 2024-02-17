@@ -708,8 +708,16 @@ class RollingMeanDaysTransformer(BasePostTransformer):
         return transformed_df[list(set(ori_cols + self._features_out))].drop(columns=['__id'])
 
     def _add_rolling_feature(self, all_df: pd.DataFrame, day: int, granularity: list[str], prefix_day: str):
+
+        if len(granularity) > 1:
+            granularity_concat = '__'.join(granularity)
+            all_df[granularity_concat] = all_df[granularity].agg('__'.join, axis=1)
+        else:
+            granularity_concat = granularity[0]
+
+
         df1 = (all_df
-               .groupby([self.column_names.start_date, *granularity])[self.features]
+               .groupby([self.column_names.start_date, granularity_concat])[self.features]
                .agg(['sum', 'size'])
                .unstack()
                .asfreq('d', fill_value=np.nan)
@@ -734,7 +742,7 @@ class RollingMeanDaysTransformer(BasePostTransformer):
 
         all_df[self.column_names.start_date] = pd.to_datetime(all_df[self.column_names.start_date])
         all_df = all_df.join(df1[[c for c in df1.columns if c in self.features_out]],
-                             on=[self.column_names.start_date, *granularity])
+                             on=[self.column_names.start_date, granularity_concat])
         if self.add_count:
             all_df[f'{prefix_day}_count'] = all_df[f'{prefix_day}_count'].fillna(0)
 
