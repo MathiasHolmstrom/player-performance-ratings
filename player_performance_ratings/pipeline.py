@@ -20,7 +20,6 @@ from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.transformation.base_transformer import BasePostTransformer
 
 
-
 class Pipeline():
 
     def __init__(self,
@@ -91,7 +90,6 @@ class Pipeline():
                 if rating_feature_str not in self._estimator_features:
                     self._estimator_features.append(rating_feature_str)
 
-
         self.performances_generator = performances_generator
         self.keep_features = keep_features
 
@@ -129,9 +127,9 @@ class Pipeline():
         if cross_validator is None:
             cross_validator = self.create_default_cross_validator(df=df)
 
-
         if self.predictor.target not in df.columns:
-            raise ValueError(f"Target {self.predictor.target } not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
+            raise ValueError(
+                f"Target {self.predictor.target} not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
 
         if create_performance:
             df = self._add_performance(df=df)
@@ -143,13 +141,28 @@ class Pipeline():
                                                       estimator_features=self._estimator_features)
 
     def create_default_cross_validator(self, df: pd.DataFrame) -> CrossValidator:
+
+        column_names = None
         if self.rating_generators:
             column_names = self.rating_generators[0].column_names
         elif self.post_rating_transformers:
-            column_names = self.post_rating_transformers[0].column_names
+            for p in self.post_rating_transformers:
+                if hasattr(p, "column_names"):
+                    column_names = p.column_names
+                    break
+
+            if column_names is None:
+                logging.error(
+                    "It's not possible to automatically create a cross-validator as column_names is not defined anywhere within the pipline. "
+                    "Pass column_names when calling the method")
+                raise ValueError(
+                    "No column_names defined")
         else:
+            logging.error(
+                "It's not possible to automatically create a cross-validator as column_names is not defined anywhere within the pipline. "
+                "Pass column_names when calling the method")
             raise ValueError(
-                "No column_names defined. Either rating_generators or post_rating_transformers must be defined.")
+                "No column_names defined.")
 
         if self.predictor.estimator_type == "regressor":
             scorer = SklearnScorer(scorer_function=mean_absolute_error, pred_column=self.predictor.pred_column)
@@ -172,7 +185,8 @@ class Pipeline():
               store_ratings: bool = True) -> pd.DataFrame:
 
         if self.predictor.target not in df.columns:
-            raise ValueError(f"Target {self.predictor.target } not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
+            raise ValueError(
+                f"Target {self.predictor.target} not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
 
         ori_cols = df.columns.tolist()
         df = self._add_performance(df=df)

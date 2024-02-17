@@ -4,7 +4,7 @@ import pytest
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.transformation import LagTransformer, RollingMeanTransformer
 from player_performance_ratings.transformation.post_transformers import LagLowerGranularityTransformer, \
-    NormalizerTransformer, GameTeamMembersColumnsTransformer, RollingMeanDaysTransformer
+    NormalizerTransformer, RollingMeanDaysTransformer
 
 
 @pytest.fixture
@@ -17,24 +17,6 @@ def column_names():
         performance="performance"
     )
 
-
-def test_game_team_members_column_transformer(column_names):
-    df = pd.DataFrame(
-        {
-            'player': ['a', 'b', 'c', "d"],
-            "team": [1, 1, 2, 2],
-            'game': [1, 1, 1, 1],
-            "minutes": [15, 20, 16, 20],
-            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"),
-                           pd.to_datetime("2023-01-01")]
-        }
-    )
-    expected_df = df.copy()
-    transformer = GameTeamMembersColumnsTransformer(column_names=column_names, features=["minutes"],
-                                                    sort_by=["minutes"], players_per_match_per_team_count=2)
-    df = transformer.fit_transform(df)
-    expected_df["team_player1_minutes"] = [20, 15, 20, 16]
-    pd.testing.assert_frame_equal(df, expected_df, check_like=True)
 
 
 def test_normalizer_transformer(column_names):

@@ -130,7 +130,7 @@ class SklearnPredictorTransformer(BasePostTransformer):
 class NormalizerTargetColumnTransformer(BasePostTransformer):
 
     def __init__(self, features: list[str], granularity, target_sum_column_name: str, prefix: str = "__normalized_"):
-        super().__init__(features=features, column_names=None)
+        super().__init__(features=features)
         self.granularity = granularity
         self.prefix = prefix
         self.target_sum_column_name = target_sum_column_name
@@ -159,7 +159,7 @@ class NormalizerTransformer(BasePostTransformer):
 
     def __init__(self, features: list[str], granularity, target_mean: Optional[float] = None,
                  create_target_as_mean: bool = False):
-        super().__init__(features=features, column_names=None)
+        super().__init__(features=features)
         self.granularity = granularity
         self.target_mean = target_mean
         self.create_target_as_mean = create_target_as_mean
@@ -222,7 +222,8 @@ class LagTransformer(BasePostTransformer):
             Prefix for the new lag columns
         """
 
-        super().__init__(features=features, column_names=column_names)
+        super().__init__(features=features)
+        self.column_names = column_names
         self.granularity = granularity or [self.column_names.player_id]
         self.lag_length = lag_length
         self.days_between_lags = days_between_lags or []
@@ -603,7 +604,8 @@ class RollingMeanDaysTransformer(BasePostTransformer):
                  add_count: bool = False,
                  add_opponent: bool = False,
                  prefix: str = 'rolling_mean_days_'):
-        super().__init__(features=features, column_names=column_names)
+        super().__init__(features=features)
+        self.column_names = column_names
         self.features = features
         self.days = days
         if isinstance(self.days, int):

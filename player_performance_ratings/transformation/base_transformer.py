@@ -25,9 +25,8 @@ class BaseTransformer(ABC):
 
 class BasePostTransformer(ABC):
 
-    def __init__(self, features: list[str], column_names: ColumnNames ,are_estimator_features:bool =True):
+    def __init__(self, features: list[str], are_estimator_features:bool =True):
         self.features = features
-        self.column_names = column_names
         self._are_estimator_features = are_estimator_features
         self._features_out = []
 
