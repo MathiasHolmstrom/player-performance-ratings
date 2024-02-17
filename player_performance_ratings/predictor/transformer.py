@@ -1,5 +1,7 @@
-import pandas as pd
+from typing import Optional
 
+import pandas as pd
+from player_performance_ratings import PredictColumnNames
 
 from player_performance_ratings.predictor._base import PredictorTransformer
 
@@ -16,6 +18,24 @@ class ConvertDataFrameToCategoricalTransformer(PredictorTransformer):
         for feature in self.features:
             df = df.assign(**{feature: df[feature].astype('category')})
         return df
+
+    @property
+    def features_out(self) -> list[str]:
+        return self.features
+
+class TargetMeanTransformer(PredictorTransformer):
+
+    def __init__(self, features: list[str], granularity:Optional[list[str]] = None ,target: str = PredictColumnNames.TARGET):
+        self.target = target
+        self.granularity = granularity
+        super().__init__(features=features)
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        return self.transform(df)
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        raise ValueError("TargetMeanTransformer is not implemented yet")
+
 
     @property
     def features_out(self) -> list[str]:

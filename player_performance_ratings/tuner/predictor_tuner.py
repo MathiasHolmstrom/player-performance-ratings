@@ -10,7 +10,7 @@ from optuna.trial import BaseTrial
 from player_performance_ratings.transformation.base_transformer import BasePostTransformer
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
-from player_performance_ratings import PipelineFactory
+from player_performance_ratings import PipelineFactory, ColumnNames
 
 from player_performance_ratings.predictor import BasePredictor
 
@@ -32,6 +32,7 @@ class PredictorTuner():
     def tune(self, df: pd.DataFrame,
              pipeline_factory: PipelineFactory,
              cross_validator: CrossValidator,
+             column_names: Optional[ColumnNames] = None,
              best_post_rating_transformers: Optional[list[BasePostTransformer]] = None,
              ) -> BasePredictor:
 
@@ -91,7 +92,7 @@ class PredictorTuner():
             pipeline = pipeline_factory.create(predictor=predictor,
                                                post_rating_transformers=best_post_rating_transformers)
             return pipeline.cross_validate_score(df=df, create_performance=False, create_rating_features=False,
-                                                 cross_validator=cross_validator)
+                                                 cross_validator=cross_validator, column_names=column_names)
 
         direction = "minimize"
         study_name = "optuna_study"

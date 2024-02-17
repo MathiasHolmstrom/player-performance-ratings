@@ -12,7 +12,7 @@ from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeig
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor import BasePredictor
 
-from player_performance_ratings.data_structures import Match
+from player_performance_ratings.data_structures import Match, ColumnNames
 from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
@@ -100,12 +100,13 @@ class Pipeline():
     def cross_validate_score(self,
                              df: pd.DataFrame,
                              cross_validator: Optional[CrossValidator] = None,
+                             column_names: Optional[ColumnNames]= None,
                              matches: Optional[list[Match]] = None,
                              create_performance: bool = True,
                              create_rating_features: bool = True) -> float:
 
         if cross_validator is None:
-            cross_validator = self.create_default_cross_validator(df=df)
+            cross_validator = self.create_default_cross_validator(df=df, column_names=column_names)
 
         if create_performance:
             df = self._add_performance(df=df)
@@ -120,12 +121,13 @@ class Pipeline():
     def generate_cross_validate_df(self,
                                    df: pd.DataFrame,
                                    cross_validator: Optional[CrossValidator] = None,
+                                   column_names: Optional[ColumnNames] = None,
                                    matches: Optional[list[Match]] = None,
                                    create_performance: bool = True,
                                    create_rating_features: bool = True) -> pd.DataFrame:
 
         if cross_validator is None:
-            cross_validator = self.create_default_cross_validator(df=df)
+            cross_validator = self.create_default_cross_validator(df=df, column_names=column_names)
 
         if self.predictor.target not in df.columns:
             raise ValueError(
@@ -140,29 +142,29 @@ class Pipeline():
                                                       post_transformers=self.post_rating_transformers,
                                                       estimator_features=self._estimator_features)
 
-    def create_default_cross_validator(self, df: pd.DataFrame) -> CrossValidator:
+    def create_default_cross_validator(self, df: pd.DataFrame, column_names: ColumnNames) -> CrossValidator:
 
-        column_names = None
-        if self.rating_generators:
-            column_names = self.rating_generators[0].column_names
-        elif self.post_rating_transformers:
-            for p in self.post_rating_transformers:
-                if hasattr(p, "column_names"):
-                    column_names = p.column_names
-                    break
+        if not column_names:
+            if self.rating_generators:
+                column_names = self.rating_generators[0].column_names
+            elif self.post_rating_transformers:
+                for p in self.post_rating_transformers:
+                    if hasattr(p, "column_names"):
+                        column_names = p.column_names
+                        break
 
-            if column_names is None:
+                if column_names is None:
+                    logging.error(
+                        "It's not possible to automatically create a cross-validator as column_names is not defined anywhere within the pipline. "
+                        "Pass column_names when calling the method")
+                    raise ValueError(
+                        "No column_names defined")
+            else:
                 logging.error(
                     "It's not possible to automatically create a cross-validator as column_names is not defined anywhere within the pipline. "
                     "Pass column_names when calling the method")
                 raise ValueError(
-                    "No column_names defined")
-        else:
-            logging.error(
-                "It's not possible to automatically create a cross-validator as column_names is not defined anywhere within the pipline. "
-                "Pass column_names when calling the method")
-            raise ValueError(
-                "No column_names defined.")
+                    "No column_names defined.")
 
         if self.predictor.estimator_type == "regressor":
             scorer = SklearnScorer(scorer_function=mean_absolute_error, pred_column=self.predictor.pred_column)
