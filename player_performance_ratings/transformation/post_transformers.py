@@ -118,7 +118,7 @@ class SklearnPredictorTransformer(BasePostTransformer):
         return self.transform(df=df)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        prediction = self.estimator.predict(df[self.features])
+        prediction = self.estimator.future_predict(df[self.features])
         df = df.assign(**{self.feature_out: prediction})
         return df
 

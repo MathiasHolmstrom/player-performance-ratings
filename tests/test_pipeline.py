@@ -295,7 +295,7 @@ def test_match_predictor_generate_and_predict():
         rating_generators=rating_generator)
 
     _ = pipeline.train(df=historical_df)
-    new_df = pipeline.predict(future_df)
+    new_df = pipeline.future_predict(future_df)
 
     pd.testing.assert_frame_equal(new_df, expected_future_df, check_like=True)
 

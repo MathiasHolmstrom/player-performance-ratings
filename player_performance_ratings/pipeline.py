@@ -116,15 +116,15 @@ class Pipeline():
                                                                estimator_features=self._estimator_features)
         return cross_validator.cross_validation_score(validation_df=validation_df)
 
-    def generate_cross_validate_df(self,
-                                   df: pd.DataFrame,
-                                   cross_validator: Optional[CrossValidator] = None,
-                                   column_names: Optional[ColumnNames] = None,
-                                   matches: Optional[list[Match]] = None,
-                                   create_performance: bool = True,
-                                   create_rating_features: bool = True,
-                                   keep_features: bool = False
-                                   ) -> pd.DataFrame:
+    def cross_validate_predict(self,
+                               df: pd.DataFrame,
+                               cross_validator: Optional[CrossValidator] = None,
+                               column_names: Optional[ColumnNames] = None,
+                               matches: Optional[list[Match]] = None,
+                               create_performance: bool = True,
+                               create_rating_features: bool = True,
+                               keep_features: bool = False
+                               ) -> pd.DataFrame:
 
         if cross_validator is None:
             cross_validator = self.create_default_cross_validator(df=df, column_names=column_names)
@@ -263,6 +263,7 @@ class Pipeline():
                     df_no_ratings[rating_feature_str] = values
 
             if len(df_calculated_ratings) > 0:
+                ratings_df = rating_generator.ratings_df
                 rating_cols = rating_generator.features_out + [
                     rating_generator.column_names.match_id, rating_generator.column_names.team_id,
                     rating_generator.column_names.player_id]
@@ -281,7 +282,7 @@ class Pipeline():
 
         return df
 
-    def predict(self, df: pd.DataFrame, keep_features: bool = False) -> pd.DataFrame:
+    def future_predict(self, df: pd.DataFrame, keep_features: bool = False) -> pd.DataFrame:
         df = df.copy()
         ori_cols = df.columns.tolist()
         for rating_idx, rating_generator in enumerate(self.rating_generators):

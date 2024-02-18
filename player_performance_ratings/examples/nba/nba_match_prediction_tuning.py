@@ -155,5 +155,5 @@ game_player_predictions = best_match_predictor.train(df=df)
 pickle.dump(best_match_predictor, open("models/nba_game_winner", 'wb'))
 game_player_predictions.to_pickle("data/game_player_predictions.pickle")
 
-game_player_cv = best_match_predictor.generate_cross_validate_df(df=df, cross_validator=cross_validator)
+game_player_cv = best_match_predictor.cross_validate_predict(df=df, cross_validator=cross_validator)
 game_player_cv.to_pickle("data/game_player_cv.pickle")
