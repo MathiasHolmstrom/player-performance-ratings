@@ -98,7 +98,7 @@ class Pipeline():
     def cross_validate_score(self,
                              df: pd.DataFrame,
                              cross_validator: Optional[CrossValidator] = None,
-                             column_names: Optional[ColumnNames]= None,
+                             column_names: Optional[ColumnNames] = None,
                              matches: Optional[list[Match]] = None,
                              create_performance: bool = True,
                              create_rating_features: bool = True) -> float:
@@ -140,7 +140,8 @@ class Pipeline():
 
         return cross_validator.generate_validation_df(df=df, predictor=self.predictor,
                                                       post_transformers=self.post_rating_transformers,
-                                                      estimator_features=self._estimator_features, keep_features=keep_features)
+                                                      estimator_features=self._estimator_features,
+                                                      keep_features=keep_features)
 
     def create_default_cross_validator(self, df: pd.DataFrame, column_names: ColumnNames) -> CrossValidator:
 
@@ -221,32 +222,62 @@ class Pipeline():
 
         return df
 
-    def _add_rating(self, matches: Optional[list[Match]], df: pd.DataFrame, store_ratings: bool = True):
+    def _add_rating(self, matches: Optional[Union[list[Match], Match]], df: pd.DataFrame, store_ratings: bool = True):
 
         if matches:
             if isinstance(matches[0], Match):
                 matches = [matches for _ in self.rating_generators]
 
+        rg = self.rating_generators[0]
+        ratings_df = rg.ratings_df
+
+        if isinstance(ratings_df, pd.DataFrame):
+            rating_game_ids = ratings_df[rg.column_names.match_id].unique()
+            new_game_ids = df[rg.column_names.match_id].unique()
+        else:
+            rating_game_ids = []
+
+        df_no_ratings = df[~df[rg.column_names.match_id].isin(rating_game_ids)]
+        df_calculated_ratings = df[df[rg.column_names.match_id].isin(rating_game_ids)]
         for rating_idx, rating_generator in enumerate(self.rating_generators):
+            if len(df_no_ratings) > 0:
 
-            rating_column_names = rating_generator.column_names
+                if matches is None:
 
-            if matches is None:
-                rating_matches = convert_df_to_matches(column_names=rating_column_names, df=df,
-                                                       league_identifier=LeagueIdentifier())
-            else:
-                rating_matches = matches[rating_idx]
-
-            if store_ratings:
-                match_ratings = rating_generator.generate_historical(matches=rating_matches, df=df)
-            else:
-                match_ratings = rating_generator.generate_historical(matches=rating_matches)
-            for rating_feature, values in match_ratings.items():
-                if len(self.rating_generators) > 1:
-                    rating_feature_str = rating_feature + str(rating_idx)
+                    rating_matches = convert_df_to_matches(column_names=rating_generator.column_names, df=df_no_ratings,
+                                                           league_identifier=LeagueIdentifier())
                 else:
-                    rating_feature_str = rating_feature
-                df[rating_feature_str] = values
+                    rating_matches = matches[rating_idx]
+                    if len(df_no_ratings) != len(df):
+                        rating_matches = [m for m in rating_matches if m.id in new_game_ids]
+
+                if store_ratings:
+                    match_ratings = rating_generator.generate_historical(matches=rating_matches, df=df)
+                else:
+                    match_ratings = rating_generator.generate_historical(matches=rating_matches)
+                for rating_feature, values in match_ratings.items():
+                    if len(self.rating_generators) > 1:
+                        rating_feature_str = rating_feature + str(rating_idx)
+                    else:
+                        rating_feature_str = rating_feature
+                    df_no_ratings[rating_feature_str] = values
+
+            if len(df_calculated_ratings) > 0:
+                rating_cols = rating_generator.features_out + [
+                    rating_generator.column_names.match_id, rating_generator.column_names.team_id,
+                    rating_generator.column_names.player_id]
+                df_calculated_ratings = df_calculated_ratings[
+                    [f for f in df_calculated_ratings.columns if f not in rating_generator.features_out]].merge(
+                    ratings_df[rating_cols], on=[
+                        rating_generator.column_names.match_id, rating_generator.column_names.team_id,
+                        rating_generator.column_names.player_id], how='inner')
+
+        if len(df_no_ratings) != len(df):
+            col = rg.column_names
+            df = pd.concat([df_calculated_ratings, df_no_ratings])
+            df = df.drop_duplicates(subset=[col.match_id, col.team_id, col.player_id])
+        else:
+            df = df_no_ratings
 
         return df
 

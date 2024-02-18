@@ -13,6 +13,7 @@ class RatingGenerator(ABC):
 
     def __init__(self, column_names: ColumnNames):
         self.column_names = column_names
+        self._ratings_df = None
 
     @abstractmethod
     def generate_historical(self, df: Optional[pd.DataFrame] = None, matches: Optional[list[Match]] = None) -> dict[
@@ -44,5 +45,9 @@ class RatingGenerator(ABC):
     def features_out(self) -> list[Union[RatingEstimatorFeatures, RatingHistoricalFeatures]]:
         pass
 
+
+    @property
+    def ratings_df(self) -> pd.DataFrame:
+        return self._ratings_df
 
 
