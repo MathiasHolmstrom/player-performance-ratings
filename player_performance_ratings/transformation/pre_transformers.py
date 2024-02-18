@@ -115,17 +115,12 @@ class MinMaxTransformer(BaseTransformer):
     def __init__(self,
                  features: list[str],
                  quantile: float = 0.98,
-                 allowed_mean_diff: Optional[float] = 0.01,
-                 max_iterations: int = 150,
                  prefix: str = ""
                  ):
         super().__init__(features=features)
         self.quantile = quantile
-        self.max_iterations = max_iterations
-        self.allowed_mean_diff = allowed_mean_diff
         self.prefix = prefix
-        self._original_mean_values = {}
-        self._mean_aligning_iterations = 0
+        self._trained_mean_values = {}
         self._min_values = {}
         self._max_values = {}
 
@@ -135,7 +130,6 @@ class MinMaxTransformer(BaseTransformer):
         self._features_out = []
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        self._mean_aligning_iterations = 0
         df = df.copy()
         for feature in self.features:
             self._min_values[feature] = df[feature].quantile(1 - self.quantile)
@@ -144,31 +138,8 @@ class MinMaxTransformer(BaseTransformer):
             df[self.prefix + feature] = (df[feature] - self._min_values[feature]) / (
                     self._max_values[feature] - self._min_values[feature])
             df[self.prefix + feature].clip(0, 1, inplace=True)
+            self._trained_mean_values[feature] = df[self.prefix + feature].mean()
             self._features_out.append(self.prefix + feature)
-
-            if self.allowed_mean_diff:
-
-                mean_value = df[self.prefix + feature].mean()
-                self._original_mean_values[feature] = mean_value
-
-                while abs(
-                        0.5 - mean_value) > self.allowed_mean_diff and self._mean_aligning_iterations < self.max_iterations:
-
-                    if mean_value > 0.5:
-                        df[self.prefix + feature] = df[self.prefix + feature] * (1 - self.allowed_mean_diff)
-                    else:
-                        df[self.prefix + feature] = df[self.prefix + feature] * (1 + self.allowed_mean_diff)
-
-                    df[self.prefix + feature].clip(0, 1, inplace=True)
-                    mean_value = df[self.prefix + feature].mean()
-
-                    self._mean_aligning_iterations += 1
-                if self._mean_aligning_iterations >= self.max_iterations and abs(
-                        0.5 - mean_value) > self.allowed_mean_diff:
-                    raise ValueError(
-                        f"MinMaxTransformer: {feature} mean value is {mean_value} after {self._mean_aligning_iterations} repetitions."
-                        f"This is above the allowed mean difference of {self.allowed_mean_diff}."
-                        f" It is recommended to use DiminishingValueTransformer or SymmetricDistributionTransformer before MinMaxTransformer.")
 
         return df
 
@@ -177,15 +148,10 @@ class MinMaxTransformer(BaseTransformer):
             df[self.prefix + feature] = (df[feature] - self._min_values[feature]) / (
                     self._max_values[feature] - self._min_values[feature])
             df[self.prefix + feature].clip(0, 1, inplace=True)
+            df[self.prefix + feature] = df[self.prefix + feature] * self._trained_mean_values[feature] / df[self.prefix + feature].mean()
 
-            for _ in range(self._mean_aligning_iterations):
 
-                if self._original_mean_values[feature] > 0.5:
-                    df[self.prefix + feature] = df[self.prefix + feature] * (1 - self.allowed_mean_diff)
-                else:
-                    df[self.prefix + feature] = df[self.prefix + feature] * (1 + self.allowed_mean_diff)
-
-                df[self.prefix + feature].clip(0, 1, inplace=True)
+            df[self.prefix + feature].clip(0, 1, inplace=True)
 
         return df
 
@@ -259,7 +225,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
                  features: List[str],
                  granularity: Optional[list[str]] = None,
                  skewness_allowed: float = 0.15,
-                 max_iterations: int = 150,
+                 max_iterations: int = 200,
                  prefix: str = "symmetric_"
                  ):
         super().__init__(features=features)
@@ -291,6 +257,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
         return self.transform(df)
 
     def _fit(self, rows: pd.DataFrame, feature: str, granularity_value: Optional[str]) -> None:
+
         skewness = rows[feature].skew()
         excessive_multiplier = 0.8
         quantile_cutoff = 0.95
@@ -310,7 +277,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
                 excessive_multiplier=excessive_multiplier,
                 quantile_cutoff=quantile_cutoff)
             transformed_rows = self._diminishing_value_transformer[feature][granularity_value].fit_transform(rows)
-            excessive_multiplier *= 0.94
+            excessive_multiplier *= 0.92
             next_quantile_cutoff = quantile_cutoff * 0.997
             if rows[feature].quantile(next_quantile_cutoff) > rows[feature].min():
                 quantile_cutoff = next_quantile_cutoff
