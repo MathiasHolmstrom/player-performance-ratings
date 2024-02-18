@@ -162,7 +162,7 @@ class PerformancesGenerator():
             else:
                 df[f"__{col_name.performance}"] += df[f'weight__{column_weight.name}']/sum_weight * df[feature_name]
 
-        return df[f"__{col_name.performance}"]
+        return df[f"__{col_name.performance}"].clip(0, 1)
 
     @property
     def features_out(self) -> list[str]:
