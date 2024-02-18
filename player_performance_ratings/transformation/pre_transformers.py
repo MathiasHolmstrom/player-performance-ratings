@@ -115,6 +115,8 @@ class MinMaxTransformer(BaseTransformer):
     def __init__(self,
                  features: list[str],
                  quantile: float = 0.98,
+                 multiply_align: bool = True,
+                 add_align:bool= False,
                  prefix: str = ""
                  ):
         super().__init__(features=features)
@@ -123,6 +125,8 @@ class MinMaxTransformer(BaseTransformer):
         self._trained_mean_values = {}
         self._min_values = {}
         self._max_values = {}
+        self.multiply_align = multiply_align
+        self.add_align = add_align
 
         if self.quantile < 0 or self.quantile > 1:
             raise ValueError("quantile must be between 0 and 1")
@@ -139,7 +143,10 @@ class MinMaxTransformer(BaseTransformer):
                     self._max_values[feature] - self._min_values[feature])
             df[self.prefix + feature].clip(0, 1, inplace=True)
             self._trained_mean_values[feature] = df[self.prefix + feature].mean()
-            df[self.prefix + feature] = df[self.prefix + feature] * 0.5 / self._trained_mean_values[feature]
+            if self.multiply_align:
+                df[self.prefix + feature] = df[self.prefix + feature] * 0.5 / self._trained_mean_values[feature]
+            if self.add_align:
+                df[self.prefix + feature] = df[self.prefix + feature] + 0.5 - self._trained_mean_values[feature]
 
             self._features_out.append(self.prefix + feature)
 
@@ -151,7 +158,10 @@ class MinMaxTransformer(BaseTransformer):
             df[self.prefix + feature] = (df[feature] - self._min_values[feature]) / (
                     self._max_values[feature] - self._min_values[feature])
             df[self.prefix + feature].clip(0, 1, inplace=True)
-            df[self.prefix + feature] = df[self.prefix + feature] * 0.5 / self._trained_mean_values[feature]
+            if self.multiply_align:
+                df[self.prefix + feature] = df[self.prefix + feature] * 0.5 / self._trained_mean_values[feature]
+            if self.add_align:
+                df[self.prefix + feature] = df[self.prefix + feature] + 0.5 - self._trained_mean_values[feature]
 
         return df
 
