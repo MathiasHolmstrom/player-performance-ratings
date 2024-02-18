@@ -255,7 +255,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
                  features: List[str],
                  granularity: Optional[list[str]] = None,
                  skewness_allowed: float = 0.15,
-                 max_iterations: int = 20,
+                 max_iterations: int = 150,
                  prefix: str = "symmetric_"
                  ):
         super().__init__(features=features)
