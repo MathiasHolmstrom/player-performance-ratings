@@ -5,7 +5,7 @@ with open('requirements.txt') as f:
 
 setup(
     name="player-performance-ratings",
-    version="4.5.15",
+    version="4.5.16",
     packages=find_packages(),
     install_requires=required,
     author="Mathias Holmstrøm",

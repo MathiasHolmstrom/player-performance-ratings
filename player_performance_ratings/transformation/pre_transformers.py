@@ -225,13 +225,15 @@ class SymmetricDistributionTransformer(BaseTransformer):
                  features: List[str],
                  granularity: Optional[list[str]] = None,
                  skewness_allowed: float = 0.15,
-                 max_iterations: int = 200,
+                 max_iterations: int = 50,
+                 min_excessive_multiplier: float = 0.04,
                  prefix: str = "symmetric_"
                  ):
         super().__init__(features=features)
         self.granularity = granularity
         self.skewness_allowed = skewness_allowed
         self.max_iterations = max_iterations
+        self.min_excessive_multiplier = min_excessive_multiplier
         self.prefix = prefix
 
         self._diminishing_value_transformer = {}
@@ -277,7 +279,10 @@ class SymmetricDistributionTransformer(BaseTransformer):
                 excessive_multiplier=excessive_multiplier,
                 quantile_cutoff=quantile_cutoff)
             transformed_rows = self._diminishing_value_transformer[feature][granularity_value].fit_transform(rows)
-            excessive_multiplier *= 0.92
+            new_excessive_multiplier = excessive_multiplier * 0.92
+            if new_excessive_multiplier < self.min_excessive_multiplier:
+                break
+            excessive_multiplier *= new_excessive_multiplier
             next_quantile_cutoff = quantile_cutoff * 0.997
             if rows[feature].quantile(next_quantile_cutoff) > rows[feature].min():
                 quantile_cutoff = next_quantile_cutoff
