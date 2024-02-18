@@ -110,7 +110,7 @@ class GameTeamPredictor(BasePredictor):
         if self.multiclassifier:
             grouped[self._pred_column] = self.estimator.predict_proba(grouped[self.estimator_features]).tolist()
         elif not hasattr(self.estimator, "predict_proba"):
-            grouped[self._pred_column] = self.estimator.future_predict(grouped[self.estimator_features])
+            grouped[self._pred_column] = self.estimator.predict(grouped[self.estimator_features])
         else:
             grouped[self._pred_column] = self.estimator.predict_proba(grouped[self.estimator_features])[:, 1]
 
@@ -226,7 +226,7 @@ class Predictor(BasePredictor):
                     "Too many unique values in relation to rows in the training dataset causes multiclassifier to not train properly")
 
         elif not hasattr(self._deepest_estimator, "predict_proba"):
-            filtered_df[self._pred_column] = self.estimator.future_predict(filtered_df[self.estimator_features])
+            filtered_df[self._pred_column] = self.estimator.predict(filtered_df[self.estimator_features])
         else:
             filtered_df[self._pred_column] = self.estimator.predict_proba(filtered_df[self.estimator_features])[:, 1]
 

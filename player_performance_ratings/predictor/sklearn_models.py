@@ -25,7 +25,7 @@ class SkLearnWrapper(BaseEstimator, ClassifierMixin):
         return self.estimator.predict_proba(X)
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
-        return self.estimator.future_predict(X)
+        return self.estimator.predict(X)
 
 
 class OrdinalClassifier(BaseEstimator, ClassifierMixin):
