@@ -139,8 +139,7 @@ class MinMaxTransformer(BaseTransformer):
                     self._max_values[feature] - self._min_values[feature])
             df[self.prefix + feature].clip(0, 1, inplace=True)
             self._trained_mean_values[feature] = df[self.prefix + feature].mean()
-            df[self.prefix + feature] = df[self.prefix + feature] * self._trained_mean_values[feature] / df[
-                self.prefix + feature].mean()
+            df[self.prefix + feature] = df[self.prefix + feature] * 0.5 / self._trained_mean_values[feature]
 
             self._features_out.append(self.prefix + feature)
 
@@ -152,7 +151,7 @@ class MinMaxTransformer(BaseTransformer):
             df[self.prefix + feature] = (df[feature] - self._min_values[feature]) / (
                     self._max_values[feature] - self._min_values[feature])
             df[self.prefix + feature].clip(0, 1, inplace=True)
-            df[self.prefix + feature] = df[self.prefix + feature] * self._trained_mean_values[feature] / df[self.prefix + feature].mean()
+            df[self.prefix + feature] = df[self.prefix + feature] * 0.5 / self._trained_mean_values[feature]
 
         return df
 
