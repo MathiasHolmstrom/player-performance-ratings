@@ -311,8 +311,9 @@ class SymmetricDistributionTransformer(BaseTransformer):
                 quantile_cutoff=quantile_cutoff)
             transformed_rows = self._diminishing_value_transformer[feature][granularity_value].fit_transform(rows)
             excessive_multiplier *= 0.94
-            if rows[feature].quantile(quantile_cutoff) > rows[feature].min() and quantile_cutoff > 0.5:
-                quantile_cutoff *= 0.997
+            next_quantile_cutoff = quantile_cutoff * 0.997
+            if rows[feature].quantile(next_quantile_cutoff) > rows[feature].min():
+                quantile_cutoff = next_quantile_cutoff
             iteration += 1
             skewness = transformed_rows[feature].skew()
 
