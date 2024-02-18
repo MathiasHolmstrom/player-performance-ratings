@@ -151,7 +151,8 @@ class MinMaxTransformer(BaseTransformer):
                 mean_value = df[self.prefix + feature].mean()
                 self._original_mean_values[feature] = mean_value
 
-                while abs(0.5 - mean_value) > self.allowed_mean_diff and self._mean_aligning_iterations < self.max_iterations:
+                while abs(
+                        0.5 - mean_value) > self.allowed_mean_diff and self._mean_aligning_iterations < self.max_iterations:
 
                     if mean_value > 0.5:
                         df[self.prefix + feature] = df[self.prefix + feature] * (1 - self.allowed_mean_diff)
@@ -162,7 +163,8 @@ class MinMaxTransformer(BaseTransformer):
                     mean_value = df[self.prefix + feature].mean()
 
                     self._mean_aligning_iterations += 1
-                if self._mean_aligning_iterations >= self.max_iterations and abs(0.5 - mean_value) > self.allowed_mean_diff :
+                if self._mean_aligning_iterations >= self.max_iterations and abs(
+                        0.5 - mean_value) > self.allowed_mean_diff:
                     raise ValueError(
                         f"MinMaxTransformer: {feature} mean value is {mean_value} after {self._mean_aligning_iterations} repetitions."
                         f"This is above the allowed mean difference of {self.allowed_mean_diff}."
@@ -212,7 +214,10 @@ class DiminishingValueTransformer(BaseTransformer):
 
         for feature_name in self.features:
             if self.cutoff_value is None:
-                self._feature_cutoff_value[feature_name] = df[feature_name].quantile(self.quantile_cutoff)
+                if self.reverse:
+                    self._feature_cutoff_value[feature_name] = df[feature_name].quantile(1 - self.quantile_cutoff)
+                else:
+                    self._feature_cutoff_value[feature_name] = df[feature_name].quantile(self.quantile_cutoff)
             else:
                 self._feature_cutoff_value[feature_name] = self.cutoff_value
 
@@ -222,7 +227,6 @@ class DiminishingValueTransformer(BaseTransformer):
         for feature_name in self.features:
             cutoff_value = self._feature_cutoff_value[feature_name]
             if self.reverse:
-                cutoff_value = 1 - cutoff_value
                 df = df.assign(**{
                     feature_name: lambda x: np.where(
                         x[feature_name] <= cutoff_value,
