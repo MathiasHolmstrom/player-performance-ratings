@@ -2,9 +2,7 @@ import logging
 from abc import abstractmethod, ABC
 from typing import Optional
 
-import numpy as np
 import pandas as pd
-from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from player_performance_ratings.predictor_transformer import PredictorTransformer, SkLearnTransformerWrapper, \
@@ -99,8 +97,8 @@ class BasePredictor(ABC):
                     self._estimator_features.remove(feature)
             self._estimator_features = list(set(pre_transformer.features_out + self._estimator_features))
 
-        if self._deepest_estimator.__class__.__name__ in ('LogisticRegression', 'Linear Regression') and StandardScaler not in [pre_transformer.transformer.__class__.__name__ for pre_transformer in
-                                        self.pre_transformers]:
+        if self._deepest_estimator.__class__.__name__ in ('LogisticRegression', 'Linear Regression') and 'StandardScaler' not in [pre_transformer.transformer.__class__.__name__ for pre_transformer in
+                                        self.pre_transformers if hasattr(pre_transformer, "transformer")]:
 
                 logging.info(f"Adding StandardScaler to pre_transformers")
                 self.pre_transformers.append(SkLearnTransformerWrapper(transformer=StandardScaler(),

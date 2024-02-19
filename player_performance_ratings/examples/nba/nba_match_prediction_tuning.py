@@ -7,8 +7,7 @@ from sklearn.preprocessing import OneHotEncoder
 
 from player_performance_ratings.cross_validator.cross_validator import MatchKFoldCrossValidator
 from player_performance_ratings.pipelinefactory import Pipeline
-from player_performance_ratings.transformation.pre_transformers import ConvertDataFrameToCategoricalTransformer, \
-    SkLearnTransformerWrapper
+from player_performance_ratings.transformation.pre_transformers import SkLearnTransformerWrapper
 
 from sklearn.metrics import log_loss
 
@@ -19,20 +18,20 @@ from player_performance_ratings.ratings.rating_calculators import MatchRatingGen
 from player_performance_ratings.ratings.rating_calculators.performance_predictor import \
     RatingDifferencePerformancePredictor
 
-from player_performance_ratings.transformation import LagTransformer, RollingMeanTransformer
+from player_performance_ratings.transformation import LagTransformer
 
 from player_performance_ratings.ratings import ColumnWeight, UpdateRatingGenerator
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 from player_performance_ratings.tuner.rating_generator_tuner import UpdateRatingGeneratorTuner
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.tuner.utils import ParameterSearchRange, get_default_team_rating_search_range, \
+from player_performance_ratings.tuner.utils import get_default_team_rating_search_range, \
     get_default_lgbm_classifier_search_range_by_learning_rate
 from venn_abers import VennAbersCalibrator
 
 from player_performance_ratings.consts import PredictColumnNames
 
-from player_performance_ratings.predictor_transformer.sklearn_models import SkLearnWrapper
+from player_performance_ratings.predictor.sklearn_models import SkLearnWrapper
 
 from player_performance_ratings.tuner import PipelineTuner
 
