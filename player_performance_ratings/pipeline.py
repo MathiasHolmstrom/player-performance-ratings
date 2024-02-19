@@ -7,10 +7,10 @@ from sklearn.metrics import log_loss, mean_absolute_error
 from player_performance_ratings.scorer import SklearnScorer, OrdinalLossScorer
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator, MatchKFoldCrossValidator
-from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
+from player_performance_ratings.ratings import PerformancesGenerator
 
 from player_performance_ratings.consts import PredictColumnNames
-from player_performance_ratings.predictor import BasePredictor
+from player_performance_ratings.predictor._base import BasePredictor
 
 from player_performance_ratings.data_structures import Match, ColumnNames
 from player_performance_ratings.ratings.league_identifier import LeagueIdentifier

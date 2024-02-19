@@ -5,8 +5,9 @@ from typing import Optional, Union
 import numpy as np
 import pandas as pd
 
+
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.predictor import Predictor, BasePredictor
+from player_performance_ratings.predictor._base import BasePredictor
 from player_performance_ratings.transformation.base_transformer import DifferentGranularityTransformer, \
     BasePostTransformer
 from player_performance_ratings.utils import validate_sorting

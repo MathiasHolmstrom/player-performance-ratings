@@ -32,7 +32,7 @@ from venn_abers import VennAbersCalibrator
 
 from player_performance_ratings.consts import PredictColumnNames
 
-from player_performance_ratings.predictor.sklearn_models import SkLearnWrapper
+from player_performance_ratings.predictor_transformer.sklearn_models import SkLearnWrapper
 
 from player_performance_ratings.tuner import PipelineTuner
 
@@ -84,7 +84,7 @@ predictor = GameTeamPredictor(
     game_id_colum="game_id",
     team_id_column="team_id",
    # categorical_transformers=[ConvertDataFrameToCategoricalTransformer(features=["location"])],
-    categorical_transformers=[SkLearnTransformerWrapper(transformer=OneHotEncoder(), features=["location"])]
+    pre_transformers=[SkLearnTransformerWrapper(transformer=OneHotEncoder(), features=["location"])]
 )
 
 performance_predictor = RatingDifferencePerformancePredictor(

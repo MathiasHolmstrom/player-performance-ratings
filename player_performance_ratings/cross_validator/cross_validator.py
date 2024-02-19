@@ -6,7 +6,7 @@ from player_performance_ratings.scorer.score import BaseScorer
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 from player_performance_ratings.cross_validator._base import CrossValidator
-from player_performance_ratings.predictor import BasePredictor
+from player_performance_ratings.predictor._base import BasePredictor
 
 
 

@@ -115,8 +115,8 @@ class MinMaxTransformer(BaseTransformer):
     def __init__(self,
                  features: list[str],
                  quantile: float = 0.98,
-                 multiply_align: bool = True,
-                 add_align:bool= False,
+                 multiply_align: bool = False,
+                 add_align:bool= True,
                  prefix: str = ""
                  ):
         super().__init__(features=features)

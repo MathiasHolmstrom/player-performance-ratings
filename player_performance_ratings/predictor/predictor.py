@@ -3,9 +3,10 @@ import warnings
 import pandas as pd
 from lightgbm import LGBMClassifier
 from pandas.errors import SettingWithCopyWarning
+
+from player_performance_ratings.predictor_transformer import PredictorTransformer
 from player_performance_ratings.scorer.score import Filter, apply_filters
 
-from player_performance_ratings.transformation.base_transformer import BaseTransformer
 
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 
@@ -16,7 +17,7 @@ from sklearn.linear_model import LogisticRegression
 from player_performance_ratings.consts import PredictColumnNames
 
 from player_performance_ratings.data_structures import ColumnNames
-from player_performance_ratings.predictor._base import BasePredictor, PredictorTransformer
+from player_performance_ratings.predictor._base import BasePredictor
 
 
 class GameTeamPredictor(BasePredictor):
@@ -29,7 +30,7 @@ class GameTeamPredictor(BasePredictor):
                  estimator_features: Optional[list[str]] = None,
                  multiclassifier: bool = False,
                  pred_column: Optional[str] = None,
-                 categorical_transformers: Optional[list[PredictorTransformer]] = None,
+                 pre_transformers: Optional[list[PredictorTransformer]] = None,
                  filters: Optional[list[Filter]] = None
 
                  ):
@@ -56,21 +57,18 @@ class GameTeamPredictor(BasePredictor):
 
         self.multiclassifier = multiclassifier
         super().__init__(target=self._target, pred_column=pred_column,
-                         estimator=estimator or LogisticRegression(), categorical_transformers=categorical_transformers,
+                         estimator=estimator or LogisticRegression(), pre_transformers=pre_transformers,
                          filters=filters, estimator_features=estimator_features)
 
     def train(self, df: pd.DataFrame, estimator_features: list[Optional[str]] = None) -> None:
+
         if estimator_features is None and self._estimator_features is None:
             raise ValueError("estimator features must either be passed to .train() or injected into constructor")
 
         self._estimator_features = estimator_features or self._estimator_features
 
-        for feature in self._estimator_features:
-            if df[feature].dtype == 'category' and feature not in self.estimator_categorical_features:
-                self.estimator_categorical_features.append(feature)
 
-        df = self.fit_transform_categorical_transformers(df=df)
-
+        df = self.fit_transform_pre_transformers(df=df)
         if len(df[self._target].unique()) > 2 and hasattr(self.estimator, "predict_proba"):
             self.multiclassifier = True
 
@@ -103,7 +101,7 @@ class GameTeamPredictor(BasePredictor):
                 pass
         if not self._estimator_features:
             raise ValueError("estimator_features not set. Please train first")
-        df = self.transform_categorical_transformers(df=df)
+        df = self.transform_pre_transformers(df=df)
         filtered_df = apply_filters(df=df, filters=self.filters)
         grouped = self._create_grouped(filtered_df)
 
@@ -124,8 +122,8 @@ class GameTeamPredictor(BasePredictor):
 
     def _create_grouped(self, df: pd.DataFrame) -> pd.DataFrame:
 
-        numeric_features = [feature for feature in self.estimator_features if
-                            feature not in self.estimator_categorical_features]
+        numeric_features = [feature for feature in self.estimator_features if df[feature].dtype in ['int', 'float']]
+        cat_feats = [feature for feature in self.estimator_features if feature not in numeric_features]
 
         if self._target in df.columns:
             if df[self._target].dtype == 'object':
@@ -144,7 +142,7 @@ class GameTeamPredictor(BasePredictor):
             grouped[self._target] = grouped[self._target].astype('int')
 
         grouped = grouped.merge(
-            df[[self.game_id_colum, self.team_id_column, *self.estimator_categorical_features]].drop_duplicates(
+            df[[self.game_id_colum, self.team_id_column, *cat_feats]].drop_duplicates(
                 subset=[self.game_id_colum, self.team_id_column]),
             on=[self.game_id_colum, self.team_id_column], how='inner')
 
@@ -161,7 +159,7 @@ class Predictor(BasePredictor):
                  multiclassifier: bool = False,
                  pred_column: Optional[str] = None,
                  column_names: Optional[ColumnNames] = None,
-                 categorical_transformers: Optional[list[PredictorTransformer]] = None
+                 pre_transformers: Optional[list[PredictorTransformer]] = None
                  ):
         self._target = target
         self.multiclassifier = multiclassifier
@@ -174,7 +172,7 @@ class Predictor(BasePredictor):
         super().__init__(target=self._target, pred_column=pred_column,
                          estimator=estimator or LGBMClassifier(max_depth=2, n_estimators=300, learning_rate=0.05,
                                                                verbose=-100),
-                         categorical_transformers=categorical_transformers, filters=filters,
+                         pre_transformers=pre_transformers, filters=filters,
                          estimator_features=estimator_features)
 
     def train(self, df: pd.DataFrame, estimator_features: Optional[list[str]] = None) -> None:
@@ -188,7 +186,7 @@ class Predictor(BasePredictor):
             except Exception:
                 pass
 
-        df = self.fit_transform_categorical_transformers(df=df)
+        df = self.fit_transform_pre_transformers(df=df)
         df = df.copy()
         filtered_df = apply_filters(df=df, filters=self.filters)
         if not self.multiclassifier and len(filtered_df[self._target].unique()) > 2 and hasattr(self._deepest_estimator,
@@ -215,7 +213,7 @@ class Predictor(BasePredictor):
             except Exception:
                 pass
 
-        df = self.transform_categorical_transformers(df=df)
+        df = self.transform_pre_transformers(df=df)
         df = df.copy()
         df['__id'] = range(len(df))
         filtered_df = apply_filters(df=df, filters=self.filters)

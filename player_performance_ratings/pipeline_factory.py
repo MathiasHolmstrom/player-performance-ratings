@@ -4,9 +4,9 @@ from typing import Optional, List, Union
 
 
 from player_performance_ratings import Pipeline
-from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
+from player_performance_ratings.ratings import PerformancesGenerator
 
-from player_performance_ratings.predictor import BasePredictor
+from player_performance_ratings.predictor._base import BasePredictor
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.transformation.base_transformer import BaseTransformer, BasePostTransformer
 

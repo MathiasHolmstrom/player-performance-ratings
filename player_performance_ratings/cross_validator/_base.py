@@ -2,10 +2,9 @@ from abc import abstractmethod, ABC
 
 import pandas as pd
 
+from player_performance_ratings.predictor._base import BasePredictor
 from player_performance_ratings.scorer.score import BaseScorer
 from player_performance_ratings.transformation.base_transformer import BaseTransformer
-
-from player_performance_ratings.predictor import BasePredictor
 
 
 

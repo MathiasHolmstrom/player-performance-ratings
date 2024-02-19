@@ -2,27 +2,14 @@ import logging
 from abc import abstractmethod, ABC
 from typing import Optional
 
+import numpy as np
 import pandas as pd
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+from player_performance_ratings.predictor_transformer import PredictorTransformer, SkLearnTransformerWrapper, \
+    ConvertDataFrameToCategoricalTransformer
 from player_performance_ratings.scorer.score import Filter
-
-
-class PredictorTransformer(ABC):
-
-    def __init__(self, features: list[str]):
-        self.features = features
-
-    @abstractmethod
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        pass
-
-    @abstractmethod
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        pass
-
-    @property
-    @abstractmethod
-    def features_out(self) -> list[str]:
-        pass
 
 
 class BasePredictor(ABC):
@@ -32,7 +19,7 @@ class BasePredictor(ABC):
                  filters: Optional[list[Filter]],
                  estimator_features: list[str],
                  target: str,
-                 categorical_transformers: Optional[list[PredictorTransformer]] = None,
+                 pre_transformers: Optional[list[PredictorTransformer]] = None,
                  pred_column: Optional[str] = None,
                  ):
         self._estimator_features = estimator_features or []
@@ -40,14 +27,8 @@ class BasePredictor(ABC):
         self.filters = filters or []
         self._target = target
         self._pred_column = pred_column or f"{self._target}_prediction"
-        self.categorical_transformers = categorical_transformers or []
-        self._estimator_categorical_features = []
+        self.pre_transformers = pre_transformers or []
         self._deepest_estimator = self.estimator
-        for cat_transformer in self.categorical_transformers:
-            for cat_feature in cat_transformer.features_out:
-                if cat_feature not in self._estimator_features:
-                    logging.info(f"adding {cat_feature} to estimator_features")
-                    self._estimator_features.append(cat_feature)
 
         iterations = 0
         while hasattr(self._deepest_estimator, "estimator"):
@@ -58,10 +39,9 @@ class BasePredictor(ABC):
 
     @property
     def estimator_type(self) -> str:
-        if hasattr(self._deepest_estimator , "predict_proba"):
+        if hasattr(self._deepest_estimator, "predict_proba"):
             return "classifier"
         return "regressor"
-
 
     @property
     def deepest_estimator(self) -> object:
@@ -92,28 +72,51 @@ class BasePredictor(ABC):
     def set_target(self, new_target_name: str):
         self._target = new_target_name
 
-    def fit_transform_categorical_transformers(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.categorical_transformers:
-            for pre_transformer in self.categorical_transformers:
-                df = pre_transformer.fit_transform(df)
-                for feature in pre_transformer.features:
-                    if feature in self._estimator_features:
-                        self._estimator_features.remove(feature)
-                self._estimator_features = list(set(pre_transformer.features_out + self._estimator_features))
-                self._estimator_categorical_features = list(
-                    set(pre_transformer.features_out + self._estimator_categorical_features))
+    def fit_transform_pre_transformers(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        feats_to_transform = []
+        for estimator_feature in self._estimator_features:
+            if df[estimator_feature].dtype in ('str', 'object') and estimator_feature not in [f.features[0] for f in
+                                                                                              self.pre_transformers]:
+                feats_to_transform.append(estimator_feature)
+
+        if feats_to_transform:
+            if self._deepest_estimator.__class__.__name__ in ('LogisticRegression', 'Linear Regression'):
+                logging.info(f"Adding OneHotEncoder to pre_transformers for features: {feats_to_transform}")
+                self.pre_transformers.append(
+                    SkLearnTransformerWrapper(transformer=OneHotEncoder(handle_unknown='ignore'),
+                                              features=feats_to_transform))
+            elif self._deepest_estimator.__class__.__name__ in ('LGBMRegressor', 'LGBMClassifier'):
+                logging.info(
+                    f"Adding ConvertDataFrameToCategoricalTransformer to pre_transformers for features: {feats_to_transform}")
+                self.pre_transformers.append(ConvertDataFrameToCategoricalTransformer(features=feats_to_transform))
+
+
+
+        for pre_transformer in self.pre_transformers:
+            for feature in pre_transformer.features:
+                if feature in self._estimator_features:
+                    self._estimator_features.remove(feature)
+            self._estimator_features = list(set(pre_transformer.features_out + self._estimator_features))
+
+        if self._deepest_estimator.__class__.__name__ in ('LogisticRegression', 'Linear Regression') and StandardScaler not in [pre_transformer.transformer.__class__.__name__ for pre_transformer in
+                                        self.pre_transformers]:
+
+                logging.info(f"Adding StandardScaler to pre_transformers")
+                self.pre_transformers.append(SkLearnTransformerWrapper(transformer=StandardScaler(),
+                                                                       features=self._estimator_features))
+
+        for pre_transformer in self.pre_transformers:
+            df = pre_transformer.fit_transform(df)
+
         return df
 
-    def transform_categorical_transformers(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.categorical_transformers:
-            for pre_transformer in self.categorical_transformers:
+    def transform_pre_transformers(self, df: pd.DataFrame) -> pd.DataFrame:
+        if self.pre_transformers:
+            for pre_transformer in self.pre_transformers:
                 df = pre_transformer.transform(df)
         return df
 
     @property
     def estimator_features(self) -> list[str]:
         return self._estimator_features
-
-    @property
-    def estimator_categorical_features(self) -> list[str]:
-        return self._estimator_categorical_features

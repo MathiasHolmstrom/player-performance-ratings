@@ -1,9 +1,30 @@
+from abc import abstractmethod, ABC
 from typing import Optional
 
 import pandas as pd
 from player_performance_ratings import PredictColumnNames
+import warnings
 
-from player_performance_ratings.predictor._base import PredictorTransformer
+warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
+
+
+class PredictorTransformer(ABC):
+
+    def __init__(self, features: list[str]):
+        self.features = features
+
+    @abstractmethod
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        pass
+
+    @abstractmethod
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        pass
+
+    @property
+    @abstractmethod
+    def features_out(self) -> list[str]:
+        pass
 
 
 class ConvertDataFrameToCategoricalTransformer(PredictorTransformer):
@@ -23,9 +44,11 @@ class ConvertDataFrameToCategoricalTransformer(PredictorTransformer):
     def features_out(self) -> list[str]:
         return self.features
 
+
 class TargetMeanTransformer(PredictorTransformer):
 
-    def __init__(self, features: list[str], granularity:Optional[list[str]] = None ,target: str = PredictColumnNames.TARGET):
+    def __init__(self, features: list[str], granularity: Optional[list[str]] = None,
+                 target: str = PredictColumnNames.TARGET):
         self.target = target
         self.granularity = granularity
         super().__init__(features=features)
@@ -35,7 +58,6 @@ class TargetMeanTransformer(PredictorTransformer):
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("TargetMeanTransformer is not implemented yet")
-
 
     @property
     def features_out(self) -> list[str]:
