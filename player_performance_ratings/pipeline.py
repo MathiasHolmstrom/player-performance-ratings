@@ -108,7 +108,7 @@ class Pipeline():
 
         if create_performance:
             df = self._add_performance(df=df)
-        if create_rating_features:
+        if create_rating_features and self.rating_generators:
             df = self._add_rating(matches=matches, df=df, store_ratings=False)
 
         validation_df = cross_validator.generate_validation_df(df=df, predictor=self.predictor,
@@ -135,7 +135,7 @@ class Pipeline():
 
         if create_performance:
             df = self._add_performance(df=df)
-        if create_rating_features:
+        if create_rating_features and self.rating_generators:
             df = self._add_rating(matches=matches, df=df, store_ratings=False)
 
         return cross_validator.generate_validation_df(df=df, predictor=self.predictor,
@@ -193,7 +193,8 @@ class Pipeline():
 
         ori_cols = df.columns.tolist()
         df = self._add_performance(df=df)
-        df = self._add_rating(matches=matches, df=df, store_ratings=store_ratings)
+        if self.rating_generators:
+            df = self._add_rating(matches=matches, df=df, store_ratings=store_ratings)
 
         for post_rating_transformer in self.post_rating_transformers:
             df = post_rating_transformer.fit_transform(df)
