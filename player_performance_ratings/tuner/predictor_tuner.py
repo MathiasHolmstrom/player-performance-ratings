@@ -4,7 +4,6 @@ from typing import Optional
 
 import optuna
 import pandas as pd
-import pendulum
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 from player_performance_ratings.transformation.base_transformer import BasePostTransformer

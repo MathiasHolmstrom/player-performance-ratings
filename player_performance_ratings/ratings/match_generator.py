@@ -97,7 +97,7 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
     prev_match_id = None
     prev_update_team_id = None
 
-    if len(df.columns) > 35:
+    if len(df.columns) > 60:
         logging.warning(
             f"Dataframe column count {len(df.columns)} is high. Consider removing unneeded columns to speed up processing itme")
     data_dict = df.to_dict('records')

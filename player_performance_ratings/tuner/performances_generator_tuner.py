@@ -43,7 +43,8 @@ class PerformancesGeneratorTuner:
              ) -> PerformancesGenerator:
 
         if pipeline_factory.performances_generator is None:
-            raise ValueError("pipeline_factory.performances_generator is None. Please provide a performances_generator.")
+            raise ValueError(
+                "pipeline_factory.performances_generator is None. Please provide a performances_generator.")
 
         df = df.copy()
 
@@ -68,17 +69,19 @@ class PerformancesGeneratorTuner:
                 new_col_weights = self._create_column_weights(params=raw_params, remove_string=f"{performance_name}__")
                 for new_col_weight in new_col_weights:
                     if new_col_weight.name in [cw.name for cw in column_weights[rating_idx]]:
-                        column_weights[rating_idx][[cw.name for cw in column_weights[rating_idx]].index(new_col_weight.name)] = new_col_weight
+                        column_weights[rating_idx][
+                            [cw.name for cw in column_weights[rating_idx]].index(new_col_weight.name)] = new_col_weight
                     else:
                         column_weights[rating_idx].append(new_col_weight)
 
                 col_names = [r.column_names for r in pipeline_factory.rating_generators]
 
                 performances_generator = PerformancesGenerator(
-                column_names = col_names,
-                column_weights = column_weights,
-                pre_transformations = best_pre_transformers,
-            )
+                    column_names=col_names,
+                    column_weights=column_weights,
+                    pre_transformations=best_pre_transformers,
+                    auto_transform_performance=pipeline_factory.performances_generator.auto_transform_performance
+                )
             pipeline = pipeline_factory.create(performances_generator=performances_generator)
             return pipeline.cross_validate_score(df=df, cross_validator=cross_validator,
                                                  create_performance=True, create_rating_features=True)
