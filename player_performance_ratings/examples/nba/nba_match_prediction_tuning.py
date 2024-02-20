@@ -2,16 +2,16 @@ import pickle
 
 import pandas as pd
 from lightgbm import LGBMClassifier
+from player_performance_ratings.predictor_transformer import SkLearnTransformerWrapper
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import OneHotEncoder
 
 from player_performance_ratings.cross_validator.cross_validator import MatchKFoldCrossValidator
-from player_performance_ratings.pipelinefactory import Pipeline
-from player_performance_ratings.transformation.pre_transformers import SkLearnTransformerWrapper
+
 
 from sklearn.metrics import log_loss
 
-from player_performance_ratings.predictor import GameTeamPredictor
+from player_performance_ratings.predictor import GameTeamPredictor, SkLearnWrapper
 from player_performance_ratings.scorer.score import SklearnScorer
 
 from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
@@ -20,18 +20,17 @@ from player_performance_ratings.ratings.rating_calculators.performance_predictor
 
 from player_performance_ratings.transformation import LagTransformer
 
-from player_performance_ratings.ratings import ColumnWeight, UpdateRatingGenerator
+from player_performance_ratings.ratings import ColumnWeight, UpdateRatingGenerator, PerformancesGenerator
 from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 from player_performance_ratings.tuner.rating_generator_tuner import UpdateRatingGeneratorTuner
 
-from player_performance_ratings import ColumnNames
-from player_performance_ratings.tuner.utils import get_default_team_rating_search_range, \
-    get_default_lgbm_classifier_search_range_by_learning_rate
+from player_performance_ratings import ColumnNames, Pipeline
+from player_performance_ratings.tuner.utils import get_default_team_rating_search_range
 from venn_abers import VennAbersCalibrator
 
 from player_performance_ratings.consts import PredictColumnNames
 
-from player_performance_ratings.predictor.sklearn_models import SkLearnWrapper
+
 
 from player_performance_ratings.tuner import PipelineTuner
 
@@ -76,7 +75,7 @@ estimator = SkLearnWrapper(
 
 # estimator = LGBMClassifier(max_depth=2, learning_rate=0.1, n_estimators=35, verbose=-100, reg_alpha=1)
 
-estimator = LogisticRegression()
+
 
 predictor = GameTeamPredictor(
     estimator=estimator,
@@ -117,27 +116,25 @@ post_rating_transformers = [
 pipeline = Pipeline(
     post_rating_transformers=post_rating_transformers,
     rating_generators=rating_generator,
-    column_weights=column_weights,
     predictor=predictor,
+    performances_generator=PerformancesGenerator(column_weights=column_weights, column_names=column_names)
 )
 
 rating_generator_tuner = UpdateRatingGeneratorTuner(
     team_rating_search_ranges=get_default_team_rating_search_range(),
    # start_rating_search_ranges=start_rating_search_range,
-    team_rating_n_trials=35,
-    start_rating_n_trials=10,
+    team_rating_n_trials=1,
+    start_rating_n_trials=1,
 )
 predictor_tuner = PredictorTuner(
     default_params={'learning_rate': 0.07},
-    search_ranges=get_default_lgbm_classifier_search_range_by_learning_rate(learning_rate=0.07),
-    n_trials=30,
-    date_column_name=column_names.start_date,
+    n_trials=1,
 )
 
 cross_validator = MatchKFoldCrossValidator(
-    scorer=SklearnScorer(pred_column=pipeline._predictor.pred_column, scorer_function=log_loss),
+    scorer=SklearnScorer(pred_column=pipeline.predictor.pred_column, scorer_function=log_loss),
     match_id_column_name=column_names.match_id,
-    n_splits=5,
+    n_splits=2,
     date_column_name=column_names.start_date
 )
 
@@ -154,5 +151,5 @@ game_player_predictions = best_match_predictor.train(df=df)
 pickle.dump(best_match_predictor, open("models/nba_game_winner", 'wb'))
 game_player_predictions.to_pickle("data/game_player_predictions.pickle")
 
-game_player_cv = best_match_predictor.cross_validate_predict(df=df, cross_validator=cross_validator)
+game_player_cv = best_match_predictor.cross_validate_predict(df=df, cross_validator=cross_validator, add_train_prediction=True)
 game_player_cv.to_pickle("data/game_player_cv.pickle")

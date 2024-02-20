@@ -123,7 +123,8 @@ class Pipeline():
                                matches: Optional[list[Match]] = None,
                                create_performance: bool = True,
                                create_rating_features: bool = True,
-                               keep_features: bool = False
+                               keep_features: bool = False,
+                               add_train_prediction: bool = False
                                ) -> pd.DataFrame:
 
         if cross_validator is None:
@@ -141,7 +142,8 @@ class Pipeline():
         return cross_validator.generate_validation_df(df=df, predictor=self.predictor,
                                                       post_transformers=self.post_rating_transformers,
                                                       estimator_features=self._estimator_features,
-                                                      keep_features=keep_features)
+                                                      keep_features=keep_features,
+                                                      add_train_prediction=add_train_prediction)
 
     def create_default_cross_validator(self, df: pd.DataFrame, column_names: ColumnNames) -> CrossValidator:
 

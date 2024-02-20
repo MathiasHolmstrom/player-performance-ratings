@@ -15,13 +15,14 @@ from player_performance_ratings import PipelineFactory, ColumnNames
 from player_performance_ratings.predictor import BasePredictor
 
 
-from player_performance_ratings.tuner.utils import ParameterSearchRange, add_params_from_search_range
+from player_performance_ratings.tuner.utils import ParameterSearchRange, add_params_from_search_range, \
+    get_default_lgbm_regressor_search_range
 
 
 class PredictorTuner():
 
     def __init__(self,
-                 search_ranges: list[ParameterSearchRange],
+                 search_ranges: Optional[list[ParameterSearchRange]] = None,
                  default_params: Optional[dict] = None,
                  n_trials: int = 30
                  ):
@@ -37,10 +38,18 @@ class PredictorTuner():
              ) -> BasePredictor:
 
         deepest_estimator = pipeline_factory.predictor.estimator
+
         estimator_subclass_level = 0
         while hasattr(deepest_estimator, "estimator"):
             deepest_estimator = deepest_estimator.estimator
             estimator_subclass_level += 1
+
+        if self.search_ranges is None and deepest_estimator.__class__.__name__ in ('LGBMRegressor', 'LGBMClassifier'):
+            search_ranges = get_default_lgbm_regressor_search_range()
+        elif self.search_ranges is None:
+            raise ValueError("search_ranges can't be None if estimator is not LGBMRegressor or LGBMClassifier")
+        else:
+            search_ranges = self.search_ranges
 
         def objective(trial: BaseTrial, df: pd.DataFrame) -> float:
 
@@ -73,7 +82,7 @@ class PredictorTuner():
 
             params = add_params_from_search_range(params=params,
                                                   trial=trial,
-                                                  parameter_search_range=self.search_ranges)
+                                                  parameter_search_range=search_ranges)
             for param, value in self.default_params.items():
                 params[param] = value
 

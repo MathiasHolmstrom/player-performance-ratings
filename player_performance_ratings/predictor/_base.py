@@ -73,8 +73,12 @@ class BasePredictor(ABC):
     def fit_transform_pre_transformers(self, df: pd.DataFrame) -> pd.DataFrame:
 
         feats_to_transform = []
-        for estimator_feature in self._estimator_features:
-            if df[estimator_feature].dtype in ('str', 'object') and estimator_feature not in [f.features[0] for f in
+        for estimator_feature in self._estimator_features.copy():
+
+            if estimator_feature not in df.columns:
+                self._estimator_features.remove(estimator_feature)
+
+            elif df[estimator_feature].dtype in ('str', 'object') and estimator_feature not in [f.features[0] for f in
                                                                                               self.pre_transformers]:
                 feats_to_transform.append(estimator_feature)
 

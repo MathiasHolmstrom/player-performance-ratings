@@ -166,7 +166,7 @@ class PipelineTuner():
             untrained_best_predictor = copy.deepcopy(best_predictor)
         else:
             untrained_best_predictor = copy.deepcopy(self._pipeline_factory.predictor)
-            best_predictor = copy.deepcopy(self._pipeline_factory.predictor)
+
 
         self._untrained_best_model = Pipeline(
             rating_generators=[copy.deepcopy(rating_generator) for rating_generator in

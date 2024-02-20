@@ -21,6 +21,7 @@ class CrossValidator(ABC):
                                predictor: BasePredictor,
                                estimator_features: list[str],
                                keep_features: bool,
+                               add_train_prediction: bool = False
                                ) -> pd.DataFrame:
         pass
 

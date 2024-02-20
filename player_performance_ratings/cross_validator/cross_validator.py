@@ -24,9 +24,15 @@ class MatchCountCrossValidator(CrossValidator):
 
     def generate_validation_df(self,
                                df: pd.DataFrame,
-                               post_transformers: list[BaseTransformer],
                                predictor: BasePredictor,
-                               estimator_features: list[str]) -> pd.DataFrame:
+                               estimator_features: Optional[list[str]] = None,
+                               post_transformers: Optional[list[BaseTransformer]] = None,
+                               keep_features: bool = False,
+                               add_train_prediction:bool = False
+                               ) -> pd.DataFrame:
+
+        ori_cols = df.columns.tolist()
+
         validation_dfs = []
         df = df.assign(__cv_match_number=pd.factorize(df[self.match_id_column_name])[0])
         max_match_number = df['__cv_match_number'].max()
@@ -40,11 +46,16 @@ class MatchCountCrossValidator(CrossValidator):
         validation_df = df[(df['__cv_match_number'] >= train_cut_off_match_number) & (
                 df['__cv_match_number'] < train_cut_off_match_number + step_matches)]
 
-        for _ in range(self.n_splits):
+        for idx in range(self.n_splits):
             for post_transformer in post_transformers:
                 train_df = post_transformer.fit_transform(train_df)
                 validation_df = post_transformer.transform(validation_df)
             predictor.train(train_df, estimator_features=estimator_features)
+
+            if idx == 0 and add_train_prediction:
+                train_df = predictor.add_prediction(train_df)
+                validation_dfs.append(train_df)
+
             validation_df = predictor.add_prediction(validation_df)
             validation_dfs.append(validation_df)
 
@@ -53,7 +64,12 @@ class MatchCountCrossValidator(CrossValidator):
             validation_df = df[(df['__cv_match_number'] >= train_cut_off_match_number) & (
                     df['__cv_match_number'] < train_cut_off_match_number + step_matches)]
 
-        return pd.concat(validation_dfs)
+        concat_validation_df =  pd.concat(validation_dfs).drop(columns=['__cv_match_number'])
+        if not keep_features:
+            concat_validation_df = concat_validation_df[ori_cols + [predictor.pred_column]]
+
+
+        return concat_validation_df
 
 
 class MatchKFoldCrossValidator(CrossValidator):
@@ -62,7 +78,8 @@ class MatchKFoldCrossValidator(CrossValidator):
                  match_id_column_name: str,
                  date_column_name: str,
                  min_validation_date: Optional[str] = None,
-                 n_splits: int = 3):
+                 n_splits: int = 3
+                 ):
         super().__init__(scorer=scorer)
         self.match_id_column_name = match_id_column_name
         self.date_column_name = date_column_name
@@ -75,6 +92,7 @@ class MatchKFoldCrossValidator(CrossValidator):
                                estimator_features: Optional[list[str]] = None,
                                post_transformers: Optional[list[BaseTransformer]] = None,
                                keep_features: bool = False,
+                               add_train_prediction: bool = False
                                ) -> pd.DataFrame:
         validation_dfs = []
         ori_cols = df.columns.tolist()
@@ -110,6 +128,11 @@ class MatchKFoldCrossValidator(CrossValidator):
                 validation_df = post_transformer.transform(validation_df)
 
             predictor.train(train_df, estimator_features=estimator_features)
+
+            if idx == 0 and add_train_prediction:
+                train_df = predictor.add_prediction(train_df)
+                validation_dfs.append(train_df)
+
             validation_df = predictor.add_prediction(validation_df)
             validation_dfs.append(validation_df)
 
