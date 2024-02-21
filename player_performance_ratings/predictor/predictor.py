@@ -61,7 +61,7 @@ class GameTeamPredictor(BasePredictor):
                          filters=filters, estimator_features=estimator_features)
 
     def train(self, df: pd.DataFrame, estimator_features: list[Optional[str]] = None) -> None:
-
+        df = df.copy()
         if estimator_features is None and self._estimator_features is None:
             raise ValueError("estimator features must either be passed to .train() or injected into constructor")
 
@@ -87,6 +87,7 @@ class GameTeamPredictor(BasePredictor):
         self.estimator.fit(grouped[self._estimator_features], grouped[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
         """
         Adds prediction to df
 
@@ -176,6 +177,7 @@ class Predictor(BasePredictor):
                          estimator_features=estimator_features)
 
     def train(self, df: pd.DataFrame, estimator_features: Optional[list[str]] = None) -> None:
+        df = df.copy()
         if estimator_features is None and self._estimator_features is None:
             raise ValueError("estimator features must either be passed to .train() or injected into constructor")
         self._estimator_features = estimator_features or self._estimator_features
@@ -203,7 +205,7 @@ class Predictor(BasePredictor):
         self.estimator.fit(filtered_df[self.estimator_features], filtered_df[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
-
+        df = df.copy()
         if not self._estimator_features:
             raise ValueError("estimator_features not set. Please train first")
 

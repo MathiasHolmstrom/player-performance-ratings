@@ -106,7 +106,7 @@ class BasePredictor(ABC):
 
                 logging.info(f"Adding StandardScaler to pre_transformers")
                 self.pre_transformers.append(SkLearnTransformerWrapper(transformer=StandardScaler(),
-                                                                       features=self._estimator_features))
+                                                                       features=self._estimator_features.copy()))
 
         for pre_transformer in self.pre_transformers:
             df = pre_transformer.fit_transform(df)

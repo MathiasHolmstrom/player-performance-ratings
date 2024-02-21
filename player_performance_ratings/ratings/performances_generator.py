@@ -1,3 +1,4 @@
+import copy
 import logging
 from dataclasses import dataclass
 from typing import Optional, Union
@@ -94,7 +95,7 @@ class PerformancesGenerator():
             for _ in range(len(self.column_weights) - len(self.column_names)):
                 self.column_names.append(self.column_names[0])
         self.auto_transform_performance = auto_transform_performance
-
+        self.original_pre_transformations = [copy.deepcopy(p) for p in pre_transformations]
         self.pre_transformations = pre_transformations or []
         if self.auto_transform_performance:
             self.pre_transformations = auto_create_pre_performance_transformations(

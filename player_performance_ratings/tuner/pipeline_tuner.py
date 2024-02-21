@@ -3,12 +3,14 @@ import logging
 from typing import Optional, Union
 
 import pandas as pd
+
+from player_performance_ratings.ratings.performances_generator import auto_create_pre_performance_transformations
 from player_performance_ratings.tuner.utils import get_default_lgbm_classifier_search_range
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 
 from player_performance_ratings.pipeline import Pipeline
-from player_performance_ratings.ratings import PerformancesGenerator
+from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 
 from player_performance_ratings import PipelineFactory
@@ -77,7 +79,6 @@ class PipelineTuner():
                 self._pipeline_factory.rating_generators) and self.rating_generator_tuners:
             raise ValueError("Number of rating_generator_tuners must match number of rating_generators")
 
-
         if not self.pipeline.rating_generators and not self.pipeline.performances_generator and not self.predictor_tuner:
 
             if "LGBM" in self.pipeline.predictor.deepest_estimator.__class__.__name__:
@@ -86,7 +87,21 @@ class PipelineTuner():
             else:
                 raise ValueError("No tuning has been provided in config")
 
+        if self.performances_generator_tuners:
+            column_weights = []
+            for idx, tuner in enumerate(self.performances_generator_tuners):
+                column_weights.append([])
+                for parameter_search_range in tuner.performances_weight_search_ranges[
+                    self._pipeline_factory .rating_generators[idx].column_names.performance]:
+                    column_weights[idx].append(
+                        ColumnWeight(name=parameter_search_range.name, weight=0))
 
+            original_pre_transformations = self._pipeline_factory .performances_generator.original_pre_transformations
+            other_params = {k: v for k, v in self._pipeline_factory .performances_generator.__dict__.items() if
+                            k not in ["column_weights", "pre_transformations", "original_pre_transformations"]}
+            self._pipeline_factory.performances_generator = PerformancesGenerator(column_weights=column_weights,
+                                                                         pre_transformations=original_pre_transformations,
+                                                                         **other_params)
 
         self.cross_validator = cross_validator
 
@@ -166,7 +181,6 @@ class PipelineTuner():
             untrained_best_predictor = copy.deepcopy(best_predictor)
         else:
             untrained_best_predictor = copy.deepcopy(self._pipeline_factory.predictor)
-
 
         self._untrained_best_model = Pipeline(
             rating_generators=[copy.deepcopy(rating_generator) for rating_generator in

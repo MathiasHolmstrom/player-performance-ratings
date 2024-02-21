@@ -79,6 +79,9 @@ class SkLearnTransformerWrapper(PredictorTransformer):
             transformed_values = self.transformer.fit_transform(df[self.features])
             if isinstance(transformed_values, pd.DataFrame):
                 transformed_values = transformed_values.to_numpy()
+        except ValueError:
+            h = 2
+
 
         self._features_out = self.transformer.get_feature_names_out().tolist()
 
