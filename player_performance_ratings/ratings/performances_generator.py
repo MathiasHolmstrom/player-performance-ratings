@@ -88,8 +88,8 @@ class PerformancesGenerator():
         self.column_names = column_names if isinstance(column_names, list) else [column_names]
         if column_weights is None:
             column_weights = []
-            for _ in range(len(self.column_names)):
-                column_weights.append([ColumnWeight(name=column_names.performance, weight=1)])
+            for idx in range(len(self.column_names)):
+                column_weights.append([ColumnWeight(name=column_names[idx].performance, weight=1)])
 
         self.column_weights = column_weights if isinstance(column_weights[0], list) else [column_weights]
         if len(self.column_names) > len(self.column_weights):
