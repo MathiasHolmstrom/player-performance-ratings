@@ -84,7 +84,7 @@ class BasePredictor(ABC):
                 feats_to_transform.append(estimator_feature)
 
         if feats_to_transform:
-            if self._deepest_estimator.__class__.__name__ in ('LogisticRegression', 'Linear Regression'):
+            if self._deepest_estimator.__class__.__name__ in ('LogisticRegression', 'LinearRegression'):
                 logging.info(f"Adding OneHotEncoder to pre_transformers for features: {feats_to_transform}")
                 self.pre_transformers.append(
                     SkLearnTransformerWrapper(transformer=OneHotEncoder(handle_unknown='ignore'),
@@ -101,7 +101,7 @@ class BasePredictor(ABC):
             self._estimator_features = list(set(pre_transformer.features_out + self._estimator_features))
 
         if self._deepest_estimator.__class__.__name__ in (
-        'LogisticRegression', 'Linear Regression'):
+        'LogisticRegression', 'LinearRegression'):
             if 'StandardScaler' not in [
                 pre_transformer.transformer.__class__.__name__ for pre_transformer in
                 self.pre_transformers if hasattr(pre_transformer, "transformer")]:
