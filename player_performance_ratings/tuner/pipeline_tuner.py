@@ -94,7 +94,7 @@ class PipelineTuner():
                 for parameter_search_range in tuner.performances_weight_search_ranges[
                     self._pipeline_factory .rating_generators[idx].column_names.performance]:
                     column_weights[idx].append(
-                        ColumnWeight(name=parameter_search_range.name, weight=0))
+                        ColumnWeight(name=parameter_search_range.name, weight=0, lower_is_better=parameter_search_range.lower_is_better))
 
             original_pre_transformations = self._pipeline_factory .performances_generator.original_pre_transformations
             other_params = {k: v for k, v in self._pipeline_factory .performances_generator.__dict__.items() if

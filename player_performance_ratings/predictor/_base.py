@@ -3,6 +3,7 @@ from abc import abstractmethod, ABC
 from typing import Optional
 
 import pandas as pd
+from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from player_performance_ratings.predictor_transformer import PredictorTransformer, SkLearnTransformerWrapper, \
@@ -79,7 +80,7 @@ class BasePredictor(ABC):
                 self._estimator_features.remove(estimator_feature)
 
             elif df[estimator_feature].dtype in ('str', 'object') and estimator_feature not in [f.features[0] for f in
-                                                                                              self.pre_transformers]:
+                                                                                                self.pre_transformers]:
                 feats_to_transform.append(estimator_feature)
 
         if feats_to_transform:
@@ -93,20 +94,21 @@ class BasePredictor(ABC):
                     f"Adding ConvertDataFrameToCategoricalTransformer to pre_transformers for features: {feats_to_transform}")
                 self.pre_transformers.append(ConvertDataFrameToCategoricalTransformer(features=feats_to_transform))
 
-
-
         for pre_transformer in self.pre_transformers:
             for feature in pre_transformer.features:
                 if feature in self._estimator_features:
                     self._estimator_features.remove(feature)
             self._estimator_features = list(set(pre_transformer.features_out + self._estimator_features))
 
-        if self._deepest_estimator.__class__.__name__ in ('LogisticRegression', 'Linear Regression') and 'StandardScaler' not in [pre_transformer.transformer.__class__.__name__ for pre_transformer in
-                                        self.pre_transformers if hasattr(pre_transformer, "transformer")]:
-
-                logging.info(f"Adding StandardScaler to pre_transformers")
-                self.pre_transformers.append(SkLearnTransformerWrapper(transformer=StandardScaler(),
-                                                                       features=self._estimator_features.copy()))
+        if self._deepest_estimator.__class__.__name__ in (
+        'LogisticRegression', 'Linear Regression') and 'StandardScaler' not in [
+            pre_transformer.transformer.__class__.__name__ for pre_transformer in
+            self.pre_transformers if hasattr(pre_transformer, "transformer")]:
+            logging.info(f"Adding StandardScaler to pre_transformers")
+            self.pre_transformers.append(SkLearnTransformerWrapper(transformer=StandardScaler(),
+                                                                   features=self._estimator_features.copy()))
+            self.pre_transformers.append(SkLearnTransformerWrapper(transformer=SimpleImputer(),
+                                                               features=self._estimator_features.copy()))
 
         for pre_transformer in self.pre_transformers:
             df = pre_transformer.fit_transform(df)

@@ -12,7 +12,8 @@ class ParameterSearchRange:
     low: Optional[Union[float, int]] = None
     high: Optional[Union[float, int]] = None
     choices: Optional[list[Any]] = None
-    custom_params: dict[str, Any] = field(default_factory=dict)
+    custom_params: dict[str, Any] = field(default_factory=dict),
+    lower_is_better: bool = False
 
 
 def add_params_from_search_range(trial: BaseTrial, parameter_search_range: list[ParameterSearchRange],
