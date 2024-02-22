@@ -101,13 +101,18 @@ class BasePredictor(ABC):
             self._estimator_features = list(set(pre_transformer.features_out + self._estimator_features))
 
         if self._deepest_estimator.__class__.__name__ in (
-        'LogisticRegression', 'Linear Regression') and 'StandardScaler' not in [
-            pre_transformer.transformer.__class__.__name__ for pre_transformer in
-            self.pre_transformers if hasattr(pre_transformer, "transformer")]:
-            logging.info(f"Adding StandardScaler to pre_transformers")
-            self.pre_transformers.append(SkLearnTransformerWrapper(transformer=StandardScaler(),
-                                                                   features=self._estimator_features.copy()))
-            self.pre_transformers.append(SkLearnTransformerWrapper(transformer=SimpleImputer(),
+        'LogisticRegression', 'Linear Regression'):
+            if 'StandardScaler' not in [
+                pre_transformer.transformer.__class__.__name__ for pre_transformer in
+                self.pre_transformers if hasattr(pre_transformer, "transformer")]:
+                logging.info(f"Adding StandardScaler to pre_transformers")
+                self.pre_transformers.append(SkLearnTransformerWrapper(transformer=StandardScaler(),
+                                                                       features=self._estimator_features.copy()))
+
+            if 'SimpleImputer' not in [
+                pre_transformer.transformer.__class__.__name__ for pre_transformer in
+                self.pre_transformers if hasattr(pre_transformer, "transformer")]:
+                self.pre_transformers.append(SkLearnTransformerWrapper(transformer=SimpleImputer(),
                                                                features=self._estimator_features.copy()))
 
         for pre_transformer in self.pre_transformers:
