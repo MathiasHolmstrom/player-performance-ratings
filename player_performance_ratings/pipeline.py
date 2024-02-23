@@ -108,12 +108,20 @@ class Pipeline():
 
         if create_performance:
             df = self._add_performance(df=df)
+
+        for rating_generator in self.rating_generators:
+            create_rating_features = any(
+                feature not in df.columns for feature in rating_generator.estimator_features_return)
+            if create_rating_features:
+                break
+
         if create_rating_features and self.rating_generators:
             df = self._add_rating(matches=matches, df=df, store_ratings=False)
 
         validation_df = cross_validator.generate_validation_df(df=df, predictor=self.predictor,
                                                                post_transformers=self.post_rating_transformers,
-                                                               estimator_features=self._estimator_features, keep_features=False)
+                                                               estimator_features=self._estimator_features,
+                                                               keep_features=False)
         return cross_validator.cross_validation_score(validation_df=validation_df)
 
     def cross_validate_predict(self,
@@ -136,6 +144,13 @@ class Pipeline():
 
         if create_performance:
             df = self._add_performance(df=df)
+
+        for rating_generator in self.rating_generators:
+            create_rating_features = any(
+                feature not in df.columns for feature in rating_generator.estimator_features_return)
+            if create_rating_features:
+                break
+
         if create_rating_features and self.rating_generators:
             df = self._add_rating(matches=matches, df=df, store_ratings=False)
 
@@ -145,7 +160,8 @@ class Pipeline():
                                                       keep_features=keep_features,
                                                       add_train_prediction=add_train_prediction)
 
-    def create_default_cross_validator(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> CrossValidator:
+    def create_default_cross_validator(self, df: pd.DataFrame,
+                                       column_names: Optional[ColumnNames] = None) -> CrossValidator:
 
         if not column_names:
             if self.rating_generators:
