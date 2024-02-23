@@ -99,7 +99,12 @@ class PredictorTuner():
 
             pipeline = pipeline_factory.create(predictor=predictor,
                                                post_rating_transformers=best_post_rating_transformers)
-            return pipeline.cross_validate_score(df=df, create_performance=False, create_rating_features=False,
+            create_rating_features = False
+            for rating_generator in pipeline.rating_generators:
+                for feature in rating_generator.features_out:
+                    if feature not in df.columns:
+                        create_rating_features = True
+            return pipeline.cross_validate_score(df=df, create_performance=False, create_rating_features=create_rating_features,
                                                  cross_validator=cross_validator, column_names=column_names)
 
         direction = "minimize"
