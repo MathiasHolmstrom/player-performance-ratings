@@ -38,7 +38,8 @@ class UpdateRatingGenerator(RatingGenerator):
             If called by match_predictor, feature_names_created determines which features will be used for prediction.
             If other features such as player_rating_difference is used, it must be added to this list.
         """
-        super().__init__(column_names=column_names)
+        super().__init__(column_names=column_names, estimator_features_pass_through=estimator_features_pass_through,
+                         historical_features_out=historical_features_out)
         self.match_rating_generator = match_rating_generator or MatchRatingGenerator()
         self.distinct_positions = distinct_positions
         self._estimator_features_pass_through = estimator_features_pass_through or []
@@ -54,8 +55,6 @@ class UpdateRatingGenerator(RatingGenerator):
         if self.distinct_positions:
             self._estimator_features_out += [RatingEstimatorFeatures.RATING_DIFFERENCE_POSITION + "_" + p for p in
                                              self.distinct_positions]
-
-        self._historical_features_out = historical_features_out or []
 
         # If projected participation weight is not None, then the projected ratings will be used instead of the actual ratings (which first are known after game is finished)
 
@@ -468,17 +467,3 @@ class UpdateRatingGenerator(RatingGenerator):
 
         return list(sorted(team_id_ratings,
                            key=lambda team: team.rating_value, reverse=True))
-
-    @property
-    def estimator_features_out(self) -> list[RatingEstimatorFeatures]:
-        return self._estimator_features_out
-
-    @property
-    def features_out(self) -> list[Union[RatingEstimatorFeatures, RatingHistoricalFeatures]]:
-        return self._estimator_features_out + self._historical_features_out
-
-    @property
-    def estimator_features_return(self) -> list[RatingEstimatorFeatures]:
-        if self._estimator_features_pass_through:
-            return list(set(self._estimator_features_pass_through + self.estimator_features_out))
-        return self.estimator_features_out

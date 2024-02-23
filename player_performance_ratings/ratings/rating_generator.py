@@ -11,8 +11,15 @@ from player_performance_ratings.data_structures import Match, PlayerRating, \
 
 class RatingGenerator(ABC):
 
-    def __init__(self, column_names: ColumnNames):
+    def __init__(self,
+                 column_names: ColumnNames,
+                 estimator_features_pass_through: Optional[list[RatingEstimatorFeatures]],
+                 historical_features_out: Optional[list[RatingHistoricalFeatures]]
+                 ):
+        self._estimator_features_out = []
+        self._historical_features_out = historical_features_out or []
         self.column_names = column_names
+        self._estimator_features_pass_through = estimator_features_pass_through
         self._ratings_df = None
 
     @abstractmethod
@@ -35,15 +42,21 @@ class RatingGenerator(ABC):
     def team_ratings(self) -> list[TeamRating]:
         pass
 
-    @property
-    @abstractmethod
-    def estimator_features_out(self) -> list[RatingEstimatorFeatures]:
-        pass
 
     @property
-    @abstractmethod
+    def estimator_features_out(self) -> list[RatingEstimatorFeatures]:
+        return self._estimator_features_out
+
+    @property
     def features_out(self) -> list[Union[RatingEstimatorFeatures, RatingHistoricalFeatures]]:
-        pass
+        return self._estimator_features_out + self._historical_features_out
+
+    @property
+    def estimator_features_return(self) -> list[RatingEstimatorFeatures]:
+        if self._estimator_features_pass_through:
+            return list(set(self._estimator_features_pass_through + self.estimator_features_out))
+        return self.estimator_features_out
+
 
 
     @property
