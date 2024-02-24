@@ -122,6 +122,11 @@ class Pipeline():
                                                                post_transformers=self.post_rating_transformers,
                                                                estimator_features=self._estimator_features,
                                                                keep_features=False)
+
+        if cross_validator.scorer is None:
+            scorer = self._create_default_scorer(df)
+            return cross_validator.cross_validation_score(validation_df=validation_df, scorer=scorer)
+
         return cross_validator.cross_validation_score(validation_df=validation_df)
 
     def cross_validate_predict(self,
@@ -185,6 +190,15 @@ class Pipeline():
                 raise ValueError(
                     "No column_names defined.")
 
+        scorer = self._create_default_scorer(df)
+
+        return MatchKFoldCrossValidator(
+            date_column_name=column_names.start_date,
+            match_id_column_name=column_names.rating_update_match_id,
+            scorer=scorer,
+        )
+
+    def _create_default_scorer(self, df: pd.DataFrame):
         if self.predictor.estimator_type == "regressor":
             scorer = SklearnScorer(scorer_function=mean_absolute_error, pred_column=self.predictor.pred_column)
             logging.info("Using mean_absolute_error as scorer")
@@ -196,11 +210,8 @@ class Pipeline():
                 scorer = SklearnScorer(scorer_function=log_loss, pred_column=self.predictor.pred_column)
                 logging.info("Using log_loss as scorer")
 
-        return MatchKFoldCrossValidator(
-            date_column_name=column_names.start_date,
-            match_id_column_name=column_names.rating_update_match_id,
-            scorer=scorer,
-        )
+        return scorer
+
 
     def train(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
               store_ratings: bool = True, keep_features: bool = False) -> pd.DataFrame:
@@ -262,7 +273,6 @@ class Pipeline():
             if len(df_no_ratings) > 0:
 
                 if matches is None:
-
                     rating_matches = convert_df_to_matches(column_names=rating_generator.column_names, df=df_no_ratings,
                                                            league_identifier=LeagueIdentifier())
                 else:
@@ -274,6 +284,7 @@ class Pipeline():
                     match_ratings = rating_generator.generate_historical(matches=rating_matches, df=df)
                 else:
                     match_ratings = rating_generator.generate_historical(matches=rating_matches)
+
                 for rating_feature, values in match_ratings.items():
                     if len(self.rating_generators) > 1:
                         rating_feature_str = rating_feature + str(rating_idx)
@@ -283,11 +294,11 @@ class Pipeline():
 
             if len(df_calculated_ratings) > 0:
                 ratings_df = rating_generator.ratings_df
-                rating_cols = rating_generator.features_out + [
+                rating_cols = rating_generator.estimator_features_return + [
                     rating_generator.column_names.match_id, rating_generator.column_names.team_id,
                     rating_generator.column_names.player_id]
                 df_calculated_ratings = df_calculated_ratings[
-                    [f for f in df_calculated_ratings.columns if f not in rating_generator.features_out]].merge(
+                    [f for f in df_calculated_ratings.columns if f not in rating_generator.estimator_features_return]].merge(
                     ratings_df[rating_cols], on=[
                         rating_generator.column_names.match_id, rating_generator.column_names.team_id,
                         rating_generator.column_names.player_id], how='inner')

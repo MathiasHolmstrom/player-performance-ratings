@@ -74,9 +74,9 @@ class MatchCountCrossValidator(CrossValidator):
 
 class MatchKFoldCrossValidator(CrossValidator):
     def __init__(self,
-                 scorer: BaseScorer,
                  match_id_column_name: str,
                  date_column_name: str,
+                 scorer: Optional[BaseScorer] = None,
                  min_validation_date: Optional[str] = None,
                  n_splits: int = 3
                  ):

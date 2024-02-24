@@ -5,7 +5,6 @@ from typing import Optional, Union
 import numpy as np
 import pandas as pd
 
-
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.predictor._base import BasePredictor
 from player_performance_ratings.transformation.base_transformer import DifferentGranularityTransformer, \
@@ -717,7 +716,6 @@ class RollingMeanDaysTransformer(BasePostTransformer):
         else:
             granularity_concat = granularity[0]
 
-
         df1 = (all_df
                .groupby([self.column_names.start_date, granularity_concat])[self.features]
                .agg(['sum', 'size'])
@@ -791,3 +789,35 @@ class ModifierTransformer(BasePostTransformer):
                 df[operation.new_column_name] = df[operation.feature1] - df[operation.feature2]
 
         return df
+
+
+class UnknownGranularityRollingMeanTransformer(BasePostTransformer):
+
+    def __init__(self,
+                 features: list[str], window: int, column_names: ColumnNames, unknown_granularity: list[str],
+                 granularity: list[str] = None,
+                 min_periods: int = 1, prefix: str = 'rolling_mean_unknown_'):
+        super().__init__(features=features)
+        self.granularity = granularity or [column_names.player_id]
+        self.window = window
+        self.min_periods = min_periods
+        self.unknown_granularity = unknown_granularity
+        self.column_names = column_names
+        self.prefix = prefix
+        self._features_out = [f'{self.prefix}{self.window}_{c}' for c in self.features]
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.assign(__concat_unknown_granularity=df[self.unknown_granularity].apply(lambda x: "_".join(x), axis=1))
+        distinct_values = df['__concat_unknown_granularity'].unique()
+        for distinct_value in distinct_values:
+            df[distinct_value] = 1
+            df["h"] = df.groupby([*self.granularity, distinct_value])[self.features].apply(
+                lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())
+            df[distinct_value] = 0
+            df["h2"] = df.groupby([*self.granularity, distinct_value])[self.features].apply(
+                lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())
+
+        return df
+
+    def transform(self , df: pd.DataFrame) -> pd.DataFrame:
+        pass

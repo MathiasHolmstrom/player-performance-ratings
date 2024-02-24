@@ -1,4 +1,5 @@
 from abc import abstractmethod, ABC
+from typing import Optional
 
 import pandas as pd
 
@@ -10,7 +11,7 @@ from player_performance_ratings.transformation.base_transformer import BaseTrans
 
 class CrossValidator(ABC):
 
-    def __init__(self, scorer: BaseScorer):
+    def __init__(self, scorer: Optional[BaseScorer]):
         self.scorer = scorer
 
 
@@ -26,6 +27,10 @@ class CrossValidator(ABC):
         pass
 
 
-    def cross_validation_score(self, validation_df: pd.DataFrame) -> float:
-        return self.scorer.score(df=validation_df)
+    def cross_validation_score(self, validation_df: pd.DataFrame, scorer: Optional[BaseScorer] = None ) -> float:
+        if not scorer and not self.scorer:
+            raise ValueError("scorer is not defined. Either pass into constructor or as argument to method")
+
+        scorer = scorer or self.scorer
+        return scorer.score(df=validation_df)
 
