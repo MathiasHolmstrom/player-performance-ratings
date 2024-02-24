@@ -791,31 +791,42 @@ class ModifierTransformer(BasePostTransformer):
         return df
 
 
-class UnknownGranularityRollingMeanTransformer(BasePostTransformer):
+class BinaryOutcomeRollingMeanTransformer(BasePostTransformer):
 
     def __init__(self,
-                 features: list[str], window: int, column_names: ColumnNames, unknown_granularity: list[str],
+                 features: list[str], window: int, column_names: ColumnNames, binary_column: str,
                  granularity: list[str] = None,
                  min_periods: int = 1, prefix: str = 'rolling_mean_unknown_'):
         super().__init__(features=features)
         self.granularity = granularity or [column_names.player_id]
         self.window = window
         self.min_periods = min_periods
-        self.unknown_granularity = unknown_granularity
+        self.binary_column = binary_column
         self.column_names = column_names
         self.prefix = prefix
-        self._features_out = [f'{self.prefix}{self.window}_{c}' for c in self.features]
+        self._features_out = []
+        for feature_name in self.features:
+            self._features_out.append(f'{self.prefix}{feature_name}_1')
+            self._features_out.append(f'{self.prefix}{feature_name}_0')
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = df.assign(__concat_unknown_granularity=df[self.unknown_granularity].apply(lambda x: "_".join(x), axis=1))
-        distinct_values = df['__concat_unknown_granularity'].unique()
-        for distinct_value in distinct_values:
-            df[distinct_value] = 1
-            df["h"] = df.groupby([*self.granularity, distinct_value])[self.features].apply(
-                lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())
-            df[distinct_value] = 0
-            df["h2"] = df.groupby([*self.granularity, distinct_value])[self.features].apply(
-                lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())
+
+        for feature in self.features:
+            mask_result_1 = df[self.binary_column] == 1
+            mask_result_0 = df[self.binary_column] == 0
+
+            # Create a column for each condition, filled with value where condition is met and NaN otherwise
+            df['value_result_1'] = df[feature].where(mask_result_1)
+            df['value_result_0'] = df[feature].where(mask_result_0)
+
+            # Use transform to calculate the expanding mean, ensuring we're only considering past data for each player
+            df[f'{self.prefix}{feature}_1'] = df.groupby(self.granularity)['value_result_1'].transform(
+                lambda x: x.shift().expanding().mean())
+            df[f'{self.prefix}{feature}_0'] = df.groupby(self.granularity)['value_result_0'].transform(
+                lambda x: x.shift().expanding().mean())
+
+            # Drop the temporary columns used for calculation
+            df.drop(['value_result_1', 'value_result_0'], axis=1, inplace=True)
 
         return df
 
