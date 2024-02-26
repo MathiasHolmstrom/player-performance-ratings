@@ -3,8 +3,8 @@ import pytest
 
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.transformation import LagTransformer, RollingMeanTransformer
-from player_performance_ratings.transformation.post_transformers import LagLowerGranularityTransformer, \
-    NormalizerTransformer, RollingMeanDaysTransformer, BinaryOutcomeRollingMeanTransformer
+from player_performance_ratings.transformation.post_transformers import NormalizerTransformer, \
+    RollingMeanDaysTransformer, BinaryOutcomeRollingMeanTransformer
 
 
 @pytest.fixture
@@ -185,178 +185,6 @@ def test_lag_fit_transform_and_transform(column_names):
     expected_df['game'] = expected_df['game'].astype('str')
     expected_df['player'] = expected_df['player'].astype('str')
     pd.testing.assert_frame_equal(future_transformed_df, expected_df, check_like=True)
-
-
-def test_lag_lower_granularity_transform(column_names):
-    game_player_df = pd.DataFrame(
-        {
-            'player': ['a', 'b', 'a'],
-            'game': [1, 1, 2],
-            'points': [1, 2, 3],
-            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-03")],
-            "team": [1, 2, 1],
-        }
-    )
-
-    lower_granularity_df = pd.DataFrame(
-        {
-            'player': ['a', "a", 'b', "a"],
-            'points': [1, 2, 2, 1],
-            "game": [1, 1, 1, 2],
-            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02"),
-                           pd.to_datetime("2023-01-03")],
-            "team": [1, 1, 2, 1],
-        }
-    )
-
-    transformer = LagLowerGranularityTransformer(
-        features=['points'],
-        lag_length=1,
-        granularity=['player'],
-        column_names=column_names,
-    )
-
-    with pytest.raises(ValueError):
-        transformer.transform(diff_granularity_df=lower_granularity_df, game_player_df=game_player_df)
-
-
-def test_lag_lower_granularity_fit_transform(column_names):
-    game_player_df = pd.DataFrame(
-        {
-            'player': ['a', 'b', 'a'],
-            'game': [1, 1, 2],
-            'points': [1, 2, 3],
-            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-03")],
-            "team": [1, 2, 1],
-        }
-    )
-
-    lower_granularity_df = pd.DataFrame(
-        {
-            'player': ['a', "a", 'b', "a"],
-            'points': [1, 2, 2, 1],
-            "game": [1, 1, 1, 2],
-            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02"),
-                           pd.to_datetime("2023-01-03")],
-            "team": [1, 1, 2, 1],
-        }
-    )
-    original_game_player_df = game_player_df.copy()
-
-    transformer = LagLowerGranularityTransformer(
-        features=['points'],
-        lag_length=1,
-        granularity=['player'],
-        column_names=column_names,
-    )
-
-    df_with_lags = transformer.fit_transform(diff_granularity_df=lower_granularity_df, game_player_df=game_player_df)
-
-    expected_df = original_game_player_df.assign(**{
-        f"{transformer.prefix}1_points": [None, None, 1.5]
-    })
-    pd.testing.assert_frame_equal(df_with_lags, expected_df, check_like=True)
-
-
-def test_lag_lower_granularity_fit_transform_and_transform(column_names):
-    historical_game_player_df = pd.DataFrame(
-        {
-            'player': ['a', 'b', 'a'],
-            'game': [1, 1, 2],
-            'points': [1, 2, 3],
-            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-03")],
-            "team": [1, 2, 1],
-        }
-    )
-
-    historical_lower_granularity_df = pd.DataFrame(
-        {
-            'player': ['a', "a", 'b', "a"],
-            'points': [1, 2, 2, 1],
-            "game": [1, 1, 1, 2],
-            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02"),
-                           pd.to_datetime("2023-01-03")],
-            "team": [1, 1, 2, 1],
-        }
-    )
-
-    future_game_player_df = pd.DataFrame(
-        {
-            'player': ['a', "c"],
-            'game': [4, 4],
-            "start_date": [pd.to_datetime("2023-01-05"), pd.to_datetime("2023-01-06")],
-            "team": [1, 2],
-        }
-    )
-
-    future_lower_granularity_df = pd.DataFrame(
-        {
-            'player': ['a', "c"],
-            'points': [1, 2],
-            "game": [4, 4],
-            "start_date": [pd.to_datetime("2023-01-05"), pd.to_datetime("2023-01-06")],
-            "team": [1, 2],
-        }
-    )
-
-    original_future_game_player_df = future_game_player_df.copy()
-
-    transformer = LagLowerGranularityTransformer(
-        features=['points'],
-        lag_length=1,
-        granularity=['player'],
-        column_names=column_names,
-    )
-
-    _ = transformer.fit_transform(diff_granularity_df=historical_lower_granularity_df,
-                                  game_player_df=historical_game_player_df)
-    transformed_game_player_df = transformer.transform(diff_granularity_df=future_lower_granularity_df,
-                                                       game_player_df=future_game_player_df)
-
-    expected_df = original_future_game_player_df.assign(**{
-        f"{transformer.prefix}1_points": [1, None]
-    })
-    pd.testing.assert_frame_equal(transformed_game_player_df, expected_df, check_like=True, check_dtype=False)
-
-
-def test_lag_lower_granularity_with_weights_fit_transform(column_names):
-    lower_granularity_df = pd.DataFrame(
-        {
-            'player': ['a', "a", 'b', 'a'],
-            'points': [1, 2, 2, 1],
-            "game": [1, 1, 1, 2],
-            "weight": [0.9, 0.1, 1, 1],
-            'team': [1, 1, 2, 1],
-            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"),
-                           pd.to_datetime("2023-01-02")],
-        }
-    )
-
-    game_player_df = pd.DataFrame({
-        "player": ['a', 'b', 'a'],
-        "game": [1, 1, 2],
-        "team": [1, 2, 1],
-        "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02")]
-    })
-
-    original_game_player_df = game_player_df.copy()
-
-    lag_transformation = LagLowerGranularityTransformer(
-        features=['points'],
-        lag_length=1,
-        granularity=['player'],
-        column_names=column_names,
-        weight_column='weight'
-    )
-
-    df_with_lags = lag_transformation.fit_transform(diff_granularity_df=lower_granularity_df,
-                                                    game_player_df=game_player_df)
-
-    expected_df = original_game_player_df.assign(**{
-        f"{lag_transformation.prefix}1_points": [None, None, 0.9 * 1 + 2 * 0.1]
-    })
-
-    pd.testing.assert_frame_equal(df_with_lags, expected_df, check_like=True, check_dtype=False)
 
 
 def test_lag_transformation_transform_2_lags(column_names):
@@ -616,11 +444,11 @@ def test_rolling_mean_days_fit_transform_opponent(column_names):
     pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
-def test_unknown_granularity_rolling_mean_transformer(column_names):
+def test_binary_granularity_rolling_mean_transformer(column_names):
     historical_df = pd.DataFrame(
         {
-            'player': ['a', 'b', 'c', "d", 'a', 'b', 'c', "d", "c","d"],
-            "game": [1, 1, 1, 1, 2, 2, 2,4, 3, 3],
+            'player': ['a', 'b', 'c', "d", 'a', 'b', 'c', "d", "c", "d"],
+            "game": [1, 1, 1, 1, 2, 2, 2, 3, 4, 4],
             'score_difference': [10, 10, -10, -10, 15, 15, -15, -20, 2, 2],
             "won": [1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
             "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"),
@@ -631,6 +459,10 @@ def test_unknown_granularity_rolling_mean_transformer(column_names):
             "team": [1, 1, 2, 2, 1, 1, 2, 2, 2, 2],
         }
     )
+
+    historical_df['team'] = historical_df['team'].astype('str')
+    historical_df['game'] = historical_df['game'].astype('str')
+    historical_df['player'] = historical_df['player'].astype('str')
 
     expected_df = historical_df.copy()
 
@@ -645,6 +477,67 @@ def test_unknown_granularity_rolling_mean_transformer(column_names):
 
     transformed_data = rolling_mean_transformation.fit_transform(historical_df)
     expected_df[rolling_mean_transformation.features_out[1]] = [None, None, None, None, None, None, -10,
-                                                                              -10, -12.5, -15]
+                                                                -10, -12.5, -15]
     expected_df[rolling_mean_transformation.features_out[0]] = [None, None, None, None, 10, 10, None, None, None, None]
     pd.testing.assert_frame_equal(transformed_data, expected_df, check_like=True, check_dtype=False)
+
+
+def test_binary_granularity_rolling_mean_fit_transform_transform(column_names):
+    historical_df = pd.DataFrame(
+        {
+            'player': ['a', 'b', 'c', "d", 'a', 'b', 'c', "d", "c", "d"],
+            "game": [1, 1, 1, 1, 2, 2, 2, 3, 4, 4],
+            'score_difference': [10, 10, -10, -10, 15, 15, -15, -20, 2, 2],
+            "won": [1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
+            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"),
+                           pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"),
+                           pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-02"),
+                           pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-02"),
+                           pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-02")],
+            "team": [1, 1, 2, 2, 1, 1, 2, 2, 2, 2],
+        }
+    )
+
+    historical_df['team'] = historical_df['team'].astype('str')
+    historical_df['game'] = historical_df['game'].astype('str')
+    historical_df['player'] = historical_df['player'].astype('str')
+    expected_historical_df = historical_df.copy()
+
+    rolling_mean_transformation = BinaryOutcomeRollingMeanTransformer(
+        features=['score_difference'],
+        binary_column="won",
+        window=1,
+        min_periods=1,
+        granularity=['player'],
+        column_names=column_names
+    )
+
+    historical_df = rolling_mean_transformation.fit_transform(historical_df)
+    expected_historical_df[rolling_mean_transformation.features_out[0]] = [None, None, None, None, 10, 10, None, None,
+                                                                           None, None]
+    expected_historical_df[rolling_mean_transformation.features_out[1]] = [None, None, None, None, None, None, -10,
+                                                                           -10, -15, -20]
+    pd.testing.assert_frame_equal(historical_df, expected_historical_df, check_like=True, check_dtype=False)
+
+    future_df = pd.DataFrame(
+        {
+            'player': ['a', 'b'],
+            "game": [5, 5],
+            'score_difference': [None, None],
+            "won": [None, None],
+            "start_date": [pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-02")],
+            "team": [1, 1],
+        }
+    )
+
+    future_df['team'] = future_df['team'].astype('str')
+    future_df['game'] = future_df['game'].astype('str')
+    future_df['player'] = future_df['player'].astype('str')
+
+    expected_future_df = future_df.copy()
+
+    future_df = rolling_mean_transformation.transform(future_df)
+    expected_future_df[rolling_mean_transformation.features_out[0]] = [15, 15]
+    expected_future_df[rolling_mean_transformation.features_out[1]] = [None, None]
+
+    pd.testing.assert_frame_equal(future_df, expected_future_df, check_like=True, check_dtype=False)

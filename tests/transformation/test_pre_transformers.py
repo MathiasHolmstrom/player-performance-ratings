@@ -1,7 +1,8 @@
 import pandas as pd
+from player_performance_ratings.predictor_transformer import SkLearnTransformerWrapper
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from player_performance_ratings.predictor.transformer import SkLearnTransformerWrapper
+
 from player_performance_ratings.transformation.pre_transformers import GroupByTransformer, DiminishingValueTransformer, \
     NetOverPredictedTransformer, SymmetricDistributionTransformer
 
