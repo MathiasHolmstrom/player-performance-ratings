@@ -582,8 +582,12 @@ class ModifierTransformer(BasePostTransformer):
 class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
 
     def __init__(self,
-                 features: list[str], window: int, column_names: ColumnNames, binary_column: str,
+                 features: list[str],
+                 window: int,
+                 column_names: ColumnNames,
+                 binary_column: str,
                  granularity: list[str] = None,
+                 prob_column: Optional[str] = None,
                  min_periods: int = 1, prefix: str = 'rolling_mean_unknown_'):
         super().__init__(features=features, column_names=column_names)
         self.granularity = granularity or [column_names.player_id]
@@ -591,11 +595,16 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
         self.min_periods = min_periods
         self.binary_column = binary_column
         self.column_names = column_names
+        self.prob_column = prob_column
         self.prefix = prefix
         self._features_out = []
         for feature_name in self.features:
             self._features_out.append(f'{self.prefix}{feature_name}_1')
             self._features_out.append(f'{self.prefix}{feature_name}_0')
+        if self.prob_column:
+            for feature_name in self.features:
+                self._features_out.append(f'{self.prefix}{self.prob_column}_{feature_name}_1')
+                self._features_out.append(f'{self.prefix}{self.prob_column}_{feature_name}_0')
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
@@ -623,6 +632,11 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
                 lambda x: x.shift().rolling(window=self.window, min_periods=self.min_periods ).mean())
 
             concat_df.drop(['value_result_1', 'value_result_0'], axis=1, inplace=True)
+
+        if self.prob_column:
+            for idx, feature_name in enumerate(self.features):
+                concat_df[self.features_out[len(self.features)*2+idx*2]] = concat_df[self.features_out[idx*2]] * concat_df[self.prob_column]
+                concat_df[self.features_out[len(self.features)*2+idx*2+1]] = concat_df[self.features_out[idx*2+1]] * (1 - concat_df[self.prob_column])
 
         return self._create_transformed_df(df=df, concat_df=concat_df)
 
