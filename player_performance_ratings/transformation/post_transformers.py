@@ -559,8 +559,10 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
             self._features_out.append(f'{self.prefix}{self.window}_{feature_name}_1')
             self._features_out.append(f'{self.prefix}{self.window}_{feature_name}_0')
 
+
             if self.add_opponent:
-                self._features_out.append(f'{prefix}{self.window}_{feature_name}_opponent')
+                self._features_out.append(f'{self.prefix}{self.window}_{feature_name}_1_opponent')
+                self._features_out.append(f'{self.prefix}{self.window}_{feature_name}_0_opponent')
 
         if self.prob_column:
             for feature_name in self.features:
@@ -568,7 +570,9 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
                 self._features_out.append(f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_0')
 
                 if self.add_opponent:
-                    self._features_out.append(f'{prefix}{self.window}_{feature_name}_opponent')
+                    self._features_out.append(f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_1_opponent')
+                    self._features_out.append(
+                        f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_0_opponent')
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
@@ -598,9 +602,19 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
 
         if self.prob_column:
             for idx, feature_name in enumerate(self.features):
-                concat_df[self.features_out[len(self.features) * 2 + idx * 2]] = concat_df[self.features_out[idx * 2]] * \
+                concat_df[f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_1'] = concat_df[f'{self.prefix}{self.window}_{feature_name}_1'] * \
                                                                                  concat_df[self.prob_column]
-                concat_df[self.features_out[len(self.features) * 2 + idx * 2 + 1]] = concat_df[self.features_out[
-                    idx * 2 + 1]] * (1 - concat_df[self.prob_column])
+                concat_df[f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_0'] = concat_df[f'{self.prefix}{self.window}_{feature_name}_0'] * (1 - concat_df[self.prob_column])
+
+                if self.add_opponent:
+                    concat_df[f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_1_opponent'] = concat_df[
+                                                                                                       f'{self.prefix}{self.window}_{feature_name}_1_opponent'] * \
+                                                                                                   concat_df[
+                                                                                                       self.prob_column]
+                    concat_df[f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_0_opponent'] = concat_df[
+                                                                                                       f'{self.prefix}{self.window}_{feature_name}_0_opponent'] * (
+                                                                                                               1 -
+                                                                                                               concat_df[
+                                                                                                                   self.prob_column])
 
         return self._create_transformed_df(df=df, concat_df=concat_df)
