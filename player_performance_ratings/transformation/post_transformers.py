@@ -7,7 +7,7 @@ import pandas as pd
 
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.predictor._base import BasePredictor
-from player_performance_ratings.transformation.base_transformer import    BasePostTransformer, BaseLagTransformer
+from player_performance_ratings.transformation.base_transformer import BasePostTransformer, BaseLagTransformer
 from player_performance_ratings.utils import validate_sorting
 
 
@@ -25,20 +25,7 @@ def create_output_column_by_game_group(data: pd.DataFrame, feature_name: str,
     return data
 
 
-def add_opponent_features(df: pd.DataFrame, column_names: ColumnNames, features: list[str]) -> pd.DataFrame:
-    team_features = df.groupby([column_names.team_id, column_names.rating_update_match_id])[
-        features].mean().reset_index()
-    df_opponent_feature = team_features.rename(
-        columns={**{column_names.team_id: 'opponent_team_id'},
-                 **{f: f"{f}_opponent" for f in features}}
-    )
-    new_df = df.merge(df_opponent_feature, on=[column_names.match_id], suffixes=('', '_team_sum'))
-    new_df = new_df[new_df[column_names.team_id] != new_df['opponent_team_id']].drop(
-        columns=['opponent_team_id'])
 
-    new_feats = [f"{f}_opponent" for f in features]
-    return df.merge(new_df[[column_names.match_id, column_names.team_id, column_names.player_id, *new_feats]],
-                    on=[column_names.match_id, column_names.team_id, column_names.player_id], how='left')
 
 
 class PredictorTransformer(BasePostTransformer):
@@ -221,30 +208,22 @@ class LagTransformer(BaseLagTransformer):
             Prefix for the new lag columns
         """
 
-        super().__init__(features=features, column_names=column_names)
+
+
+        super().__init__(features=features, column_names=column_names, add_opponent=add_opponent, prefix=prefix, iterations=[i for i in range(1, lag_length + 1)])
+        self.days_between_lags = days_between_lags or []
+        for days_lag in self.days_between_lags:
+            self._features_out.append(f'{prefix}{days_lag}_days_ago')
+
         self.column_names = column_names
         self.granularity = granularity or [self.column_names.player_id]
         self.lag_length = lag_length
-        self.days_between_lags = days_between_lags or []
-        self.prefix = prefix
+
         self.future_lag = future_lag
-        self.add_opponent = add_opponent
-        self._features_out = []
         self._df = None
 
-        for feature_name in self.features:
-            for lag in range(1, self.lag_length + 1):
-                self._features_out.append(f'{self.prefix}{lag}_{feature_name}')
-                if self.add_opponent:
-                    self._features_out.append(f'{self.prefix}{lag}_{feature_name}_opponent')
-
-        for days_lag in self.days_between_lags:
-            self._features_out.append(f'{self.prefix}{days_lag}_days_ago')
-            if self.add_opponent:
-                self._features_out.append(f'{self.prefix}{days_lag}_days_ago_opponent')
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-
 
         for feature_out in self._features_out:
             if feature_out in df.columns:
@@ -268,10 +247,12 @@ class LagTransformer(BaseLagTransformer):
 
         if self.column_names.participation_weight:
             for feature in self.features:
-                concat_df = concat_df.assign(**{feature: concat_df[feature] * concat_df[self.column_names.participation_weight]})
+                concat_df = concat_df.assign(
+                    **{feature: concat_df[feature] * concat_df[self.column_names.participation_weight]})
 
         grouped = \
-            concat_df.groupby(self.granularity + [self.column_names.rating_update_match_id, self.column_names.start_date])[
+            concat_df.groupby(
+                self.granularity + [self.column_names.rating_update_match_id, self.column_names.start_date])[
                 self.features].mean().reset_index()
 
         grouped = grouped.sort_values([self.column_names.start_date, self.column_names.rating_update_match_id])
@@ -320,15 +301,11 @@ class LagTransformer(BaseLagTransformer):
             grouped[self.granularity + [self.column_names.rating_update_match_id, *feats_out]],
             on=self.granularity + [self.column_names.rating_update_match_id], how='left')
 
-        if self.add_opponent:
-            concat_df = add_opponent_features(df=concat_df, column_names=self.column_names, features=feats_out)
-
         return self._create_transformed_df(df=df, concat_df=concat_df)
 
     @property
     def features_out(self) -> list[str]:
         return self._features_out
-
 
 
 class RollingMeanTransformer(BaseLagTransformer):
@@ -338,6 +315,7 @@ class RollingMeanTransformer(BaseLagTransformer):
                  window: int,
                  column_names: ColumnNames,
                  granularity: Union[list[str], str] = None,
+                 add_opponent: bool = False,
                  min_periods: int = 1,
                  prefix: str = 'rolling_mean_'):
         """
@@ -371,17 +349,14 @@ class RollingMeanTransformer(BaseLagTransformer):
         :param prefix:
             Prefix for the new rolling mean columns
         """
-
-        super().__init__(features=features, column_names=column_names)
+        super().__init__(features=features, column_names=column_names, add_opponent=add_opponent, iterations=[window], prefix=prefix)
         self.granularity = granularity or [column_names.player_id]
         if isinstance(self.granularity, str):
             self.granularity = [self.granularity]
         self.window = window
         self.min_periods = min_periods
         self.column_names = column_names
-        self._df = None
-        self.prefix = prefix
-        self._features_out = [f'{self.prefix}{self.window}_{c}' for c in self.features]
+
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         return self._fit_transform(df)
@@ -416,7 +391,7 @@ class RollingMeanTransformer(BaseLagTransformer):
                 grp[self.granularity + [self.column_names.rating_update_match_id, output_column_name]],
                 on=self.granularity + [self.column_names.rating_update_match_id], how='left')
             concat_df = concat_df.sort_values(by=[self.column_names.start_date, self.column_names.match_id,
-                                            self.column_names.team_id, self.column_names.player_id])
+                                                  self.column_names.team_id, self.column_names.player_id])
 
         return self._create_transformed_df(df=df, concat_df=concat_df)
 
@@ -435,24 +410,15 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
                  add_count: bool = False,
                  add_opponent: bool = False,
                  prefix: str = 'rolling_mean_days_'):
-        super().__init__(features=features, column_names=column_names)
-        self.column_names = column_names
-        self.features = features
         self.days = days
         if isinstance(self.days, int):
             self.days = [self.days]
+        super().__init__(features=features, column_names=column_names, iterations=[i for i in self.days], prefix=prefix, add_opponent=add_opponent)
+
         self.granularity = granularity or [self.column_names.player_id]
         self.add_count = add_count
-        self.add_opponent = add_opponent
-        self.prefix = prefix
-        self._features_out = []
 
         for day in self.days:
-            for feature_name in self.features:
-                self._features_out.append(f'{self.prefix}{day}_{feature_name}')
-                if self.add_opponent:
-                    self._features_out.append(f'{self.prefix}{day}_{feature_name}_opponent')
-
             if self.add_count:
                 self._features_out.append(f'{self.prefix}{day}_count')
 
@@ -476,22 +442,13 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
                 concat_df = concat_df.assign(
                     **{feature_name: concat_df[feature_name] * concat_df[self.column_names.participation_weight]})
 
-        concat_df = concat_df.assign(**{self.column_names.start_date: lambda x: x[self.column_names.start_date].dt.date})
+        concat_df = concat_df.assign(
+            **{self.column_names.start_date: lambda x: x[self.column_names.start_date].dt.date})
 
         for day in self.days:
             prefix_day = f'{self.prefix}{day}'
             concat_df = self._add_rolling_feature(concat_df=concat_df, day=day, granularity=self.granularity,
                                                   prefix_day=prefix_day)
-
-        if self.add_opponent:
-            feats = []
-            for day in self.days:
-                for feature_name in self.features:
-                    feats.append(f'{self.prefix}{day}_{feature_name}')
-                if self.add_count:
-                    feats.append(f'{self.prefix}{day}_count')
-
-            concat_df = add_opponent_features(df=concat_df, column_names=self.column_names, features=feats)
 
         return self._create_transformed_df(df=df, concat_df=concat_df)
 
@@ -588,23 +545,30 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
                  binary_column: str,
                  granularity: list[str] = None,
                  prob_column: Optional[str] = None,
-                 min_periods: int = 1, prefix: str = 'rolling_mean_unknown_'):
-        super().__init__(features=features, column_names=column_names)
+                 min_periods: int = 1,
+                 add_opponent: bool = False,
+                 prefix: str = 'rolling_mean_binary_'):
+        super().__init__(features=features, column_names=column_names, add_opponent=add_opponent, prefix=prefix, iterations=[])
         self.granularity = granularity or [column_names.player_id]
         self.window = window
         self.min_periods = min_periods
         self.binary_column = binary_column
         self.column_names = column_names
         self.prob_column = prob_column
-        self.prefix = prefix
-        self._features_out = []
         for feature_name in self.features:
-            self._features_out.append(f'{self.prefix}{feature_name}_1')
-            self._features_out.append(f'{self.prefix}{feature_name}_0')
+            self._features_out.append(f'{self.prefix}{self.window}_{feature_name}_1')
+            self._features_out.append(f'{self.prefix}{self.window}_{feature_name}_0')
+
+            if self.add_opponent:
+                self._features_out.append(f'{prefix}{self.window}_{feature_name}_opponent')
+
         if self.prob_column:
             for feature_name in self.features:
-                self._features_out.append(f'{self.prefix}{self.prob_column}_{feature_name}_1')
-                self._features_out.append(f'{self.prefix}{self.prob_column}_{feature_name}_0')
+                self._features_out.append(f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_1')
+                self._features_out.append(f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_0')
+
+                if self.add_opponent:
+                    self._features_out.append(f'{prefix}{self.window}_{feature_name}_opponent')
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
@@ -625,18 +589,18 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
             concat_df['value_result_1'] = concat_df[feature].where(mask_result_1)
             concat_df['value_result_0'] = concat_df[feature].where(mask_result_0)
 
-
-            concat_df[f'{self.prefix}{feature}_1'] = concat_df.groupby(self.granularity)['value_result_1'].transform(
-                lambda x: x.shift().rolling(window=self.window, min_periods=self.min_periods ).mean())
-            concat_df[f'{self.prefix}{feature}_0'] = concat_df.groupby(self.granularity)['value_result_0'].transform(
-                lambda x: x.shift().rolling(window=self.window, min_periods=self.min_periods ).mean())
+            concat_df[f'{self.prefix}{self.window}_{feature}_1'] = concat_df.groupby(self.granularity)['value_result_1'].transform(
+                lambda x: x.shift().rolling(window=self.window, min_periods=self.min_periods).mean())
+            concat_df[f'{self.prefix}{self.window}_{feature}_0'] = concat_df.groupby(self.granularity)['value_result_0'].transform(
+                lambda x: x.shift().rolling(window=self.window, min_periods=self.min_periods).mean())
 
             concat_df.drop(['value_result_1', 'value_result_0'], axis=1, inplace=True)
 
         if self.prob_column:
             for idx, feature_name in enumerate(self.features):
-                concat_df[self.features_out[len(self.features)*2+idx*2]] = concat_df[self.features_out[idx*2]] * concat_df[self.prob_column]
-                concat_df[self.features_out[len(self.features)*2+idx*2+1]] = concat_df[self.features_out[idx*2+1]] * (1 - concat_df[self.prob_column])
+                concat_df[self.features_out[len(self.features) * 2 + idx * 2]] = concat_df[self.features_out[idx * 2]] * \
+                                                                                 concat_df[self.prob_column]
+                concat_df[self.features_out[len(self.features) * 2 + idx * 2 + 1]] = concat_df[self.features_out[
+                    idx * 2 + 1]] * (1 - concat_df[self.prob_column])
 
         return self._create_transformed_df(df=df, concat_df=concat_df)
-
