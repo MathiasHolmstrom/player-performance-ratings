@@ -97,7 +97,7 @@ class BaseLagTransformer(BasePostTransformer):
                            self.column_names.player_id]].agg('__'.join, axis=1))
         self._df = self._df.drop_duplicates(subset=['__id'], keep='last')
 
-        transformed_df = self.transform(pd.DataFrame(df))
+        transformed_df = self.transform(df=df)
         return transformed_df
 
     def _string_convert(self, df: pd.DataFrame) -> pd.DataFrame:

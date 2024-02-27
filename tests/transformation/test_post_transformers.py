@@ -457,7 +457,7 @@ def test_binary_granularity_rolling_mean_transformer(column_names):
                            pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-02"),
                            pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-02")],
             "team": [1, 1, 2, 2, 1, 1, 2, 2, 2, 2],
-            'prob': [0.5, 0.5, 0.5, 0.5, 0.6, 0.6,  0.3, 0.3, 0.2, 0.2]
+            'prob': [0.5, 0.5, 0.5, 0.5, 0.6, 0.6, 0.3, 0.3, 0.2, 0.2]
         }
     )
 
@@ -481,8 +481,10 @@ def test_binary_granularity_rolling_mean_transformer(column_names):
     expected_df[rolling_mean_transformation.features_out[0]] = [None, None, None, None, 10, 10, None, None, None, None]
     expected_df[rolling_mean_transformation.features_out[1]] = [None, None, None, None, None, None, -10,
                                                                 -10, -12.5, -15]
-    expected_df[rolling_mean_transformation.features_out[2]] = [None, None, None, None, 10*0.6, 10*0.6, None, None, None, None]
-    expected_df[rolling_mean_transformation.features_out[3]] = [None, None, None, None, None, None, (1-0.3)*-10, (1-0.3)* -10, (1-0.2)*-12.5, (1-0.2)*-15]
+    expected_df[rolling_mean_transformation.features_out[2]] = [None, None, None, None, 10 * 0.6, 10 * 0.6, None, None,
+                                                                None, None]
+    expected_df[rolling_mean_transformation.features_out[3]] = [None, None, None, None, None, None, (1 - 0.3) * -10,
+                                                                (1 - 0.3) * -10, (1 - 0.2) * -12.5, (1 - 0.2) * -15]
     pd.testing.assert_frame_equal(transformed_data, expected_df, check_like=True, check_dtype=False)
 
 
@@ -545,3 +547,48 @@ def test_binary_granularity_rolling_mean_fit_transform_transform(column_names):
     expected_future_df[rolling_mean_transformation.features_out[1]] = [None, None]
 
     pd.testing.assert_frame_equal(future_df, expected_future_df, check_like=True, check_dtype=False)
+
+
+def test_binary_granularity_rolling_mean_fit_transform_opponent(column_names):
+    df = pd.DataFrame(
+        {
+            'player': ['a', 'b', "a", "b", "a", "b"],
+            "game": [1, 1, 2, 2, 3, 3],
+            'score_difference': [10, -10, 5, -5, 3, 3],
+            "won": [1, 0, 0, 1, 1,0],
+            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"),
+                           pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"),
+                           pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"),],
+            "team": [1, 2, 1, 2, 1, 2],
+            "prob": [0.6, 0.4, 0.6, 0.4, 0.6, 0.4]
+        }
+    )
+
+    df['team'] = df['team'].astype('str')
+    df['game'] = df['game'].astype('str')
+    df['player'] = df['player'].astype('str')
+    expected_historical_df = df.copy()
+
+    rolling_mean_transformation = BinaryOutcomeRollingMeanTransformer(
+        features=['score_difference'],
+        binary_column="won",
+        window=2,
+        min_periods=1,
+        granularity=['player'],
+        add_opponent=True,
+        column_names=column_names,
+        prob_column="prob"
+    )
+
+    df = rolling_mean_transformation.fit_transform(df)
+
+    expected_historical_df[rolling_mean_transformation.features_out[0]] = [None, None, 10, None, 10, -5]
+    expected_historical_df[rolling_mean_transformation.features_out[1]] = [None, None, None, -10, 5, -10 ]
+    expected_historical_df[rolling_mean_transformation.features_out[2]] = [None, None, None, 10, -5, 10 ]
+    expected_historical_df[rolling_mean_transformation.features_out[3]] = [None, None, -10, None, -10, 5]
+
+    expected_historical_df[rolling_mean_transformation.features_out[4]] = [None, None, None, None, 10*0.6+0.4*5, -10*0.6+0.4*-5]
+    expected_historical_df[rolling_mean_transformation.features_out[5]] = [None, None, None, None, -10*0.6+0.4*-5, 10*0.6+0.4*5]
+
+    pd.testing.assert_frame_equal(df, expected_historical_df, check_like=True, check_dtype=False)
+

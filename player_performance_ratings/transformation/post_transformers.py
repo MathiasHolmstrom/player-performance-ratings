@@ -25,9 +25,6 @@ def create_output_column_by_game_group(data: pd.DataFrame, feature_name: str,
     return data
 
 
-
-
-
 class PredictorTransformer(BasePostTransformer):
 
     def __init__(self, predictor: BasePredictor, features: list[str] = None):
@@ -208,9 +205,8 @@ class LagTransformer(BaseLagTransformer):
             Prefix for the new lag columns
         """
 
-
-
-        super().__init__(features=features, column_names=column_names, add_opponent=add_opponent, prefix=prefix, iterations=[i for i in range(1, lag_length + 1)])
+        super().__init__(features=features, column_names=column_names, add_opponent=add_opponent, prefix=prefix,
+                         iterations=[i for i in range(1, lag_length + 1)])
         self.days_between_lags = days_between_lags or []
         for days_lag in self.days_between_lags:
             self._features_out.append(f'{prefix}{days_lag}_days_ago')
@@ -221,7 +217,6 @@ class LagTransformer(BaseLagTransformer):
 
         self.future_lag = future_lag
         self._df = None
-
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
@@ -349,14 +344,14 @@ class RollingMeanTransformer(BaseLagTransformer):
         :param prefix:
             Prefix for the new rolling mean columns
         """
-        super().__init__(features=features, column_names=column_names, add_opponent=add_opponent, iterations=[window], prefix=prefix)
+        super().__init__(features=features, column_names=column_names, add_opponent=add_opponent, iterations=[window],
+                         prefix=prefix)
         self.granularity = granularity or [column_names.player_id]
         if isinstance(self.granularity, str):
             self.granularity = [self.granularity]
         self.window = window
         self.min_periods = min_periods
         self.column_names = column_names
-
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         return self._fit_transform(df)
@@ -413,7 +408,8 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
         self.days = days
         if isinstance(self.days, int):
             self.days = [self.days]
-        super().__init__(features=features, column_names=column_names, iterations=[i for i in self.days], prefix=prefix, add_opponent=add_opponent)
+        super().__init__(features=features, column_names=column_names, iterations=[i for i in self.days], prefix=prefix,
+                         add_opponent=add_opponent)
 
         self.granularity = granularity or [self.column_names.player_id]
         self.add_count = add_count
@@ -548,7 +544,8 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
                  min_periods: int = 1,
                  add_opponent: bool = False,
                  prefix: str = 'rolling_mean_binary_'):
-        super().__init__(features=features, column_names=column_names, add_opponent=add_opponent, prefix=prefix, iterations=[])
+        super().__init__(features=features, column_names=column_names, add_opponent=add_opponent, prefix=prefix,
+                         iterations=[])
         self.granularity = granularity or [column_names.player_id]
         self.window = window
         self.min_periods = min_periods
@@ -556,9 +553,12 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
         self.column_names = column_names
         self.prob_column = prob_column
         for feature_name in self.features:
+            feature1 = f'{self.prefix}{self.window}_{feature_name}_1'
+            feature2 = f'{self.prefix}{self.window}_{feature_name}_0'
             self._features_out.append(f'{self.prefix}{self.window}_{feature_name}_1')
             self._features_out.append(f'{self.prefix}{self.window}_{feature_name}_0')
-
+            self._entity_features.append(feature1)
+            self._entity_features.append(feature2)
 
             if self.add_opponent:
                 self._features_out.append(f'{self.prefix}{self.window}_{feature_name}_1_opponent')
@@ -566,13 +566,12 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
 
         if self.prob_column:
             for feature_name in self.features:
-                self._features_out.append(f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_1')
-                self._features_out.append(f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_0')
+                prob_feature = f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}'
+                self._features_out.append(prob_feature)
+                self._entity_features.append(prob_feature)
 
                 if self.add_opponent:
-                    self._features_out.append(f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_1_opponent')
-                    self._features_out.append(
-                        f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_0_opponent')
+                    self._features_out.append(f'{prob_feature}_opponent')
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
@@ -593,28 +592,25 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
             concat_df['value_result_1'] = concat_df[feature].where(mask_result_1)
             concat_df['value_result_0'] = concat_df[feature].where(mask_result_0)
 
-            concat_df[f'{self.prefix}{self.window}_{feature}_1'] = concat_df.groupby(self.granularity)['value_result_1'].transform(
+            concat_df[f'{self.prefix}{self.window}_{feature}_1'] = concat_df.groupby(self.granularity)[
+                'value_result_1'].transform(
                 lambda x: x.shift().rolling(window=self.window, min_periods=self.min_periods).mean())
-            concat_df[f'{self.prefix}{self.window}_{feature}_0'] = concat_df.groupby(self.granularity)['value_result_0'].transform(
+            concat_df[f'{self.prefix}{self.window}_{feature}_0'] = concat_df.groupby(self.granularity)[
+                'value_result_0'].transform(
                 lambda x: x.shift().rolling(window=self.window, min_periods=self.min_periods).mean())
 
             concat_df.drop(['value_result_1', 'value_result_0'], axis=1, inplace=True)
 
         if self.prob_column:
             for idx, feature_name in enumerate(self.features):
-                concat_df[f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_1'] = concat_df[f'{self.prefix}{self.window}_{feature_name}_1'] * \
-                                                                                 concat_df[self.prob_column]
-                concat_df[f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_0'] = concat_df[f'{self.prefix}{self.window}_{feature_name}_0'] * (1 - concat_df[self.prob_column])
-
-                if self.add_opponent:
-                    concat_df[f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_1_opponent'] = concat_df[
-                                                                                                       f'{self.prefix}{self.window}_{feature_name}_1_opponent'] * \
-                                                                                                   concat_df[
-                                                                                                       self.prob_column]
-                    concat_df[f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}_0_opponent'] = concat_df[
-                                                                                                       f'{self.prefix}{self.window}_{feature_name}_0_opponent'] * (
-                                                                                                               1 -
-                                                                                                               concat_df[
-                                                                                                                   self.prob_column])
+                concat_df[f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}'] = concat_df[
+                                                                                                 f'{self.prefix}{self.window}_{feature_name}_1'] * \
+                                                                                             concat_df[
+                                                                                                 self.prob_column] + \
+                                                                                             concat_df[
+                                                                                                 f'{self.prefix}{self.window}_{feature_name}_0'] * (
+                                                                                                     1 -
+                                                                                                     concat_df[
+                                                                                                         self.prob_column])
 
         return self._create_transformed_df(df=df, concat_df=concat_df)
