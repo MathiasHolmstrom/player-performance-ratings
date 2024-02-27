@@ -416,7 +416,10 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
 
         for day in self.days:
             if self.add_count:
-                self._features_out.append(f'{self.prefix}{day}_count')
+                feature = f'{self.prefix}{day}_count'
+                self._features_out.append(feature)
+                self._entity_features.append(feature)
+
 
                 if self.add_opponent:
                     self._features_out.append(f'{self.prefix}{day}_count_opponent')
