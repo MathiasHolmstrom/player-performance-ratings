@@ -75,7 +75,6 @@ class BaseLagTransformer(BasePostTransformer):
                 if self.add_opponent:
                     self._features_out.append(f'{prefix}{lag}_{feature_name}_opponent')
 
-
     def _concat_df(self, df: pd.DataFrame):
         df = self._string_convert(df=df)
         df = df.assign(
@@ -83,6 +82,8 @@ class BaseLagTransformer(BasePostTransformer):
                      self.column_names.player_id]].agg('__'.join, axis=1))
 
         concat_df = pd.concat([self._df, df], axis=0).reset_index()
+        if concat_df[self.column_names.start_date].dtype in('str', 'object'):
+            concat_df[self.column_names.start_date] = pd.to_datetime(concat_df[self.column_names.start_date])
         return concat_df.drop_duplicates(subset=['__id'], keep='last')
 
     def _fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -115,7 +116,6 @@ class BaseLagTransformer(BasePostTransformer):
 
         if self.add_opponent:
             concat_df = self._add_opponent_features(df=concat_df)
-
 
         ori_cols = df.columns.tolist()
         ori_index_values = df.index.tolist()

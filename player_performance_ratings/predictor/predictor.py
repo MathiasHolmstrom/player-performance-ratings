@@ -108,6 +108,7 @@ class GameTeamPredictor(BasePredictor):
 
         if self.multiclassifier:
             grouped[self._pred_column] = self.estimator.predict_proba(grouped[self.estimator_features]).tolist()
+            grouped['classes'] = self.estimator.classes_
         elif not hasattr(self.estimator, "predict_proba"):
             grouped[self._pred_column] = self.estimator.predict(grouped[self.estimator_features])
         else:
@@ -116,7 +117,12 @@ class GameTeamPredictor(BasePredictor):
         if self.pred_column in df.columns:
             df = df.drop(columns=[self.pred_column])
 
-        df = df.merge(grouped[[self.game_id_colum, self.team_id_column] + [self._pred_column]],
+        if 'classes' in grouped.columns:
+            df = df.merge(grouped[[self.game_id_colum, self.team_id_column] + [self._pred_column, 'classes']],
+                          on=[self.game_id_colum, self.team_id_column])
+
+        else:
+            df = df.merge(grouped[[self.game_id_colum, self.team_id_column] + [self._pred_column]],
                       on=[self.game_id_colum, self.team_id_column])
 
         return df
@@ -221,6 +227,7 @@ class Predictor(BasePredictor):
         filtered_df = apply_filters(df=df, filters=self.filters)
         if self.multiclassifier:
             filtered_df[self._pred_column] = self.estimator.predict_proba(filtered_df[self.estimator_features]).tolist()
+            filtered_df['classes'] = self.estimator.classes_
             if len(set(filtered_df[self.pred_column].iloc[0])) == 2:
                 raise ValueError(
                     "Too many unique values in relation to rows in the training dataset causes multiclassifier to not train properly")
@@ -230,5 +237,8 @@ class Predictor(BasePredictor):
         else:
             filtered_df[self._pred_column] = self.estimator.predict_proba(filtered_df[self.estimator_features])[:, 1]
 
-        df = df.merge(filtered_df[['__id', self._pred_column]], on='__id', how='left')
+        if 'classes' in filtered_df.columns:
+            df = df.merge(filtered_df[['__id', self._pred_column, 'classes']], on='__id', how='left')
+        else:
+            df = df.merge(filtered_df[['__id', self._pred_column]], on='__id', how='left')
         return df.drop(columns=['__id'])
