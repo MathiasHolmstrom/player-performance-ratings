@@ -47,7 +47,6 @@ class StartLeagueRatingOptimizer():
     def optimize(self, df: pd.DataFrame, rating_model_idx: int, rating_generator: UpdateRatingGenerator,
                  matches: list[Match]) -> dict[str, float]:
 
-        df = df.copy()
 
         column_names = rating_generator.column_names
         start_rating_generator = rating_generator.match_rating_generator.start_rating_generator
@@ -76,7 +75,7 @@ class StartLeagueRatingOptimizer():
 
             rating_values = rating_generators[rating_model_idx].generate_historical(df=df, matches=matches)
             for rating_column, rating_value in rating_values.items():
-                df[rating_column] = rating_value
+                df = df.assign(**{rating_column: rating_value})
 
             ratings_df = rating_generators[rating_model_idx].ratings_df
             df_incl_ratings = df.merge(ratings_df[[column_names.match_id, column_names.team_id, column_names.player_id,
