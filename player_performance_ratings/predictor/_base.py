@@ -28,6 +28,7 @@ class BasePredictor(ABC):
         self._pred_column = pred_column or f"{self._target}_prediction"
         self.pre_transformers = pre_transformers or []
         self._deepest_estimator = self.estimator
+        self.multiclassifier = False
 
         iterations = 0
         while hasattr(self._deepest_estimator, "estimator"):
@@ -61,6 +62,12 @@ class BasePredictor(ABC):
     @property
     def target(self) -> str:
         return self._target
+
+    @property
+    def columns_added(self) -> list[str]:
+        if not self.multiclassifier:
+            return [self.pred_column]
+        return [self.pred_column, "classes"]
 
     @property
     def classes_(self) -> Optional[list[str]]:
