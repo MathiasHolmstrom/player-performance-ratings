@@ -288,8 +288,8 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                 rating_generators = [rating_g]
             match_predictor = match_predictor_factory.create(
                 rating_generators=rating_generators,
-
             )
+
             return match_predictor.cross_validate_score(df=df, matches=matches, create_performance=False,
                                                         cross_validator=cross_validator)
 

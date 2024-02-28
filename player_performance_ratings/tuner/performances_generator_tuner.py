@@ -127,7 +127,10 @@ class PerformancesGeneratorTuner:
                     sum_weights += all_params[param]
 
             for param in all_params:
+
                 if f"{performance_name}__" in param:
+                    lower_is_better = False
+
                     column_weights.append(ColumnWeight(name=param.replace(f"{performance_name}__", ""),
                                                        weight=all_params[param] / sum_weights))
 

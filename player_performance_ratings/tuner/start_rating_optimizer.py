@@ -47,6 +47,8 @@ class StartLeagueRatingOptimizer():
     def optimize(self, df: pd.DataFrame, rating_model_idx: int, rating_generator: UpdateRatingGenerator,
                  matches: list[Match]) -> dict[str, float]:
 
+        df = df.copy()
+
         column_names = rating_generator.column_names
         start_rating_generator = rating_generator.match_rating_generator.start_rating_generator
         league_ratings = start_rating_generator.league_ratings.copy()
