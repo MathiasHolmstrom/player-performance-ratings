@@ -93,7 +93,7 @@ class StartLeagueRatingOptimizer():
 
             if not league_ratings:
                 league_ratings = pipeline.rating_generators[
-                    rating_model_idx].team_rating_generator.start_rating_generator.league_ratings
+                    rating_model_idx].match_rating_generator.start_rating_generator.league_ratings
 
             self._league_ratings_iterations.append(copy.deepcopy(league_ratings))
             self._scores.append(score)

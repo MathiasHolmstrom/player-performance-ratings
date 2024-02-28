@@ -592,3 +592,5 @@ def test_binary_granularity_rolling_mean_fit_transform_opponent(column_names):
 
     pd.testing.assert_frame_equal(df, expected_historical_df, check_like=True, check_dtype=False)
 
+
+

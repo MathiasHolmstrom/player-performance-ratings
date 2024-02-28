@@ -172,3 +172,4 @@ def test_symmetric_distribution_transformer_with_granularity_fit_transform():
     transformed_df = transformer.fit_transform(df)
     assert abs(df[lambda x: x.position == 'SG']["performance"].skew()) > transformer.skewness_allowed
     assert abs(transformed_df.loc[lambda x: x.position == 'SG']["performance"].skew()) < transformer.skewness_allowed
+

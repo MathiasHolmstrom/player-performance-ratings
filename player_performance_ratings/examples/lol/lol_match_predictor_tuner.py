@@ -112,14 +112,9 @@ predictor = GameTeamPredictor(
     game_id_colum="gameid",
     team_id_column="teamname",
 )
-column_weights = [ColumnWeight(name='kills', weight=1),
-                  ColumnWeight(name='deaths', weight=1),
-                  ColumnWeight(name='damagetochampions', weight=1),
-                  ColumnWeight(name='result', weight=1)]
 
 pipeline = Pipeline(
     rating_generators=rating_generator,
-    column_weights=column_weights,
     predictor=predictor,
 )
 
