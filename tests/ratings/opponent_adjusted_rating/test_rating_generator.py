@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 from player_performance_ratings.data_structures import Match, MatchPlayer, MatchPerformance, MatchTeam, \
@@ -8,7 +9,6 @@ from player_performance_ratings.ratings.rating_calculators import MatchRatingGen
 
 from player_performance_ratings.ratings.rating_calculators.performance_predictor import \
     MATCH_CONTRIBUTION_TO_SUM_VALUE
-
 
 
 def test_rating_generator_update_id_different_from_match_id():
@@ -290,7 +290,6 @@ def test_rating_generator_1_match():
         assert is_close(rating.confidence_sum, expected_rating.confidence_sum)
 
 
-
 def test_opponent_adjusted_rating_generator_with_projected_performance():
     column_names = ColumnNames(
         match_id="game_id",
@@ -365,9 +364,9 @@ def test_test_opponent_adjusted_rating_generator_with_projected_performance_feat
     rating_generator = UpdateRatingGenerator(
         column_names=column_names,
         estimator_features_out=[RatingEstimatorFeatures.TEAM_RATING_PROJECTED, RatingEstimatorFeatures.PLAYER_RATING,
-                      RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED,
-                      RatingEstimatorFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
-                      RatingEstimatorFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED],
+                                RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED,
+                                RatingEstimatorFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
+                                RatingEstimatorFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED],
         match_rating_generator=MatchRatingGenerator(
             confidence_weight=0,
             start_rating_generator=StartRatingGenerator(
@@ -419,10 +418,11 @@ def test_opponent_adjusted_rating_generator_historical_and_future():
     rating_generator = UpdateRatingGenerator(
         column_names=column_names,
         estimator_features_out=[RatingEstimatorFeatures.TEAM_RATING_PROJECTED,
-                      RatingEstimatorFeatures.PLAYER_RATING,
-                      RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED,
-                      RatingEstimatorFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
-                      RatingEstimatorFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED],
+                                RatingEstimatorFeatures.PLAYER_RATING,
+                                RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED,
+                                RatingEstimatorFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
+                                RatingEstimatorFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED],
+        historical_features_out=[RatingHistoricalFeatures.PLAYER_RATING_CHANGE],
         match_rating_generator=MatchRatingGenerator(
             confidence_weight=0,
             start_rating_generator=StartRatingGenerator(
@@ -455,6 +455,8 @@ def test_opponent_adjusted_rating_generator_historical_and_future():
                                                                                player_rating_2 - team_rating1,
                                                                                player_rating_3 - team_rating2,
                                                                                player_rating_4 - team_rating2],
+        RatingHistoricalFeatures.PLAYER_RATING_CHANGE: [np.nan, np.nan, np.nan, np.nan]
+
     }
 
     assert future_ratings == expected_future_ratings

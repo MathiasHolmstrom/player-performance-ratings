@@ -305,6 +305,9 @@ class UpdateRatingGenerator(RatingGenerator):
             team_leagues=team_leagues,
         )
 
+        for f in self._historical_features_out:
+            potential_feature_values[f] = [np.nan] * len(pre_match_player_rating_values)
+
         return {f: potential_feature_values[f] for f in self.estimator_features_return + self._historical_features_out}
 
     def _get_shared_rating_values(self,

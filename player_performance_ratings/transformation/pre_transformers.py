@@ -14,7 +14,7 @@ class NetOverPredictedTransformer(BaseTransformer):
     def __init__(self,
                  predictor: Predictor,
                  features: list[str],
-                 prefix: str = "net_over_prediction_",
+                 prefix: str = "net_over_",
                  ):
         super().__init__(features=features)
         self.prefix = prefix
