@@ -23,13 +23,11 @@ class PerformancesGeneratorTuner:
     def __init__(self,
                  performances_weight_search_ranges: dict[str, list[ParameterSearchRange]],
                  feature_names: Optional[Union[list[str], list[list[str]]]] = None,
-                 lower_is_better_features: Optional[list[str]] = None,
                  n_trials: int = 30,
                  ):
 
         self.performances_weight_search_ranges = performances_weight_search_ranges
         self.feature_names = feature_names
-        self.lower_is_better_features = lower_is_better_features
 
         self.n_trials = n_trials
         self._scores = []
@@ -65,7 +63,7 @@ class PerformancesGeneratorTuner:
                 for sr in renamed_search:
                     sr.name = f"{performance_name}__{sr.name}"
                 add_params_from_search_range(trial=trial, params=raw_params, parameter_search_range=renamed_search)
-                new_col_weights = self._create_column_weights(params=raw_params, remove_string=f"{performance_name}__")
+                new_col_weights = self._create_column_weights(params=raw_params, remove_string=f"{performance_name}__", search_range=search_range)
                 for new_col_weight in new_col_weights:
                     if new_col_weight.name in [cw.name for cw in column_weights[rating_idx]]:
                         column_weights[rating_idx][
@@ -104,12 +102,17 @@ class PerformancesGeneratorTuner:
                                      pre_transformations=pipeline_factory.performances_generator.original_pre_transformations,
                                      )
 
-    def _create_column_weights(self, params: dict, remove_string: str) -> list[ColumnWeight]:
+    def _create_column_weights(self, params: dict, remove_string: str, search_range:list[ParameterSearchRange]) -> list[ColumnWeight]:
 
         sum_weights = sum([v for _, v in params.items()])
         column_weights = []
+        lower_is_better = False
         for name, weight in params.items():
-            column_weights.append(ColumnWeight(name=name.replace(remove_string, ""), weight=weight / sum_weights))
+            for search in search_range:
+                if search.name == name.split("__")[1]:
+                    lower_is_better = search.lower_is_better
+                    break
+            column_weights.append(ColumnWeight(name=name.replace(remove_string, ""), weight=weight / sum_weights, lower_is_better=lower_is_better))
 
         return column_weights
 

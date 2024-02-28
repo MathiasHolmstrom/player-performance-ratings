@@ -57,6 +57,7 @@ weighter_search_range = {
                 type='uniform',
                 low=0,
                 high=.3,
+                lower_is_better=True
             ),
             ParameterSearchRange(
                 name='kills',
@@ -95,7 +96,6 @@ start_rating_search_range = [
 ]
 
 performance_generator_tuner = PerformancesGeneratorTuner(performances_weight_search_ranges=weighter_search_range,
-                                                         lower_is_better_features=["deaths"],
                                                          n_trials=1
                                                          )
 
@@ -118,12 +118,6 @@ pipeline = Pipeline(
     predictor=predictor,
 )
 
-cross_validator = MatchKFoldCrossValidator(
-    scorer=SklearnScorer(pred_column=pipeline.predictor.pred_column, scorer_function=log_loss),
-    match_id_column_name=column_names.match_id,
-    n_splits=1,
-    date_column_name=column_names.start_date
-)
 
 tuner = PipelineTuner(
     performances_generator_tuners=performance_generator_tuner,
@@ -131,7 +125,6 @@ tuner = PipelineTuner(
   #  predictor_tuner=predictor_tuner,
     fit_best=True,
     pipeline=pipeline,
-    cross_validator=cross_validator,
 )
 best_match_predictor = tuner.tune(df=df)
 pickle.dump(best_match_predictor, open("models/lol_match_predictor", 'wb'))
