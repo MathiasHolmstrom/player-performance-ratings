@@ -118,7 +118,7 @@ class PerformancesGeneratorTuner:
 
     def _select_best_column_weights(self, all_params: dict) -> list[list[ColumnWeight]]:
         best_column_weights = []
-        for performance_name in self.performances_weight_search_ranges:
+        for performance_name, search_range in self.performances_weight_search_ranges.items():
             column_weights = []
             sum_weights = 0
             for param in all_params:
@@ -130,9 +130,14 @@ class PerformancesGeneratorTuner:
 
                 if f"{performance_name}__" in param:
                     lower_is_better = False
+                    for s in search_range:
+                        if s.name == param.split("__")[1]:
+                            lower_is_better = s.lower_is_better
+                            break
+
 
                     column_weights.append(ColumnWeight(name=param.replace(f"{performance_name}__", ""),
-                                                       weight=all_params[param] / sum_weights))
+                                                       weight=all_params[param] / sum_weights, lower_is_better=lower_is_better))
 
             best_column_weights.append(column_weights)
 
