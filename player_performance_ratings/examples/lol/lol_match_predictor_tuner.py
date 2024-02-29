@@ -4,15 +4,12 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
 
-from player_performance_ratings.scorer.score import SklearnScorer
-from sklearn.metrics import log_loss
 
-from player_performance_ratings.cross_validator.cross_validator import MatchKFoldCrossValidator
 from player_performance_ratings.pipeline import Pipeline
 from player_performance_ratings.predictor import GameTeamPredictor
 
 from player_performance_ratings.tuner.rating_generator_tuner import UpdateRatingGeneratorTuner
-from player_performance_ratings.ratings import UpdateRatingGenerator, ColumnWeight
+from player_performance_ratings.ratings import UpdateRatingGenerator
 
 from player_performance_ratings.data_structures import ColumnNames
 

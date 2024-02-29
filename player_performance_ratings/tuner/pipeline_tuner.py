@@ -99,7 +99,7 @@ class PipelineTuner():
             if self._pipeline_factory.performances_generator:
                 original_pre_transformations = self._pipeline_factory.performances_generator.original_pre_transformations
                 other_params = {k: v for k, v in self._pipeline_factory .performances_generator.__dict__.items() if
-                                k not in ["column_weights", "pre_transformations", "original_pre_transformations"]}
+                                k not in ["column_weights", "pre_transformations", "original_pre_transformations", "column_names"]}
                 column_names = self._pipeline_factory.performances_generator.column_names
             else:
                 original_pre_transformations = []
