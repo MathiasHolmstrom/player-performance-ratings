@@ -49,7 +49,10 @@ class NetOverPredictedPostTransformer(BasePostTransformer):
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self._predictor.add_prediction(df)
         new_feature_name = self.prefix + self._predictor.pred_column
-        df = df.assign(**{new_feature_name: df[self._predictor.target] - df[self._predictor.pred_column]})
+        if self._predictor.target not in df.columns:
+            df = df.assign(**{new_feature_name: np.nan})
+        else:
+            df = df.assign(**{new_feature_name: df[self._predictor.target] - df[self._predictor.pred_column]})
         df = df.drop(columns=[self._predictor.pred_column])
 
         return df
@@ -541,9 +544,10 @@ class ModifierTransformer(BasePostTransformer):
         for operation in self.modify_operations:
             if operation.operation == Operation.SUBTRACT:
                 if operation.feature1 not in df.columns or operation.feature2 not in df.columns:
-                    df[operation.new_column_name] = np.nan
+                    df = df.assign(**{operation.new_column_name: np.nan})
+
                 else:
-                    df[operation.new_column_name] = df[operation.feature1] - df[operation.feature2]
+                    df = df.assign(**{operation.new_column_name: df[operation.feature1] - df[operation.feature2]})
 
         return df
 
