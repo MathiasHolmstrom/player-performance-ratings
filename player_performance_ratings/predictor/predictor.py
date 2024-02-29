@@ -4,6 +4,7 @@ import pandas as pd
 from lightgbm import LGBMClassifier
 from pandas.errors import SettingWithCopyWarning
 
+from player_performance_ratings.predictor.sklearn_estimator import OrdinalClassifier
 from player_performance_ratings.predictor_transformer import PredictorTransformer
 from player_performance_ratings.scorer.score import Filter, apply_filters
 
@@ -71,6 +72,8 @@ class GameTeamPredictor(BasePredictor):
         df = self.fit_transform_pre_transformers(df=df)
         if len(df[self._target].unique()) > 2 and hasattr(self.estimator, "predict_proba"):
             self.multiclassifier = True
+            if self.estimator.__class__.__name__ == 'LogisticRegression':
+                self.estimator = OrdinalClassifier(self.estimator)
 
         if hasattr(self.estimator, "predict_proba"):
             try:
@@ -200,6 +203,8 @@ class Predictor(BasePredictor):
         if not self.multiclassifier and len(filtered_df[self._target].unique()) > 2 and hasattr(self._deepest_estimator,
                                                                                                 "predict_proba"):
             self.multiclassifier = True
+            if self.estimator.__class__.__name__ == 'LogisticRegression':
+                self.estimator = OrdinalClassifier(self.estimator)
             if len(filtered_df[self._target].unique()) > 50:
                 logging.warning(
                     f"target has {len(filtered_df[self._target].unique())} unique values. This may machine-learning model to not function properly."

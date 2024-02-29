@@ -32,8 +32,9 @@ class NetOverPredictedPostTransformer(BasePostTransformer):
                  predictor: GameTeamPredictor,
                  features: list[str] = None,
                  prefix: str = "net_over_predicted_",
+                 are_estimator_features: bool = False,
                  ):
-        super().__init__(features=features)
+        super().__init__(features=features, are_estimator_features=are_estimator_features)
         self.prefix = prefix
         self._predictor = predictor
         self._features_out = []
