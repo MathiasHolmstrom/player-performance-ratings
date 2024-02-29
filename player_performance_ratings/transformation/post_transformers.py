@@ -540,7 +540,10 @@ class ModifierTransformer(BasePostTransformer):
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         for operation in self.modify_operations:
             if operation.operation == Operation.SUBTRACT:
-                df[operation.new_column_name] = df[operation.feature1] - df[operation.feature2]
+                if operation.feature1 not in df.columns or operation.feature2 not in df.columns:
+                    df[operation.new_column_name] = np.nan
+                else:
+                    df[operation.new_column_name] = df[operation.feature1] - df[operation.feature2]
 
         return df
 
