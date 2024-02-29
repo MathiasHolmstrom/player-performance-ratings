@@ -337,7 +337,7 @@ class Pipeline():
         df = self.predictor.add_prediction(df)
 
         if not keep_features:
-            df = df[ori_cols + [self.predictor.columns_added]]
+            df = df[ori_cols + self.predictor.columns_added]
         return df
 
     @property
