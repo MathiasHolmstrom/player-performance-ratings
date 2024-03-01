@@ -1,9 +1,8 @@
 import pandas as pd
 from deepdiff import DeepDiff
-from sklearn.preprocessing import StandardScaler
+
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.predictor.transformer import SkLearnTransformerWrapper
 from player_performance_ratings.ratings import ColumnWeight, PerformancesGenerator
 from player_performance_ratings.ratings.performances_generator import auto_create_pre_performance_transformations
 from player_performance_ratings.transformation import \

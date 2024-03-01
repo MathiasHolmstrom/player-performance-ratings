@@ -362,6 +362,7 @@ class RollingMeanTransformer(BaseLagTransformer):
         self.min_periods = min_periods
 
     def fit_transform(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
+        self.column_names = column_names
         self.granularity = self.granularity or [column_names.player_id]
         return self._fit_transform(df)
 

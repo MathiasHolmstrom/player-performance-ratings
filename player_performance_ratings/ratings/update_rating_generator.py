@@ -58,7 +58,7 @@ class UpdateRatingGenerator(RatingGenerator):
 
         # If projected participation weight is not None, then the projected ratings will be used instead of the actual ratings (which first are known after game is finished)
 
-    def generate_historical(self, df: pd.DataFrame, column_names: ColumnNames, matches: Optional[list[Match]] = None) -> \
+    def generate_historical(self, df: Optional[pd.DataFrame], column_names: ColumnNames, matches: Optional[list[Match]] = None) -> \
     dict[
         Union[
             RatingEstimatorFeatures, RatingHistoricalFeatures], list[float]]:
@@ -85,7 +85,7 @@ class UpdateRatingGenerator(RatingGenerator):
             raise ValueError("If matches is not passed, df must be massed")
 
         if matches is None:
-            matches = convert_df_to_matches(df=df, column_names=self.column_names)
+            matches = convert_df_to_matches(df=df, column_names=self.column_names, performance_column_name=self.performance_column)
 
         pre_match_player_rating_values = []
         pre_match_team_rating_values = []
@@ -233,7 +233,7 @@ class UpdateRatingGenerator(RatingGenerator):
             raise ValueError("If matches is not passed, df must be massed")
 
         if matches is None:
-            matches = convert_df_to_matches(df=df, column_names=self.column_names)
+            matches = convert_df_to_matches(df=df, column_names=self.column_names, performance_column_name=self.performance_column)
 
         pre_match_player_rating_values = []
         pre_match_opponent_projected_rating_values = []

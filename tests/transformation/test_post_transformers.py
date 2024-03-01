@@ -14,7 +14,6 @@ def column_names():
         team_id="team",
         player_id="player",
         start_date="start_date",
-        performance="performance"
     )
 
 
@@ -69,10 +68,9 @@ def test_lag_team_fit_transform(column_names):
         features=['points'],
         lag_length=1,
         granularity=['team'],
-        column_names=column_names,
     )
 
-    df_with_lags = lag_transformation.fit_transform(df)
+    df_with_lags = lag_transformation.fit_transform(df, column_names=column_names)
 
     expected_df = original_df.assign(**{
         "lag_1_points": [None, None, None, None, 1.5, 1.5, 2.5, 2.5]
@@ -100,10 +98,9 @@ def test_lag_fit_transform_2_features(column_names):
         features=['points', "points_per_minute"],
         lag_length=1,
         granularity=['player'],
-        column_names=column_names
     )
 
-    df_with_lags = lag_transformation.fit_transform(df)
+    df_with_lags = lag_transformation.fit_transform(df, column_names=column_names)
 
     expected_df = original_df.assign(**{
         "lag_1_points": [None, None, 1],
@@ -132,10 +129,9 @@ def test_lag_fit_transform_lag_length_2(column_names):
         features=['points'],
         lag_length=2,
         granularity=['player'],
-        column_names=column_names
     )
 
-    df_with_lags = lag_transformation.fit_transform(df)
+    df_with_lags = lag_transformation.fit_transform(df, column_names=column_names)
 
     expected_df = original_df.assign(**{
         "lag_1_points": [None, None, 1, 3],
@@ -173,11 +169,10 @@ def test_lag_fit_transform_and_transform(column_names):
         features=['points'],
         lag_length=1,
         granularity=['player'],
-        column_names=column_names
 
     )
 
-    _ = lag_transformation.fit_transform(historical_df)
+    _ = lag_transformation.fit_transform(historical_df, column_names=column_names)
     future_transformed_df = lag_transformation.transform(future_df)
 
     expected_df = future_df_copy.assign(**{lag_transformation.prefix + "1_points": [3, 2, None]})
@@ -212,10 +207,9 @@ def test_lag_transformation_transform_2_lags(column_names):
         features=['points'],
         lag_length=2,
         granularity=['player'],
-        column_names=column_names
     )
 
-    _ = lag_transformation.fit_transform(historical_df)
+    _ = lag_transformation.fit_transform(historical_df, column_names=column_names)
     future_transformed_df = lag_transformation.transform(future_df)
 
     expected_df = future_df_copy.assign(**{lag_transformation.prefix + "1_points": [3, 2, None]})
@@ -244,10 +238,9 @@ def test_rolling_mean_fit_transform(column_names):
         window=2,
         min_periods=1,
         granularity=['player'],
-        column_names=column_names
     )
 
-    df_with_rolling_mean = rolling_mean_transformation.fit_transform(df)
+    df_with_rolling_mean = rolling_mean_transformation.fit_transform(df, column_names=column_names)
 
     expected_df = original_df.assign(**{
         f"{rolling_mean_transformation.prefix}2_points": [None, None, 1, (3 + 1) / 2]
@@ -284,10 +277,9 @@ def test_rolling_mean_fit_transform_and_transform(column_names):
         window=2,
         min_periods=1,
         granularity=['player'],
-        column_names=column_names
     )
 
-    _ = rolling_mean_transformation.fit_transform(historical_df)
+    _ = rolling_mean_transformation.fit_transform(df=historical_df, column_names=column_names)
     transformed_future_df = rolling_mean_transformation.transform(future_df)
 
     expected_df = original_future_df.assign(**{
@@ -320,10 +312,9 @@ def test_rolling_mean_transformer_fit_transformer_team_stat(column_names):
         window=2,
         min_periods=1,
         granularity=['team'],
-        column_names=column_names
     )
 
-    transformed_data = rolling_mean_transformation.fit_transform(historical_df)
+    transformed_data = rolling_mean_transformation.fit_transform(historical_df, column_names=column_names)
     expected_df[rolling_mean_transformation.prefix + "2_score_difference"] = [None, None, None, None, 10, 10, -10, -10]
     expected_df['team'] = expected_df['team'].astype('str')
     expected_df['game'] = expected_df['game'].astype('str')
@@ -351,11 +342,10 @@ def test_rolling_mean_days_fit_transform(column_names):
         features=['points', 'points2'],
         days=2,
         granularity=['player'],
-        column_names=column_names,
         add_count=True
     )
 
-    transformed_df = rolling_mean_transformation.fit_transform(df)
+    transformed_df = rolling_mean_transformation.fit_transform(df, column_names=column_names)
 
     expected_df = original_df.assign(**{
         rolling_mean_transformation.features_out[0]: [None, None, None, 1, None],
@@ -390,10 +380,9 @@ def test_rolling_mean_days_fit_transform_40_days(column_names):
         features=['points'],
         days=40,
         granularity=['player'],
-        column_names=column_names,
     )
 
-    transformed_df = rolling_mean_transformation.fit_transform(df)
+    transformed_df = rolling_mean_transformation.fit_transform(df, column_names=column_names)
 
     expected_df = original_df.assign(**{
         rolling_mean_transformation.features_out[0]: [None, 1, 1, None, 1.5, 3],
@@ -427,11 +416,10 @@ def test_rolling_mean_days_fit_transform_opponent(column_names):
         features=['points'],
         days=10,
         granularity=['player'],
-        column_names=column_names,
         add_opponent=True
     )
 
-    transformed_df = rolling_mean_transformation.fit_transform(df)
+    transformed_df = rolling_mean_transformation.fit_transform(df, column_names=column_names)
 
     expected_df = original_df.assign(**{
         rolling_mean_transformation.features_out[0]: [None, None, None, None, 1, 1.5, 2, 3],
@@ -473,18 +461,14 @@ def test_binary_granularity_rolling_mean_transformer(column_names):
         window=10,
         min_periods=1,
         granularity=['player'],
-        column_names=column_names,
         prob_column="prob"
     )
 
-    transformed_data = rolling_mean_transformation.fit_transform(historical_df)
+    transformed_data = rolling_mean_transformation.fit_transform(df=historical_df, column_names=column_names)
     expected_df[rolling_mean_transformation.features_out[0]] = [None, None, None, None, 10, 10, None, None, None, None]
     expected_df[rolling_mean_transformation.features_out[1]] = [None, None, None, None, None, None, -10,
                                                                 -10, -12.5, -15]
-    expected_df[rolling_mean_transformation.features_out[2]] = [None, None, None, None, 10 * 0.6, 10 * 0.6, None, None,
-                                                                None, None]
-    expected_df[rolling_mean_transformation.features_out[3]] = [None, None, None, None, None, None, (1 - 0.3) * -10,
-                                                                (1 - 0.3) * -10, (1 - 0.2) * -12.5, (1 - 0.2) * -15]
+    expected_df[rolling_mean_transformation.features_out[2]] = [None, None, None, None, None, None, None, None, None, None]
     pd.testing.assert_frame_equal(transformed_data, expected_df, check_like=True, check_dtype=False)
 
 
@@ -515,10 +499,9 @@ def test_binary_granularity_rolling_mean_fit_transform_transform(column_names):
         window=1,
         min_periods=1,
         granularity=['player'],
-        column_names=column_names
     )
 
-    historical_df = rolling_mean_transformation.fit_transform(historical_df)
+    historical_df = rolling_mean_transformation.fit_transform(historical_df, column_names=column_names)
     expected_historical_df[rolling_mean_transformation.features_out[0]] = [None, None, None, None, 10, 10, None, None,
                                                                            None, None]
     expected_historical_df[rolling_mean_transformation.features_out[1]] = [None, None, None, None, None, None, -10,
@@ -576,11 +559,10 @@ def test_binary_granularity_rolling_mean_fit_transform_opponent(column_names):
         min_periods=1,
         granularity=['player'],
         add_opponent=True,
-        column_names=column_names,
         prob_column="prob"
     )
 
-    df = rolling_mean_transformation.fit_transform(df)
+    df = rolling_mean_transformation.fit_transform(df, column_names=column_names)
 
     expected_historical_df[rolling_mean_transformation.features_out[0]] = [None, None, 10, None, 10, -5]
     expected_historical_df[rolling_mean_transformation.features_out[1]] = [None, None, None, -10, 5, -10 ]

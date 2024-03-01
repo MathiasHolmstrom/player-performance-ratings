@@ -22,12 +22,11 @@ def test_bayesian_time_weight_rating_generator():
     column_names = ColumnNames(
         match_id='match_id',
         player_id='player_id',
-        performance='performance',
         start_date="start_date",
         team_id="team_id"
     )
 
-    matches = convert_df_to_matches(df=df, column_names=column_names)
+    matches = convert_df_to_matches(df=df, column_names=column_names, performance_column_name="performance")
 
     m = BayesianTimeWeightedRating(column_names=column_names)
 
@@ -77,14 +76,13 @@ def test_time_weight_rating_generator_with_league_and_position_priors():
     column_names = ColumnNames(
         match_id='match_id',
         player_id='player_id',
-        performance='performance',
         start_date="start_date",
         team_id="team_id",
         league="league",
         position="position"
     )
 
-    matches = convert_df_to_matches(df=df, column_names=column_names)
+    matches = convert_df_to_matches(df=df, column_names=column_names, performance_column_name="performance")
 
     m = BayesianTimeWeightedRating(prior_by_league=True, prior_by_position=True, column_names=column_names)
     ratings = m.generate_historical(matches=matches, df=df)

@@ -127,7 +127,9 @@ class PerformancesGeneratorTuner:
 
     def _select_best_performances(self, all_params: dict) -> list[list[ColumnWeight]]:
         best_column_weights = []
-        for performance_name, search_range in self.performances_search_ranges.items():
+        for performance_search_range in self.performances_search_ranges:
+            performance_name = performance_search_range.name
+            search_range = performance_search_range.search_ranges
             column_weights = []
             sum_weights = 0
             for param in all_params:

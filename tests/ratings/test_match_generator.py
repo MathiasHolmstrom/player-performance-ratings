@@ -30,14 +30,14 @@ def test_convert_df_to_matches():
         team_id="team_id",
         player_id="player_id",
         start_date="start_date",
-        performance="won",
         league="league"
     )
 
     matches = convert_df_to_matches(
         df=df,
         column_names=column_names,
-        league_identifier=LeagueIdentifier()
+        league_identifier=LeagueIdentifier(),
+        performance_column_name="won"
     )
 
     expected_matches = [
