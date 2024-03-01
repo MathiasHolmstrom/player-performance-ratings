@@ -24,6 +24,7 @@ class Pipeline():
 
     def __init__(self,
                  predictor: BasePredictor,
+                 column_names: ColumnNames,
                  rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
                  post_rating_transformers: Optional[List[BasePostTransformer]] = None,
@@ -76,6 +77,7 @@ class Pipeline():
             self.rating_generators: list[RatingGenerator] = []
 
         self.post_rating_transformers = post_rating_transformers or []
+        self.column_names = column_names
 
         for c in self.post_rating_transformers:
             self._estimator_features += [f for f in c.estimator_features_out if f not in self._estimator_features]
@@ -90,21 +92,18 @@ class Pipeline():
                     self._estimator_features.append(rating_feature_str)
 
         self.performances_generator = performances_generator
-
         self.predictor = predictor
-
         self.predictor.set_target(PredictColumnNames.TARGET)
 
     def cross_validate_score(self,
                              df: pd.DataFrame,
                              cross_validator: Optional[CrossValidator] = None,
-                             column_names: Optional[ColumnNames] = None,
                              matches: Optional[list[Match]] = None,
                              create_performance: bool = True,
                              create_rating_features: bool = True) -> float:
 
         if cross_validator is None:
-            cross_validator = self.create_default_cross_validator(df=df, column_names=column_names)
+            cross_validator = self.create_default_cross_validator(df=df)
 
         if create_performance:
             df = self._add_performance(df=df)
@@ -119,6 +118,7 @@ class Pipeline():
             df = self._add_rating(matches=matches, df=df, store_ratings=False)
 
         validation_df = cross_validator.generate_validation_df(df=df, predictor=self.predictor,
+                                                               column_names=self.column_names,
                                                                post_transformers=self.post_rating_transformers,
                                                                estimator_features=self._estimator_features,
                                                                keep_features=False)
@@ -132,7 +132,6 @@ class Pipeline():
     def cross_validate_predict(self,
                                df: pd.DataFrame,
                                cross_validator: Optional[CrossValidator] = None,
-                               column_names: Optional[ColumnNames] = None,
                                matches: Optional[list[Match]] = None,
                                create_performance: bool = True,
                                create_rating_features: bool = True,
@@ -141,7 +140,7 @@ class Pipeline():
                                ) -> pd.DataFrame:
 
         if cross_validator is None:
-            cross_validator = self.create_default_cross_validator(df=df, column_names=column_names)
+            cross_validator = self.create_default_cross_validator(df=df)
 
         if self.predictor.target not in df.columns:
             raise ValueError(
@@ -159,42 +158,21 @@ class Pipeline():
         if create_rating_features and self.rating_generators:
             df = self._add_rating(matches=matches, df=df, store_ratings=False)
 
-        return cross_validator.generate_validation_df(df=df, predictor=self.predictor,
+        return cross_validator.generate_validation_df(df=df,
+                                                      predictor=self.predictor,
+                                                      column_names=self.column_names,
                                                       post_transformers=self.post_rating_transformers,
                                                       estimator_features=self._estimator_features,
                                                       keep_features=keep_features,
                                                       add_train_prediction=add_train_prediction)
 
-    def create_default_cross_validator(self, df: pd.DataFrame,
-                                       column_names: Optional[ColumnNames] = None) -> CrossValidator:
-
-        if not column_names:
-            if self.rating_generators:
-                column_names = self.rating_generators[0].column_names
-            elif self.post_rating_transformers:
-                for p in self.post_rating_transformers:
-                    if hasattr(p, "column_names"):
-                        column_names = p.column_names
-                        break
-
-                if column_names is None:
-                    logging.error(
-                        "It's not possible to automatically create a cross-validator as column_names is not defined anywhere within the pipline. "
-                        "Pass column_names when calling the method")
-                    raise ValueError(
-                        "No column_names defined")
-            else:
-                logging.error(
-                    "It's not possible to automatically create a cross-validator as column_names is not defined anywhere within the pipline. "
-                    "Pass column_names when calling the method")
-                raise ValueError(
-                    "No column_names defined.")
+    def create_default_cross_validator(self, df: pd.DataFrame) -> CrossValidator:
 
         scorer = self._create_default_scorer(df)
 
         return MatchKFoldCrossValidator(
-            date_column_name=column_names.start_date,
-            match_id_column_name=column_names.rating_update_match_id,
+            date_column_name=self.column_names.start_date,
+            match_id_column_name=self.column_names.rating_update_match_id,
             scorer=scorer,
         )
 
@@ -212,9 +190,10 @@ class Pipeline():
 
         return scorer
 
-
     def train(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
               store_ratings: bool = True, keep_features: bool = False) -> pd.DataFrame:
+
+        df_with_predict = df.copy()
 
         if self.predictor.target not in df.columns:
             raise ValueError(
@@ -226,14 +205,20 @@ class Pipeline():
             df = self._add_rating(matches=matches, df=df, store_ratings=store_ratings)
 
         for post_rating_transformer in self.post_rating_transformers:
-            df = post_rating_transformer.fit_transform(df)
+            df = post_rating_transformer.fit_transform(df, column_names=self.column_names)
 
         self.predictor.train(df, estimator_features=self._estimator_features)
         df = self.predictor.add_prediction(df)
-        if not keep_features:
-            df = df[ori_cols + [self.predictor.pred_column]]
+        cn = self.column_names
+        if keep_features:
+            new_feats = [f for f in df.columns if f not in ori_cols]
+            return df_with_predict.merge(
+                df[new_feats + [cn.match_id, cn.team_id, cn.player_id]],
+                on=[cn.match_id, cn.team_id, cn.player_id], how='left')
 
-        return df
+        return df_with_predict.merge(
+            df[self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id]],
+            on=[cn.match_id, cn.team_id, cn.player_id], how='left')
 
     def _add_performance(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
@@ -252,7 +237,8 @@ class Pipeline():
 
         return df
 
-    def _add_rating(self, matches: Optional[Union[list[Match], Match]], df: pd.DataFrame, store_ratings: bool = True):
+    def _add_rating(self, matches: Optional[Union[list[Match], Match]], df: pd.DataFrame,
+                    store_ratings: bool = True):
 
         if matches:
             if isinstance(matches[0], Match):
@@ -267,23 +253,27 @@ class Pipeline():
         else:
             rating_game_ids = []
 
-        df_no_ratings = df[~df[rg.column_names.match_id].isin(rating_game_ids)]
-        df_calculated_ratings = df[df[rg.column_names.match_id].isin(rating_game_ids)]
+        df_no_ratings = df[~df[self.column_names.match_id].isin(rating_game_ids)]
+        df_calculated_ratings = df[df[self.column_names.match_id].isin(rating_game_ids)]
         for rating_idx, rating_generator in enumerate(self.rating_generators):
             if len(df_no_ratings) > 0:
 
                 if matches is None:
-                    rating_matches = convert_df_to_matches(column_names=rating_generator.column_names, df=df_no_ratings,
-                                                           league_identifier=LeagueIdentifier())
+                    rating_matches = convert_df_to_matches(column_names=self.column_names,
+                                                           df=df_no_ratings,
+                                                           league_identifier=LeagueIdentifier(),
+                                                           performance_column_name=rating_generator.performance_column)
                 else:
                     rating_matches = matches[rating_idx]
                     if len(df_no_ratings) != len(df):
                         rating_matches = [m for m in rating_matches if m.id in new_game_ids]
 
                 if store_ratings:
-                    match_ratings = rating_generator.generate_historical(matches=rating_matches, df=df)
+                    match_ratings = rating_generator.generate_historical(matches=rating_matches,
+                                                                         column_names=self.column_names, df=df)
                 else:
-                    match_ratings = rating_generator.generate_historical(matches=rating_matches)
+                    match_ratings = rating_generator.generate_historical(df=None, matches=rating_matches,
+                                                                         column_names=self.column_names)
 
                 for rating_feature, values in match_ratings.items():
                     if len(self.rating_generators) > 1:
@@ -298,7 +288,8 @@ class Pipeline():
                     rating_generator.column_names.match_id, rating_generator.column_names.team_id,
                     rating_generator.column_names.player_id]
                 df_calculated_ratings = df_calculated_ratings[
-                    [f for f in df_calculated_ratings.columns if f not in rating_generator.estimator_features_return]].merge(
+                    [f for f in df_calculated_ratings.columns if
+                     f not in rating_generator.estimator_features_return]].merge(
                     ratings_df[rating_cols], on=[
                         rating_generator.column_names.match_id, rating_generator.column_names.team_id,
                         rating_generator.column_names.player_id], how='inner')
@@ -313,15 +304,17 @@ class Pipeline():
         return df
 
     def future_predict(self, df: pd.DataFrame, keep_features: bool = False) -> pd.DataFrame:
-        df = df.copy()
-        ori_cols = df.columns.tolist()
+        df_with_predict = df.copy()
+
+        ori_cols = df_with_predict.columns.tolist()
         for rating_idx, rating_generator in enumerate(self.rating_generators):
             rating_column_names = rating_generator.column_names
 
-            matches = convert_df_to_matches(column_names=rating_column_names, df=df,
-                                            league_identifier=LeagueIdentifier())
+            matches = convert_df_to_matches(column_names=rating_column_names, df=df_with_predict,
+                                            league_identifier=LeagueIdentifier(),
+                                            performance_column_name=rating_generator.performance_column)
 
-            match_ratings = rating_generator.generate_future(matches=matches, df=df)
+            match_ratings = rating_generator.generate_future(matches=matches, df=df_with_predict)
             for rating_feature in rating_generator.features_out:
                 values = match_ratings[rating_feature]
 
@@ -329,16 +322,23 @@ class Pipeline():
                     rating_feature_str = rating_feature + str(rating_idx)
                 else:
                     rating_feature_str = rating_feature
-                df[rating_feature_str] = values
+                df_with_predict[rating_feature_str] = values
 
         for post_rating_transformer in self.post_rating_transformers:
-            df = post_rating_transformer.transform(df)
+            df_with_predict = post_rating_transformer.transform(df_with_predict)
 
-        df = self.predictor.add_prediction(df)
+        df_with_predict = self.predictor.add_prediction(df_with_predict)
 
-        if not keep_features:
-            df = df[ori_cols + self.predictor.columns_added]
-        return df
+        cn = self.column_names
+        if keep_features:
+            new_feats = [f for f in df.columns if f not in ori_cols]
+            return df_with_predict.merge(
+                df[new_feats + [cn.match_id, cn.team_id, cn.player_id]],
+                on=[cn.match_id, cn.team_id, cn.player_id], how='left')
+
+        return df_with_predict.merge(
+            df[self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id]],
+            on=[cn.match_id, cn.team_id, cn.player_id], how='left')
 
     @property
     def classes_(self) -> Optional[list[str]]:

@@ -56,7 +56,7 @@ def test_transformer_tuner():
     )
 
     performances_generator_tuner = PerformancesGeneratorTuner(
-        performances_weight_search_ranges=performances_weight_search_ranges,
+        performances_search_range=performances_weight_search_ranges,
         n_trials=2)
 
     df = pd.DataFrame(
@@ -161,7 +161,7 @@ def test_transformer_tuner_2_performances(estimator):
     )
 
     performances_generator_tuner = PerformancesGeneratorTuner(
-        performances_weight_search_ranges=performances_weight_search_ranges,
+        performances_search_range=performances_weight_search_ranges,
         n_trials=2)
 
     df = pd.DataFrame(

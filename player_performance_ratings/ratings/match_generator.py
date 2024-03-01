@@ -18,8 +18,12 @@ from player_performance_ratings.ratings.league_identifier import LeagueIdentifie
 HOUR_NUMBER_COLUMN_NAME = "hour_number"
 
 
-def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
-                          league_identifier: Optional[LeagueIdentifier] = LeagueIdentifier()) -> list[Match]:
+def convert_df_to_matches(
+        df: pd.DataFrame,
+        column_names: ColumnNames,
+        performance_column_name: str,
+        league_identifier: Optional[LeagueIdentifier] = LeagueIdentifier(),
+) -> list[Match]:
     """
     Converts a dataframe to a list of matches.
     Each dataframe row needs to be a unique combination of match_id and player_id.
@@ -44,11 +48,11 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
 
     if column_names.participation_weight is None and column_names.projected_participation_weight is not None:
         raise ValueError("projected_participation_weight column passed but not participation_weight column")
-    if column_names.performance in df.columns:
-        if max(df[column_names.performance]) > 1.001 or min(df[column_names.performance]) < -0.001:
+    if performance_column_name in df.columns:
+        if max(df[performance_column_name]) > 1.001 or min(df[performance_column_name]) < -0.001:
             raise ValueError("performance column must be between 0 and 1")
 
-        mean_performance = df[column_names.performance].mean()
+        mean_performance = df[performance_column_name].mean()
 
         if abs(mean_performance - 0.5) > 0.05:
             logging.warning(
@@ -178,11 +182,11 @@ def convert_df_to_matches(df: pd.DataFrame, column_names: ColumnNames,
         else:
             projected_participation_weight = participation_weight
 
-        if col_names.performance in row:
+        if performance_column_name in row:
             performance = MatchPerformance(
                 team_players_playing_time=team_players_playing_time,
                 opponent_players_playing_time=opponent_players_playing_time,
-                performance_value=row[col_names.performance],
+                performance_value=row[performance_column_name],
                 participation_weight=participation_weight,
                 projected_participation_weight=projected_participation_weight
             )

@@ -21,7 +21,6 @@ column_names = ColumnNames(
     match_id='gameid',
     start_date="date",
     player_id="playername",
-    performance='performance',
     league='league',
     position='position',
 )
@@ -38,10 +37,10 @@ df = (
     .drop(columns=['team_count'])
 )
 
-rating_generator = UpdateRatingGenerator(column_names=column_names)
+rating_generator = UpdateRatingGenerator(performance_column='performance')
 
 weighter_search_range = {
-    column_names.performance:
+    'performance':
         [
             ParameterSearchRange(
                 name='damagetochampions',
@@ -92,7 +91,7 @@ start_rating_search_range = [
     )
 ]
 
-performance_generator_tuner = PerformancesGeneratorTuner(performances_weight_search_ranges=weighter_search_range,
+performance_generator_tuner = PerformancesGeneratorTuner(performances_search_range=weighter_search_range,
                                                          n_trials=1
                                                          )
 
@@ -113,6 +112,7 @@ predictor = GameTeamPredictor(
 pipeline = Pipeline(
     rating_generators=rating_generator,
     predictor=predictor,
+    column_names=column_names
 )
 
 

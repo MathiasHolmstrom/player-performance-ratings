@@ -38,12 +38,14 @@ class NetOverPredictedPostTransformer(BasePostTransformer):
         self.prefix = prefix
         self._predictor = predictor
         self._features_out = []
+        self.column_names = None
         new_feature_name = self.prefix + self._predictor.pred_column
         self._features_out.append(new_feature_name)
         if self.prefix is "":
             raise ValueError("Prefix must not be empty")
 
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
+        self.column_names = column_names
         self._predictor.train(df, estimator_features=self.features)
         return self.transform(df)
 
@@ -63,15 +65,13 @@ class NetOverPredictedPostTransformer(BasePostTransformer):
         return self._features_out
 
 
-
-
 class PredictorTransformer(BasePostTransformer):
 
     def __init__(self, predictor: BasePredictor, features: list[str] = None):
         self.predictor = predictor
         super().__init__(features=features)
 
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame, column_names: Optional[None] = None) -> pd.DataFrame:
         self.predictor.train(df=df, estimator_features=self.features)
         return self.transform(df)
 
@@ -88,15 +88,11 @@ class RatioTeamPredictorTransformer(BasePostTransformer):
     def __init__(self,
                  features: list[str],
                  predictor: BasePredictor,
-                 game_id: str,
-                 team_id: str,
                  team_total_prediction_column: Optional[str] = None,
                  prefix: str = "_ratio_team"
                  ):
         super().__init__(features=features)
         self.predictor = predictor
-        self.game_id = game_id
-        self.team_id = team_id
         self.team_total_prediction_column = team_total_prediction_column
         self.prefix = prefix
         self.predictor._pred_column = f"__prediction__{self.predictor.target}"
@@ -104,13 +100,14 @@ class RatioTeamPredictorTransformer(BasePostTransformer):
         if self.team_total_prediction_column:
             self._features_out.append(self.predictor.target + prefix + "_team_total_multiplied")
 
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
+        self.column_names = column_names
         self.predictor.train(df=df, estimator_features=self.features)
         return self.transform(df)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self.predictor.add_prediction(df=df)
-        df[self.predictor.pred_column + "_sum"] = df.groupby([self.game_id, self.team_id])[
+        df[self.predictor.pred_column + "_sum"] = df.groupby([self.column_names.match_id, self.column_names.team_id])[
             self.predictor.pred_column].transform('sum')
         df[self._features_out[0]] = df[self.predictor.pred_column] / df[self.predictor.pred_column + "_sum"]
         if self.team_total_prediction_column:
@@ -136,7 +133,7 @@ class NormalizerTargetColumnTransformer(BasePostTransformer):
         for feature in self.features:
             self._features_out.append(f'{self.prefix}{feature}')
 
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
         return self.transform(df=df)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -165,7 +162,7 @@ class NormalizerTransformer(BasePostTransformer):
         if self.target_mean is None and not self.create_target_as_mean:
             raise ValueError("Either target_sum or create_target_as_mean must be set")
 
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
         self._features_to_normalization_target = {f: self.target_mean for f in self.features} if self.target_mean else {
             f: df[f].mean() for f in self.features}
         return self.transform(df=df)
@@ -187,7 +184,6 @@ class LagTransformer(BaseLagTransformer):
     def __init__(self,
                  features: list[str],
                  lag_length: int,
-                 column_names: ColumnNames,
                  granularity: Optional[list[str]] = None,
                  days_between_lags: Optional[list[int]] = None,
                  prefix: str = 'lag_',
@@ -219,20 +215,20 @@ class LagTransformer(BaseLagTransformer):
             Prefix for the new lag columns
         """
 
-        super().__init__(features=features, column_names=column_names, add_opponent=add_opponent, prefix=prefix,
+        super().__init__(features=features, add_opponent=add_opponent, prefix=prefix,
                          iterations=[i for i in range(1, lag_length + 1)])
         self.days_between_lags = days_between_lags or []
         for days_lag in self.days_between_lags:
             self._features_out.append(f'{prefix}{days_lag}_days_ago')
 
-        self.column_names = column_names
-        self.granularity = granularity or [self.column_names.player_id]
+        self.granularity = granularity
         self.lag_length = lag_length
-
         self.future_lag = future_lag
         self._df = None
 
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
+        self.column_names = column_names
+        self.granularity = self.granularity or [self.column_names.player_id]
 
         for feature_out in self._features_out:
             if feature_out in df.columns:
@@ -322,7 +318,6 @@ class RollingMeanTransformer(BaseLagTransformer):
     def __init__(self,
                  features: list[str],
                  window: int,
-                 column_names: ColumnNames,
                  granularity: Union[list[str], str] = None,
                  add_opponent: bool = False,
                  min_periods: int = 1,
@@ -358,16 +353,16 @@ class RollingMeanTransformer(BaseLagTransformer):
         :param prefix:
             Prefix for the new rolling mean columns
         """
-        super().__init__(features=features, column_names=column_names, add_opponent=add_opponent, iterations=[window],
+        super().__init__(features=features, add_opponent=add_opponent, iterations=[window],
                          prefix=prefix)
-        self.granularity = granularity or [column_names.player_id]
+        self.granularity = granularity
         if isinstance(self.granularity, str):
             self.granularity = [self.granularity]
         self.window = window
         self.min_periods = min_periods
-        self.column_names = column_names
 
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
+        self.granularity = self.granularity or [column_names.player_id]
         return self._fit_transform(df)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -414,7 +409,6 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
     def __init__(self,
                  features: list[str],
                  days: Union[int, list[int]],
-                 column_names: ColumnNames,
                  granularity: Union[list[str], str] = None,
                  add_count: bool = False,
                  add_opponent: bool = False,
@@ -422,10 +416,10 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
         self.days = days
         if isinstance(self.days, int):
             self.days = [self.days]
-        super().__init__(features=features, column_names=column_names, iterations=[i for i in self.days], prefix=prefix,
+        super().__init__(features=features, iterations=[i for i in self.days], prefix=prefix,
                          add_opponent=add_opponent)
 
-        self.granularity = granularity or [self.column_names.player_id]
+        self.granularity = granularity
         self.add_count = add_count
 
         for day in self.days:
@@ -434,11 +428,12 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
                 self._features_out.append(feature)
                 self._entity_features.append(feature)
 
-
                 if self.add_opponent:
                     self._features_out.append(f'{self.prefix}{day}_count_opponent')
 
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
+        self.granularity = self.granularity or [self.column_names.player_id]
+        self.column_names = column_names
         validate_sorting(df=df, column_names=self.column_names)
         return self._fit_transform(df)
 
@@ -538,7 +533,8 @@ class ModifierTransformer(BasePostTransformer):
         self.modify_operations = modify_operations
         self._features_out = [operation.new_column_name for operation in self.modify_operations]
 
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames]) -> pd.DataFrame:
+        self.column_names = column_names
         return self.transform(df)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -558,20 +554,18 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
     def __init__(self,
                  features: list[str],
                  window: int,
-                 column_names: ColumnNames,
                  binary_column: str,
                  granularity: list[str] = None,
                  prob_column: Optional[str] = None,
                  min_periods: int = 1,
                  add_opponent: bool = False,
                  prefix: str = 'rolling_mean_binary_'):
-        super().__init__(features=features, column_names=column_names, add_opponent=add_opponent, prefix=prefix,
+        super().__init__(features=features, add_opponent=add_opponent, prefix=prefix,
                          iterations=[])
-        self.granularity = granularity or [column_names.player_id]
+        self.granularity = granularity
         self.window = window
         self.min_periods = min_periods
         self.binary_column = binary_column
-        self.column_names = column_names
         self.prob_column = prob_column
         for feature_name in self.features:
             feature1 = f'{self.prefix}{self.window}_{feature_name}_1'
@@ -594,8 +588,9 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
                 if self.add_opponent:
                     self._features_out.append(f'{prob_feature}_opponent')
 
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-
+    def fit_transform(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
+        self.column_names = column_names
+        self.granularity = self.granularity or [column_names.player_id]
         validate_sorting(df=df, column_names=self.column_names)
         return self._fit_transform(df)
 

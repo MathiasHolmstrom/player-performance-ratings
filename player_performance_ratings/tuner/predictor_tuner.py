@@ -105,7 +105,7 @@ class PredictorTuner():
                 if create_rating_features:
                     break
             return pipeline.cross_validate_score(df=df, create_performance=False, create_rating_features=create_rating_features,
-                                                 cross_validator=cross_validator, column_names=column_names)
+                                                 cross_validator=cross_validator)
 
         direction = "minimize"
         study_name = "optuna_study"

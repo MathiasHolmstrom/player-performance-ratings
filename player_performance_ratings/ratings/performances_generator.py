@@ -1,6 +1,6 @@
 import copy
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Union
 
 import pandas as pd
@@ -25,11 +25,16 @@ class ColumnWeight:
         if self.weight > 1:
             raise ValueError("Weight must be less than 1")
 
+@dataclass
+class Performance:
+    name: str = 'performance'
+    weights: list[ColumnWeight] = field(default_factory=list)
+
+
 
 def auto_create_pre_performance_transformations(
         pre_transformations: list[BaseTransformer],
-        column_weights: Union[list[list[ColumnWeight]], list[ColumnWeight]],
-        column_names: list[ColumnNames],
+        performances: list[Performance],
 ) -> list[BaseTransformer]:
     """
     Creates a list of transformers that ensure the performance column is generated in a way that makes sense for the rating model.
@@ -37,41 +42,19 @@ def auto_create_pre_performance_transformations(
     and then weights them according to the column_weights.
     """
 
-    if not isinstance(column_weights[0], list):
-        column_weights = [column_weights]
-
-
-    contains_not_position = True if any([c.position is None for c in column_names]) else False
-
     not_transformed_features = []
     transformed_features = []
 
+    for performance in performances:
+        not_transformed_features += [p.name for p in performance.weights if p not in not_transformed_features]
 
-    for idx, col_weights in enumerate(column_weights):
-        not_transformed_features += [c.name for c in column_weights[idx] if c.name not in not_transformed_features]
-
-
-        if column_names[idx].position is not None:
-            granularity = [column_names[idx].position]
-            features_in = []
-            for column_weight in col_weights:
-                features_in.append(column_weight.name)
-                not_transformed_features.remove(column_weight.name)
-
-            distribution_transformer = SymmetricDistributionTransformer(
-                features=features_in,
-                granularity=granularity, prefix="")
-            transformed_features += [distribution_transformer.prefix + f for f in distribution_transformer.features]
-            pre_transformations.append(distribution_transformer)
-
-
-    if contains_not_position:
-        distribution_transformer = SymmetricDistributionTransformer(features=not_transformed_features, prefix="")
-        pre_transformations.append(distribution_transformer)
+    distribution_transformer = SymmetricDistributionTransformer(features=not_transformed_features, prefix="")
+    pre_transformations.append(distribution_transformer)
 
     all_features = transformed_features + not_transformed_features
 
-    pre_transformations.append(PartialStandardScaler(features=all_features, ratio=1, max_value=9999, target_mean=0, prefix=""))
+    pre_transformations.append(
+        PartialStandardScaler(features=all_features, ratio=1, max_value=9999, target_mean=0, prefix=""))
     pre_transformations.append(MinMaxTransformer(features=all_features))
 
     return pre_transformations
@@ -80,64 +63,56 @@ def auto_create_pre_performance_transformations(
 class PerformancesGenerator():
 
     def __init__(self,
-                 column_names: Union[list[ColumnNames], ColumnNames],
-                 column_weights: Optional[Union[list[list[ColumnWeight]], list[ColumnWeight]]] = None,
+                 performances: Union[list[Performance], Performance],
                  pre_transformations: Optional[list[BaseTransformer]] = None,
                  auto_transform_performance: bool = True
                  ):
-        self.column_names = column_names if isinstance(column_names, list) else [column_names]
-        if column_weights is None:
-            column_weights = []
-            for idx in range(len(self.column_names)):
-                column_weights.append([ColumnWeight(name=column_names[idx].performance, weight=1)])
 
-        self.column_weights = column_weights if isinstance(column_weights[0], list) else [column_weights]
-        if len(self.column_names) > len(self.column_weights):
-            raise ValueError("There cannot be more column names items than column weights items")
-        elif len(self.column_names) < len(self.column_weights):
-            for _ in range(len(self.column_weights) - len(self.column_names)):
-                self.column_names.append(self.column_names[0])
+        self.performances = performances if isinstance(performances, list) else [performances]
         self.auto_transform_performance = auto_transform_performance
-        self.original_pre_transformations = [copy.deepcopy(p) for p in pre_transformations] if pre_transformations else []
+        self.original_pre_transformations = [copy.deepcopy(p) for p in
+                                             pre_transformations] if pre_transformations else []
         self.pre_transformations = pre_transformations or []
         if self.auto_transform_performance:
             self.pre_transformations = auto_create_pre_performance_transformations(
-                pre_transformations=self.pre_transformations, column_weights=column_weights,
-                column_names=self.column_names)
+                pre_transformations=self.pre_transformations, performances=self.performances)
+
 
     def generate(self, df):
+
 
         if self.pre_transformations:
             for pre_transformation in self.pre_transformations:
                 df = pre_transformation.fit_transform(df)
 
-        for idx, col_name in enumerate(self.column_names):
+        for performance in self.performances:
             if self.pre_transformations:
                 max_idx = len(self.pre_transformations) - 1
                 column_weighs_mapping = {col_weight.name: self.pre_transformations[max_idx].features_out[idx] for
-                                         idx, col_weight in enumerate(self.column_weights[idx])}
+                                         idx, col_weight in enumerate(performance.weights)}
             else:
                 column_weighs_mapping = None
 
-            df[col_name.performance] = self._weight_columns(df=df, col_name=col_name,
-                                                            col_weights=self.column_weights[idx],
-                                                            column_weighs_mapping=column_weighs_mapping)
+            df[performance.name] = self._weight_columns(df=df,
+                                                        performance_column_name=performance.name,
+                                                        col_weights=performance.weights,
+                                                        column_weighs_mapping=column_weighs_mapping)
 
-            if df[col_name.performance].isnull().any():
+            if df[performance.name].isnull().any():
                 logging.error(
-                    f"df[{col_name.performance}] contains nan values. Make sure all column_names used in column_weights are imputed beforehand")
+                    f"df[{performance.name}] contains nan values. Make sure all column_names used in column_weights are imputed beforehand")
                 raise ValueError("performance contains nan values")
 
         return df
 
     def _weight_columns(self,
                         df: pd.DataFrame,
-                        col_name: ColumnNames,
+                        performance_column_name: str,
                         col_weights: list[ColumnWeight],
                         column_weighs_mapping: dict[str, str]
                         ) -> pd.DataFrame:
         df = df.copy()
-        df[f"__{col_name.performance}"] = 0
+        df[f"__{performance_column_name}"] = 0
 
         df['sum_cols_weights'] = 0
         for column_weight in col_weights:
@@ -146,7 +121,7 @@ class PerformancesGenerator():
             df.loc[df[column_weight.name].isna(), column_weight.name] = 0
             df['sum_cols_weights'] = df['sum_cols_weights'] + df[f'weight__{column_weight.name}']
 
-        drop_cols = ['sum_cols_weights', f"__{col_name.performance}"]
+        drop_cols = ['sum_cols_weights', f"__{performance_column_name}"]
         for column_weight in col_weights:
             df[f'weight__{column_weight.name}'] / df['sum_cols_weights']
             drop_cols.append(f'weight__{column_weight.name}')
@@ -161,13 +136,13 @@ class PerformancesGenerator():
                 feature_name = column_weight.name
 
             if column_weight.lower_is_better:
-                df[f"__{col_name.performance}"] += df[f'weight__{column_weight.name}']/sum_weight * (
+                df[f"__{performance_column_name}"] += df[f'weight__{column_weight.name}'] / sum_weight * (
                         1 - df[feature_name])
             else:
-                df[f"__{col_name.performance}"] += df[f'weight__{column_weight.name}']/sum_weight * df[feature_name]
+                df[f"__{performance_column_name}"] += df[f'weight__{column_weight.name}'] / sum_weight * df[feature_name]
 
-        return df[f"__{col_name.performance}"].clip(0, 1)
+        return df[f"__{performance_column_name}"].clip(0, 1)
 
     @property
     def features_out(self) -> list[str]:
-        return [c.performance for c in self.column_names]
+        return [c.name for c in self.performances]

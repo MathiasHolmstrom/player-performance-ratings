@@ -22,7 +22,7 @@ class UpdateRatingGenerator(RatingGenerator):
     """
 
     def __init__(self,
-                 column_names: ColumnNames,
+                 performance_column: str = 'performance',
                  match_rating_generator: Optional[MatchRatingGenerator] = None,
                  estimator_features_out: Optional[list[RatingEstimatorFeatures]] = None,
                  historical_features_out: Optional[list[RatingHistoricalFeatures]] = None,
@@ -38,8 +38,8 @@ class UpdateRatingGenerator(RatingGenerator):
             If called by match_predictor, feature_names_created determines which features will be used for prediction.
             If other features such as player_rating_difference is used, it must be added to this list.
         """
-        super().__init__(column_names=column_names, estimator_features_pass_through=estimator_features_pass_through,
-                         historical_features_out=historical_features_out)
+        super().__init__(estimator_features_pass_through=estimator_features_pass_through,
+                         historical_features_out=historical_features_out, performance_column=performance_column)
         self.match_rating_generator = match_rating_generator or MatchRatingGenerator()
         self.distinct_positions = distinct_positions
         self._estimator_features_pass_through = estimator_features_pass_through or []
@@ -58,9 +58,11 @@ class UpdateRatingGenerator(RatingGenerator):
 
         # If projected participation weight is not None, then the projected ratings will be used instead of the actual ratings (which first are known after game is finished)
 
-    def generate_historical(self, df: Optional[pd.DataFrame] = None, matches: Optional[list[Match]] = None) -> dict[
+    def generate_historical(self, df: pd.DataFrame, column_names: ColumnNames, matches: Optional[list[Match]] = None) -> \
+    dict[
         Union[
             RatingEstimatorFeatures, RatingHistoricalFeatures], list[float]]:
+        self.column_names = column_names
 
         """
         Generate ratings by iterating over each match, calculate predicted performance and update ratings after the match is finished.
@@ -218,10 +220,11 @@ class UpdateRatingGenerator(RatingGenerator):
 
         return {f: potential_feature_values[f] for f in self.estimator_features_return + self._historical_features_out}
 
-    def generate_future(self, df: Optional[pd.DataFrame] = None, matches: Optional[list[Match]] = None) -> dict[Union[
-                                                                                                                    RatingEstimatorFeatures, RatingHistoricalFeatures],
-                                                                                                                list[
-                                                                                                                    float]]:
+    def generate_future(self, df: Optional[pd.DataFrame],
+                        matches: Optional[list[Match]] = None) -> dict[Union[
+                                                                           RatingEstimatorFeatures, RatingHistoricalFeatures],
+                                                                       list[
+                                                                           float]]:
 
         if matches is not None and len(matches) > 0 and not isinstance(matches[0], Match):
             raise ValueError("matches must be a list of Match objects")

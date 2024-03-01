@@ -58,7 +58,7 @@ def test_match_predictor_tuner():
     }
 
     performances_generator_tuner = PerformancesGeneratorTuner(
-        performances_weight_search_ranges=performances_weight_search_ranges,
+        performances_search_range=performances_weight_search_ranges,
         n_trials=1)
 
     rating_generator_tuner = UpdateRatingGeneratorTuner(

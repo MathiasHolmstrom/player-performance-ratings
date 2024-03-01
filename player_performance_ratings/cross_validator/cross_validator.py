@@ -1,9 +1,10 @@
 from typing import Optional
 
 import pandas as pd
+from player_performance_ratings import ColumnNames
 
 from player_performance_ratings.scorer.score import BaseScorer
-from player_performance_ratings.transformation.base_transformer import BaseTransformer
+from player_performance_ratings.transformation.base_transformer import BaseTransformer, BasePostTransformer
 
 from player_performance_ratings.cross_validator._base import CrossValidator
 from player_performance_ratings.predictor._base import BasePredictor
@@ -25,6 +26,7 @@ class MatchCountCrossValidator(CrossValidator):
     def generate_validation_df(self,
                                df: pd.DataFrame,
                                predictor: BasePredictor,
+                               column_names: ColumnNames,
                                estimator_features: Optional[list[str]] = None,
                                post_transformers: Optional[list[BaseTransformer]] = None,
                                keep_features: bool = False,
@@ -89,8 +91,9 @@ class MatchKFoldCrossValidator(CrossValidator):
     def generate_validation_df(self,
                                df: pd.DataFrame,
                                predictor: BasePredictor,
+                               column_names: ColumnNames,
                                estimator_features: Optional[list[str]] = None,
-                               post_transformers: Optional[list[BaseTransformer]] = None,
+                               post_transformers: Optional[list[BasePostTransformer]] = None,
                                keep_features: bool = False,
                                add_train_prediction: bool = False
                                ) -> pd.DataFrame:
@@ -124,7 +127,7 @@ class MatchKFoldCrossValidator(CrossValidator):
             for post_transformer in post_transformers:
                 if hasattr(post_transformer, "_df"):
                     post_transformer._df = None
-                train_df = post_transformer.fit_transform(train_df)
+                train_df = post_transformer.fit_transform(train_df, column_names=column_names)
                 validation_df = post_transformer.transform(validation_df)
 
             predictor.train(train_df, estimator_features=estimator_features)

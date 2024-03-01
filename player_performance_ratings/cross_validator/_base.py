@@ -2,6 +2,7 @@ from abc import abstractmethod, ABC
 from typing import Optional
 
 import pandas as pd
+from player_performance_ratings import ColumnNames
 
 from player_performance_ratings.predictor._base import BasePredictor
 from player_performance_ratings.scorer.score import BaseScorer
@@ -19,6 +20,7 @@ class CrossValidator(ABC):
     def generate_validation_df(self,
                                df: pd.DataFrame,
                                post_transformers: list[BaseTransformer],
+                               column_names: ColumnNames,
                                predictor: BasePredictor,
                                estimator_features: list[str],
                                keep_features: bool,

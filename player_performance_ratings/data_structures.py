@@ -9,7 +9,6 @@ class ColumnNames:
     match_id: str
     start_date: str
     player_id: str
-    performance: str
     league: Optional[str] = None
     position: Optional[str] = None
     participation_weight: Optional[str] = None
@@ -32,8 +31,6 @@ class ColumnNames:
 
         if self.parent_team_id != self.team_id and self.rating_update_match_id is None:
             raise ValueError("rating_update_match_id must be passed if rating_update_team_id is passed")
-
-
 
 
 @dataclass

@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 
 import pandas as pd
-from player_performance_ratings.data_structures import Match
+from player_performance_ratings.data_structures import Match, ColumnNames
 
 from player_performance_ratings.cross_validator._base import CrossValidator
 
@@ -44,11 +44,16 @@ class StartLeagueRatingOptimizer():
         self._scores = []
         self._league_ratings_iterations = []
 
-    def optimize(self, df: pd.DataFrame, rating_model_idx: int, rating_generator: UpdateRatingGenerator,
-                 matches: list[Match]) -> dict[str, float]:
+    def optimize(self,
+                 df: pd.DataFrame,
+                 rating_model_idx: int,
+                 rating_generator: UpdateRatingGenerator,
+                 matches: list[Match],
+                 column_names: ColumnNames,
+                 ) -> dict[str, float]:
 
 
-        column_names = rating_generator.column_names
+
         start_rating_generator = rating_generator.match_rating_generator.start_rating_generator
         league_ratings = start_rating_generator.league_ratings.copy()
         start_rating_params = list(
@@ -73,7 +78,7 @@ class StartLeagueRatingOptimizer():
             rating_generators = copy.deepcopy(self.pipeline_factory.rating_generators)
             rating_generators[rating_model_idx] = rating_generator_used
 
-            rating_values = rating_generators[rating_model_idx].generate_historical(df=df, matches=matches)
+            rating_values = rating_generators[rating_model_idx].generate_historical(df=df, matches=matches, column_names=column_names)
             for rating_column, rating_value in rating_values.items():
                 df = df.assign(**{rating_column: rating_value})
 

@@ -30,9 +30,10 @@ class BasePostTransformer(ABC):
         self.features = features
         self._are_estimator_features = are_estimator_features
         self._features_out = []
+        self.column_names = None
 
     @abstractmethod
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
         pass
 
     @abstractmethod
@@ -53,7 +54,6 @@ class BasePostTransformer(ABC):
 class BaseLagTransformer(BasePostTransformer):
 
     def __init__(self,
-                 column_names: ColumnNames,
                  features: list[str],
                  add_opponent: bool,
                  iterations: list[int],
@@ -62,7 +62,6 @@ class BaseLagTransformer(BasePostTransformer):
                  ):
         super().__init__(features, are_estimator_features)
         self._entity_features = []
-        self.column_names = column_names
         self.add_opponent = add_opponent
         self.prefix = prefix
         self._df = None
@@ -75,7 +74,7 @@ class BaseLagTransformer(BasePostTransformer):
                 if self.add_opponent:
                     self._features_out.append(f'{prefix}{lag}_{feature_name}_opponent')
 
-    def _concat_df(self, df: pd.DataFrame):
+    def _concat_df(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self._string_convert(df=df)
         df = df.assign(
             __id=df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id,
