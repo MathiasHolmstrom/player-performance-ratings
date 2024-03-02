@@ -121,7 +121,7 @@ class Pipeline():
                                                                column_names=self.column_names,
                                                                post_transformers=self.post_rating_transformers,
                                                                estimator_features=self._estimator_features,
-                                                               keep_features=False)
+                                                               return_features=False)
 
         if cross_validator.scorer is None:
             scorer = self._create_default_scorer(df)
@@ -135,7 +135,7 @@ class Pipeline():
                                matches: Optional[list[Match]] = None,
                                create_performance: bool = True,
                                create_rating_features: bool = True,
-                               keep_features: bool = False,
+                               return_features: bool = False,
                                add_train_prediction: bool = False
                                ) -> pd.DataFrame:
 
@@ -160,17 +160,17 @@ class Pipeline():
             cross_validated_df = self._add_rating(matches=matches, df=cross_validated_df, store_ratings=False)
 
         cross_validated_df =  cross_validator.generate_validation_df(df=cross_validated_df,
-                                                      predictor=self.predictor,
-                                                      column_names=self.column_names,
-                                                      post_transformers=self.post_rating_transformers,
-                                                      estimator_features=self._estimator_features,
-                                                      keep_features=keep_features,
-                                                      add_train_prediction=add_train_prediction)
+                                                                     predictor=self.predictor,
+                                                                     column_names=self.column_names,
+                                                                     post_transformers=self.post_rating_transformers,
+                                                                     estimator_features=self._estimator_features,
+                                                                     return_features=return_features,
+                                                                     add_train_prediction=add_train_prediction)
 
         cn = self.column_names
         for _, row in df[[cn.match_id, cn.team_id, cn.player_id]].dtypes.reset_index().iterrows():
             cross_validated_df[row['index']] = cross_validated_df[row['index']].astype(row[0])
-        if keep_features:
+        if return_features:
             new_feats = [f for f in cross_validated_df.columns if f not in df.columns]
             return df.merge(
                 cross_validated_df[new_feats + [cn.match_id, cn.team_id, cn.player_id]],
@@ -205,7 +205,7 @@ class Pipeline():
         return scorer
 
     def train(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
-              store_ratings: bool = True, keep_features: bool = False) -> pd.DataFrame:
+              store_ratings: bool = True, return_features: bool = False) -> pd.DataFrame:
 
         df_with_predict = df.copy()
 
@@ -227,7 +227,7 @@ class Pipeline():
         for _, row in df[[cn.match_id,cn.team_id, cn.player_id]].dtypes.reset_index().iterrows():
             df_with_predict[row['index']] = df_with_predict[row['index']].astype(row[0])
 
-        if keep_features:
+        if return_features:
             new_feats = [f for f in df.columns if f not in ori_cols]
             return df.merge(
                 df_with_predict[new_feats + [cn.match_id, cn.team_id, cn.player_id]],
@@ -320,7 +320,7 @@ class Pipeline():
 
         return df
 
-    def future_predict(self, df: pd.DataFrame, keep_features: bool = False) -> pd.DataFrame:
+    def future_predict(self, df: pd.DataFrame, return_features: bool = False) -> pd.DataFrame:
         df_with_predict = df.copy()
 
         for rating_idx, rating_generator in enumerate(self.rating_generators):
@@ -348,7 +348,7 @@ class Pipeline():
         cn = self.column_names
         for _, row in df[[cn.match_id, cn.team_id, cn.player_id]].dtypes.reset_index().iterrows():
             df_with_predict[row['index']] = df_with_predict[row['index']].astype(row[0])
-        if keep_features:
+        if return_features:
             new_feats = [f for f in df_with_predict.columns if f not in df.columns]
             return df.merge(
                 df_with_predict[new_feats + [cn.match_id, cn.team_id, cn.player_id]],
