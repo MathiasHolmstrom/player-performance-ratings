@@ -1,7 +1,7 @@
 import pandas as pd
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.data_structures import Match, Team, MatchTeam, MatchPlayer, MatchPerformance
+from player_performance_ratings.data_structures import Match, MatchTeam, MatchPlayer, MatchPerformance
 from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 

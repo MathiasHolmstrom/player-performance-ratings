@@ -46,7 +46,7 @@ def auto_create_pre_performance_transformations(
     transformed_features = []
 
     for performance in performances:
-        not_transformed_features += [p.name for p in performance.weights if p not in not_transformed_features]
+        not_transformed_features += [p.name for p in performance.weights if p.name not in not_transformed_features]
 
     distribution_transformer = SymmetricDistributionTransformer(features=not_transformed_features, prefix="")
     pre_transformations.append(distribution_transformer)

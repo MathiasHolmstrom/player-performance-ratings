@@ -27,6 +27,7 @@ def test_predictor_tuner():
 
     predictor_factory = PipelineFactory(
         predictor=Predictor(estimator=LogisticRegression(), estimator_features=["rating_difference"], target="__target"),
+        column_names=None
     )
 
     search_ranges = [

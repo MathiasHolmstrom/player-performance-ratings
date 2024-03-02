@@ -4,6 +4,8 @@ import mock
 import pandas as pd
 
 from player_performance_ratings.predictor import Predictor
+from player_performance_ratings.ratings.performances_generator import Performance
+from player_performance_ratings.tuner.performances_generator_tuner import PerformancesSearchRange
 from player_performance_ratings.tuner.utils import ParameterSearchRange
 from skbase.testing.utils.deep_equals import deep_equals
 
@@ -29,13 +31,14 @@ def test_match_predictor_tuner():
             team_id="team_id",
             player_id="player_id",
             start_date="start_date",
-            performance="won"
         )
 
+
+
     pipeline = Pipeline(
-        rating_generators=UpdateRatingGenerator(column_names=col_names),
-        predictor=Predictor(),
-        performances_generator=PerformancesGenerator(column_weights=[ColumnWeight(name="won", weight=1)], column_names=col_names),
+        column_names=col_names,
+        rating_generators=UpdateRatingGenerator(performance_column="performance"),
+        predictor=Predictor()
 
     )
 
@@ -44,21 +47,19 @@ def test_match_predictor_tuner():
 
     original_pipeline = copy.deepcopy(pipeline)
 
-    performances_weight_search_ranges = {
-        "performance":
-            [
+    performance_search_range = PerformancesSearchRange(
+        search_ranges=[
                 ParameterSearchRange(
                     name='won',
                     type='uniform',
                     low=0.8,
                     high=1
                 )
-            ],
-
-    }
+            ]
+    )
 
     performances_generator_tuner = PerformancesGeneratorTuner(
-        performances_search_range=performances_weight_search_ranges,
+        performances_search_range=performance_search_range,
         n_trials=1)
 
     rating_generator_tuner = UpdateRatingGeneratorTuner(

@@ -1,10 +1,10 @@
 import pandas as pd
 from deepdiff import DeepDiff
 
-
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.ratings import ColumnWeight, PerformancesGenerator
-from player_performance_ratings.ratings.performances_generator import auto_create_pre_performance_transformations
+from player_performance_ratings.ratings.performances_generator import auto_create_pre_performance_transformations, \
+    Performance
 from player_performance_ratings.transformation import \
     MinMaxTransformer
 
@@ -13,19 +13,11 @@ from player_performance_ratings.transformation.pre_transformers import Symmetric
 
 
 def test_auto_create_pre_transformers():
-    column_weights = [[ColumnWeight(name="kills", weight=0.5),
-                       ColumnWeight(name="deaths", weight=0.5, lower_is_better=True)]]
+    performances = [Performance(name='weighted_performance', weights=[ColumnWeight(name="kills", weight=0.5),
+                                                                      ColumnWeight(name="deaths", weight=0.5,
+                                                                                   lower_is_better=True)])]
 
-    column_names = [ColumnNames(
-        match_id="game_id",
-        team_id="team_id",
-        player_id="player_id",
-        start_date="start_date",
-        performance="weighted_performance"
-    )]
-
-    pre_transformations = auto_create_pre_performance_transformations(column_weights=column_weights,
-                                                                      column_names=column_names, pre_transformations=[])
+    pre_transformations = auto_create_pre_performance_transformations(performances=performances, pre_transformations=[])
 
     expected_pre_transformations = [
         SymmetricDistributionTransformer(features=["kills", "deaths"], prefix=""),
@@ -38,29 +30,12 @@ def test_auto_create_pre_transformers():
 
 
 def test_auto_create_pre_transformers_multiple_column_names():
-    column_weights = [[ColumnWeight(name="kills", weight=0.5),
-                       ColumnWeight(name="deaths", weight=0.5, lower_is_better=True)],
-                      [ColumnWeight(name="kills", weight=1)]]
+    performances = [Performance(name='weighted_performance', weights=[ColumnWeight(name="kills", weight=0.5),
+                                                                      ColumnWeight(name="deaths", weight=0.5,
+                                                                                   lower_is_better=True)]),
+                    Performance(name='performance', weights=[ColumnWeight(name="kills", weight=1)])]
 
-    col_names = [
-        ColumnNames(
-            match_id="game_id",
-            team_id="team_id",
-            player_id="player_id",
-            start_date="start_date",
-            performance="weighted_performance"
-        ),
-        ColumnNames(
-            match_id="game_id",
-            team_id="team_id",
-            player_id="player_id",
-            start_date="start_date",
-            performance="performance"
-        )
-    ]
-
-    pre_transformations = auto_create_pre_performance_transformations(column_weights=column_weights,
-                                                                      column_names=col_names, pre_transformations=[])
+    pre_transformations = auto_create_pre_performance_transformations(performances=performances, pre_transformations=[])
 
     expected_pre_transformations = [
         SymmetricDistributionTransformer(features=["kills", "deaths"], prefix=""),
@@ -79,14 +54,12 @@ def test_performances_generator():
             team_id="team_id",
             player_id="player_id",
             start_date="start_date",
-            performance="weighted_performance"
         ),
         ColumnNames(
             match_id="game_id",
             team_id="team_id",
             player_id="player_id",
             start_date="start_date",
-            performance="won"
         )
     ]
 
@@ -94,13 +67,6 @@ def test_performances_generator():
         features=["points_difference", "won"],
         quantile=1
     )]
-
-    column_weights = [
-        [
-            ColumnWeight(name="won", weight=0.5), ColumnWeight(name="points_difference", weight=0.5)], [
-            ColumnWeight(name="won", weight=1),
-        ]
-    ]
 
     df = pd.DataFrame(
         {
@@ -115,7 +81,11 @@ def test_performances_generator():
     )
     expected_df_with_performances = df.copy()
 
-    performances_generator = PerformancesGenerator(column_weights=column_weights, column_names=column_names,
+    performances = [Performance(name='weighted_performance', weights=[
+        ColumnWeight(name="won", weight=0.5), ColumnWeight(name="points_difference", weight=0.5)]),
+                    Performance(name='performance', weights=[ColumnWeight(name="won", weight=1)])]
+
+    performances_generator = PerformancesGenerator(performances,
                                                    pre_transformations=pre_transformers)
 
     df_with_performances = performances_generator.generate(df)
