@@ -139,15 +139,17 @@ class Pipeline():
                                add_train_prediction: bool = False
                                ) -> pd.DataFrame:
 
-        if cross_validator is None:
-            cross_validator = self.create_default_cross_validator(df=df)
 
-        if self.predictor.target not in df.columns:
+        cross_validated_df = df.copy()
+        if cross_validator is None:
+            cross_validator = self.create_default_cross_validator(df=cross_validated_df)
+
+        if self.predictor.target not in cross_validated_df.columns:
             raise ValueError(
                 f"Target {self.predictor.target} not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
 
         if create_performance:
-            df = self._add_performance(df=df)
+            cross_validated_df = self._add_performance(df=cross_validated_df)
 
         for rating_generator in self.rating_generators:
             create_rating_features = any(
@@ -156,15 +158,26 @@ class Pipeline():
                 break
 
         if create_rating_features and self.rating_generators:
-            df = self._add_rating(matches=matches, df=df, store_ratings=False)
+            cross_validated_df = self._add_rating(matches=matches, df=cross_validated_df, store_ratings=False)
 
-        return cross_validator.generate_validation_df(df=df,
+        cross_validated_df =  cross_validator.generate_validation_df(df=cross_validated_df,
                                                       predictor=self.predictor,
                                                       column_names=self.column_names,
                                                       post_transformers=self.post_rating_transformers,
                                                       estimator_features=self._estimator_features,
                                                       keep_features=keep_features,
                                                       add_train_prediction=add_train_prediction)
+
+        cn = self.column_names
+        if keep_features:
+            new_feats = [f for f in cross_validated_df.columns if f not in df.columns]
+            return df.merge(
+                cross_validated_df[new_feats + [cn.match_id, cn.team_id, cn.player_id]],
+                on=[cn.match_id, cn.team_id, cn.player_id], how='left')
+
+        return df.merge(
+            cross_validated_df[self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id]],
+            on=[cn.match_id, cn.team_id, cn.player_id], how='left')
 
     def create_default_cross_validator(self, df: pd.DataFrame) -> CrossValidator:
 
@@ -195,29 +208,29 @@ class Pipeline():
 
         df_with_predict = df.copy()
 
-        if self.predictor.target not in df.columns:
+        if self.predictor.target not in df_with_predict.columns:
             raise ValueError(
                 f"Target {self.predictor.target} not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}")
 
         ori_cols = df.columns.tolist()
-        df = self._add_performance(df=df)
+        df_with_predict = self._add_performance(df=df_with_predict)
         if self.rating_generators:
-            df = self._add_rating(matches=matches, df=df, store_ratings=store_ratings)
+            df_with_predict = self._add_rating(matches=matches, df=df_with_predict, store_ratings=store_ratings)
 
         for post_rating_transformer in self.post_rating_transformers:
-            df = post_rating_transformer.fit_transform(df, column_names=self.column_names)
+            df_with_predict = post_rating_transformer.fit_transform(df_with_predict, column_names=self.column_names)
 
-        self.predictor.train(df, estimator_features=self._estimator_features)
-        df = self.predictor.add_prediction(df)
+        self.predictor.train(df=df_with_predict, estimator_features=self._estimator_features)
+        df_with_predict = self.predictor.add_prediction(df=df_with_predict)
         cn = self.column_names
         if keep_features:
             new_feats = [f for f in df.columns if f not in ori_cols]
-            return df_with_predict.merge(
-                df[new_feats + [cn.match_id, cn.team_id, cn.player_id]],
+            return df.merge(
+                df_with_predict[new_feats + [cn.match_id, cn.team_id, cn.player_id]],
                 on=[cn.match_id, cn.team_id, cn.player_id], how='left')
 
-        return df_with_predict.merge(
-            df[self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id]],
+        return df.merge(
+            df_with_predict[self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id]],
             on=[cn.match_id, cn.team_id, cn.player_id], how='left')
 
     def _add_performance(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -306,7 +319,6 @@ class Pipeline():
     def future_predict(self, df: pd.DataFrame, keep_features: bool = False) -> pd.DataFrame:
         df_with_predict = df.copy()
 
-        ori_cols = df_with_predict.columns.tolist()
         for rating_idx, rating_generator in enumerate(self.rating_generators):
             rating_column_names = rating_generator.column_names
 
@@ -331,13 +343,13 @@ class Pipeline():
 
         cn = self.column_names
         if keep_features:
-            new_feats = [f for f in df.columns if f not in ori_cols]
-            return df_with_predict.merge(
-                df[new_feats + [cn.match_id, cn.team_id, cn.player_id]],
+            new_feats = [f for f in df_with_predict.columns if f not in df.columns]
+            return df.merge(
+                df_with_predict[new_feats + [cn.match_id, cn.team_id, cn.player_id]],
                 on=[cn.match_id, cn.team_id, cn.player_id], how='left')
 
-        return df_with_predict.merge(
-            df[self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id]],
+        return df.merge(
+            df_with_predict[self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id]],
             on=[cn.match_id, cn.team_id, cn.player_id], how='left')
 
     @property
