@@ -139,7 +139,6 @@ class Pipeline():
                                add_train_prediction: bool = False
                                ) -> pd.DataFrame:
 
-
         cross_validated_df = df.copy()
         if cross_validator is None:
             cross_validator = self.create_default_cross_validator(df=cross_validated_df)
@@ -169,6 +168,8 @@ class Pipeline():
                                                       add_train_prediction=add_train_prediction)
 
         cn = self.column_names
+        for _, row in df[[cn.match_id, cn.team_id, cn.player_id]].dtypes.reset_index().iterrows():
+            cross_validated_df[row['index']] = cross_validated_df[row['index']].astype(row[0])
         if keep_features:
             new_feats = [f for f in cross_validated_df.columns if f not in df.columns]
             return df.merge(
@@ -223,6 +224,9 @@ class Pipeline():
         self.predictor.train(df=df_with_predict, estimator_features=self._estimator_features)
         df_with_predict = self.predictor.add_prediction(df=df_with_predict)
         cn = self.column_names
+        for _, row in df[[cn.match_id,cn.team_id, cn.player_id]].dtypes.reset_index().iterrows():
+            df_with_predict[row['index']] = df_with_predict[row['index']].astype(row[0])
+
         if keep_features:
             new_feats = [f for f in df.columns if f not in ori_cols]
             return df.merge(
@@ -342,6 +346,8 @@ class Pipeline():
         df_with_predict = self.predictor.add_prediction(df_with_predict)
 
         cn = self.column_names
+        for _, row in df[[cn.match_id, cn.team_id, cn.player_id]].dtypes.reset_index().iterrows():
+            df_with_predict[row['index']] = df_with_predict[row['index']].astype(row[0])
         if keep_features:
             new_feats = [f for f in df_with_predict.columns if f not in df.columns]
             return df.merge(
