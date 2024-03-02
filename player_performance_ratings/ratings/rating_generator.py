@@ -23,6 +23,9 @@ class RatingGenerator(ABC):
         self._ratings_df = None
         self.column_names = None
 
+    def reset_ratings(self):
+        self._ratings_df = None
+
     @abstractmethod
     def generate_historical(self, df: Optional[pd.DataFrame], column_names: ColumnNames,
                             matches: Optional[list[Match]] = None) -> dict[

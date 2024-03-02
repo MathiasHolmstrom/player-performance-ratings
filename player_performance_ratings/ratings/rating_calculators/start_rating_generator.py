@@ -47,6 +47,13 @@ class StartRatingGenerator():
         self._league_player_ratings: dict[str, list] = {}
         self._player_to_league: Dict[str, str] = {}
 
+
+    def reset(self):
+        self._league_to_last_day_number = {}
+        self._league_to_player_ids = {}
+        self._league_player_ratings = {}
+        self._player_to_league = {}
+
     def generate_rating_value(self,
                               day_number: int,
                               match_player: MatchPlayer,

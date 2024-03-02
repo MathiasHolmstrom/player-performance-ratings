@@ -58,6 +58,13 @@ class UpdateRatingGenerator(RatingGenerator):
 
         # If projected participation weight is not None, then the projected ratings will be used instead of the actual ratings (which first are known after game is finished)
 
+    def reset_ratings(self):
+        self._ratings_df = None
+        self.match_rating_generator.player_ratings = {}
+        self.match_rating_generator._teams = {}
+        self.match_rating_generator.start_rating_generator.reset()
+        self.match_rating_generator.performance_predictor.reset()
+
     def generate_historical(self, df: Optional[pd.DataFrame], column_names: ColumnNames, matches: Optional[list[Match]] = None) -> \
     dict[
         Union[

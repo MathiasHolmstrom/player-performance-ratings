@@ -21,6 +21,10 @@ def sigmoid_subtract_half_and_multiply2(value: float, x: float) -> float:
 class PerformancePredictor(ABC):
 
     @abstractmethod
+    def reset(self):
+        pass
+
+    @abstractmethod
     def predict_performance(self,
                             player_rating: PreMatchPlayerRating,
                             opponent_team_rating: PreMatchTeamRating,
@@ -51,6 +55,14 @@ class RatingMeanCustomOpponentRatingPerformancePredictor(PerformancePredictor):
         self._rating_count = 0
         self._actual_player_rating_std = 0
         self._actual_player_rating_mean = 0
+
+    def reset(self):
+        self._player_ratings = []
+        self._sum_rating = 0
+        self._rating_count = 0
+        self._actual_player_rating_std = 0
+        self._actual_player_rating_mean = 0
+        self._backup_performance_predictor.reset()
 
     def predict_performance(self,
                             player_rating: PreMatchPlayerRating,
@@ -121,6 +133,10 @@ class RatingNonOpponentPerformancePredictor(PerformancePredictor):
             raise ValueError("min_count_for_historical_average must be positive")
         self._prev_entries_ratings = []
 
+    def reset(self):
+        self._prev_entries_ratings = []
+
+
     def predict_performance(self,
                             player_rating: PreMatchPlayerRating,
                             opponent_team_rating: PreMatchTeamRating,
@@ -155,6 +171,10 @@ class RatingDifferencePerformancePredictor(PerformancePredictor):
         self.team_rating_diff_coef = team_rating_diff_coef
         self.max_predict_value = max_predict_value
         self.participation_weight_coef = participation_weight_coef
+
+
+    def reset(self):
+        pass
 
     def predict_performance(self,
                             player_rating: PreMatchPlayerRating,
@@ -228,6 +248,11 @@ class RatingMeanPerformancePredictor(PerformancePredictor):
         self.coef = coef
         self.max_predict_value = max_predict_value
         self.last_sample_count = last_sample_count
+        self.sum_ratings = []
+        self.sum_rating = 0
+        self.rating_count = 0
+
+    def reset(self):
         self.sum_ratings = []
         self.sum_rating = 0
         self.rating_count = 0

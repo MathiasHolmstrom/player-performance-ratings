@@ -204,9 +204,10 @@ class Pipeline():
 
         return scorer
 
-    def train(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
-              store_ratings: bool = True, return_features: bool = False) -> pd.DataFrame:
+    def train_predict(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
+                      store_ratings: bool = True, return_features: bool = False) -> pd.DataFrame:
 
+        self.reset_pipeline()
         df_with_predict = df.copy()
 
         if self.predictor.target not in df_with_predict.columns:
@@ -236,6 +237,16 @@ class Pipeline():
         return df.merge(
             df_with_predict[self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id]],
             on=[cn.match_id, cn.team_id, cn.player_id], how='left')
+
+
+    def reset_pipeline(self):
+        for idx in range(len(self.rating_generators)):
+            self.rating_generators[idx].reset_ratings()
+
+        for idx in range(len(self.post_rating_transformers)):
+            if hasattr(self.post_rating_transformers[idx], "_df"):
+                self.post_rating_transformers[idx]._df = None
+
 
     def _add_performance(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
