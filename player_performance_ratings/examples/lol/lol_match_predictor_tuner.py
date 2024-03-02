@@ -3,10 +3,9 @@ import pickle
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
-
-
 from player_performance_ratings.pipeline import Pipeline
 from player_performance_ratings.predictor import GameTeamPredictor
+from player_performance_ratings.tuner.performances_generator_tuner import PerformancesSearchRange
 
 from player_performance_ratings.tuner.rating_generator_tuner import UpdateRatingGeneratorTuner
 from player_performance_ratings.ratings import UpdateRatingGenerator
@@ -39,37 +38,6 @@ df = (
 
 rating_generator = UpdateRatingGenerator(performance_column='performance')
 
-weighter_search_range = {
-    'performance':
-        [
-            ParameterSearchRange(
-                name='damagetochampions',
-                type='uniform',
-                low=0,
-                high=0.45
-            ),
-            ParameterSearchRange(
-                name='deaths',
-                type='uniform',
-                low=0,
-                high=.3,
-                lower_is_better=True
-            ),
-            ParameterSearchRange(
-                name='kills',
-                type='uniform',
-                low=0,
-                high=0.3
-            ),
-            ParameterSearchRange(
-                name='result',
-                type='uniform',
-                low=0.25,
-                high=0.85
-            ),
-        ]
-}
-
 start_rating_search_range = [
     ParameterSearchRange(
         name='team_weight',
@@ -91,9 +59,36 @@ start_rating_search_range = [
     )
 ]
 
-performance_generator_tuner = PerformancesGeneratorTuner(performances_search_range=weighter_search_range,
-                                                         n_trials=1
-                                                         )
+performance_generator_tuner = PerformancesGeneratorTuner(
+    performances_search_range=PerformancesSearchRange(search_ranges=[
+        ParameterSearchRange(
+            name='damagetochampions',
+            type='uniform',
+            low=0,
+            high=0.45
+        ),
+        ParameterSearchRange(
+            name='deaths',
+            type='uniform',
+            low=0,
+            high=.3,
+            lower_is_better=True
+        ),
+        ParameterSearchRange(
+            name='kills',
+            type='uniform',
+            low=0,
+            high=0.3
+        ),
+        ParameterSearchRange(
+            name='result',
+            type='uniform',
+            low=0.25,
+            high=0.85
+        ),
+    ]),
+    n_trials=1
+)
 
 rating_generator_tuner = UpdateRatingGeneratorTuner(
     team_rating_search_ranges=get_default_team_rating_search_range(),
@@ -115,11 +110,10 @@ pipeline = Pipeline(
     column_names=column_names
 )
 
-
 tuner = PipelineTuner(
     performances_generator_tuners=performance_generator_tuner,
     rating_generator_tuners=rating_generator_tuner,
-  #  predictor_tuner=predictor_tuner,
+    #  predictor_tuner=predictor_tuner,
     fit_best=True,
     pipeline=pipeline,
 )

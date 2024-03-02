@@ -32,16 +32,19 @@ def test_match_count_cross_validator():
 
     return_add_prediction1 = df.copy()
     return_add_prediction1['__target_prediction'] = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    return_add_prediction1['__cv_match_number'] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     return_add_prediction2 = df.copy()
     return_add_prediction2['__target_prediction'] = [0, 0, 0, 0, 1, 1, 1, 1, 1, 0]
+    return_add_prediction2['__cv_match_number'] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
     predictor = mock.Mock()
     predictor.add_prediction.side_effect = [return_add_prediction1, return_add_prediction2]
+    predictor.columns_added = ['__target_prediction']
 
     cv = MatchCountCrossValidator(scorer=scorer, match_id_column_name='match_id', n_splits=2,
                                   validation_match_count=2)
 
-    validation_df = cv.generate_validation_df(df=df, predictor=predictor,post_transformers=[], estimator_features=[])
+    validation_df = cv.generate_validation_df(df=df, predictor=predictor,post_transformers=[], estimator_features=[], column_names=None)
     score = cv.cross_validation_score(validation_df=validation_df)
 
     assert score == 0.75
@@ -90,14 +93,15 @@ def test_match_k_fold_cross_validator():
     return_add_prediction2['__target_prediction'] = [0, 0, 0, 0, 1, 1, 1, 1, 1, 0]
     return_add_prediction2['__cv_match_number'] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
+
     predictor = mock.Mock()
     predictor.add_prediction.side_effect = [return_add_prediction1, return_add_prediction2]
-    predictor.pred_column = '__target_prediction'
+    predictor.columns_added = ['__target_prediction']
 
     cv = MatchKFoldCrossValidator(scorer=scorer, match_id_column_name='match_id', n_splits=2,
                                   date_column_name='date', min_validation_date='2020-01-02')
 
-    validation_df = cv.generate_validation_df(df=df, predictor=predictor,post_transformers=[], estimator_features=[])
+    validation_df = cv.generate_validation_df(df=df, predictor=predictor,post_transformers=[], estimator_features=[], column_names=None)
     score = cv.cross_validation_score(validation_df=validation_df)
 
     assert score == 0.75

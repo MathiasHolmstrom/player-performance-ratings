@@ -70,6 +70,8 @@ class Pipeline():
 
         """
 
+
+
         self._estimator_features = predictor._estimator_features
         self.rating_generators: list[RatingGenerator] = rating_generators if isinstance(rating_generators, list) else [
             rating_generators]

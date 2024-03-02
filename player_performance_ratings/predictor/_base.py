@@ -8,26 +8,26 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from player_performance_ratings.predictor_transformer import PredictorTransformer, SkLearnTransformerWrapper, \
     ConvertDataFrameToCategoricalTransformer
-from player_performance_ratings.scorer.score import Filter
+
 
 
 class BasePredictor(ABC):
 
     def __init__(self,
                  estimator,
-                 filters: Optional[list[Filter]],
                  estimator_features: list[str],
                  target: str,
                  pre_transformers: Optional[list[PredictorTransformer]] = None,
                  pred_column: Optional[str] = None,
+                 filters: Optional[dict] = None
                  ):
         self._estimator_features = estimator_features or []
         self.estimator = estimator
-        self.filters = filters or []
         self._target = target
         self._pred_column = pred_column or f"{self._target}_prediction"
         self.pre_transformers = pre_transformers or []
         self._deepest_estimator = self.estimator
+        self.filters = filters or []
         self.multiclassifier = False
 
         iterations = 0
@@ -120,7 +120,7 @@ class BasePredictor(ABC):
                 pre_transformer.transformer.__class__.__name__ for pre_transformer in
                 self.pre_transformers if hasattr(pre_transformer, "transformer")]:
                 self.pre_transformers.append(SkLearnTransformerWrapper(transformer=SimpleImputer(),
-                                                               features=self._estimator_features.copy()))
+                                                                       features=self._estimator_features.copy()))
 
         for pre_transformer in self.pre_transformers:
             df = pre_transformer.fit_transform(df)

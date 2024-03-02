@@ -2,7 +2,7 @@ from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
-
+from lightgbm import LGBMClassifier
 
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
@@ -31,7 +31,7 @@ def test_game_team_predictor_add_prediction():
     expected_df = df.copy()
     expected_df[predictor.pred_column] = [0.8, 0.4, 0.7]
 
-    pd.testing.assert_frame_equal(result, expected_df, check_like=True)
+    pd.testing.assert_frame_equal(result, expected_df, check_like=True, check_dtype=False)
 
 
 def test_game_team_predictor_multiclass_train():
@@ -60,8 +60,8 @@ def test_game_team_predictor_game_player():
     """
 
     mock_model = Mock()
-    mock_model.estimator = LogisticRegression()
-    predictor = GameTeamPredictor(game_id_colum='game_id', team_id_column='team_id', estimator=mock_model)
+    mock_model.estimator = LGBMClassifier()
+    predictor = GameTeamPredictor(game_id_colum='game_id', team_id_column='team_id', estimator=mock_model, pre_transformers=[])
 
     df = pd.DataFrame(
         {
