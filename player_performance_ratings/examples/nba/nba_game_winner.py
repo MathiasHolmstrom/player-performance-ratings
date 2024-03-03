@@ -57,7 +57,7 @@ pipeline = Pipeline(
 )
 
 # Trains the model and returns historical predictions
-historical_predictions = pipeline.train_predict(df=historical_df)
+historical_predictions = pipeline.train_predict(df=historical_df, cross_validate_predict=True)
 
 # Future predictions on future results
 future_predictions = pipeline.future_predict(df=future_df)

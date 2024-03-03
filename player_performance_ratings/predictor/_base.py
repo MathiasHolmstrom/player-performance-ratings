@@ -105,7 +105,7 @@ class BasePredictor(ABC):
             for feature in pre_transformer.features:
                 if feature in self._estimator_features:
                     self._estimator_features.remove(feature)
-            self._estimator_features = list(set(pre_transformer.features_out + self._estimator_features))
+
 
         if self._deepest_estimator.__class__.__name__ in (
         'LogisticRegression', 'LinearRegression'):
@@ -124,6 +124,7 @@ class BasePredictor(ABC):
 
         for pre_transformer in self.pre_transformers:
             df = pre_transformer.fit_transform(df)
+            self._estimator_features = list(set(pre_transformer.features_out + self._estimator_features))
 
         return df
 

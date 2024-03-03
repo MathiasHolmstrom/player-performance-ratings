@@ -70,8 +70,6 @@ class Pipeline():
 
         """
 
-
-
         self._estimator_features = predictor._estimator_features
         self.rating_generators: list[RatingGenerator] = rating_generators if isinstance(rating_generators, list) else [
             rating_generators]
@@ -161,13 +159,13 @@ class Pipeline():
         if create_rating_features and self.rating_generators:
             cross_validated_df = self._add_rating(matches=matches, df=cross_validated_df, store_ratings=False)
 
-        cross_validated_df =  cross_validator.generate_validation_df(df=cross_validated_df,
-                                                                     predictor=self.predictor,
-                                                                     column_names=self.column_names,
-                                                                     post_transformers=self.post_rating_transformers,
-                                                                     estimator_features=self._estimator_features,
-                                                                     return_features=return_features,
-                                                                     add_train_prediction=add_train_prediction)
+        cross_validated_df = cross_validator.generate_validation_df(df=cross_validated_df,
+                                                                    predictor=self.predictor,
+                                                                    column_names=self.column_names,
+                                                                    post_transformers=self.post_rating_transformers,
+                                                                    estimator_features=self._estimator_features,
+                                                                    return_features=return_features,
+                                                                    add_train_prediction=add_train_prediction)
 
         cn = self.column_names
         for _, row in df[[cn.match_id, cn.team_id, cn.player_id]].dtypes.reset_index().iterrows():
@@ -211,8 +209,13 @@ class Pipeline():
 
         return scorer
 
-    def train_predict(self, df: pd.DataFrame, matches: Optional[Union[list[Match], list[list[Match]]]] = None,
-                      store_ratings: bool = True, return_features: bool = False) -> pd.DataFrame:
+    def train_predict(self,
+                      df: pd.DataFrame,
+                      matches: Optional[Union[list[Match], list[list[Match]]]] = None,
+                      store_ratings: bool = True,
+                      return_features: bool = False,
+                      cross_validate_predict: bool = False
+                      ) -> pd.DataFrame:
 
         self.reset_pipeline()
         df_with_predict = df.copy()
@@ -230,9 +233,14 @@ class Pipeline():
             df_with_predict = post_rating_transformer.fit_transform(df_with_predict, column_names=self.column_names)
 
         self.predictor.train(df=df_with_predict, estimator_features=self._estimator_features)
-        df_with_predict = self.predictor.add_prediction(df=df_with_predict)
+        if cross_validate_predict:
+            df_with_predict = self.cross_validate_predict(df=df_with_predict, return_features=return_features,
+                                                          create_rating_features=False, create_performance=False,
+                                                          add_train_prediction=True)
+        else:
+            df_with_predict = self.predictor.add_prediction(df=df_with_predict)
         cn = self.column_names
-        for _, row in df[[cn.match_id,cn.team_id, cn.player_id]].dtypes.reset_index().iterrows():
+        for _, row in df[[cn.match_id, cn.team_id, cn.player_id]].dtypes.reset_index().iterrows():
             df_with_predict[row['index']] = df_with_predict[row['index']].astype(row[0])
 
         if return_features:
@@ -245,7 +253,6 @@ class Pipeline():
             df_with_predict[self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id]],
             on=[cn.match_id, cn.team_id, cn.player_id], how='left')
 
-
     def reset_pipeline(self):
         for idx in range(len(self.rating_generators)):
             self.rating_generators[idx].reset_ratings()
@@ -253,7 +260,6 @@ class Pipeline():
         for idx in range(len(self.post_rating_transformers)):
             if hasattr(self.post_rating_transformers[idx], "_df"):
                 self.post_rating_transformers[idx]._df = None
-
 
     def _add_performance(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
