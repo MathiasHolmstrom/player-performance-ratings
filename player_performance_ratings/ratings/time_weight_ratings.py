@@ -10,6 +10,8 @@ from player_performance_ratings.ratings.enums import RatingEstimatorFeatures, Ra
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
 
+# NOT WORKING AT THE MOMENT
+
 class BayesianTimeWeightedRating(RatingGenerator):
     """
     Generates ratings for players and teams by watching past performances higher using a combination of prior, evidence and likelihood.

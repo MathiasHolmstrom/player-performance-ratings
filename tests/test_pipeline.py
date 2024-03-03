@@ -231,3 +231,6 @@ def test_match_predictor_generate_and_predict():
     pd.testing.assert_frame_equal(new_df, expected_future_df, check_like=True)
 
     assert len(pipeline.performances_generator.pre_transformations) > 0
+
+def test_cross_validation_does_not_mutate():
+    pass

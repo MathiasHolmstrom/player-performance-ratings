@@ -173,6 +173,11 @@ class Pipeline():
         for _, row in df[[cn.match_id, cn.team_id, cn.player_id]].dtypes.reset_index().iterrows():
             cross_validated_df[row['index']] = cross_validated_df[row['index']].astype(row[0])
         if return_features:
+            cols_to_drop = []
+            for c in list(set(self._estimator_features + self.predictor.columns_added)):
+                if c in cross_validated_df.columns and c in df.columns:
+                    cols_to_drop.append(c)
+            df = df.drop(columns=cols_to_drop)
             new_feats = [f for f in cross_validated_df.columns if f not in df.columns]
             return df.merge(
                 cross_validated_df[new_feats + [cn.match_id, cn.team_id, cn.player_id]],
@@ -231,7 +236,7 @@ class Pipeline():
             df_with_predict[row['index']] = df_with_predict[row['index']].astype(row[0])
 
         if return_features:
-            new_feats = [f for f in df.columns if f not in ori_cols]
+            new_feats = [f for f in df_with_predict.columns if f not in ori_cols]
             return df.merge(
                 df_with_predict[new_feats + [cn.match_id, cn.team_id, cn.player_id]],
                 on=[cn.match_id, cn.team_id, cn.player_id], how='left')

@@ -6,6 +6,7 @@ from sklearn.linear_model import LogisticRegression
 from player_performance_ratings.pipeline import Pipeline
 from player_performance_ratings.predictor import GameTeamPredictor
 from player_performance_ratings.tuner.performances_generator_tuner import PerformancesSearchRange
+from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
 
 from player_performance_ratings.tuner.rating_generator_tuner import UpdateRatingGeneratorTuner
 from player_performance_ratings.ratings import UpdateRatingGenerator
@@ -87,19 +88,17 @@ performance_generator_tuner = PerformancesGeneratorTuner(
             high=0.85
         ),
     ]),
-    n_trials=1
+    n_trials=3
 )
 
 rating_generator_tuner = UpdateRatingGeneratorTuner(
     team_rating_search_ranges=get_default_team_rating_search_range(),
     start_rating_search_ranges=start_rating_search_range,
     optimize_league_ratings=True,
-    team_rating_n_trials=1
+    team_rating_n_trials=3
 )
 
-estimator = LogisticRegression()
 predictor = GameTeamPredictor(
-    estimator=estimator,
     game_id_colum="gameid",
     team_id_column="teamname",
 )
@@ -113,9 +112,8 @@ pipeline = Pipeline(
 tuner = PipelineTuner(
     performances_generator_tuners=performance_generator_tuner,
     rating_generator_tuners=rating_generator_tuner,
-    #  predictor_tuner=predictor_tuner,
+    predictor_tuner=PredictorTuner(n_trials=1, search_ranges=[ParameterSearchRange(name='C', type='categorical', choices=[1.0, 0.5])]),
     fit_best=True,
     pipeline=pipeline,
 )
-best_match_predictor = tuner.tune(df=df)
-pickle.dump(best_match_predictor, open("models/lol_match_predictor", 'wb'))
+best_match_predictor,df = tuner.tune(df=df, return_df=True, return_cross_validated_predictions=True)

@@ -32,7 +32,6 @@ class PredictorTuner():
     def tune(self, df: pd.DataFrame,
              pipeline_factory: PipelineFactory,
              cross_validator: CrossValidator,
-             column_names: Optional[ColumnNames] = None,
              best_post_rating_transformers: Optional[list[BasePostTransformer]] = None,
              ) -> BasePredictor:
 

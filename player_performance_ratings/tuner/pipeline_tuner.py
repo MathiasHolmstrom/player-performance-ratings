@@ -117,7 +117,11 @@ class PipelineTuner():
 
         self.cross_validator = cross_validator
 
-    def tune(self, df: pd.DataFrame) -> Pipeline:
+    def tune(self,
+             df: pd.DataFrame,
+             return_df: bool = False,
+             return_cross_validated_predictions: bool = False,
+             ) -> Union[Pipeline, tuple[Pipeline, pd.DataFrame]]:
 
         if self.cross_validator is None:
             self.cross_validator = self.pipeline.create_default_cross_validator(df)
@@ -180,7 +184,8 @@ class PipelineTuner():
                     rating_feature_str = rating_feature + str(rating_idx)
                 else:
                     rating_feature_str = rating_feature
-                df[rating_feature_str] = values
+
+                df = df.assign(**{rating_feature_str: values})
 
         best_post_transformers = copy.deepcopy(self._pipeline_factory.post_rating_transformers)
         untrained_best_post_transformers = copy.deepcopy(best_post_transformers)
@@ -214,7 +219,14 @@ class PipelineTuner():
         )
         if self.fit_best:
             logging.info("Retraining best match predictor with all data")
-            best_match_predictor.train_predict(df=original_df, store_ratings=True)
+            df = best_match_predictor.train_predict(df=original_df, store_ratings=True, return_features=True)
+
+        if return_df or return_cross_validated_predictions:
+            if return_cross_validated_predictions:
+                df = self.pipeline.cross_validate_predict(df, self.cross_validator, add_train_prediction=True,
+                                                          create_rating_features=False, create_performance=False,
+                                                          return_features=True)
+            return best_match_predictor, df
 
         return best_match_predictor
 
