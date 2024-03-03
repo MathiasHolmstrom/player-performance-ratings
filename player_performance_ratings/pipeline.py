@@ -102,6 +102,9 @@ class Pipeline():
                              create_performance: bool = True,
                              create_rating_features: bool = True) -> float:
 
+        if self.predictor.pred_column in df.columns:
+            df = df.drop(columns=[self.predictor.pred_column])
+
         if cross_validator is None:
             cross_validator = self.create_default_cross_validator(df=df)
 
@@ -138,6 +141,9 @@ class Pipeline():
                                return_features: bool = False,
                                add_train_prediction: bool = False
                                ) -> pd.DataFrame:
+
+        if self.predictor.pred_column in df.columns:
+            df = df.drop(columns=[self.predictor.pred_column])
 
         cross_validated_df = df.copy()
         if cross_validator is None:
