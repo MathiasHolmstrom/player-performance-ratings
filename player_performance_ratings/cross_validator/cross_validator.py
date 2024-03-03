@@ -1,3 +1,4 @@
+import copy
 import inspect
 from typing import Optional
 
@@ -9,15 +10,6 @@ from player_performance_ratings.transformation.base_transformer import BaseTrans
 
 from player_performance_ratings.cross_validator._base import CrossValidator
 from player_performance_ratings.predictor._base import BasePredictor
-
-
-def copy_predictor(predictor: BasePredictor) -> BasePredictor:
-    predictor_class = predictor.__class__
-    predictor_constructor_params = list(
-        inspect.signature(predictor_class.__init__).parameters.keys())[1:]
-    param_values = {param: getattr(predictor, param) for param in predictor_constructor_params}
-    return predictor_class(**param_values)
-
 
 class MatchCountCrossValidator(CrossValidator):
 
@@ -41,7 +33,7 @@ class MatchCountCrossValidator(CrossValidator):
                                add_train_prediction: bool = False
                                ) -> pd.DataFrame:
 
-        predictor = copy_predictor(predictor)
+        predictor = copy.deepcopy(predictor)
         ori_cols = df.columns.tolist()
 
         validation_dfs = []
@@ -111,8 +103,7 @@ class MatchKFoldCrossValidator(CrossValidator):
                                add_train_prediction: bool = False
                                ) -> pd.DataFrame:
 
-        predictor = copy_predictor(predictor)
-
+        predictor = copy.deepcopy(predictor)
         validation_dfs = []
         ori_cols = df.columns.tolist()
 
