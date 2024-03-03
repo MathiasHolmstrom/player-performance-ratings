@@ -61,6 +61,7 @@ class MatchCountCrossValidator(CrossValidator):
                 train_df = predictor.add_prediction(train_df)
                 validation_dfs.append(train_df)
 
+            validation_df = validation_df[[c for c in validation_df.columns if c not in predictor.columns_added]]
             validation_df = predictor.add_prediction(validation_df)
             validation_dfs.append(validation_df)
 
@@ -141,6 +142,7 @@ class MatchKFoldCrossValidator(CrossValidator):
                 train_df = predictor.add_prediction(train_df)
                 validation_dfs.append(train_df)
 
+            validation_df = validation_df[[c for c in validation_df.columns if c not in predictor.columns_added]]
             validation_df = predictor.add_prediction(validation_df)
             validation_dfs.append(validation_df)
 
