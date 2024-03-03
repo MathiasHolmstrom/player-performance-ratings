@@ -96,6 +96,7 @@ class BasePredictor(ABC):
                 self.pre_transformers.append(
                     SkLearnTransformerWrapper(transformer=OneHotEncoder(handle_unknown='ignore'),
                                               features=feats_to_transform))
+
             elif self._deepest_estimator.__class__.__name__ in ('LGBMRegressor', 'LGBMClassifier'):
                 logging.info(
                     f"Adding ConvertDataFrameToCategoricalTransformer to pre_transformers for features: {feats_to_transform}")
