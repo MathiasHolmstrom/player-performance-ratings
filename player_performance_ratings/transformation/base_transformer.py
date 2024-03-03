@@ -80,6 +80,10 @@ class BaseLagTransformer(BasePostTransformer):
             __id=df[[self.column_names.rating_update_match_id, self.column_names.parent_team_id,
                      self.column_names.player_id]].agg('__'.join, axis=1))
 
+        for column in self.features:
+            if column not in df.columns:
+                df[column] = None
+
         concat_df = pd.concat([self._df, df], axis=0).reset_index()
         if concat_df[self.column_names.start_date].dtype in('str', 'object'):
             concat_df[self.column_names.start_date] = pd.to_datetime(concat_df[self.column_names.start_date])
