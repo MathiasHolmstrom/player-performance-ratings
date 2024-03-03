@@ -234,14 +234,18 @@ class Pipeline():
         if self.rating_generators:
             df_with_predict = self._add_rating(matches=matches, df=df_with_predict, store_ratings=store_ratings)
 
+        if cross_validate_predict:
+            df_cv_predict = self.cross_validate_predict(df=df_with_predict, return_features=return_features,
+                                                          create_rating_features=False, create_performance=False,
+                                                          add_train_prediction=True)
+
         for post_rating_transformer in self.post_rating_transformers:
             df_with_predict = post_rating_transformer.fit_transform(df_with_predict, column_names=self.column_names)
 
         self.predictor.train(df=df_with_predict, estimator_features=self._estimator_features)
+
         if cross_validate_predict:
-            df_with_predict = self.cross_validate_predict(df=df_with_predict, return_features=return_features,
-                                                          create_rating_features=False, create_performance=False,
-                                                          add_train_prediction=True)
+            df_with_predict = df_cv_predict
         else:
             df_with_predict = self.predictor.add_prediction(df=df_with_predict)
         cn = self.column_names

@@ -8,7 +8,6 @@ from player_performance_ratings.predictor.sklearn_estimator import OrdinalClassi
 from player_performance_ratings.predictor_transformer import PredictorTransformer
 from player_performance_ratings.scorer.score import Filter, apply_filters
 
-
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 
 from typing import Optional
@@ -32,7 +31,7 @@ class GameTeamPredictor(BasePredictor):
                  multiclassifier: bool = False,
                  pred_column: Optional[str] = None,
                  pre_transformers: Optional[list[PredictorTransformer]] = None,
-                filters: Optional[list[Filter]] = None
+                 filters: Optional[list[Filter]] = None
                  ):
         """
         Wrapper for sklearn models that predicts game results.
@@ -58,16 +57,17 @@ class GameTeamPredictor(BasePredictor):
 
         self.multiclassifier = multiclassifier
         super().__init__(target=self._target, pred_column=pred_column,
-                         estimator=estimator or LogisticRegression(), pre_transformers=pre_transformers, estimator_features=estimator_features, filters=filters)
+                         estimator=estimator or LogisticRegression(), pre_transformers=pre_transformers,
+                         estimator_features=estimator_features, filters=filters)
 
     def train(self, df: pd.DataFrame, estimator_features: list[Optional[str]] = None) -> None:
+        df = df.copy()
         if estimator_features is None and self._estimator_features is None:
             raise ValueError("estimator features must either be passed to .train() or injected into constructor")
 
         self._estimator_features = estimator_features or self._estimator_features
 
-        df_to_train = df.copy()
-        df_to_train = self.fit_transform_pre_transformers(df=df_to_train)
+        df = self.fit_transform_pre_transformers(df=df)
         if len(df[self._target].unique()) > 2 and hasattr(self.estimator, "predict_proba"):
             self.multiclassifier = True
             if self.estimator.__class__.__name__ == 'LogisticRegression':
@@ -75,16 +75,16 @@ class GameTeamPredictor(BasePredictor):
 
         if hasattr(self.estimator, "predict_proba"):
             try:
-                df_to_train = df_to_train.assign(**{self._target: df_to_train[self._target].astype('int')})
+                df = df.assign(**{self._target: df[self._target].astype('int')})
             except Exception:
                 pass
 
         if self._target not in df.columns:
             raise ValueError(f"target {self._target} not in df")
 
-        df_to_train = apply_filters(df=df_to_train, filters=self.filters)
+        df = apply_filters(df=df, filters=self.filters)
 
-        grouped = self._create_grouped(df_to_train)
+        grouped = self._create_grouped(df)
         self.estimator.fit(grouped[self._estimator_features], grouped[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -109,7 +109,7 @@ class GameTeamPredictor(BasePredictor):
 
         if self.multiclassifier:
             grouped[self._pred_column] = self.estimator.predict_proba(grouped[self._estimator_features]).tolist()
-            grouped['classes'] =[list(self.estimator.classes_) for _ in range(len(grouped))]
+            grouped['classes'] = [list(self.estimator.classes_) for _ in range(len(grouped))]
         elif not hasattr(self.estimator, "predict_proba"):
             grouped[self._pred_column] = self.estimator.predict(grouped[self._estimator_features])
         else:
@@ -124,7 +124,7 @@ class GameTeamPredictor(BasePredictor):
 
         else:
             df = df.merge(grouped[[self.game_id_colum, self.team_id_column] + [self._pred_column]],
-                      on=[self.game_id_colum, self.team_id_column])
+                          on=[self.game_id_colum, self.team_id_column])
 
         return df
 
@@ -228,7 +228,8 @@ class Predictor(BasePredictor):
         df['__id'] = range(len(df))
         filtered_df = apply_filters(df=df, filters=self.filters)
         if self.multiclassifier:
-            filtered_df[self._pred_column] = self.estimator.predict_proba(filtered_df[self._estimator_features]).tolist()
+            filtered_df[self._pred_column] = self.estimator.predict_proba(
+                filtered_df[self._estimator_features]).tolist()
             filtered_df['classes'] = [list(self.estimator.classes_) for _ in range(len(filtered_df))]
             if len(set(filtered_df[self.pred_column].iloc[0])) == 2:
                 raise ValueError(
