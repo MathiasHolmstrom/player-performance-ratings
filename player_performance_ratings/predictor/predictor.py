@@ -222,7 +222,6 @@ class Predictor(BasePredictor):
 
         df = self.transform_pre_transformers(df=df)
         df = df.copy()
-        df['__id'] = range(len(df))
         if self.multiclassifier:
             df[self._pred_column] = self.estimator.predict_proba(
                 df[self._estimator_features]).tolist()
@@ -235,9 +234,4 @@ class Predictor(BasePredictor):
             df[self._pred_column] = self.estimator.predict(df[self._estimator_features])
         else:
             df[self._pred_column] = self.estimator.predict_proba(df[self._estimator_features])[:, 1]
-
-        if 'classes' in df.columns:
-            df = df.merge(df[['__id', self._pred_column, 'classes']], on='__id', how='left')
-        else:
-            df = df.merge(df[['__id', self._pred_column]], on='__id', how='left')
-        return df.drop(columns=['__id'])
+        return df
