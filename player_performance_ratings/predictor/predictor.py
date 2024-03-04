@@ -61,12 +61,12 @@ class GameTeamPredictor(BasePredictor):
                          estimator_features=estimator_features, filters=filters)
 
     def train(self, df: pd.DataFrame, estimator_features: list[Optional[str]] = None) -> None:
-        df = df.copy()
+
         if estimator_features is None and self._estimator_features is None:
             raise ValueError("estimator features must either be passed to .train() or injected into constructor")
 
         self._estimator_features = estimator_features or self._estimator_features
-
+        df = apply_filters(df=df, filters=self.filters)
         df = self.fit_transform_pre_transformers(df=df)
         if len(df[self._target].unique()) > 2 and hasattr(self.estimator, "predict_proba"):
             self.multiclassifier = True
@@ -81,8 +81,6 @@ class GameTeamPredictor(BasePredictor):
 
         if self._target not in df.columns:
             raise ValueError(f"target {self._target} not in df")
-
-        df = apply_filters(df=df, filters=self.filters)
 
         grouped = self._create_grouped(df)
         self.estimator.fit(grouped[self._estimator_features], grouped[self._target])
@@ -182,33 +180,34 @@ class Predictor(BasePredictor):
                          pre_transformers=pre_transformers, filters=filters, estimator_features=estimator_features)
 
     def train(self, df: pd.DataFrame, estimator_features: Optional[list[str]] = None) -> None:
-        df = df.copy()
+
         if estimator_features is None and self._estimator_features is None:
             raise ValueError("estimator features must either be passed to .train() or injected into constructor")
         self._estimator_features = estimator_features or self._estimator_features
 
+        filtered_df = apply_filters(df=df, filters=self.filters)
         if hasattr(self.estimator, "predict_proba"):
             try:
-                df[self._target] = df[self._target].astype('int')
+                filtered_df[self._target] = filtered_df[self._target].astype('int')
             except Exception:
                 pass
 
-        df = self.fit_transform_pre_transformers(df=df)
-        df = df.copy()
-        if not self.multiclassifier and len(df[self._target].unique()) > 2 and hasattr(self._deepest_estimator,
+        filtered_df = self.fit_transform_pre_transformers(df=filtered_df)
+
+        if not self.multiclassifier and len(filtered_df[self._target].unique()) > 2 and hasattr(self._deepest_estimator,
                                                                                                 "predict_proba"):
             self.multiclassifier = True
             if self.estimator.__class__.__name__ == 'LogisticRegression':
                 self.estimator = OrdinalClassifier(self.estimator)
-            if len(df[self._target].unique()) > 50:
+            if len(filtered_df[self._target].unique()) > 50:
                 logging.warning(
                     f"target has {len(df[self._target].unique())} unique values. This may machine-learning model to not function properly."
                     f" It is recommended to limit max and min values to ensure less than 50 unique targets")
 
         if hasattr(self._deepest_estimator, "predict_proba"):
-            df = df.assign(**{self._target: df[self._target].astype('int')})
+            filtered_df = filtered_df.assign(**{self._target: filtered_df[self._target].astype('int')})
 
-        self.estimator.fit(df[self._estimator_features], df[self._target])
+        self.estimator.fit(filtered_df[self._estimator_features], filtered_df[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
@@ -224,22 +223,21 @@ class Predictor(BasePredictor):
         df = self.transform_pre_transformers(df=df)
         df = df.copy()
         df['__id'] = range(len(df))
-        filtered_df = apply_filters(df=df, filters=self.filters)
         if self.multiclassifier:
-            filtered_df[self._pred_column] = self.estimator.predict_proba(
-                filtered_df[self._estimator_features]).tolist()
-            filtered_df['classes'] = [list(self.estimator.classes_) for _ in range(len(filtered_df))]
-            if len(set(filtered_df[self.pred_column].iloc[0])) == 2:
+            df[self._pred_column] = self.estimator.predict_proba(
+                df[self._estimator_features]).tolist()
+            df['classes'] = [list(self.estimator.classes_) for _ in range(len(df))]
+            if len(set(df[self.pred_column].iloc[0])) == 2:
                 raise ValueError(
                     "Too many unique values in relation to rows in the training dataset causes multiclassifier to not train properly")
 
         elif not hasattr(self._deepest_estimator, "predict_proba"):
-            filtered_df[self._pred_column] = self.estimator.predict(filtered_df[self._estimator_features])
+            df[self._pred_column] = self.estimator.predict(df[self._estimator_features])
         else:
-            filtered_df[self._pred_column] = self.estimator.predict_proba(filtered_df[self._estimator_features])[:, 1]
+            df[self._pred_column] = self.estimator.predict_proba(df[self._estimator_features])[:, 1]
 
-        if 'classes' in filtered_df.columns:
-            df = df.merge(filtered_df[['__id', self._pred_column, 'classes']], on='__id', how='left')
+        if 'classes' in df.columns:
+            df = df.merge(df[['__id', self._pred_column, 'classes']], on='__id', how='left')
         else:
-            df = df.merge(filtered_df[['__id', self._pred_column]], on='__id', how='left')
+            df = df.merge(df[['__id', self._pred_column]], on='__id', how='left')
         return df.drop(columns=['__id'])
