@@ -104,8 +104,7 @@ class GameTeamPredictor(BasePredictor):
         if not self._estimator_features:
             raise ValueError("estimator_features not set. Please train first")
         df = self.transform_pre_transformers(df=df)
-        filtered_df = apply_filters(df=df, filters=self.filters)
-        grouped = self._create_grouped(filtered_df)
+        grouped = self._create_grouped(df)
 
         if self.multiclassifier:
             grouped[self._pred_column] = self.estimator.predict_proba(grouped[self._estimator_features]).tolist()
@@ -196,21 +195,20 @@ class Predictor(BasePredictor):
 
         df = self.fit_transform_pre_transformers(df=df)
         df = df.copy()
-        filtered_df = apply_filters(df=df, filters=self.filters)
-        if not self.multiclassifier and len(filtered_df[self._target].unique()) > 2 and hasattr(self._deepest_estimator,
+        if not self.multiclassifier and len(df[self._target].unique()) > 2 and hasattr(self._deepest_estimator,
                                                                                                 "predict_proba"):
             self.multiclassifier = True
             if self.estimator.__class__.__name__ == 'LogisticRegression':
                 self.estimator = OrdinalClassifier(self.estimator)
-            if len(filtered_df[self._target].unique()) > 50:
+            if len(df[self._target].unique()) > 50:
                 logging.warning(
-                    f"target has {len(filtered_df[self._target].unique())} unique values. This may machine-learning model to not function properly."
+                    f"target has {len(df[self._target].unique())} unique values. This may machine-learning model to not function properly."
                     f" It is recommended to limit max and min values to ensure less than 50 unique targets")
 
         if hasattr(self._deepest_estimator, "predict_proba"):
-            filtered_df = filtered_df.assign(**{self._target: filtered_df[self._target].astype('int')})
+            df = df.assign(**{self._target: df[self._target].astype('int')})
 
-        self.estimator.fit(filtered_df[self._estimator_features], filtered_df[self._target])
+        self.estimator.fit(df[self._estimator_features], df[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
