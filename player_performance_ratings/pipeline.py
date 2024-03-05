@@ -364,8 +364,7 @@ class Pipeline():
                                             performance_column_name=rating_generator.performance_column)
 
             match_ratings = rating_generator.generate_future(matches=matches, df=df_with_predict)
-            for rating_feature in rating_generator.features_out:
-                values = match_ratings[rating_feature]
+            for rating_feature, values in match_ratings.items():
 
                 if len(self.rating_generators) > 1:
                     rating_feature_str = rating_feature + str(rating_idx)

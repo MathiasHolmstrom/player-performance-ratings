@@ -101,7 +101,7 @@ def test_match_k_fold_cross_validator():
     cv = MatchKFoldCrossValidator(scorer=scorer, match_id_column_name='match_id', n_splits=2,
                                   date_column_name='date', min_validation_date='2020-01-02')
 
-    validation_df = cv.generate_validation_df(df=df, predictor=predictor,post_transformers=[], estimator_features=[], column_names=None)
+    validation_df = cv.generate_validation_df(df=df, predictor=predictor,post_transformers=[], estimator_features=[])
     score = cv.cross_validation_score(validation_df=validation_df)
 
     assert score == 0.75

@@ -81,7 +81,8 @@ class BaseLagTransformer(BasePostTransformer):
                      self.column_names.player_id]].agg('__'.join, axis=1))
 
         for feature in self.features:
-            df = df.assign(**{feature: lambda x: x[feature].astype('float')})
+            if feature in df.columns:
+                df = df.assign(**{feature: lambda x: x[feature].astype('float')})
 
         concat_df = pd.concat([self._df, df], axis=0).reset_index()
         if concat_df[self.column_names.start_date].dtype in('str', 'object'):

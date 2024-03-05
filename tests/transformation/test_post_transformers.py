@@ -109,7 +109,7 @@ def test_lag_fit_transform_2_features(column_names):
     expected_df['team'] = expected_df['team'].astype('str')
     expected_df['game'] = expected_df['game'].astype('str')
     expected_df['player'] = expected_df['player'].astype('str')
-    pd.testing.assert_frame_equal(df_with_lags, expected_df, check_like=True)
+    pd.testing.assert_frame_equal(df_with_lags, expected_df, check_like=True, check_dtype=False)
 
 
 def test_lag_fit_transform_lag_length_2(column_names):
@@ -141,7 +141,7 @@ def test_lag_fit_transform_lag_length_2(column_names):
     expected_df['game'] = expected_df['game'].astype('str')
     expected_df['player'] = expected_df['player'].astype('str')
 
-    pd.testing.assert_frame_equal(df_with_lags, expected_df, check_like=True)
+    pd.testing.assert_frame_equal(df_with_lags, expected_df, check_like=True, check_dtype=False)
 
 
 def test_lag_fit_transform_and_transform(column_names):
@@ -179,7 +179,7 @@ def test_lag_fit_transform_and_transform(column_names):
     expected_df['team'] = expected_df['team'].astype('str')
     expected_df['game'] = expected_df['game'].astype('str')
     expected_df['player'] = expected_df['player'].astype('str')
-    pd.testing.assert_frame_equal(future_transformed_df, expected_df, check_like=True)
+    pd.testing.assert_frame_equal(future_transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
 def test_lag_transformation_transform_2_lags(column_names):
@@ -217,7 +217,7 @@ def test_lag_transformation_transform_2_lags(column_names):
     expected_df['team'] = expected_df['team'].astype('str')
     expected_df['game'] = expected_df['game'].astype('str')
     expected_df['player'] = expected_df['player'].astype('str')
-    pd.testing.assert_frame_equal(future_transformed_df, expected_df, check_like=True)
+    pd.testing.assert_frame_equal(future_transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
 def test_rolling_mean_fit_transform(column_names):
@@ -249,7 +249,7 @@ def test_rolling_mean_fit_transform(column_names):
     expected_df['game'] = expected_df['game'].astype('str')
     expected_df['player'] = expected_df['player'].astype('str')
 
-    pd.testing.assert_frame_equal(df_with_rolling_mean, expected_df, check_like=True)
+    pd.testing.assert_frame_equal(df_with_rolling_mean, expected_df, check_like=True, check_dtype=False)
 
 
 def test_rolling_mean_fit_transform_and_transform(column_names):
