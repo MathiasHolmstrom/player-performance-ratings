@@ -65,7 +65,7 @@ class GameTeamPredictor(BasePredictor):
         if estimator_features is None and self._estimator_features is None:
             raise ValueError("estimator features must either be passed to .train() or injected into constructor")
 
-        self._estimator_features = estimator_features or self._estimator_features
+        self._estimator_features = estimator_features.copy() or self._estimator_features.copy()
         df = apply_filters(df=df, filters=self.filters)
         df = self.fit_transform_pre_transformers(df=df)
         if len(df[self._target].unique()) > 2 and hasattr(self.estimator, "predict_proba"):
@@ -183,7 +183,7 @@ class Predictor(BasePredictor):
 
         if estimator_features is None and self._estimator_features is None:
             raise ValueError("estimator features must either be passed to .train() or injected into constructor")
-        self._estimator_features = estimator_features or self._estimator_features
+        self._estimator_features = estimator_features.copy() or self._estimator_features.copy()
 
         filtered_df = apply_filters(df=df, filters=self.filters)
         if hasattr(self.estimator, "predict_proba"):
