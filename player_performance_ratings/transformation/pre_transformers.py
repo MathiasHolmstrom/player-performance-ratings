@@ -116,7 +116,7 @@ class MinMaxTransformer(BaseTransformer):
                  features: list[str],
                  quantile: float = 0.98,
                  multiply_align: bool = False,
-                 add_align:bool= True,
+                 add_align: bool = True,
                  prefix: str = ""
                  ):
         super().__init__(features=features)
@@ -138,6 +138,11 @@ class MinMaxTransformer(BaseTransformer):
         for feature in self.features:
             self._min_values[feature] = df[feature].quantile(1 - self.quantile)
             self._max_values[feature] = df[feature].quantile(self.quantile)
+
+            if self._min_values[feature] == self._max_values[feature]:
+                raise ValueError(
+                    f"Feature {feature} has the same min and max value. This can lead to division by zero. "
+                    f"This feature is not suited for MinMaxTransformer")
 
             df[self.prefix + feature] = (df[feature] - self._min_values[feature]) / (
                     self._max_values[feature] - self._min_values[feature])
@@ -254,6 +259,8 @@ class SymmetricDistributionTransformer(BaseTransformer):
             df = df.assign(__concat_granularity=df[self.granularity].astype(str).agg('_'.join, axis=1))
 
         for feature in self.features:
+            if df[feature].min() == df[feature].max():
+                raise ValueError(f"SymmetricDistributionTransformer: {feature} has the same min and max value.")
             self._diminishing_value_transformer[feature] = {}
             if self.granularity:
 
@@ -298,7 +305,6 @@ class SymmetricDistributionTransformer(BaseTransformer):
                 quantile_cutoff = next_quantile_cutoff
             iteration += 1
             skewness = transformed_rows[feature].skew()
-        u = 2
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()

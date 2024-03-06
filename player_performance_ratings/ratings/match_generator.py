@@ -58,6 +58,12 @@ def convert_df_to_matches(
             logging.warning(
                 f"mean performance is {mean_performance} which is far from 0.5. It is recommended to do further pre_transformations of the performance column")
 
+
+    if df[performance_column_name].isnull().any():
+        logging.error(
+            f"df[{performance_column_name}] contains nan values. Make sure all column_names used in column_weights are imputed beforehand")
+        raise ValueError("performance contains nan values")
+
     validate_sorting(df=df, column_names=column_names)
 
     col_names = column_names
