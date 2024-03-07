@@ -14,9 +14,9 @@ from player_performance_ratings.predictor._base import BasePredictor
 class MatchCountCrossValidator(CrossValidator):
 
     def __init__(self,
-                 scorer: BaseScorer,
                  match_id_column_name: str,
                  validation_match_count: int,
+                 scorer: Optional[BaseScorer] = None,
                  n_splits: int = 3):
         super().__init__(scorer=scorer)
         self.n_splits = n_splits
@@ -28,7 +28,7 @@ class MatchCountCrossValidator(CrossValidator):
                                predictor: BasePredictor,
                                column_names: ColumnNames,
                                estimator_features: Optional[list[str]] = None,
-                               post_transformers: Optional[list[BaseTransformer]] = None,
+                               post_transformers: Optional[list[BasePostTransformer]] = None,
                                return_features: bool = False,
                                add_train_prediction: bool = False
                                ) -> pd.DataFrame:
@@ -54,7 +54,7 @@ class MatchCountCrossValidator(CrossValidator):
                 train_df = train_df[[c for c in train_df.columns if c not in post_transformer.features_out]]
                 validation_df = validation_df[
                     [c for c in validation_df.columns if c not in post_transformer.features_out]]
-                train_df = post_transformer.fit_transform(train_df)
+                train_df = post_transformer.fit_transform(train_df, column_names=column_names)
                 validation_df = post_transformer.transform(validation_df)
             predictor.train(train_df, estimator_features=estimator_features)
 

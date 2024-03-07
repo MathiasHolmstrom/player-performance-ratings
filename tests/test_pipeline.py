@@ -1,7 +1,7 @@
 import mock
 import pandas as pd
 
-from player_performance_ratings.cross_validator import MatchKFoldCrossValidator
+from player_performance_ratings.cross_validator import MatchKFoldCrossValidator, MatchCountCrossValidator
 from player_performance_ratings.predictor import Predictor
 from sklearn.linear_model import LinearRegression
 
@@ -289,14 +289,13 @@ def test_cross_validate_is_equal_to_predict_future():
                        pd.to_datetime("2023-01-03"), pd.to_datetime("2023-01-03"),
                        pd.to_datetime("2023-01-04"), pd.to_datetime("2023-01-04"),
                        ],
-        'deaths': [1, 1, 1, 2, 2, 2, 1, 3, 2, 5],
-        "kills": [0.2, 0.3, 0.4, 0.5, 2, 0.2, 1, 4, 3, 5],
-        "__target": [1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+        'deaths': [0.5, 1, 0.7, 2, 0.5, 0.7, 0.2, 2.1, 0.8, 1],
+        "kills": [0.2, 0.3, 0.2, 0.3,0.2, 0.3, 0.2, 0.3, 0.2, 0.3],
+        "__target": [1, 0, 0.6, 0.3, 0.8, 0.2, 0.4, 0.1, 1, 0],
     })
 
     column_weights = [
-        ColumnWeight(name="kills", weight=0.6),
-        ColumnWeight(name="deaths", weight=0.4, lower_is_better=True)
+        ColumnWeight(name="kills", weight=1)
     ]
     predictor = Predictor(estimator=LinearRegression())
 
@@ -318,17 +317,17 @@ def test_cross_validate_is_equal_to_predict_future():
         column_names=column_names,
     )
 
-    cross_validator = MatchKFoldCrossValidator(date_column_name=column_names.start_date,
+    cross_validator = MatchCountCrossValidator(
                                                match_id_column_name=column_names.match_id,
-                                               min_validation_date="2023-01-04", n_splits=1)
+                                               validation_match_count=1, n_splits=1)
     cross_validated_df = pipeline.cross_validate_predict(df=df, cross_validator=cross_validator)
 
     historical_df = df[df[column_names.start_date] < pd.to_datetime("2023-01-04")]
     future_df = df[df[column_names.start_date] >= pd.to_datetime("2023-01-04")]
-    pipeline.train_predict(df=historical_df)
-    future_predict = pipeline.future_predict(df=future_df)
-    future_cv_df = cross_validated_df[cross_validated_df[column_names.start_date] >= pd.to_datetime("2023-01-04")]
-    assert pd.testing.assert_frame_equal(future_cv_df, future_predict, check_like=True, check_dtype=False)
+    historical_df_predictions = pipeline.train_predict(df=historical_df)
+    future_predict = pipeline.future_predict(df=future_df).reset_index(drop=True)
+    future_cv_df = cross_validated_df[cross_validated_df[column_names.start_date] >= pd.to_datetime("2023-01-04")].reset_index(drop=True)
+    pd.testing.assert_frame_equal(future_cv_df, future_predict, check_like=True, check_dtype=False)
 
 
 def test_cross_validation_does_not_mutate():

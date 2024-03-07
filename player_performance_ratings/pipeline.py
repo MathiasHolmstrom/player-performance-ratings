@@ -186,8 +186,12 @@ class Pipeline():
                 cross_validated_df[new_feats + [cn.match_id, cn.team_id, cn.player_id]],
                 on=[cn.match_id, cn.team_id, cn.player_id], how='left')
 
+        predictor_cols_added = self.predictor.columns_added
+        if 'classes' in cross_validated_df.columns and 'classes' not in predictor_cols_added and 'classes' not in df.columns:
+            predictor_cols_added.append('classes')
+
         return df.merge(
-            cross_validated_df[self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id]],
+            cross_validated_df[predictor_cols_added + [cn.match_id, cn.team_id, cn.player_id]],
             on=[cn.match_id, cn.team_id, cn.player_id], how='left')
 
     def create_default_cross_validator(self, df: pd.DataFrame) -> CrossValidator:
@@ -258,8 +262,12 @@ class Pipeline():
                 df_with_predict[new_feats + [cn.match_id, cn.team_id, cn.player_id]],
                 on=[cn.match_id, cn.team_id, cn.player_id], how='left')
 
+        predictor_cols_added = self.predictor.columns_added
+        if 'classes' in df_with_predict.columns and 'classes' not in predictor_cols_added and 'classes' not in df.columns:
+            predictor_cols_added.append('classes')
+
         return df.merge(
-            df_with_predict[self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id]],
+            df_with_predict[predictor_cols_added + [cn.match_id, cn.team_id, cn.player_id]],
             on=[cn.match_id, cn.team_id, cn.player_id], how='left')
 
     def reset_pipeline(self):
