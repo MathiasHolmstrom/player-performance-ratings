@@ -1,5 +1,10 @@
 import mock
 import pandas as pd
+
+from player_performance_ratings.cross_validator import MatchKFoldCrossValidator
+from player_performance_ratings.predictor import Predictor
+from sklearn.linear_model import LinearRegression
+
 from player_performance_ratings.ratings import BayesianTimeWeightedRating, \
     RatingEstimatorFeatures, convert_df_to_matches, ColumnWeight, UpdateRatingGenerator, PerformancesGenerator, \
     MatchRatingGenerator
@@ -131,7 +136,6 @@ def test_match_predictor_0_rating_generators():
         "__target": [1, 0, 1, 0, 1, 0],
     })
 
-
     expected_df = df.copy()
     expected_df["prediction"] = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
 
@@ -222,7 +226,7 @@ def test_match_predictor_generate_and_predict():
         performances_generator=PerformancesGenerator(Performance(weights=column_weights)),
         predictor=predictor_mock,
         rating_generators=rating_generator,
-    column_names=column_names
+        column_names=column_names
     )
 
     _ = pipeline.train_predict(df=historical_df)
@@ -231,6 +235,101 @@ def test_match_predictor_generate_and_predict():
     pd.testing.assert_frame_equal(new_df, expected_future_df, check_like=True)
 
     assert len(pipeline.performances_generator.pre_transformations) > 0
+
+
+def test_train_predict_cross_validate():
+    historical_df = pd.DataFrame({
+        "game_id": [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+        "player_id": [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
+        "team_id": [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
+        "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02"),
+                       pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-03"), pd.to_datetime("2023-01-03"),
+                       pd.to_datetime("2023-01-03"), pd.to_datetime("2023-01-03"),
+                       pd.to_datetime("2023-01-04"), pd.to_datetime("2023-01-04"),
+                       ],
+        'deaths': [1, 1, 1, 2, 2, 2, 1, 3, 2, 5],
+        "kills": [0.2, 0.3, 0.4, 0.5, 2, 0.2, 1, 4, 3, 5],
+        "__target": [1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    })
+
+    column_weights = [
+        ColumnWeight(name="kills", weight=0.6),
+        ColumnWeight(name="deaths", weight=0.4, lower_is_better=True)
+    ]
+    predictor = Predictor(estimator=LinearRegression())
+
+    column_names = ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="start_date",
+    )
+    rating_generator = UpdateRatingGenerator(
+        estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+
+    pipeline = Pipeline(
+        performances_generator=PerformancesGenerator(Performance(weights=column_weights)),
+        predictor=predictor,
+        rating_generators=rating_generator,
+        post_rating_transformers=[
+            LagTransformer(features=["kills", "deaths"], lag_length=1, granularity=['player_id'])],
+        column_names=column_names
+    )
+
+    cross_validated_df = pipeline.train_predict(df=historical_df, cross_validate_predict=True)
+
+
+def test_cross_validate_is_equal_to_predict_future():
+    df = pd.DataFrame({
+        "game_id": [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+        "player_id": [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
+        "team_id": [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
+        "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02"),
+                       pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-03"), pd.to_datetime("2023-01-03"),
+                       pd.to_datetime("2023-01-03"), pd.to_datetime("2023-01-03"),
+                       pd.to_datetime("2023-01-04"), pd.to_datetime("2023-01-04"),
+                       ],
+        'deaths': [1, 1, 1, 2, 2, 2, 1, 3, 2, 5],
+        "kills": [0.2, 0.3, 0.4, 0.5, 2, 0.2, 1, 4, 3, 5],
+        "__target": [1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+    })
+
+    column_weights = [
+        ColumnWeight(name="kills", weight=0.6),
+        ColumnWeight(name="deaths", weight=0.4, lower_is_better=True)
+    ]
+    predictor = Predictor(estimator=LinearRegression())
+
+    column_names = ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="start_date",
+    )
+    rating_generator = UpdateRatingGenerator(
+        estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+
+    pipeline = Pipeline(
+        performances_generator=PerformancesGenerator(Performance(weights=column_weights)),
+        predictor=predictor,
+        rating_generators=rating_generator,
+        post_rating_transformers=[
+            LagTransformer(features=["kills", "deaths"], lag_length=1, granularity=['player_id'])],
+        column_names=column_names,
+    )
+
+    cross_validator = MatchKFoldCrossValidator(date_column_name=column_names.start_date,
+                                               match_id_column_name=column_names.match_id,
+                                               min_validation_date="2023-01-04", n_splits=1)
+    cross_validated_df = pipeline.cross_validate_predict(df=df, cross_validator=cross_validator)
+
+    historical_df = df[df[column_names.start_date] < pd.to_datetime("2023-01-04")]
+    future_df = df[df[column_names.start_date] >= pd.to_datetime("2023-01-04")]
+    pipeline.train_predict(df=historical_df)
+    future_predict = pipeline.future_predict(df=future_df)
+    future_cv_df = cross_validated_df[cross_validated_df[column_names.start_date] >= pd.to_datetime("2023-01-04")]
+    assert pd.testing.assert_frame_equal(future_cv_df, future_predict, check_like=True, check_dtype=False)
+
 
 def test_cross_validation_does_not_mutate():
     pass

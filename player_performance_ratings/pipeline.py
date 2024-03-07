@@ -357,6 +357,8 @@ class Pipeline():
         df_with_predict = df.copy()
 
         for rating_idx, rating_generator in enumerate(self.rating_generators):
+            if rating_generator.performance_column in df_with_predict.columns:
+                df_with_predict = df_with_predict.drop(columns=[rating_generator.performance_column])
             rating_column_names = rating_generator.column_names
 
             matches = convert_df_to_matches(column_names=rating_column_names, df=df_with_predict,
