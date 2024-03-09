@@ -223,7 +223,8 @@ class Pipeline():
                       matches: Optional[Union[list[Match], list[list[Match]]]] = None,
                       store_ratings: bool = True,
                       return_features: bool = False,
-                      cross_validate_predict: bool = False
+                      cross_validate_predict: bool = False,
+                      cross_validator: Optional[CrossValidator] = None,
                       ) -> pd.DataFrame:
 
         self.reset_pipeline()
@@ -241,7 +242,7 @@ class Pipeline():
         if cross_validate_predict:
             df_cv_predict = self.cross_validate_predict(df=df_with_predict, return_features=return_features,
                                                           create_rating_features=False, create_performance=False,
-                                                          add_train_prediction=True)
+                                                          add_train_prediction=True, cross_validator=cross_validator)
 
         for post_rating_transformer in self.post_rating_transformers:
             df_with_predict = post_rating_transformer.fit_transform(df_with_predict, column_names=self.column_names)
