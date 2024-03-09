@@ -224,8 +224,8 @@ class PipelineTuner():
                                                     cross_validate_predict=return_cross_validated_predictions,
                                                     cross_validator=self.cross_validator)
 
+        if return_df:
             return best_match_predictor, df
-
         return best_match_predictor
 
     @property
