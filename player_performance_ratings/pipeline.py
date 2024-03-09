@@ -245,6 +245,8 @@ class Pipeline():
                                                           add_train_prediction=True, cross_validator=cross_validator)
 
         for post_rating_transformer in self.post_rating_transformers:
+            if hasattr(post_rating_transformer, "_df"):
+                post_rating_transformer._df = None
             df_with_predict = post_rating_transformer.fit_transform(df_with_predict, column_names=self.column_names)
 
         self.predictor.train(df=df_with_predict, estimator_features=self._estimator_features)
