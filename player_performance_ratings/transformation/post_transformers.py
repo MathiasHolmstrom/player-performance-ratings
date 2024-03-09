@@ -243,7 +243,7 @@ class LagTransformer(BaseLagTransformer):
             raise ValueError("fit_transform needs to be called before transform")
 
         if len(df.drop_duplicates(
-                subset=[self.column_names.player_id, self.column_names.parent_team_id,
+                subset=[self.column_names.player_id, self.column_names.team_id,
                         self.column_names.match_id])) != len(df):
             raise ValueError(
                 f"Duplicated rows in df. Df must be a unique combination of {self.column_names.player_id} and {self.column_names.update_match_id}")
@@ -303,8 +303,8 @@ class LagTransformer(BaseLagTransformer):
             feats_out.append(f'{self.prefix}{days_lag}_days_ago')
 
         concat_df = concat_df.merge(
-            grouped[self.granularity + [self.column_names.update_match_id, *feats_out]],
-            on=self.granularity + [self.column_names.update_match_id], how='left')
+            grouped[self.granularity + [self.column_names.update_match_id, self.column_names.start_date, *feats_out]],
+            on=self.granularity + [self.column_names.update_match_id, self.column_names.start_date], how='left')
 
         return self._create_transformed_df(df=df, concat_df=concat_df)
 

@@ -139,6 +139,7 @@ class GameTeamPredictor(BasePredictor):
                 **{feature: 'mean' for feature in numeric_features},
                 self._target: 'mean',
             }).reset_index()
+
         else:
             grouped = df.groupby([self.game_id_colum, self.team_id_column]).agg({
                 **{feature: 'mean' for feature in numeric_features}

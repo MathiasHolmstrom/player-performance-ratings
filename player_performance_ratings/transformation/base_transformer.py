@@ -77,7 +77,7 @@ class BaseLagTransformer(BasePostTransformer):
     def _concat_df(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self._string_convert(df=df)
         df = df.assign(
-            __id=df[[self.column_names.match_id, self.column_names.parent_team_id,
+            __id=df[[self.column_names.match_id, self.column_names.team_id,
                      self.column_names.player_id]].agg('__'.join, axis=1))
 
         for feature in self.features:
@@ -85,7 +85,7 @@ class BaseLagTransformer(BasePostTransformer):
                 df = df.assign(**{feature: lambda x: x[feature].astype('float')})
 
         concat_df = pd.concat([self._df, df], axis=0).reset_index()
-        if concat_df[self.column_names.start_date].dtype in('str', 'object'):
+        if concat_df[self.column_names.start_date].dtype in ('str', 'object'):
             concat_df[self.column_names.start_date] = pd.to_datetime(concat_df[self.column_names.start_date])
         return concat_df.drop_duplicates(subset=['__id'], keep='last')
 
@@ -97,7 +97,7 @@ class BaseLagTransformer(BasePostTransformer):
             self._df = pd.concat([self._df, df], axis=0)
 
         self._df = self._df.assign(
-            __id=self._df[[self.column_names.update_match_id, self.column_names.parent_team_id,
+            __id=self._df[[self.column_names.match_id, self.column_names.team_id,
                            self.column_names.player_id]].agg('__'.join, axis=1))
         self._df = self._df.drop_duplicates(subset=['__id'], keep='last')
 
@@ -105,7 +105,8 @@ class BaseLagTransformer(BasePostTransformer):
         return transformed_df
 
     def _string_convert(self, df: pd.DataFrame) -> pd.DataFrame:
-        for column in [self.column_names.match_id, self.column_names.parent_team_id, self.column_names.player_id, self.column_names.update_match_id]:
+        for column in [self.column_names.match_id, self.column_names.parent_team_id, self.column_names.player_id,
+                       self.column_names.update_match_id]:
             df = df.assign(**{column: lambda x: x[column].astype('str')})
         return df
 
@@ -129,17 +130,18 @@ class BaseLagTransformer(BasePostTransformer):
         return transformed_df[list(set(ori_cols + self._features_out))]
 
     def _add_opponent_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        team_features = df.groupby([self.column_names.team_id, self.column_names.update_match_id])[
+        team_features = df.groupby([self.column_names.team_id, self.column_names.match_id])[
             self._entity_features].mean().reset_index()
         df_opponent_feature = team_features.rename(
-            columns={**{self.column_names.team_id: 'opponent_team_id'},
+            columns={**{self.column_names.team_id: '__opponent_team_id'},
                      **{f: f"{f}_opponent" for f in self._entity_features}}
         )
         new_df = df.merge(df_opponent_feature, on=[self.column_names.match_id], suffixes=('', '_team_sum'))
-        new_df = new_df[new_df[self.column_names.team_id] != new_df['opponent_team_id']].drop(
-            columns=['opponent_team_id'])
+        new_df = new_df[new_df[self.column_names.team_id] != new_df['__opponent_team_id']].drop(
+            columns=['__opponent_team_id'])
 
         new_feats = [f"{f}_opponent" for f in self._entity_features]
         return df.merge(
-            new_df[[self.column_names.match_id, self.column_names.team_id, self.column_names.player_id, *new_feats]],
+            new_df[[self.column_names.match_id, self.column_names.team_id, self.column_names.player_id,
+                    *new_feats]],
             on=[self.column_names.match_id, self.column_names.team_id, self.column_names.player_id], how='left')
