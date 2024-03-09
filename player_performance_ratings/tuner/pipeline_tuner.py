@@ -217,15 +217,13 @@ class PipelineTuner():
             predictor=untrained_best_predictor,
             column_names=self.pipeline.column_names
         )
+
         if self.fit_best:
             logging.info("Retraining best match predictor with all data")
-            df = best_match_predictor.train_predict(df=original_df, store_ratings=True, return_features=True)
+            df = best_match_predictor.train_predict(df=original_df, store_ratings=True, return_features=True,
+                                                    cross_validate_predict=return_cross_validated_predictions,
+                                                    cross_validator=self.cross_validator)
 
-        if return_df or return_cross_validated_predictions:
-            if return_cross_validated_predictions:
-                df = self.pipeline.cross_validate_predict(df, self.cross_validator, add_train_prediction=True,
-                                                          create_rating_features=False, create_performance=False,
-                                                          return_features=True)
             return best_match_predictor, df
 
         return best_match_predictor
