@@ -244,9 +244,9 @@ class LagTransformer(BaseLagTransformer):
 
         if len(df.drop_duplicates(
                 subset=[self.column_names.player_id, self.column_names.parent_team_id,
-                        self.column_names.rating_update_match_id])) != len(df):
+                        self.column_names.match_id])) != len(df):
             raise ValueError(
-                f"Duplicated rows in df. Df must be a unique combination of {self.column_names.player_id} and {self.column_names.rating_update_match_id}")
+                f"Duplicated rows in df. Df must be a unique combination of {self.column_names.player_id} and {self.column_names.update_match_id}")
 
         concat_df = self._concat_df(df=df)
 
@@ -257,10 +257,10 @@ class LagTransformer(BaseLagTransformer):
 
         grouped = \
             concat_df.groupby(
-                self.granularity + [self.column_names.rating_update_match_id, self.column_names.start_date])[
+                self.granularity + [self.column_names.update_match_id, self.column_names.start_date])[
                 self.features].mean().reset_index()
 
-        grouped = grouped.sort_values([self.column_names.start_date, self.column_names.rating_update_match_id])
+        grouped = grouped.sort_values([self.column_names.start_date, self.column_names.update_match_id])
 
         for days_lag in self.days_between_lags:
             if self.future_lag:
@@ -303,8 +303,8 @@ class LagTransformer(BaseLagTransformer):
             feats_out.append(f'{self.prefix}{days_lag}_days_ago')
 
         concat_df = concat_df.merge(
-            grouped[self.granularity + [self.column_names.rating_update_match_id, *feats_out]],
-            on=self.granularity + [self.column_names.rating_update_match_id], how='left')
+            grouped[self.granularity + [self.column_names.update_match_id, *feats_out]],
+            on=self.granularity + [self.column_names.update_match_id], how='left')
 
         return self._create_transformed_df(df=df, concat_df=concat_df)
 
@@ -385,16 +385,16 @@ class RollingMeanTransformer(BaseLagTransformer):
                     f'Column {output_column_name} already exists. Choose different prefix or ensure no duplication was performed')
 
             agg_dict = {feature_name: 'mean', self.column_names.start_date: 'first'}
-            grp = concat_df.groupby(self.granularity + [self.column_names.rating_update_match_id]).agg(
+            grp = concat_df.groupby(self.granularity + [self.column_names.update_match_id]).agg(
                 agg_dict).reset_index()
-            grp.sort_values(by=[self.column_names.start_date, self.column_names.rating_update_match_id], inplace=True)
+            grp.sort_values(by=[self.column_names.start_date, self.column_names.update_match_id], inplace=True)
 
             grp = grp.assign(**{output_column_name: grp.groupby(self.granularity)[feature_name].apply(
                 lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())})
 
             concat_df = concat_df.merge(
-                grp[self.granularity + [self.column_names.rating_update_match_id, output_column_name]],
-                on=self.granularity + [self.column_names.rating_update_match_id], how='left')
+                grp[self.granularity + [self.column_names.update_match_id, output_column_name]],
+                on=self.granularity + [self.column_names.update_match_id], how='left')
             concat_df = concat_df.sort_values(by=[self.column_names.start_date, self.column_names.match_id,
                                                   self.column_names.team_id, self.column_names.player_id])
 
@@ -433,8 +433,8 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
                     self._features_out.append(f'{self.prefix}{day}_count_opponent')
 
     def fit_transform(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
-        self.granularity = self.granularity or [self.column_names.player_id]
         self.column_names = column_names
+        self.granularity = self.granularity or [self.column_names.player_id]
         validate_sorting(df=df, column_names=self.column_names)
         return self._fit_transform(df)
 
@@ -454,10 +454,21 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
         concat_df = concat_df.assign(
             **{self.column_names.start_date: lambda x: x[self.column_names.start_date].dt.date})
 
+        aggregations = {feature: 'mean' for feature in self.features}
+        aggregations[self.column_names.start_date] = 'first'
+        grouped = concat_df.groupby(
+            [*self.granularity, self.column_names.update_match_id]).agg(
+            aggregations).reset_index()
         for day in self.days:
             prefix_day = f'{self.prefix}{day}'
-            concat_df = self._add_rolling_feature(concat_df=concat_df, day=day, granularity=self.granularity,
+            grouped = self._add_rolling_feature(concat_df=grouped, day=day, granularity=self.granularity,
                                                   prefix_day=prefix_day)
+
+        feats_created = [f for f in self.features_out if f in grouped.columns]
+        concat_df = concat_df.merge(grouped[[*self.granularity, *feats_created, self.column_names.update_match_id]],
+                                    on=self.granularity + [self.column_names.update_match_id], how='left')
+        concat_df = concat_df.sort_values(by=[self.column_names.start_date, self.column_names.match_id,
+                                              self.column_names.team_id, self.column_names.player_id])
 
         return self._create_transformed_df(df=df, concat_df=concat_df)
 

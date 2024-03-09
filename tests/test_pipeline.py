@@ -320,15 +320,16 @@ def test_cross_validate_is_equal_to_predict_future():
     cross_validator = MatchCountCrossValidator(
                                                match_id_column_name=column_names.match_id,
                                                validation_match_count=1, n_splits=1)
-    cross_validated_df = pipeline.cross_validate_predict(df=df, cross_validator=cross_validator)
+    cross_validated_df = pipeline.cross_validate_predict(df=df, cross_validator=cross_validator, add_train_prediction=True)
 
     historical_df = df[df[column_names.start_date] < pd.to_datetime("2023-01-04")]
     future_df = df[df[column_names.start_date] >= pd.to_datetime("2023-01-04")]
     historical_df_predictions = pipeline.train_predict(df=historical_df)
     future_predict = pipeline.future_predict(df=future_df).reset_index(drop=True)
     future_cv_df = cross_validated_df[cross_validated_df[column_names.start_date] >= pd.to_datetime("2023-01-04")].reset_index(drop=True)
+    past_cv_df = cross_validated_df[cross_validated_df[column_names.start_date] < pd.to_datetime("2023-01-04")].reset_index(drop=True)
     pd.testing.assert_frame_equal(future_cv_df, future_predict, check_like=True, check_dtype=False)
-
+    pd.testing.assert_frame_equal(past_cv_df, historical_df_predictions, check_like=True, check_dtype=False)
 
 def test_cross_validation_does_not_mutate():
     pass

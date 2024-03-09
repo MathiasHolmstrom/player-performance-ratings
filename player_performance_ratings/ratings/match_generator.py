@@ -246,7 +246,7 @@ def _create_match(league_in_df, row: pd.Series, match_teams: list[MatchTeam], co
         teams=match_teams,
         day_number=int(row[HOUR_NUMBER_COLUMN_NAME] / 24),
         league=match_league,
-        update_id=row[column_names.rating_update_match_id]
+        update_id=row[column_names.update_match_id]
     )
 
 

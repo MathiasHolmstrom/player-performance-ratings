@@ -200,7 +200,7 @@ class Pipeline():
 
         return MatchKFoldCrossValidator(
             date_column_name=self.column_names.start_date,
-            match_id_column_name=self.column_names.rating_update_match_id,
+            match_id_column_name=self.column_names.update_match_id,
             scorer=scorer,
         )
 

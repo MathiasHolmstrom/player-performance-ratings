@@ -13,23 +13,23 @@ class ColumnNames:
     position: Optional[str] = None
     participation_weight: Optional[str] = None
     projected_participation_weight: Optional[str] = None
-    rating_update_match_id: Optional[str] = None
+    update_match_id: Optional[str] = None
     parent_team_id: Optional[str] = None
     team_players_playing_time: Optional[str] = None
     opponent_players_playing_time: Optional[str] = None
     other_values: Optional[list[str]] = None
 
     def __post_init__(self):
-        if self.rating_update_match_id is None:
-            self.rating_update_match_id = self.match_id
+        if self.update_match_id is None:
+            self.update_match_id = self.match_id
 
         if self.parent_team_id is None:
             self.parent_team_id = self.team_id
 
-        if self.rating_update_match_id != self.match_id and self.parent_team_id is None:
+        if self.update_match_id != self.match_id and self.parent_team_id is None:
             raise ValueError("rating_update_team_id must be passed if rating_update_match_id is passed")
 
-        if self.parent_team_id != self.team_id and self.rating_update_match_id is None:
+        if self.parent_team_id != self.team_id and self.update_match_id is None:
             raise ValueError("rating_update_match_id must be passed if rating_update_team_id is passed")
 
 
