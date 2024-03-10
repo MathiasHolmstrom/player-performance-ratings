@@ -91,7 +91,7 @@ class BaseLagTransformer(BasePostTransformer):
                  self.column_names.start_date])) if f in df.columns]
 
         if additional_cols_to_use:
-            cols += additional_cols_to_use
+            cols += [f for f in additional_cols_to_use if f in df.columns]
 
         concat_df = pd.concat([self._df, df[cols]], axis=0).reset_index()
         if 'index' in concat_df.columns:
