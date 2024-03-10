@@ -216,12 +216,11 @@ class LagTransformer(BaseLagTransformer):
         """
 
         super().__init__(features=features, add_opponent=add_opponent, prefix=prefix,
-                         iterations=[i for i in range(1, lag_length + 1)])
+                         iterations=[i for i in range(1, lag_length + 1)], granularity=granularity)
         self.days_between_lags = days_between_lags or []
         for days_lag in self.days_between_lags:
             self._features_out.append(f'{prefix}{days_lag}_days_ago')
 
-        self.granularity = granularity
         self.lag_length = lag_length
         self.future_lag = future_lag
         self._df = None
@@ -354,10 +353,7 @@ class RollingMeanTransformer(BaseLagTransformer):
             Prefix for the new rolling mean columns
         """
         super().__init__(features=features, add_opponent=add_opponent, iterations=[window],
-                         prefix=prefix)
-        self.granularity = granularity
-        if isinstance(self.granularity, str):
-            self.granularity = [self.granularity]
+                         prefix=prefix, granularity=granularity)
         self.window = window
         self.min_periods = min_periods
 
@@ -418,9 +414,8 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
         if isinstance(self.days, int):
             self.days = [self.days]
         super().__init__(features=features, iterations=[i for i in self.days], prefix=prefix,
-                         add_opponent=add_opponent)
+                         add_opponent=add_opponent, granularity=granularity)
 
-        self.granularity = granularity
         self.add_count = add_count
 
         for day in self.days:
@@ -573,8 +568,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
                  add_opponent: bool = False,
                  prefix: str = 'rolling_mean_binary_'):
         super().__init__(features=features, add_opponent=add_opponent, prefix=prefix,
-                         iterations=[])
-        self.granularity = granularity
+                         iterations=[], granularity=granularity)
         self.window = window
         self.min_periods = min_periods
         self.binary_column = binary_column
@@ -604,14 +598,15 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
         self.column_names = column_names
         self.granularity = self.granularity or [column_names.player_id]
         validate_sorting(df=df, column_names=self.column_names)
-        return self._fit_transform(df)
+        additional_cols_to_use = [self.binary_column] + ([self.prob_column] if self.prob_column else [])
+        return self._fit_transform(df, additional_cols_to_use=additional_cols_to_use)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
 
         if self._df is None:
             raise ValueError("fit_transform needs to be called before transform")
-
-        concat_df = self._concat_df(df)
+        additional_cols_to_use = [self.binary_column] + ([self.prob_column] if self.prob_column else [])
+        concat_df = self._concat_df(df,additional_cols_to_use=additional_cols_to_use)
 
         for feature in self.features:
             mask_result_1 = concat_df[self.binary_column] == 1
