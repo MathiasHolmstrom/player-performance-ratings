@@ -96,7 +96,7 @@ class RatioTeamPredictorTransformer(BasePostTransformer):
         self.team_total_prediction_column = team_total_prediction_column
         self.prefix = prefix
         self.predictor._pred_column = f"__prediction__{self.predictor.target}"
-        self._features_out = [self.predictor.target + prefix]
+        self._features_out = [self.predictor.target + prefix, self.predictor._pred_column]
         if self.team_total_prediction_column:
             self._features_out.append(self.predictor.target + prefix + "_team_total_multiplied")
 
@@ -107,6 +107,7 @@ class RatioTeamPredictorTransformer(BasePostTransformer):
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self.predictor.add_prediction(df=df)
+
         df[self.predictor.pred_column + "_sum"] = df.groupby([self.column_names.match_id, self.column_names.team_id])[
             self.predictor.pred_column].transform('sum')
         df[self._features_out[0]] = df[self.predictor.pred_column] / df[self.predictor.pred_column + "_sum"]
@@ -114,7 +115,7 @@ class RatioTeamPredictorTransformer(BasePostTransformer):
             df = df.assign(**{self.predictor.target + self.prefix + "_team_total_multiplied": df[self._features_out[
                 0]] * df[
                                                                                                   self.team_total_prediction_column]})
-        return df.drop(columns=[self.predictor.pred_column + "_sum", self.predictor.pred_column])
+        return df.drop(columns=[self.predictor.pred_column + "_sum"])
 
     @property
     def features_out(self) -> list[str]:
@@ -475,6 +476,9 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
             concat_df[granularity_concat] = temporary_str_df.agg('__'.join, axis=1)
         else:
             granularity_concat = granularity[0]
+
+        # drop rows where any of features are nan
+        concat_df = concat_df.dropna(subset=self.features)
 
         df1 = (concat_df
                .groupby([self.column_names.start_date, granularity_concat])[self.features]
