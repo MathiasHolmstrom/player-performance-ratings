@@ -550,8 +550,8 @@ def test_rolling_mean_days_tranformer_transform(column_names):
     expected_df = expected_df.assign(**{
         transformer.features_out[0]: [2, 3, 2, 3],
         transformer.features_out[1]: [3, 2, 3, 2],
-        f'{transformer.prefix}10_count': [1, 1, 1, 1],
-        f'{transformer.prefix}10_count_opponent': [1, 1, 1, 1],
+        f'{transformer.prefix}10_count': [2, 2, 2, 2],
+        f'{transformer.prefix}10_count_opponent': [2, 2, 2, 2],
     })
     expected_df['team'] = expected_df['team'].astype('str')
     expected_df['game'] = expected_df['game'].astype('str')

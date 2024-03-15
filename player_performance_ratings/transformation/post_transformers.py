@@ -470,7 +470,8 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
         count_feats = []
         for day in self.days:
             prefix_day = f'{self.prefix}{day}'
-            count_feats.append(f'{prefix_day}_count')
+            if self.add_count:
+                count_feats.append(f'{prefix_day}_count')
             grouped = self._add_rolling_feature(concat_df=grouped, day=day, granularity=self.granularity,
                                                 prefix_day=prefix_day)
 
@@ -487,7 +488,7 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
         for feat in feats_added:
             concat_df['is_ori_nan'] = concat_df[feat].isna().astype(int)
             if feat in count_feats:
-                concat_df.loc[~(concat_df[self.column_names.match_id].isin(self._fitted_game_ids)) & (concat_df[self.column_names.start_date] >= max_date_fitted), feat] = np.nan
+                concat_df.loc[~(concat_df[self.column_names.match_id].isin(self._fitted_game_ids)) & (concat_df[self.column_names.start_date] >= max_date_fitted) & (concat_df[feat]==0), feat] = np.nan
             concat_df[feat] = concat_df.groupby(self.granularity)[feat].fillna(method='ffill')
             concat_df.loc[(concat_df[self.column_names.start_date] <= max_date_fitted) & (concat_df['is_ori_nan'] == 1) &(df[self.column_names.match_id].isin(self._fitted_game_ids)) , feat] = np.nan
 
