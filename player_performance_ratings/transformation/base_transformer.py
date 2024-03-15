@@ -90,10 +90,21 @@ class BaseLagTransformer(BasePostTransformer):
                  self.column_names.parent_team_id, self.column_names.update_match_id,
                  self.column_names.start_date])) if f in df.columns]
 
+
         if additional_cols_to_use:
             cols += [f for f in additional_cols_to_use if f in df.columns]
-
+        df = df.assign(
+            is_nan=lambda x: (
+                x[self.features].isna().any(axis=1).astype(int) if self.features[0] in x.columns else 1
+            )
+        )
+        df = df.assign(
+            nan_count=df.groupby(self.granularity)['is_nan'].cumsum()
+        )
+        self._df = self._df.assign(nan_count=0)
+        cols += ['nan_count', 'is_nan']
         concat_df = pd.concat([self._df, df[cols]], axis=0).reset_index()
+
         if 'index' in concat_df.columns:
             concat_df = concat_df.drop(columns=['index'])
         if concat_df[self.column_names.start_date].dtype in ('str', 'object'):
