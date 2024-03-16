@@ -132,8 +132,7 @@ class MatchKFoldCrossValidator(CrossValidator):
         for idx in range(self.n_splits):
 
             for post_transformer in post_transformers:
-                if hasattr(post_transformer, "_df"):
-                    post_transformer._df = None
+                post_transformer.reset()
                 train_df = train_df[[c for c in train_df.columns if c not in post_transformer.features_out]]
                 validation_df = validation_df[
                     [c for c in validation_df.columns if c not in post_transformer.features_out]]
