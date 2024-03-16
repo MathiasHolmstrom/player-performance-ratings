@@ -666,8 +666,11 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
             concat_df.drop(['value_result_1', 'value_result_0'], axis=1, inplace=True)
 
         feats_added = [f for f in self.features_out if f in concat_df.columns]
-        ori_concat_df = ori_concat_df.merge(concat_df[[*self.granularity, *feats_added,
-                                                       self.column_names.update_match_id]], how='left')
+        cols_use = list(set([*feats_added, *self.granularity, self.column_names.match_id, self.column_names.team_id,
+                             self.column_names.player_id]))
+        ori_concat_df = ori_concat_df.merge(concat_df[cols_use],
+                                            on=[self.column_names.match_id, self.column_names.team_id,
+                                                self.column_names.player_id], how='left')
         ori_concat_df[feats_added] = ori_concat_df.groupby(self.granularity)[feats_added].fillna(method='ffill')
 
         if self.prob_column:
