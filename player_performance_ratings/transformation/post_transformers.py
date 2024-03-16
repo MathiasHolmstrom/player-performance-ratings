@@ -150,6 +150,7 @@ class NormalizerTargetColumnTransformer(BasePostTransformer):
         return self._features_out
 
 
+
 class NormalizerTransformer(BasePostTransformer):
 
     def __init__(self, features: list[str], granularity, target_mean: Optional[float] = None,
@@ -178,6 +179,9 @@ class NormalizerTransformer(BasePostTransformer):
     @property
     def features_out(self) -> list[str]:
         return self.features
+
+    def reset(self):
+        pass
 
 
 class LagTransformer(BaseLagTransformer):
@@ -547,6 +551,10 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
            #     (concat_df['nan_count'] <= 1) & (concat_df[f'{prefix_day}_count'].isna()), f'{prefix_day}_count'] = 0
 
         return concat_df
+
+    def reset(self):
+        self._df = None
+        self._fitted_game_ids = []
 
     @property
     def features_out(self) -> list[str]:

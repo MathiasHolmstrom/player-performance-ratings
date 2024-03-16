@@ -51,6 +51,10 @@ class BasePostTransformer(ABC):
         return []
 
 
+    def reset(self):
+        pass
+
+
 class BaseLagTransformer(BasePostTransformer):
 
     def __init__(self,
@@ -175,3 +179,6 @@ class BaseLagTransformer(BasePostTransformer):
             new_df[[self.column_names.match_id, self.column_names.team_id, self.column_names.player_id,
                     *new_feats]],
             on=[self.column_names.match_id, self.column_names.team_id, self.column_names.player_id], how='left')
+
+    def reset(self):
+        self._df = None

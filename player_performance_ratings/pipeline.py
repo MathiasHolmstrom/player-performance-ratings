@@ -244,9 +244,9 @@ class Pipeline():
                                                           create_rating_features=False, create_performance=False,
                                                           add_train_prediction=True, cross_validator=cross_validator)
 
-        for post_rating_transformer in self.post_rating_transformers:
+        for idx, post_rating_transformer in enumerate(self.post_rating_transformers):
             if hasattr(post_rating_transformer, "_df"):
-                post_rating_transformer._df = None
+                self.post_rating_transformers[idx].reset()
             df_with_predict = post_rating_transformer.fit_transform(df_with_predict, column_names=self.column_names)
 
         self.predictor.train(df=df_with_predict, estimator_features=self._estimator_features)
@@ -278,8 +278,8 @@ class Pipeline():
             self.rating_generators[idx].reset_ratings()
 
         for idx in range(len(self.post_rating_transformers)):
-            if hasattr(self.post_rating_transformers[idx], "_df"):
-                self.post_rating_transformers[idx]._df = None
+            self.post_rating_transformers[idx].reset()
+
 
     def _add_performance(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
