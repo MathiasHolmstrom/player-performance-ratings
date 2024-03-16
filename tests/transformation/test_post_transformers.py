@@ -81,6 +81,7 @@ def test_lag_team_fit_transform(column_names):
     pd.testing.assert_frame_equal(df_with_lags, expected_df, check_like=True, check_dtype=False)
 
 
+
 def test_lag_fit_transform_2_features(column_names):
     df = pd.DataFrame(
         {
@@ -213,11 +214,67 @@ def test_lag_transformation_transform_2_lags(column_names):
     future_transformed_df = lag_transformation.transform(future_df)
 
     expected_df = future_df_copy.assign(**{lag_transformation.prefix + "1_points": [3, 2, 3]})
-    expected_df = expected_df.assign(**{lag_transformation.prefix + "2_points": [1, None, 3]})
+    expected_df = expected_df.assign(**{lag_transformation.prefix + "2_points": [1, None, 1]})
     expected_df['team'] = expected_df['team'].astype('str')
     expected_df['game'] = expected_df['game'].astype('str')
     expected_df['player'] = expected_df['player'].astype('str')
     pd.testing.assert_frame_equal(future_transformed_df, expected_df, check_like=True, check_dtype=False)
+
+def test_lag_transformer_fit_transform_transform_multiple_teams(column_names):
+    df = pd.DataFrame(
+        {
+            'player': ['a', 'b', 'a', "c"],
+            'game': [1, 1, 2, 2],
+            "team": [1, 2, 1, 3],
+            'points': [1, 2, 3, 5],
+            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-02")]
+        }
+    )
+    original_df = df.copy()
+
+    lag_transformation = LagTransformer(
+        features=['points'],
+        lag_length=2,
+        granularity=['player'],
+        add_opponent=True
+    )
+
+    df_with_lags = lag_transformation.fit_transform(df, column_names=column_names)
+
+    expected_df = original_df.assign(**{
+        lag_transformation.features_out[0]: [None, None, 1, None],
+        lag_transformation.features_out[1]: [None, None, None, 1],
+        lag_transformation.features_out[2]: [None, None, None, None],
+        lag_transformation.features_out[3]: [None, None, None, None],
+    })
+    expected_df['team'] = expected_df['team'].astype('str')
+    expected_df['game'] = expected_df['game'].astype('str')
+    expected_df['player'] = expected_df['player'].astype('str')
+    pd.testing.assert_frame_equal(df_with_lags, expected_df, check_like=True, check_dtype=False)
+
+    future_df = pd.DataFrame(
+        {
+            'player': ['a', 'b', 'b', "c"],
+            'game': [3, 3, 4, 4],
+            "team": [1, 2, 2, 3],
+            "start_date": [pd.to_datetime("2023-01-04"), pd.to_datetime("2023-01-04"), pd.to_datetime("2023-01-05"),
+                           pd.to_datetime("2023-01-05")]
+        }
+    )
+    expected_future_df = future_df.copy()
+
+    future_df = lag_transformation.transform(future_df)
+
+    expected_future_df = expected_future_df.assign(**{
+        lag_transformation.features_out[0]: [3, 2, 2, 5],
+        lag_transformation.features_out[1]: [2, 3, 5, 2],
+        lag_transformation.features_out[2]: [1, None, None, None],
+        lag_transformation.features_out[3]: [None, 1, None, None],
+    })
+    expected_future_df['team'] = expected_future_df['team'].astype('str')
+    expected_future_df['game'] = expected_future_df['game'].astype('str')
+    expected_future_df['player'] = expected_future_df['player'].astype('str')
+    pd.testing.assert_frame_equal(future_df, expected_future_df, check_like=True, check_dtype=False)
 
 
 def test_lag_transformer_parent_match_id(column_names: ColumnNames):
@@ -251,6 +308,9 @@ def test_lag_transformer_parent_match_id(column_names: ColumnNames):
     expected_df['player'] = expected_df['player'].astype('str')
     expected_df['series_id'] = expected_df['series_id'].astype('str')
     pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
+
+
+
 
 
 def test_rolling_mean_fit_transform(column_names):
@@ -395,6 +455,7 @@ def test_rolling_mean_days_fit_transform(column_names):
     pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
+
 def test_rolling_mean_days_series_id(column_names: ColumnNames):
     column_names = column_names
     column_names.update_match_id = 'series_id'
@@ -499,7 +560,7 @@ def test_rolling_mean_days_fit_transform_opponent(column_names):
     pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
-def test_rolling_mean_days_tranformer_transform(column_names):
+def test_rolling_mean_days_transformer_transform(column_names):
     historical_df = pd.DataFrame(
         {
             'player': ['a', 'b', 'a', 'b'],
@@ -566,20 +627,11 @@ def test_rolling_mean_days_tranformer_transform_first_future_beyond_window(colum
             'player': ['a', 'b', 'a', 'b'],
             'game': [1, 1, 2, 2],
             'points': [1, 2, 3, 2],
-            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-02")],
+            "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-12"), pd.to_datetime("2023-01-12")],
             "team": [1, 2, 1, 2],
         }
     )
 
-    future_df = pd.DataFrame(
-        {
-            'player': ['a', 'b', 'a', 'b'],
-            'game': [3, 3, 4, 4],
-            "start_date": [pd.to_datetime("2023-01-24"), pd.to_datetime("2023-01-24"), pd.to_datetime("2023-01-25"),
-                           pd.to_datetime("2023-01-25")],
-            "team": [1, 2, 1, 2],
-        }
-    )
 
     transformer = RollingMeanDaysTransformer(
         features=['points'],
@@ -588,16 +640,40 @@ def test_rolling_mean_days_tranformer_transform_first_future_beyond_window(colum
         add_opponent=True,
         add_count=True
     )
-    _ = historical_df.copy()
-    _ = transformer.fit_transform(historical_df, column_names=column_names)
+    expected_historical_df = historical_df.copy()
+    historical_df = transformer.fit_transform(historical_df, column_names=column_names)
+
+    expected_historical_df = expected_historical_df.assign(**{
+        transformer.features_out[0]: [None, None, None, None],
+        transformer.features_out[1]: [None, None, None, None],
+        f'{transformer.prefix}10_count': [0, 0, 0, 0],
+        f'{transformer.prefix}10_count_opponent': [0, 0, 0, 0],
+    })
+
+    expected_historical_df['team'] = expected_historical_df['team'].astype('str')
+    expected_historical_df['game'] = expected_historical_df['game'].astype('str')
+    expected_historical_df['player'] = expected_historical_df['player'].astype('str')
+    pd.testing.assert_frame_equal(historical_df, expected_historical_df, check_like=True, check_dtype=False)
+
+
+    future_df = pd.DataFrame(
+        {
+            'player': ['a', 'b', 'a', 'b'],
+            'game': [3, 3, 4, 4],
+            "start_date": [pd.to_datetime("2023-01-16"), pd.to_datetime("2023-01-16"), pd.to_datetime("2023-01-25"),
+                           pd.to_datetime("2023-01-25")],
+            "team": [1, 2, 1, 2],
+        }
+    )
+
 
     expected_df = future_df.copy()
 
     transformed_future_df = transformer.transform(df=future_df)
 
     expected_df = expected_df.assign(**{
-        transformer.features_out[0]: [1, 2, 1, 2],
-        transformer.features_out[1]: [2, 1, 2, 1],
+        transformer.features_out[0]: [3, 2, 3, 2],
+        transformer.features_out[1]: [2, 3, 2, 3],
         f'{transformer.prefix}10_count': [1, 1, 1, 1],
         f'{transformer.prefix}10_count_opponent': [1, 1, 1, 1],
     })
@@ -801,3 +877,5 @@ def test_binary_granularity_rolling_mean_fit_transform_opponent(column_names):
                                                                            -10 * 0.6 + 0.4 * -5]
 
     pd.testing.assert_frame_equal(df, expected_historical_df, check_like=True, check_dtype=False)
+
+

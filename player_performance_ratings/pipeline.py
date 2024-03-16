@@ -245,8 +245,8 @@ class Pipeline():
                                                           add_train_prediction=True, cross_validator=cross_validator)
 
         for idx, post_rating_transformer in enumerate(self.post_rating_transformers):
-            if hasattr(post_rating_transformer, "_df"):
-                self.post_rating_transformers[idx].reset()
+
+            self.post_rating_transformers[idx].reset()
             df_with_predict = post_rating_transformer.fit_transform(df_with_predict, column_names=self.column_names)
 
         self.predictor.train(df=df_with_predict, estimator_features=self._estimator_features)
@@ -408,3 +408,6 @@ class Pipeline():
         if 'classes_' not in dir(self.predictor.estimator):
             return None
         return self.predictor.estimator.classes_
+
+
+

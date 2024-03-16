@@ -150,7 +150,6 @@ class NormalizerTargetColumnTransformer(BasePostTransformer):
         return self._features_out
 
 
-
 class NormalizerTransformer(BasePostTransformer):
 
     def __init__(self, features: list[str], granularity, target_mean: Optional[float] = None,
@@ -311,7 +310,7 @@ class LagTransformer(BaseLagTransformer):
             on=self.granularity + [self.column_names.update_match_id, self.column_names.start_date], how='left')
 
         feats_added = [f for f in self.features_out if f in concat_df.columns]
-        concat_df[feats_added] = concat_df.groupby(self.granularity)[feats_added].fillna(method='ffill')
+        #  concat_df[feats_added] = concat_df.groupby(self.granularity)[feats_added].fillna(method='ffill')
         return self._create_transformed_df(df=df, concat_df=concat_df)
 
     @property
@@ -432,7 +431,7 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
                          add_opponent=add_opponent, granularity=granularity)
 
         self.add_count = add_count
-        self._fitted_game_ids  =[]
+        self._fitted_game_ids = []
 
         for day in self.days:
             if self.add_count:
@@ -451,7 +450,7 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
         return self._fit_transform(df)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-
+        cn = self.column_names
         if self._df is None:
             raise ValueError("fit_transform needs to be called before transform")
 
@@ -485,19 +484,20 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
         concat_df = concat_df.sort_values(by=[self.column_names.start_date, self.column_names.match_id,
                                               self.column_names.team_id, self.column_names.player_id])
 
-        feats_added = [f for f in self.features_out if f in concat_df.columns]
+        if len(self._df[cn.match_id].unique()) != len(set(df[cn.match_id].unique().tolist() + self._fitted_game_ids)):
+            max_fitted_date = self._df[cn.start_date].max()
+            concat_df.loc[concat_df[cn.start_date] > max_fitted_date, cn.start_date] = max_fitted_date +pd.DateOffset(hours=1)
+            transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
+            for col in [cn.match_id, cn.player_id, cn.team_id]:
+                df = df.assign(**{col: lambda x: x[col].astype('str')})
 
-        max_date_fitted = self._df[self.column_names.start_date].max()
+            transformed_df = transformed_df[[c for c in transformed_df.columns if c != cn.start_date]].merge(
+                df[[cn.match_id, cn.team_id, cn.player_id, cn.start_date]], on=[cn.match_id, cn.team_id, cn.player_id],
+                how='left')
 
-        for feat in feats_added:
-            concat_df['is_ori_nan'] = concat_df[feat].isna().astype(int)
-            if feat in count_feats:
-                concat_df.loc[~(concat_df[self.column_names.match_id].isin(self._fitted_game_ids)) & (concat_df[self.column_names.start_date] >= max_date_fitted) & (concat_df[feat]==0), feat] = np.nan
-            concat_df[feat] = concat_df.groupby(self.granularity)[feat].fillna(method='ffill')
-            concat_df.loc[(concat_df[self.column_names.start_date] <= max_date_fitted) & (concat_df['is_ori_nan'] == 1) &(df[self.column_names.match_id].isin(self._fitted_game_ids)) , feat] = np.nan
+        else:
+            transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
 
-
-        transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
         return transformed_df
 
     def _add_rolling_feature(self, concat_df: pd.DataFrame, day: int, granularity: list[str], prefix_day: str):
@@ -534,7 +534,6 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
 
             df1.loc[df1[f'{prefix_day}_{feature_name}_count'] == 0, f'{prefix_day}_{feature_name}'] = np.nan
 
-
         if self.add_count:
             df1[f'{prefix_day}_count'] = df1[f'{prefix_day}_{self.features[0]}_count']
             df1 = df1.drop(columns=[f'{prefix_day}_{feature_name}_count' for feature_name in self.features])
@@ -546,9 +545,9 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
         if self.add_count:
             concat_df[f'{prefix_day}_count'] = concat_df[f'{prefix_day}_count'].fillna(0)
 
-       # if self.add_count:
-           # concat_df.loc[
-           #     (concat_df['nan_count'] <= 1) & (concat_df[f'{prefix_day}_count'].isna()), f'{prefix_day}_count'] = 0
+        # if self.add_count:
+        # concat_df.loc[
+        #     (concat_df['nan_count'] <= 1) & (concat_df[f'{prefix_day}_count'].isna()), f'{prefix_day}_count'] = 0
 
         return concat_df
 

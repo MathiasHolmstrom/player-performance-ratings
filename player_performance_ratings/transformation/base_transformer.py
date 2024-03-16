@@ -1,6 +1,7 @@
 from abc import abstractmethod, ABC
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 from player_performance_ratings import ColumnNames
 
@@ -74,6 +75,7 @@ class BaseLagTransformer(BasePostTransformer):
         self.prefix = prefix
         self._df = None
         self._entity_features = []
+        self._fitted_game_ids  = []
 
         for feature_name in self.features:
             for lag in iterations:
@@ -137,6 +139,7 @@ class BaseLagTransformer(BasePostTransformer):
             subset=[self.column_names.match_id, self.column_names.team_id, self.column_names.player_id], keep='last')
 
         transformed_df = self.transform(df=df)
+        self._fitted_game_ids =list(set(transformed_df[self.column_names.match_id].tolist() + self._fitted_game_ids))
         return transformed_df
 
     def _string_convert(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -146,9 +149,25 @@ class BaseLagTransformer(BasePostTransformer):
         return df
 
     def _create_transformed_df(self, df: pd.DataFrame, concat_df: pd.DataFrame) -> pd.DataFrame:
+
         cn = self.column_names
 
-        if self.add_opponent:
+      #  for feat in feats_added:
+       #     concat_df['is_ori_nan'] = concat_df[feat].isna().astype(int)
+       #     if feat in feats_to_forward_fill_future_periods:
+                #concat_df.loc[~(concat_df[self.column_names.match_id].isin(self._fitted_game_ids)) & (concat_df[self.column_names.start_date] >= max_date_fitted) & (concat_df[feat]==0), feat] = np.nan
+       #         concat_df.loc[~(concat_df[self.column_names.match_id].isin(self._fitted_game_ids)) & (concat_df[feat] == 0), feat] = np.nan
+      #      concat_df[feat] = concat_df.groupby(self.granularity)[feat].fillna(method='ffill')
+      #      concat_df.loc[(concat_df['is_ori_nan'] == 1) &(df[self.column_names.match_id].isin(self._fitted_game_ids)) , feat] = np.nan
+
+
+        cn = self.column_names
+
+        unfitted_game_ids  = False
+        if  len(self._df[cn.match_id].unique()) != len(set(df[cn.match_id].unique().tolist() + self._fitted_game_ids)):
+            unfitted_game_ids = True
+
+        if self.add_opponent and not unfitted_game_ids:
             concat_df = self._add_opponent_features(df=concat_df)
 
         ori_cols = [c for c in df.columns if c not in concat_df.columns] + [cn.match_id, cn.player_id, cn.team_id]
@@ -158,6 +177,44 @@ class BaseLagTransformer(BasePostTransformer):
 
         transformed_df = concat_df.merge(df[ori_cols],
                                          on=[cn.match_id, cn.player_id, cn.team_id], how='inner')
+
+        if unfitted_game_ids:
+            transformed_df[self._entity_features] = transformed_df[self._entity_features].fillna(-999.21345)
+            first_grp = transformed_df.groupby(self.granularity)[self._entity_features].first().reset_index()
+            transformed_df = transformed_df[[c for c in transformed_df.columns if c not in self._entity_features]].merge(first_grp,on=self.granularity, how='left')
+            for f in self._entity_features:
+                transformed_df[f].replace(-999.21345, np.nan, inplace=True)
+            transformed_df.groupby(self.granularity)[self._entity_features].fillna(method='ffill', inplace=True)
+
+            team_features = transformed_df.groupby([self.column_names.team_id, self.column_names.match_id])[
+                self._entity_features].mean().reset_index()
+            df_opponent_feature = team_features.rename(
+                columns={**{self.column_names.team_id: '__opponent_team_id'},
+                         **{f: f"{f}_opponent" for f in self._entity_features}}
+            )
+            opponent_feat_names = [f"{f}_opponent" for f in self._entity_features]
+            new_df = transformed_df.merge(df_opponent_feature, on=[self.column_names.match_id], suffixes=('', '_team_sum'))
+            new_df = new_df[new_df[self.column_names.team_id] != new_df['__opponent_team_id']]
+            new_df[opponent_feat_names] = new_df[
+                opponent_feat_names].fillna(-999.21345)
+            first_grp = new_df.groupby('__opponent_team_id')[
+                opponent_feat_names].first().reset_index()
+            new_df = new_df[
+                [c for c in new_df.columns if c not in opponent_feat_names]].merge(first_grp,
+                                                                                                            on='__opponent_team_id',
+                                                                                                            how='left')
+            for f in opponent_feat_names:
+                new_df[f].replace(-999.21345, np.nan, inplace=True)
+            new_df.groupby('__opponent_team_id')[opponent_feat_names].fillna(method='ffill',
+                                                                                                  inplace=True)
+
+            transformed_df = transformed_df.merge(
+                new_df[[self.column_names.match_id, self.column_names.team_id, self.column_names.player_id,
+                        *opponent_feat_names]],
+                on=[self.column_names.match_id, self.column_names.team_id, self.column_names.player_id], how='left')
+
+
+
         transformed_df.index = ori_index_values
         transformed_df = transformed_df.sort_values(by=[cn.start_date, cn.match_id,
                                                         cn.team_id, cn.player_id])
