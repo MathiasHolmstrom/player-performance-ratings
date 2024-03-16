@@ -374,8 +374,8 @@ class RollingMeanTransformer(BaseLagTransformer):
             raise ValueError("fit_transform needs to be called before transform")
 
         # cumcount number of occurences where features are nan
-        ori_concat_df = self._concat_df(df)
-        concat_df = ori_concat_df[ori_concat_df['nan_count'] <= 1]
+        concat_df = self._concat_df(df)
+
         for feature_name in self.features:
 
             if self.column_names.participation_weight:
@@ -402,13 +402,13 @@ class RollingMeanTransformer(BaseLagTransformer):
                                                   self.column_names.team_id, self.column_names.player_id])
 
         feats_added = [f for f in self.features_out if f in concat_df.columns]
-        ori_concat_df = ori_concat_df.merge(concat_df[[self.column_names.match_id, self.column_names.team_id,
-                                                       self.column_names.player_id, *feats_added]],
-                                            on=[self.column_names.match_id, self.column_names.team_id,
-                                                self.column_names.player_id], how='left')
-        ori_concat_df[feats_added] = ori_concat_df.groupby(self.granularity)[feats_added].fillna(method='ffill')
+        #  ori_concat_df = ori_concat_df.merge(concat_df[[self.column_names.match_id, self.column_names.team_id,
+        #                                                 self.column_names.player_id, *feats_added]],
+        #                                     on=[self.column_names.match_id, self.column_names.team_id,
+        #                                        self.column_names.player_id], how='left')
+        concat_df[feats_added] = concat_df.groupby(self.granularity)[feats_added].fillna(method='ffill')
 
-        return self._create_transformed_df(df=df, concat_df=ori_concat_df)
+        return self._create_transformed_df(df=df, concat_df=concat_df)
 
     @property
     def features_out(self) -> list[str]:
@@ -465,7 +465,7 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
         concat_df = concat_df.assign(
             **{self.column_names.start_date: lambda x: x[self.column_names.start_date].dt.date})
 
-        aggregations = {feature: 'mean' for feature in self.features + ['nan_count']}
+        aggregations = {feature: 'mean' for feature in self.features}
         aggregations[self.column_names.start_date] = 'first'
         grouped = concat_df.groupby(
             [*self.granularity, self.column_names.update_match_id]).agg(
@@ -486,7 +486,8 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
 
         if len(self._df[cn.match_id].unique()) != len(set(df[cn.match_id].unique().tolist() + self._fitted_game_ids)):
             max_fitted_date = self._df[cn.start_date].max()
-            concat_df.loc[concat_df[cn.start_date] > max_fitted_date, cn.start_date] = max_fitted_date +pd.DateOffset(hours=1)
+            concat_df.loc[concat_df[cn.start_date] > max_fitted_date, cn.start_date] = max_fitted_date + pd.DateOffset(
+                hours=1)
             transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
             for col in [cn.match_id, cn.player_id, cn.team_id]:
                 df = df.assign(**{col: lambda x: x[col].astype('str')})
@@ -494,6 +495,7 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
             transformed_df = transformed_df[[c for c in transformed_df.columns if c != cn.start_date]].merge(
                 df[[cn.match_id, cn.team_id, cn.player_id, cn.start_date]], on=[cn.match_id, cn.team_id, cn.player_id],
                 how='left')
+            transformed_df = transformed_df.sort_values(by=[cn.start_date, cn.match_id, cn.team_id, cn.player_id])
 
         else:
             transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
@@ -653,8 +655,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
         if self._df is None:
             raise ValueError("fit_transform needs to be called before transform")
         additional_cols_to_use = [self.binary_column] + ([self.prob_column] if self.prob_column else [])
-        ori_concat_df = self._concat_df(df, additional_cols_to_use=additional_cols_to_use)
-        concat_df = ori_concat_df[ori_concat_df['nan_count'] <= 1]
+        concat_df = self._concat_df(df, additional_cols_to_use=additional_cols_to_use)
 
         for feature in self.features:
             mask_result_1 = concat_df[self.binary_column] == 1
@@ -673,23 +674,24 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
             concat_df.drop(['value_result_1', 'value_result_0'], axis=1, inplace=True)
 
         feats_added = [f for f in self.features_out if f in concat_df.columns]
-        cols_use = list(set([*feats_added, *self.granularity, self.column_names.match_id, self.column_names.team_id,
-                             self.column_names.player_id]))
-        ori_concat_df = ori_concat_df.merge(concat_df[cols_use],
-                                            on=[self.column_names.match_id, self.column_names.team_id,
-                                                self.column_names.player_id], how='left')
-        ori_concat_df[feats_added] = ori_concat_df.groupby(self.granularity)[feats_added].fillna(method='ffill')
 
+        concat_df[feats_added] = concat_df.groupby(self.granularity)[feats_added].fillna(method='ffill')
+        weighted_prob_feats = []
         if self.prob_column:
             for idx, feature_name in enumerate(self.features):
-                ori_concat_df[f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}'] = ori_concat_df[
-                                                                                                     f'{self.prefix}{self.window}_{feature_name}_1'] * \
-                                                                                                 ori_concat_df[
-                                                                                                     self.prob_column] + \
-                                                                                                 ori_concat_df[
-                                                                                                     f'{self.prefix}{self.window}_{feature_name}_0'] * (
-                                                                                                         1 -
-                                                                                                         ori_concat_df[
-                                                                                                             self.prob_column])
+                weighted_prob_feat_name = f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}'
+                weighted_prob_feats.append(weighted_prob_feat_name)
+        transformed_df = self._create_transformed_df(df=df, concat_df=concat_df, exclude_features=weighted_prob_feats)
+        if self.prob_column:
+            for idx, feature_name in enumerate(self.features):
+                transformed_df[weighted_prob_feats[idx]] = transformed_df[
+                                                               f'{self.prefix}{self.window}_{feature_name}_1'] * \
+                                                           transformed_df[
+                                                               self.prob_column] + \
+                                                           transformed_df[
+                                                               f'{self.prefix}{self.window}_{feature_name}_0'] * (
+                                                                   1 -
+                                                                   transformed_df[
+                                                                       self.prob_column])
 
-        return self._create_transformed_df(df=df, concat_df=ori_concat_df)
+        return transformed_df
