@@ -106,7 +106,7 @@ class BaseLagTransformer(BasePostTransformer):
         return concat_df.drop_duplicates(
             subset=[self.column_names.match_id, self.column_names.team_id, self.column_names.player_id], keep='last')
 
-    def _store_df(self, df: pd.DataFrame, additional_cols_to_use: Optional[list[str]] = None) -> pd.DataFrame:
+    def _store_df(self, df: pd.DataFrame, additional_cols_to_use: Optional[list[str]] = None):
         df = self._string_convert(df)
 
         cols = list(
@@ -125,7 +125,6 @@ class BaseLagTransformer(BasePostTransformer):
 
         self._df = self._df.drop_duplicates(
             subset=[self.column_names.match_id, self.column_names.team_id, self.column_names.player_id], keep='last')
-
 
     def _string_convert(self, df: pd.DataFrame) -> pd.DataFrame:
         for column in [self.column_names.match_id, self.column_names.parent_team_id, self.column_names.player_id,
@@ -154,8 +153,6 @@ class BaseLagTransformer(BasePostTransformer):
 
         return transformed_df[list(set(df.columns.tolist() + self.features_out))]
 
-
-
     def _add_opponent_features(self, df: pd.DataFrame) -> pd.DataFrame:
         team_features = df.groupby([self.column_names.team_id, self.column_names.match_id])[
             self._entity_features].mean().reset_index()
@@ -173,8 +170,9 @@ class BaseLagTransformer(BasePostTransformer):
                     *new_feats]],
             on=[self.column_names.match_id, self.column_names.team_id, self.column_names.player_id], how='left')
 
-
-    def _generate_future_feats(self, transformed_df: pd.DataFrame, ori_df: pd.DataFrame) -> pd.DataFrame:
+    def _generate_future_feats(self, transformed_df: pd.DataFrame, ori_df: pd.DataFrame,
+                               known_future_features: Optional[list[str]] = None) -> pd.DataFrame:
+        known_future_features = known_future_features or []
         ori_cols = ori_df.columns.tolist()
         ori_index_values = ori_df.index.tolist()
         cn = self.column_names
@@ -210,7 +208,7 @@ class BaseLagTransformer(BasePostTransformer):
         for f in opponent_feat_names:
             new_df[f].replace(-999.21345, np.nan, inplace=True)
 
-        new_df = new_df.sort_values(by=[cn.start_date, cn.match_id,'__opponent_team_id'])
+        new_df = new_df.sort_values(by=[cn.start_date, cn.match_id, '__opponent_team_id'])
         new_df.groupby('__opponent_team_id')[opponent_feat_names].fillna(method='ffill',
                                                                          inplace=True)
 
@@ -219,10 +217,16 @@ class BaseLagTransformer(BasePostTransformer):
                     *opponent_feat_names]],
             on=[self.column_names.match_id, self.column_names.team_id, self.column_names.player_id], how='left')
 
+        for col in [cn.match_id, cn.player_id, cn.team_id]:
+            ori_df = ori_df.assign(**{col: lambda x: x[col].astype('str')})
+        transformed_df = transformed_df.merge(ori_df[[cn.match_id, cn.team_id, cn.player_id,
+                                                      *[c for c in ori_df.columns if c not in transformed_df.columns]]],
+                                              on=[cn.match_id, cn.team_id, cn.player_id])
+
         transformed_df = transformed_df.sort_values(by=[cn.start_date, cn.match_id,
                                                         cn.team_id, cn.player_id])
         transformed_df.index = ori_index_values
-        return transformed_df[list(ori_cols + self.features_out)]
+        return transformed_df[list(ori_cols + [f for f in self.features_out if f not in known_future_features])]
 
     def reset(self):
         self._df = None

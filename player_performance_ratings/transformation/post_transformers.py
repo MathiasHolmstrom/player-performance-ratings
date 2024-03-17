@@ -44,12 +44,12 @@ class NetOverPredictedPostTransformer(BasePostTransformer):
         if self.prefix is "":
             raise ValueError("Prefix must not be empty")
 
-    def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
+    def generate_historical(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
         self.column_names = column_names
         self._predictor.train(df, estimator_features=self.features)
-        return self.transform(df)
+        return self.generate_future(df)
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self._predictor.add_prediction(df)
         new_feature_name = self.prefix + self._predictor.pred_column
         if self._predictor.target not in df.columns:
@@ -71,11 +71,11 @@ class PredictorTransformer(BasePostTransformer):
         self.predictor = predictor
         super().__init__(features=features)
 
-    def fit_transform(self, df: pd.DataFrame, column_names: Optional[None] = None) -> pd.DataFrame:
+    def generate_historical(self, df: pd.DataFrame, column_names: Optional[None] = None) -> pd.DataFrame:
         self.predictor.train(df=df, estimator_features=self.features)
-        return self.transform(df)
+        return self.generate_future(df)
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self.predictor.add_prediction(df=df)
         return df
 
@@ -100,12 +100,12 @@ class RatioTeamPredictorTransformer(BasePostTransformer):
         if self.team_total_prediction_column:
             self._features_out.append(self.predictor.target + prefix + "_team_total_multiplied")
 
-    def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
+    def generate_historical(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
         self.column_names = column_names
         self.predictor.train(df=df, estimator_features=self.features)
-        return self.transform(df)
+        return self.generate_future(df)
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self.predictor.add_prediction(df=df)
 
         df[self.predictor.pred_column + "_sum"] = df.groupby([self.column_names.match_id, self.column_names.team_id])[
@@ -134,10 +134,10 @@ class NormalizerTargetColumnTransformer(BasePostTransformer):
         for feature in self.features:
             self._features_out.append(f'{self.prefix}{feature}')
 
-    def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
-        return self.transform(df=df)
+    def generate_historical(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
+        return self.generate_future(df=df)
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
         for feature in self.features:
             df[f"{feature}_sum"] = df.groupby(self.granularity)[feature].transform('sum')
             df = df.assign(
@@ -163,12 +163,12 @@ class NormalizerTransformer(BasePostTransformer):
         if self.target_mean is None and not self.create_target_as_mean:
             raise ValueError("Either target_sum or create_target_as_mean must be set")
 
-    def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
+    def generate_historical(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
         self._features_to_normalization_target = {f: self.target_mean for f in self.features} if self.target_mean else {
             f: df[f].mean() for f in self.features}
-        return self.transform(df=df)
+        return self.generate_future(df=df)
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.assign(**{f'__mean_{feature}': df.groupby(self.granularity)[feature].transform('mean') for feature in
                           self.features})
         for feature, target_sum in self._features_to_normalization_target.items():
@@ -229,18 +229,23 @@ class LagTransformer(BaseLagTransformer):
         self.future_lag = future_lag
         self._df = None
 
-    def fit_transform(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
+    def generate_historical(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
         self.column_names = column_names
         self.granularity = self.granularity or [self.column_names.player_id]
+        validate_sorting(df=df, column_names=self.column_names)
+        self._store_df(df)
+        concat_df = self._generate_concat_df_with_feats(df)
+        df = self._create_transformed_df(df=df, concat_df=concat_df)
+        return df
 
-        for feature_out in self._features_out:
-            if feature_out in df.columns:
-                raise ValueError(
-                    f'Column {feature_out} already exists. Choose different prefix or ensure no duplication was performed')
+    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
+        concat_df = self._generate_concat_df_with_feats(df=df)
+        transformed_df = concat_df[
+            concat_df[self.column_names.match_id].isin(df[self.column_names.match_id].astype('str').unique().tolist())]
+        transformed_future = self._generate_future_feats(transformed_df=transformed_df, ori_df=df)
+        return transformed_future
 
-        return self._store_df(df=df)
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _generate_concat_df_with_feats(self, df: pd.DataFrame) -> pd.DataFrame:
 
         if self._df is None:
             raise ValueError("fit_transform needs to be called before transform")
@@ -309,9 +314,7 @@ class LagTransformer(BaseLagTransformer):
             grouped[self.granularity + [self.column_names.update_match_id, self.column_names.start_date, *feats_out]],
             on=self.granularity + [self.column_names.update_match_id, self.column_names.start_date], how='left')
 
-        feats_added = [f for f in self.features_out if f in concat_df.columns]
-        #  concat_df[feats_added] = concat_df.groupby(self.granularity)[feats_added].fillna(method='ffill')
-        return self._create_transformed_df(df=df, concat_df=concat_df)
+        return concat_df
 
     @property
     def features_out(self) -> list[str]:
@@ -363,17 +366,27 @@ class RollingMeanTransformer(BaseLagTransformer):
         self.window = window
         self.min_periods = min_periods
 
-    def fit_transform(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
+    def generate_historical(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
         self.column_names = column_names
-        self.granularity = self.granularity or [column_names.player_id]
-        return self._store_df(df)
+        self.granularity = self.granularity or [self.column_names.player_id]
+        validate_sorting(df=df, column_names=self.column_names)
+        self._store_df(df)
+        concat_df = self._generate_concat_df_with_feats(df)
+        df = self._create_transformed_df(df=df, concat_df=concat_df)
+        return df
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
+        concat_df = self._generate_concat_df_with_feats(df=df)
+        transformed_df = concat_df[
+            concat_df[self.column_names.match_id].isin(df[self.column_names.match_id].astype('str').unique().tolist())]
+        transformed_future = self._generate_future_feats(transformed_df=transformed_df, ori_df=df)
+        return transformed_future
+
+    def _generate_concat_df_with_feats(self, df: pd.DataFrame) -> pd.DataFrame:
 
         if self._df is None:
             raise ValueError("fit_transform needs to be called before transform")
 
-        # cumcount number of occurences where features are nan
         concat_df = self._concat_df(df)
 
         for feature_name in self.features:
@@ -402,13 +415,9 @@ class RollingMeanTransformer(BaseLagTransformer):
                                                   self.column_names.team_id, self.column_names.player_id])
 
         feats_added = [f for f in self.features_out if f in concat_df.columns]
-        #  ori_concat_df = ori_concat_df.merge(concat_df[[self.column_names.match_id, self.column_names.team_id,
-        #                                                 self.column_names.player_id, *feats_added]],
-        #                                     on=[self.column_names.match_id, self.column_names.team_id,
-        #                                        self.column_names.player_id], how='left')
-        concat_df[feats_added] = concat_df.groupby(self.granularity)[feats_added].fillna(method='ffill')
 
-        return self._create_transformed_df(df=df, concat_df=concat_df)
+        concat_df[feats_added] = concat_df.groupby(self.granularity)[feats_added].fillna(method='ffill')
+        return concat_df
 
     @property
     def features_out(self) -> list[str]:
@@ -454,15 +463,16 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
             for day in self.days:
                 df = df.assign(**{f'{self.prefix}{day}_count': df[f'{self.prefix}{day}_count'].fillna(0)})
                 if self.add_opponent:
-                    df = df.assign(**{f'{self.prefix}{day}_count_opponent': df[f'{self.prefix}{day}_count_opponent'].fillna(0)})
+                    df = df.assign(
+                        **{f'{self.prefix}{day}_count_opponent': df[f'{self.prefix}{day}_count_opponent'].fillna(0)})
         return df
 
     def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
         concat_df = self._generate_concat_df_with_feats(df=df)
-        transformed_df = concat_df[concat_df[self.column_names.match_id].isin(df[self.column_names.match_id].astype('str').unique().tolist())]
+        transformed_df = concat_df[
+            concat_df[self.column_names.match_id].isin(df[self.column_names.match_id].astype('str').unique().tolist())]
         transformed_future = self._generate_future_feats(transformed_df=transformed_df, ori_df=df)
         return transformed_future
-
 
     def _generate_concat_df_with_feats(self, df: pd.DataFrame) -> pd.DataFrame:
         if self._df is None:
@@ -498,7 +508,6 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
         concat_df = concat_df.sort_values(by=[self.column_names.start_date, self.column_names.match_id,
                                               self.column_names.team_id, self.column_names.player_id])
         return concat_df
-
 
     def _add_rolling_feature(self, concat_df: pd.DataFrame, day: int, granularity: list[str], prefix_day: str):
 
@@ -542,7 +551,6 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
         concat_df = concat_df.join(df1[[c for c in df1.columns if c in self.features_out]],
                                    on=[self.column_names.start_date, granularity_concat])
 
-
         return concat_df
 
     def reset(self):
@@ -581,11 +589,11 @@ class ModifierTransformer(BasePostTransformer):
         self.modify_operations = modify_operations
         self._features_out = [operation.new_column_name for operation in self.modify_operations]
 
-    def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames]) -> pd.DataFrame:
+    def generate_historical(self, df: pd.DataFrame, column_names: Optional[ColumnNames]) -> pd.DataFrame:
         self.column_names = column_names
-        return self.transform(df)
+        return self.generate_future(df)
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
         for operation in self.modify_operations:
             if operation.operation == Operation.SUBTRACT:
                 if operation.feature1 not in df.columns or operation.feature2 not in df.columns:
@@ -635,17 +643,55 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
             #  if self.add_opponent:
             #    self._features_out.append(f'{prob_feature}_opponent')
 
-    def fit_transform(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
+    def generate_historical(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
         self.column_names = column_names
-        self.granularity = self.granularity or [column_names.player_id]
+        self.granularity = self.granularity or [self.column_names.player_id]
         validate_sorting(df=df, column_names=self.column_names)
         additional_cols_to_use = [self.binary_column] + ([self.prob_column] if self.prob_column else [])
-        return self._store_df(df, additional_cols_to_use=additional_cols_to_use)
+        self._store_df(df, additional_cols_to_use=additional_cols_to_use)
+        concat_df = self._generate_concat_df_with_feats(df)
+        concat_df = self._add_weighted_prob(transformed_df=concat_df)
+        transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
+        return self._add_weighted_prob(transformed_df=transformed_df)
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-
+    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
         if self._df is None:
-            raise ValueError("fit_transform needs to be called before transform")
+            raise ValueError("generate_historical needs to be called before generate_future")
+        concat_df = self._generate_concat_df_with_feats(df=df)
+        transformed_df = concat_df[
+            concat_df[self.column_names.match_id].isin(df[self.column_names.match_id].astype('str').unique().tolist())]
+        transformed_future = self._generate_future_feats(transformed_df=transformed_df, ori_df=df,
+                                                         known_future_features=self._get_known_future_features())
+        return self._add_weighted_prob(transformed_df=transformed_future)
+
+    def _get_known_future_features(self) -> list[str]:
+        known_future_features = []
+        if self.prob_column:
+            for idx, feature_name in enumerate(self.features):
+                weighted_prob_feat_name = f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}'
+                known_future_features.append(weighted_prob_feat_name)
+
+        return known_future_features
+
+    def _add_weighted_prob(self, transformed_df: pd.DataFrame) -> pd.DataFrame:
+
+        if self.prob_column:
+            for idx, feature_name in enumerate(self.features):
+                weighted_prob_feat_name = f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}'
+                transformed_df[weighted_prob_feat_name] = transformed_df[
+                                                              f'{self.prefix}{self.window}_{feature_name}_1'] * \
+                                                          transformed_df[
+                                                              self.prob_column] + \
+                                                          transformed_df[
+                                                              f'{self.prefix}{self.window}_{feature_name}_0'] * (
+                                                                  1 -
+                                                                  transformed_df[
+                                                                      self.prob_column])
+        return transformed_df
+
+    def _generate_concat_df_with_feats(self, df: pd.DataFrame) -> pd.DataFrame:
+
+
         additional_cols_to_use = [self.binary_column] + ([self.prob_column] if self.prob_column else [])
         concat_df = self._concat_df(df, additional_cols_to_use=additional_cols_to_use)
 
@@ -666,24 +712,5 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
             concat_df.drop(['value_result_1', 'value_result_0'], axis=1, inplace=True)
 
         feats_added = [f for f in self.features_out if f in concat_df.columns]
-
         concat_df[feats_added] = concat_df.groupby(self.granularity)[feats_added].fillna(method='ffill')
-        weighted_prob_feats = []
-        if self.prob_column:
-            for idx, feature_name in enumerate(self.features):
-                weighted_prob_feat_name = f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}'
-                weighted_prob_feats.append(weighted_prob_feat_name)
-        transformed_df = self._create_transformed_df(df=df, concat_df=concat_df, exclude_features=weighted_prob_feats)
-        if self.prob_column:
-            for idx, feature_name in enumerate(self.features):
-                transformed_df[weighted_prob_feats[idx]] = transformed_df[
-                                                               f'{self.prefix}{self.window}_{feature_name}_1'] * \
-                                                           transformed_df[
-                                                               self.prob_column] + \
-                                                           transformed_df[
-                                                               f'{self.prefix}{self.window}_{feature_name}_0'] * (
-                                                                   1 -
-                                                                   transformed_df[
-                                                                       self.prob_column])
-
-        return transformed_df
+        return concat_df

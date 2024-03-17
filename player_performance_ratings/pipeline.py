@@ -247,7 +247,7 @@ class Pipeline():
         for idx, post_rating_transformer in enumerate(self.post_rating_transformers):
 
             self.post_rating_transformers[idx].reset()
-            df_with_predict = post_rating_transformer.fit_transform(df_with_predict, column_names=self.column_names)
+            df_with_predict = post_rating_transformer.generate_historical(df_with_predict, column_names=self.column_names)
 
         self.predictor.train(df=df_with_predict, estimator_features=self._estimator_features)
 
@@ -386,7 +386,7 @@ class Pipeline():
                 df_with_predict[rating_feature_str] = values
 
         for post_rating_transformer in self.post_rating_transformers:
-            df_with_predict = post_rating_transformer.transform(df_with_predict)
+            df_with_predict = post_rating_transformer.generate_future(df_with_predict)
 
         df_with_predict = self.predictor.add_prediction(df_with_predict)
 

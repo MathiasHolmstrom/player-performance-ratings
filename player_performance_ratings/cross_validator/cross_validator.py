@@ -54,8 +54,8 @@ class MatchCountCrossValidator(CrossValidator):
                 train_df = train_df[[c for c in train_df.columns if c not in post_transformer.features_out]]
                 validation_df = validation_df[
                     [c for c in validation_df.columns if c not in post_transformer.features_out]]
-                train_df = post_transformer.fit_transform(train_df, column_names=column_names)
-                validation_df = post_transformer.transform(validation_df)
+                train_df = post_transformer.generate_historical(train_df, column_names=column_names)
+                validation_df = post_transformer.generate_future(validation_df)
             predictor.train(train_df, estimator_features=estimator_features)
 
             if idx == 0 and add_train_prediction:
@@ -136,8 +136,8 @@ class MatchKFoldCrossValidator(CrossValidator):
                 train_df = train_df[[c for c in train_df.columns if c not in post_transformer.features_out]]
                 validation_df = validation_df[
                     [c for c in validation_df.columns if c not in post_transformer.features_out]]
-                train_df = post_transformer.fit_transform(train_df, column_names=column_names)
-                validation_df = post_transformer.transform(validation_df)
+                train_df = post_transformer.generate_historical(train_df, column_names=column_names)
+                validation_df = post_transformer.generate_future(validation_df)
 
             predictor.train(train_df, estimator_features=estimator_features)
 
