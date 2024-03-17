@@ -439,7 +439,7 @@ def test_rolling_mean_days_fit_transform(column_names):
         add_count=True
     )
 
-    transformed_df = rolling_mean_transformation.fit_transform(df, column_names=column_names)
+    transformed_df = rolling_mean_transformation.generate_historical(df, column_names=column_names)
 
     expected_df = original_df.assign(**{
         rolling_mean_transformation.features_out[0]: [None, None, None, 1, None],
@@ -469,19 +469,21 @@ def test_rolling_mean_days_series_id(column_names: ColumnNames):
     )
     expected_df = historical_df.copy()
 
-    lag_transformation = RollingMeanDaysTransformer(
+    transformer = RollingMeanDaysTransformer(
         features=['points'],
         days=2,
     )
 
-    transformed_df = lag_transformation.fit_transform(df=historical_df, column_names=column_names)
+    transformed_df = transformer.generate_historical(df=historical_df, column_names=column_names)
 
-    expected_df = expected_df.assign(**{lag_transformation.features_out[0]: [None, None, 1.5, 3]})
+    expected_df = expected_df.assign(**{transformer.features_out[0]: [None, None, 1.5, 3]})
     expected_df['team'] = expected_df['team'].astype('str')
     expected_df['game'] = expected_df['game'].astype('str')
     expected_df['player'] = expected_df['player'].astype('str')
     expected_df['series_id'] = expected_df['series_id'].astype('str')
     pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
+
+
 
 
 def test_rolling_mean_days_fit_transform_40_days(column_names):
@@ -507,7 +509,7 @@ def test_rolling_mean_days_fit_transform_40_days(column_names):
         granularity=['player'],
     )
 
-    transformed_df = rolling_mean_transformation.fit_transform(df, column_names=column_names)
+    transformed_df = rolling_mean_transformation.generate_historical(df, column_names=column_names)
 
     expected_df = original_df.assign(**{
         rolling_mean_transformation.features_out[0]: [None, 1, 1, None, 1.5, 3],
@@ -544,7 +546,7 @@ def test_rolling_mean_days_fit_transform_opponent(column_names):
         add_opponent=True
     )
 
-    transformed_df = rolling_mean_transformation.fit_transform(df, column_names=column_names)
+    transformed_df = rolling_mean_transformation.generate_historical(df, column_names=column_names)
 
     expected_df = original_df.assign(**{
         rolling_mean_transformation.features_out[0]: [None, None, None, None, 1, 1.5, 2, 3],
@@ -587,7 +589,7 @@ def test_rolling_mean_days_transformer_transform(column_names):
         add_count=True
     )
     expected_historical_df = historical_df.copy()
-    historical_df = transformer.fit_transform(historical_df, column_names=column_names)
+    historical_df = transformer.generate_historical(historical_df, column_names=column_names)
     expected_historical_df = expected_historical_df.assign(**{
         transformer.features_out[0]: [None, None, 1, 2],
         transformer.features_out[1]: [None, None, 2, 1],
@@ -603,7 +605,7 @@ def test_rolling_mean_days_transformer_transform(column_names):
 
     expected_df = future_df.copy()
 
-    transformed_future_df = transformer.transform(df=future_df)
+    transformed_future_df = transformer.generate_future(df=future_df)
 
     expected_df = expected_df.assign(**{
         transformer.features_out[0]: [2, 3, 2, 3],
@@ -637,7 +639,7 @@ def test_rolling_mean_days_tranformer_transform_first_future_beyond_window(colum
         add_count=True
     )
     expected_historical_df = historical_df.copy()
-    historical_df = transformer.fit_transform(historical_df, column_names=column_names)
+    historical_df = transformer.generate_historical(historical_df, column_names=column_names)
 
     expected_historical_df = expected_historical_df.assign(**{
         transformer.features_out[0]: [None, None, None, None],
@@ -663,7 +665,7 @@ def test_rolling_mean_days_tranformer_transform_first_future_beyond_window(colum
 
     expected_df = future_df.copy()
 
-    transformed_future_df = transformer.transform(df=future_df)
+    transformed_future_df = transformer.generate_future(df=future_df)
 
     expected_df = expected_df.assign(**{
         transformer.features_out[0]: [3, 2, 3, 2],
