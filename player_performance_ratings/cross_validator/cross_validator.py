@@ -38,6 +38,9 @@ class MatchCountCrossValidator(CrossValidator):
 
         validation_dfs = []
         df = df.assign(__cv_match_number=pd.factorize(df[self.match_id_column_name])[0])
+        for post_transformer in post_transformers:
+            post_transformer.reset()
+            df = post_transformer.generate_historical(df, column_names=column_names)
         max_match_number = df['__cv_match_number'].max()
         train_cut_off_match_number = max_match_number - self.validation_match_count * self.n_splits + 1
         step_matches = self.validation_match_count
@@ -50,12 +53,7 @@ class MatchCountCrossValidator(CrossValidator):
                 df['__cv_match_number'] < train_cut_off_match_number + step_matches)]
 
         for idx in range(self.n_splits):
-            for post_transformer in post_transformers:
-                train_df = train_df[[c for c in train_df.columns if c not in post_transformer.features_out]]
-                validation_df = validation_df[
-                    [c for c in validation_df.columns if c not in post_transformer.features_out]]
-                train_df = post_transformer.generate_historical(train_df, column_names=column_names)
-                validation_df = post_transformer.generate_future(validation_df)
+
             predictor.train(train_df, estimator_features=estimator_features)
 
             if idx == 0 and add_train_prediction:
@@ -118,6 +116,10 @@ class MatchKFoldCrossValidator(CrossValidator):
         df = df.assign(__cv_match_number=range(len(df)))
         min_validation_match_number = df[df[self.date_column_name] >= self.min_validation_date][
             "__cv_match_number"].min()
+        for post_transformer in post_transformers:
+            post_transformer.reset()
+            df = post_transformer.generate_historical(df, column_names=column_names)
+
 
         max_match_number = df['__cv_match_number'].max()
         train_cut_off_match_number = min_validation_match_number
@@ -130,15 +132,6 @@ class MatchKFoldCrossValidator(CrossValidator):
                 df['__cv_match_number'] < train_cut_off_match_number + step_matches)]
 
         for idx in range(self.n_splits):
-
-            for post_transformer in post_transformers:
-                post_transformer.reset()
-                train_df = train_df[[c for c in train_df.columns if c not in post_transformer.features_out]]
-                validation_df = validation_df[
-                    [c for c in validation_df.columns if c not in post_transformer.features_out]]
-                train_df = post_transformer.generate_historical(train_df, column_names=column_names)
-                validation_df = post_transformer.generate_future(validation_df)
-
             predictor.train(train_df, estimator_features=estimator_features)
 
             if idx == 0 and add_train_prediction:

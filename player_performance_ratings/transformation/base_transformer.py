@@ -219,8 +219,7 @@ class BaseLagTransformer(BasePostTransformer):
 
         for col in [cn.match_id, cn.player_id, cn.team_id]:
             ori_df = ori_df.assign(**{col: lambda x: x[col].astype('str')})
-        transformed_df = transformed_df.merge(ori_df[[cn.match_id, cn.team_id, cn.player_id,
-                                                      *[c for c in ori_df.columns if c not in transformed_df.columns]]],
+        transformed_df = ori_df.merge(transformed_df[[cn.match_id, cn.team_id, cn.player_id,*[f for f in self.features_out if f not in known_future_features]]],
                                               on=[cn.match_id, cn.team_id, cn.player_id])
 
         transformed_df = transformed_df.sort_values(by=[cn.start_date, cn.match_id,
