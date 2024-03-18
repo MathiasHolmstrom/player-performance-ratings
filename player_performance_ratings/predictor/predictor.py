@@ -1,8 +1,10 @@
+import copy
 import logging
 import warnings
 import pandas as pd
 from lightgbm import LGBMClassifier
 from pandas.errors import SettingWithCopyWarning
+from sklearn import clone
 
 from player_performance_ratings.predictor.sklearn_estimator import OrdinalClassifier
 from player_performance_ratings.predictor_transformer import PredictorTransformer
@@ -61,6 +63,9 @@ class GameTeamPredictor(BasePredictor):
                          estimator_features=estimator_features, filters=filters)
 
     def train(self, df: pd.DataFrame, estimator_features: list[Optional[str]] = None) -> None:
+
+        if len(df) == 0:
+            raise ValueError("df is empty")
 
         if estimator_features is None and self._estimator_features is None:
             raise ValueError("estimator features must either be passed to .train() or injected into constructor")
@@ -183,6 +188,9 @@ class Predictor(BasePredictor):
 
     def train(self, df: pd.DataFrame, estimator_features: Optional[list[str]] = None) -> None:
 
+        if len(df) == 0:
+            raise ValueError("df is empty")
+
         if estimator_features is None and self._estimator_features is None:
             raise ValueError("estimator features must either be passed to .train() or injected into constructor")
         self._estimator_features = estimator_features or self._estimator_features
@@ -224,7 +232,6 @@ class Predictor(BasePredictor):
                 pass
 
         df = self.transform_pre_transformers(df=df)
-        df = df.copy()
         if self.multiclassifier:
             df[self._pred_column] = self.estimator.predict_proba(
                 df[self._estimator_features]).tolist()
@@ -237,4 +244,103 @@ class Predictor(BasePredictor):
             df[self._pred_column] = self.estimator.predict(df[self._estimator_features])
         else:
             df[self._pred_column] = self.estimator.predict_proba(df[self._estimator_features])[:, 1]
+        return df
+
+class GranularityPredictor(BasePredictor):
+
+    def __init__(self,
+                 granularity_column_name: str,
+                 target: Optional[str] = PredictColumnNames.TARGET,
+                 estimator: Optional = None,
+                 estimator_features: Optional[list[str]] = None,
+                 filters: Optional[list[Filter]] = None,
+                 multiclassifier: bool = False,
+                 pred_column: Optional[str] = None,
+                 column_names: Optional[ColumnNames] = None,
+                 pre_transformers: Optional[list[PredictorTransformer]] = None
+                 ):
+        self._target = target
+        self.granularity_column_name = granularity_column_name
+        self.multiclassifier = multiclassifier
+        self.column_names = column_names
+        self._granularities = []
+        self._granularity_estimators = {}
+
+        if estimator is None:
+            logging.warning(
+                "model is not set. Will use LGBMClassifier(max_depth=2, n_estimators=400, learning_rate=0.05)")
+
+        super().__init__(target=self._target, pred_column=pred_column,
+                         estimator=estimator or LGBMClassifier(max_depth=2, n_estimators=300, learning_rate=0.05,
+                                                               verbose=-100),
+                         pre_transformers=pre_transformers, filters=filters, estimator_features=estimator_features)
+
+    def train(self, df: pd.DataFrame, estimator_features: list[str]) -> None:
+
+        if len(df) == 0:
+            raise ValueError("df is empty")
+
+        if estimator_features is None and self._estimator_features is None:
+            raise ValueError("estimator features must either be passed to .train() or injected into constructor")
+        self._estimator_features = estimator_features or self._estimator_features
+        self._estimator_features = self._estimator_features.copy()
+
+        filtered_df = apply_filters(df=df, filters=self.filters)
+        if hasattr(self.estimator, "predict_proba"):
+            try:
+                filtered_df[self._target] = filtered_df[self._target].astype('int')
+            except Exception:
+                pass
+
+        filtered_df = self.fit_transform_pre_transformers(df=filtered_df)
+
+        if hasattr(self._deepest_estimator, "predict_proba"):
+            filtered_df = filtered_df.assign(**{self._target: filtered_df[self._target].astype('int')})
+
+        if not self.multiclassifier and len(filtered_df[self._target].unique()) > 2 and hasattr(
+                self._deepest_estimator,
+                "predict_proba"):
+            self.multiclassifier = True
+            if self.estimator.__class__.__name__ == 'LogisticRegression':
+                self.estimator = OrdinalClassifier(self.estimator)
+            if len(filtered_df[self._target].unique()) > 50:
+                logging.warning(
+                    f"target has {len(df[self._target].unique())} unique values. This may machine-learning model to not function properly."
+                    f" It is recommended to limit max and min values to ensure less than 50 unique targets")
+
+        self._granularities = filtered_df[self.granularity_column_name].unique()
+
+        for granularity in self._granularities:
+            self._granularity_estimators[granularity] = clone(self.estimator)
+            rows = filtered_df[filtered_df[self.granularity_column_name] == granularity]
+            self._granularity_estimators[granularity].fit(rows[self._estimator_features], rows[self._target])
+
+    def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
+        if not self._estimator_features:
+            raise ValueError("estimator_features not set. Please train first")
+
+        if hasattr(self.estimator, "predict_proba"):
+            try:
+                df = df.assign(**{self._target: df[self._target].astype('int')})
+            except Exception:
+                pass
+
+        df = self.transform_pre_transformers(df=df)
+        dfs = []
+        for granularity, estimator in self._granularity_estimators.items():
+            rows = df[df[self.granularity_column_name] == granularity]
+            if self.multiclassifier:
+                rows = rows.assign(**{self._pred_column: estimator.predict_proba(rows[self._estimator_features]).tolist()})
+                rows = rows.assign(**{'classes': [list(estimator.classes_) for _ in range(len(rows))]})
+                if len(set(rows[self.pred_column].iloc[0])) == 2:
+                    raise ValueError(
+                        "Too many unique values in relation to rows in the training dataset causes multiclassifier to not train properly")
+
+            elif not hasattr(self._deepest_estimator, "predict_proba"):
+                rows = rows.assign(**{self._pred_column: estimator.predict(rows[self._estimator_features])})
+            else:
+                rows = rows.assign(**{self._pred_column: estimator.predict_proba(rows[self._estimator_features])[:, 1]})
+            dfs.append(rows)
+
+        df = pd.concat(dfs)
         return df

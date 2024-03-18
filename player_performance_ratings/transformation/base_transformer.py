@@ -88,6 +88,8 @@ class BaseLagTransformer(BasePostTransformer):
             if feature in df.columns:
                 df = df.assign(**{feature: lambda x: x[feature].astype('float')})
 
+        df = df[[c for c in df.columns if c not in self.features_out]]
+
         cols = [f for f in list(
             set([*self.features, *self.granularity, self.column_names.match_id, self.column_names.team_id,
                  self.column_names.player_id,
@@ -219,13 +221,21 @@ class BaseLagTransformer(BasePostTransformer):
 
         for col in [cn.match_id, cn.player_id, cn.team_id]:
             ori_df = ori_df.assign(**{col: lambda x: x[col].astype('str')})
-        transformed_df = ori_df.merge(transformed_df[[cn.match_id, cn.team_id, cn.player_id,*[f for f in self.features_out if f not in known_future_features]]],
-                                              on=[cn.match_id, cn.team_id, cn.player_id])
+
+        ori_feats_to_use = [f for f in ori_cols if f not in self.features_out]
+        transformed_feats_to_use = [cn.match_id, cn.team_id, cn.player_id,
+                                    *[f for f in
+                                      self.features_out if
+                                      f not in known_future_features]]
+
+        transformed_df = ori_df[ori_feats_to_use].merge(transformed_df[transformed_feats_to_use],
+                                                        on=[cn.match_id, cn.team_id,
+                                                            cn.player_id])
 
         transformed_df = transformed_df.sort_values(by=[cn.start_date, cn.match_id,
                                                         cn.team_id, cn.player_id])
         transformed_df.index = ori_index_values
-        return transformed_df[list(ori_cols + [f for f in self.features_out if f not in known_future_features])]
+        return transformed_df[list(set(ori_cols + [f for f in self.features_out if f not in known_future_features]))]
 
     def reset(self):
         self._df = None
