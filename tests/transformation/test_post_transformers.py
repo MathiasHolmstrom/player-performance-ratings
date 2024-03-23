@@ -2,8 +2,7 @@ import pandas as pd
 import pytest
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.transformation import LagTransformer, RollingMeanTransformer
-from player_performance_ratings.transformation.post_transformers import NormalizerTransformer, \
+from player_performance_ratings.transformers import LagTransformer, RollingMeanTransformer, NormalizerTransformer, \
     RollingMeanDaysTransformer, BinaryOutcomeRollingMeanTransformer
 
 
@@ -30,7 +29,7 @@ def test_normalizer_transformer(column_names):
     expected_df = df.copy()
     transformer = NormalizerTransformer(features=["minutes"], granularity=[column_names.match_id, column_names.team_id],
                                         create_target_as_mean=True)
-    df = transformer.generate_historical(df, column_names=column_names)
+    df = transformer.fit_transform(df, column_names=column_names)
     mean_minutes = df['minutes'].mean()
     game1_team_1_multiplier = mean_minutes / (15 * 0.5 + 20 * 0.5)
     game1_team_2_multiplier = mean_minutes / (16 * 0.5 + 20 * 0.5)

@@ -6,10 +6,10 @@ import pandas as pd
 from lightgbm import LGBMRegressor
 
 from player_performance_ratings.predictor import Predictor
-from player_performance_ratings.transformation.base_transformer import BaseTransformer
+from player_performance_ratings.transformers.base_transformer import BasePerformancesTransformer
 
 
-class NetOverPredictedTransformer(BaseTransformer):
+class NetOverPredictedTransformer(BasePerformancesTransformer):
 
     def __init__(self,
                  predictor: Predictor,
@@ -42,7 +42,7 @@ class NetOverPredictedTransformer(BaseTransformer):
         return self._features_out
 
 
-class SklearnEstimatorImputer(BaseTransformer):
+class SklearnEstimatorImputer(BasePerformancesTransformer):
 
     def __init__(self, features: list[str], target_name: str, estimator: Optional[LGBMRegressor] = None):
         super().__init__(features=features)
@@ -69,7 +69,7 @@ class SklearnEstimatorImputer(BaseTransformer):
         return [self.target_name]
 
 
-class PartialStandardScaler(BaseTransformer):
+class PartialStandardScaler(BasePerformancesTransformer):
 
     def __init__(self,
                  features: list[str],
@@ -110,7 +110,7 @@ class PartialStandardScaler(BaseTransformer):
         return self._features_out
 
 
-class MinMaxTransformer(BaseTransformer):
+class MinMaxTransformer(BasePerformancesTransformer):
 
     def __init__(self,
                  features: list[str],
@@ -175,7 +175,7 @@ class MinMaxTransformer(BaseTransformer):
         return self._features_out
 
 
-class DiminishingValueTransformer(BaseTransformer):
+class DiminishingValueTransformer(BasePerformancesTransformer):
 
     def __init__(self,
                  features: List[str],
@@ -234,7 +234,7 @@ class DiminishingValueTransformer(BaseTransformer):
         return self.features
 
 
-class SymmetricDistributionTransformer(BaseTransformer):
+class SymmetricDistributionTransformer(BasePerformancesTransformer):
 
     def __init__(self,
                  features: List[str],
@@ -346,7 +346,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
         return [self.prefix + feature for feature in self.features]
 
 
-class GroupByTransformer(BaseTransformer):
+class GroupByTransformer(BasePerformancesTransformer):
 
     def __init__(self,
                  features: list[str],

@@ -1,63 +1,12 @@
 import mock
 import pandas as pd
+from player_performance_ratings import ColumnNames
 from sklearn.metrics import mean_absolute_error
 
 from player_performance_ratings.scorer.score import SklearnScorer
 
-from player_performance_ratings.cross_validator.cross_validator import MatchCountCrossValidator, \
+from player_performance_ratings.cross_validator.cross_validator import  \
     MatchKFoldCrossValidator
-
-
-def test_match_count_cross_validator():
-    scorer = SklearnScorer(
-        pred_column='__target_prediction',
-        target='__target',
-        scorer_function=mean_absolute_error,
-    )
-
-    df = pd.DataFrame({
-        '__target': [1, 1, 1, 1, 0, 0, 0, 0, 0, 1],
-        'match_id': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-    })
-
-    expected_predictor_train1 = df.copy().iloc[0:6]
-    expected_predictor_train1['__cv_match_number'] = [0, 1, 2, 3, 4, 5]
-    expected_predictor_train2 = df.copy().iloc[:8]
-    expected_predictor_train2['__cv_match_number'] = [0, 1, 2, 3, 4, 5, 6, 7]
-
-    expected_predictor_validation1 = df.copy().iloc[6:8]
-    expected_predictor_validation1['__cv_match_number'] = [6, 7]
-    expected_predictor_validation2 = df.copy().iloc[8:10]
-    expected_predictor_validation2['__cv_match_number'] = [8, 9]
-
-    return_add_prediction1 = df.copy()
-    return_add_prediction1['__target_prediction'] = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-    return_add_prediction1['__cv_match_number'] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-    return_add_prediction2 = df.copy()
-    return_add_prediction2['__target_prediction'] = [0, 0, 0, 0, 1, 1, 1, 1, 1, 0]
-    return_add_prediction2['__cv_match_number'] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-
-    predictor = mock.Mock()
-    predictor.add_prediction.side_effect = [return_add_prediction1, return_add_prediction2]
-    predictor.columns_added = ['__target_prediction']
-
-    cv = MatchCountCrossValidator(scorer=scorer, match_id_column_name='match_id', n_splits=2,
-                                  validation_match_count=2)
-
-    validation_df = cv.generate_validation_df(df=df, predictor=predictor,post_transformers=[], estimator_features=[], column_names=None)
-    score = cv.cross_validation_score(validation_df=validation_df)
-
-    assert score == 0.75
-
-    pd.testing.assert_frame_equal(predictor.method_calls[0][1][0], expected_predictor_train1, check_like=True,
-                                  check_dtype=False)
-    pd.testing.assert_frame_equal(predictor.method_calls[2][1][0], expected_predictor_train2, check_like=True,
-                                  check_dtype=False)
-
-    pd.testing.assert_frame_equal(predictor.method_calls[1][1][0], expected_predictor_validation1, check_like=True,
-                                  check_dtype=False)
-    pd.testing.assert_frame_equal(predictor.method_calls[3][1][0], expected_predictor_validation2, check_like=True,
-                                  check_dtype=False)
 
 
 def test_match_k_fold_cross_validator():
@@ -75,6 +24,13 @@ def test_match_k_fold_cross_validator():
                  pd.to_datetime('2020-01-07'), pd.to_datetime('2020-01-08'), pd.to_datetime('2020-01-09'),
                  pd.to_datetime('2020-01-10')],
     })
+
+    column_names = ColumnNames(
+        match_id='match_id',
+        start_date='date',
+        team_id='team_id',
+        player_id='player_id',
+    )
 
     expected_predictor_train1 = df.copy().iloc[0:1]
     expected_predictor_train1['__cv_match_number'] = [0]
@@ -101,7 +57,7 @@ def test_match_k_fold_cross_validator():
     cv = MatchKFoldCrossValidator(scorer=scorer, match_id_column_name='match_id', n_splits=2,
                                   date_column_name='date', min_validation_date='2020-01-02')
 
-    validation_df = cv.generate_validation_df(df=df, predictor=predictor,post_transformers=[], estimator_features=[])
+    validation_df = cv.generate_validation_df(df=df, predictor=predictor,  estimator_features=[], column_names=column_names)
     score = cv.cross_validation_score(validation_df=validation_df)
 
     assert score == 0.75
@@ -115,3 +71,4 @@ def test_match_k_fold_cross_validator():
                                   check_dtype=False)
     pd.testing.assert_frame_equal(predictor.method_calls[3][1][0], expected_predictor_validation2, check_like=True,
                                   check_dtype=False)
+

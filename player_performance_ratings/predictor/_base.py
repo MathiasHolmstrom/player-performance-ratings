@@ -85,6 +85,7 @@ class BasePredictor(ABC):
 
             if estimator_feature not in df.columns:
                 self._estimator_features.remove(estimator_feature)
+                logging.warning(f"Feature {estimator_feature} not in df, removing from estimator_features")
 
             elif df[estimator_feature].dtype in ('str', 'object') and estimator_feature not in [f.features[0] for f in
                                                                                                 self.pre_transformers]:

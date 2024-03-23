@@ -8,7 +8,7 @@ from player_performance_ratings.predictor import GameTeamPredictor
 
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.predictor._base import BasePredictor
-from player_performance_ratings.transformation.base_transformer import BasePostTransformer, BaseLagTransformer
+from player_performance_ratings.transformers.base_transformer import BaseTransformer, BaseLagGenerator
 from player_performance_ratings.utils import validate_sorting
 
 
@@ -26,164 +26,10 @@ def create_output_column_by_game_group(data: pd.DataFrame, feature_name: str,
     return data
 
 
-class NetOverPredictedPostTransformer(BasePostTransformer):
-
-    def __init__(self,
-                 predictor: GameTeamPredictor,
-                 features: list[str] = None,
-                 prefix: str = "net_over_predicted_",
-                 are_estimator_features: bool = False,
-                 ):
-        super().__init__(features=features, are_estimator_features=are_estimator_features)
-        self.prefix = prefix
-        self._predictor = predictor
-        self._features_out = []
-        self.column_names = None
-        new_feature_name = self.prefix + self._predictor.pred_column
-        self._features_out.append(new_feature_name)
-        if self.prefix is "":
-            raise ValueError("Prefix must not be empty")
-
-    def generate_historical(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
-        self.column_names = column_names
-        self._predictor.train(df, estimator_features=self.features)
-        return self.generate_future(df)
-
-    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = self._predictor.add_prediction(df)
-        new_feature_name = self.prefix + self._predictor.pred_column
-        if self._predictor.target not in df.columns:
-            df = df.assign(**{new_feature_name: np.nan})
-        else:
-            df = df.assign(**{new_feature_name: df[self._predictor.target] - df[self._predictor.pred_column]})
-        df = df.drop(columns=[self._predictor.pred_column])
-
-        return df
-
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out
 
 
-class PredictorTransformer(BasePostTransformer):
 
-    def __init__(self, predictor: BasePredictor, features: list[str] = None):
-        self.predictor = predictor
-        super().__init__(features=features)
-
-    def generate_historical(self, df: pd.DataFrame, column_names: Optional[None] = None) -> pd.DataFrame:
-        self.predictor.train(df=df, estimator_features=self.features)
-        return self.generate_future(df)
-
-    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = self.predictor.add_prediction(df=df)
-        return df
-
-    @property
-    def features_out(self) -> list[str]:
-        return [f'{self.predictor.pred_column}']
-
-
-class RatioTeamPredictorTransformer(BasePostTransformer):
-    def __init__(self,
-                 features: list[str],
-                 predictor: BasePredictor,
-                 team_total_prediction_column: Optional[str] = None,
-                 prefix: str = "_ratio_team"
-                 ):
-        super().__init__(features=features)
-        self.predictor = predictor
-        self.team_total_prediction_column = team_total_prediction_column
-        self.prefix = prefix
-        self.predictor._pred_column = f"__prediction__{self.predictor.target}"
-        self._features_out = [self.predictor.target + prefix, self.predictor._pred_column]
-        if self.team_total_prediction_column:
-            self._features_out.append(self.predictor.target + prefix + "_team_total_multiplied")
-
-    def generate_historical(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
-        self.column_names = column_names
-        self.predictor.train(df=df, estimator_features=self.features)
-        return self.generate_future(df)
-
-    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = self.predictor.add_prediction(df=df)
-
-        df[self.predictor.pred_column + "_sum"] = df.groupby([self.column_names.match_id, self.column_names.team_id])[
-            self.predictor.pred_column].transform('sum')
-        df[self._features_out[0]] = df[self.predictor.pred_column] / df[self.predictor.pred_column + "_sum"]
-        if self.team_total_prediction_column:
-            df = df.assign(**{self.predictor.target + self.prefix + "_team_total_multiplied": df[self._features_out[
-                0]] * df[
-                                                                                                  self.team_total_prediction_column]})
-        return df.drop(columns=[self.predictor.pred_column + "_sum"])
-
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out
-
-
-class NormalizerTargetColumnTransformer(BasePostTransformer):
-
-    def __init__(self, features: list[str], granularity, target_sum_column_name: str, prefix: str = "__normalized_"):
-        super().__init__(features=features)
-        self.granularity = granularity
-        self.prefix = prefix
-        self.target_sum_column_name = target_sum_column_name
-        self._features_to_normalization_target = {}
-        self._features_out = []
-        for feature in self.features:
-            self._features_out.append(f'{self.prefix}{feature}')
-
-    def generate_historical(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
-        return self.generate_future(df=df)
-
-    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
-        for feature in self.features:
-            df[f"{feature}_sum"] = df.groupby(self.granularity)[feature].transform('sum')
-            df = df.assign(
-                **{self.prefix + feature: df[feature] / df[f"{feature}_sum"] * df[self.target_sum_column_name]})
-            df = df.drop(columns=[f"{feature}_sum"])
-        return df
-
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out
-
-
-class NormalizerTransformer(BasePostTransformer):
-
-    def __init__(self, features: list[str], granularity, target_mean: Optional[float] = None,
-                 create_target_as_mean: bool = False):
-        super().__init__(features=features)
-        self.granularity = granularity
-        self.target_mean = target_mean
-        self.create_target_as_mean = create_target_as_mean
-        self._features_to_normalization_target = {}
-
-        if self.target_mean is None and not self.create_target_as_mean:
-            raise ValueError("Either target_sum or create_target_as_mean must be set")
-
-    def generate_historical(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
-        self._features_to_normalization_target = {f: self.target_mean for f in self.features} if self.target_mean else {
-            f: df[f].mean() for f in self.features}
-        return self.generate_future(df=df)
-
-    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = df.assign(**{f'__mean_{feature}': df.groupby(self.granularity)[feature].transform('mean') for feature in
-                          self.features})
-        for feature, target_sum in self._features_to_normalization_target.items():
-            df = df.assign(**{feature: df[feature] / df[f'__mean_{feature}'] * target_sum})
-        return df.drop(columns=[f'__mean_{feature}' for feature in self.features])
-
-    @property
-    def features_out(self) -> list[str]:
-        return self.features
-
-    def reset(self):
-        pass
-
-
-class LagTransformer(BaseLagTransformer):
+class LagTransformer(BaseLagGenerator):
 
     def __init__(self,
                  features: list[str],
@@ -321,7 +167,7 @@ class LagTransformer(BaseLagTransformer):
         return self._features_out
 
 
-class RollingMeanTransformer(BaseLagTransformer):
+class RollingMeanTransformer(BaseLagGenerator):
 
     def __init__(self,
                  features: list[str],
@@ -424,7 +270,7 @@ class RollingMeanTransformer(BaseLagTransformer):
         return self._features_out
 
 
-class RollingMeanDaysTransformer(BaseLagTransformer):
+class RollingMeanDaysTransformer(BaseLagGenerator):
 
     def __init__(self,
                  features: list[str],
@@ -578,7 +424,7 @@ class ModifyOperation:
             self.new_column_name = f"{self.feature1}_minus_{self.feature2}"
 
 
-class ModifierTransformer(BasePostTransformer):
+class ModifierTransformer(BaseTransformer):
 
     def __init__(self,
                  modify_operations: list[ModifyOperation],
@@ -605,7 +451,7 @@ class ModifierTransformer(BasePostTransformer):
         return df
 
 
-class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
+class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
     def __init__(self,
                  features: list[str],

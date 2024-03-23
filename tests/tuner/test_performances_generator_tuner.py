@@ -5,11 +5,10 @@ import pandas as pd
 import pytest
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
-from player_performance_ratings import ColumnNames, Pipeline, PipelineFactory
+from player_performance_ratings import ColumnNames,  PipelineFactory
 from player_performance_ratings.predictor import Predictor
-from player_performance_ratings.ratings import RatingEstimatorFeatures, UpdateRatingGenerator, PerformancesGenerator, \
-    ColumnWeight
-from player_performance_ratings.ratings.performances_generator import Performance
+from player_performance_ratings.ratings import RatingEstimatorFeatures, UpdateRatingGenerator
+from player_performance_ratings.ratings.performance_generator import Performance, PerformancesGenerator, ColumnWeight
 
 from player_performance_ratings.tuner import PerformancesGeneratorTuner
 from player_performance_ratings.tuner.performances_generator_tuner import PerformancesSearchRange

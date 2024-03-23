@@ -3,7 +3,7 @@ from player_performance_ratings.predictor_transformer import SkLearnTransformerW
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
-from player_performance_ratings.transformation.pre_transformers import GroupByTransformer, DiminishingValueTransformer, \
+from player_performance_ratings.ratings.performance_generator import GroupByTransformer, DiminishingValueTransformer, \
     NetOverPredictedTransformer, SymmetricDistributionTransformer
 
 

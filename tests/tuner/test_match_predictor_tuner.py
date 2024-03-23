@@ -4,13 +4,12 @@ import mock
 import pandas as pd
 
 from player_performance_ratings.predictor import Predictor
-from player_performance_ratings.ratings.performances_generator import Performance
 from player_performance_ratings.tuner.performances_generator_tuner import PerformancesSearchRange
 from player_performance_ratings.tuner.utils import ParameterSearchRange
 from skbase.testing.utils.deep_equals import deep_equals
 
 from player_performance_ratings import ColumnNames, Pipeline
-from player_performance_ratings.ratings import UpdateRatingGenerator, PerformancesGenerator, ColumnWeight
+from player_performance_ratings.ratings import UpdateRatingGenerator
 
 from player_performance_ratings.tuner import PipelineTuner, PerformancesGeneratorTuner
 

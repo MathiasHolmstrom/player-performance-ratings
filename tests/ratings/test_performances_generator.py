@@ -2,13 +2,8 @@ import pandas as pd
 from deepdiff import DeepDiff
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.ratings import ColumnWeight, PerformancesGenerator
-from player_performance_ratings.ratings.performances_generator import auto_create_pre_performance_transformations, \
-    Performance
-from player_performance_ratings.transformation import \
-    MinMaxTransformer
-
-from player_performance_ratings.transformation.pre_transformers import SymmetricDistributionTransformer, \
+from player_performance_ratings.ratings.performance_generator import ColumnWeight, MinMaxTransformer, \
+    PerformancesGenerator, auto_create_pre_performance_transformations, Performance, SymmetricDistributionTransformer, \
     PartialStandardScaler
 
 
@@ -17,7 +12,7 @@ def test_auto_create_pre_transformers():
                                                                       ColumnWeight(name="deaths", weight=0.5,
                                                                                    lower_is_better=True)])]
 
-    pre_transformations = auto_create_pre_performance_transformations(performances=performances, pre_transformations=[])
+    pre_transformations = auto_create_pre_performance_transformations(performances=performances, pre_transformers=[])
 
     expected_pre_transformations = [
         SymmetricDistributionTransformer(features=["kills", "deaths"], prefix=""),
@@ -35,7 +30,7 @@ def test_auto_create_pre_transformers_multiple_column_names():
                                                                                    lower_is_better=True)]),
                     Performance(name='performance', weights=[ColumnWeight(name="kills", weight=1)])]
 
-    pre_transformations = auto_create_pre_performance_transformations(performances=performances, pre_transformations=[])
+    pre_transformations = auto_create_pre_performance_transformations(performances=performances, pre_transformers=[])
 
     expected_pre_transformations = [
         SymmetricDistributionTransformer(features=["kills", "deaths"], prefix=""),
@@ -86,7 +81,7 @@ def test_performances_generator():
                     Performance(name='performance', weights=[ColumnWeight(name="won", weight=1)])]
 
     performances_generator = PerformancesGenerator(performances,
-                                                   pre_transformations=pre_transformers)
+                                                   transformers=pre_transformers)
 
     df_with_performances = performances_generator.generate(df)
 

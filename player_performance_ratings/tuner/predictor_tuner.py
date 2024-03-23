@@ -6,7 +6,7 @@ import optuna
 import pandas as pd
 from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
-from player_performance_ratings.transformation.base_transformer import BasePostTransformer
+from player_performance_ratings.transformers.base_transformer import BaseTransformer
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 from player_performance_ratings import PipelineFactory, ColumnNames
@@ -31,8 +31,7 @@ class PredictorTuner():
 
     def tune(self, df: pd.DataFrame,
              pipeline_factory: PipelineFactory,
-             cross_validator: CrossValidator,
-             best_post_rating_transformers: Optional[list[BasePostTransformer]] = None,
+             cross_validator: CrossValidator
              ) -> BasePredictor:
 
         deepest_estimator = pipeline_factory.predictor.estimator
@@ -96,8 +95,7 @@ class PredictorTuner():
                 else:
                     setattr(predictor.estimator, param, params[param])
 
-            pipeline = pipeline_factory.create(predictor=predictor,
-                                               post_rating_transformers=best_post_rating_transformers)
+            pipeline = pipeline_factory.create(predictor=predictor)
             create_rating_features = False
             for rating_generator in pipeline.rating_generators:
                 create_rating_features = any(feature not in df.columns for feature in  rating_generator.estimator_features_return)

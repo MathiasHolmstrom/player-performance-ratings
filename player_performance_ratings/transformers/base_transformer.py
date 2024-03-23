@@ -6,7 +6,7 @@ import pandas as pd
 from player_performance_ratings import ColumnNames
 
 
-class BaseTransformer(ABC):
+class BasePerformancesTransformer(ABC):
 
     def __init__(self, features: list[str]):
         self.features = features
@@ -25,7 +25,7 @@ class BaseTransformer(ABC):
         pass
 
 
-class BasePostTransformer(ABC):
+class BaseTransformer(ABC):
 
     def __init__(self, features: list[str], are_estimator_features: bool = True):
         self.features = features
@@ -34,11 +34,11 @@ class BasePostTransformer(ABC):
         self.column_names = None
 
     @abstractmethod
-    def generate_historical(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
         pass
 
     @abstractmethod
-    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         pass
 
     @property
@@ -51,11 +51,11 @@ class BasePostTransformer(ABC):
             return self.features_out
         return []
 
-    def reset(self):
-        pass
+    def reset(self) -> "BaseTransformer":
+        return self
 
 
-class BaseLagTransformer(BasePostTransformer):
+class BaseLagGenerator():
 
     def __init__(self,
                  granularity: list[str],
@@ -65,7 +65,9 @@ class BaseLagTransformer(BasePostTransformer):
                  prefix: str,
                  are_estimator_features: bool = True,
                  ):
-        super().__init__(features, are_estimator_features)
+        self.features = features
+        self._features_out = []
+        self._are_estimator_features = are_estimator_features
         self.granularity = granularity
         if isinstance(self.granularity, str):
             self.granularity = [self.granularity]
@@ -81,6 +83,24 @@ class BaseLagTransformer(BasePostTransformer):
                 self._entity_features.append(f'{prefix}{lag}_{feature_name}')
                 if self.add_opponent:
                     self._features_out.append(f'{prefix}{lag}_{feature_name}_opponent')
+
+    @abstractmethod
+    def generate_historical(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
+        pass
+
+    @abstractmethod
+    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
+        pass
+
+    @property
+    def estimator_features_out(self) -> list[str]:
+        if self._are_estimator_features:
+            return self.features_out
+        return []
+
+    @property
+    def features_out(self) -> list[str]:
+        return self._features_out
 
     def _concat_df(self, df: pd.DataFrame, additional_cols_to_use: Optional[list[str]] = None) -> pd.DataFrame:
         df = self._string_convert(df=df)
@@ -237,5 +257,6 @@ class BaseLagTransformer(BasePostTransformer):
         transformed_df.index = ori_index_values
         return transformed_df[list(set(ori_cols + [f for f in self.features_out if f not in known_future_features]))]
 
-    def reset(self):
+    def reset(self) -> "BaseLagGenerator":
         self._df = None
+        return self

@@ -1,16 +1,15 @@
 import mock
 import pandas as pd
+from player_performance_ratings.cross_validator import MatchKFoldCrossValidator
 
-from player_performance_ratings.cross_validator import MatchKFoldCrossValidator, MatchCountCrossValidator
 from player_performance_ratings.predictor import Predictor
 from sklearn.linear_model import LinearRegression
 
-from player_performance_ratings.ratings import BayesianTimeWeightedRating, \
-    RatingEstimatorFeatures, convert_df_to_matches, ColumnWeight, UpdateRatingGenerator, PerformancesGenerator, \
+from player_performance_ratings.ratings import RatingEstimatorFeatures, UpdateRatingGenerator, \
     MatchRatingGenerator
-from player_performance_ratings.ratings.performances_generator import Performance
+from player_performance_ratings.ratings.performance_generator import Performance, ColumnWeight, PerformancesGenerator
 
-from player_performance_ratings.transformation import LagTransformer
+from player_performance_ratings.transformers import LagTransformer, RatioTeamPredictorTransformer, PredictorTransformer
 
 from player_performance_ratings import ColumnNames, Pipeline
 
@@ -63,7 +62,7 @@ def test_match_predictor_auto_pre_transformers():
 
     pd.testing.assert_frame_equal(new_df, expected_df, check_like=True)
 
-    assert len(pipeline.performances_generator.pre_transformations) > 0
+    assert len(pipeline.performances_generator.transformers) > 0
 
 
 def test_match_predictor_multiple_rating_generators_same_performance():
@@ -102,7 +101,7 @@ def test_match_predictor_multiple_rating_generators_same_performance():
             UpdateRatingGenerator(estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]),
             UpdateRatingGenerator(match_rating_generator=MatchRatingGenerator(rating_change_multiplier=20),
                                   estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])],
-        post_rating_transformers=[],
+        lag_generators=[],
         predictor=predictor_mock,
         column_names=column_names1
     )
@@ -157,7 +156,7 @@ def test_match_predictor_0_rating_generators():
 
     pipeline = Pipeline(
         rating_generators=[],
-        post_rating_transformers=[
+        lag_generators=[
             lag_transformer],
         predictor=predictor_mock,
         column_names=column_names
@@ -234,7 +233,7 @@ def test_match_predictor_generate_and_predict():
 
     pd.testing.assert_frame_equal(new_df, expected_future_df, check_like=True)
 
-    assert len(pipeline.performances_generator.pre_transformations) > 0
+    assert len(pipeline.performances_generator.transformers) > 0
 
 
 def test_train_predict_cross_validate():
@@ -271,7 +270,7 @@ def test_train_predict_cross_validate():
         performances_generator=PerformancesGenerator(Performance(weights=column_weights)),
         predictor=predictor,
         rating_generators=rating_generator,
-        post_rating_transformers=[
+        lag_generators=[
             LagTransformer(features=["kills", "deaths"], lag_length=1, granularity=['player_id'])],
         column_names=column_names
     )
@@ -290,7 +289,7 @@ def test_cross_validate_is_equal_to_predict_future():
                        pd.to_datetime("2023-01-04"), pd.to_datetime("2023-01-04"),
                        ],
         'deaths': [0.5, 1, 0.7, 2, 0.5, 0.7, 0.2, 2.1, 0.8, 1],
-        "kills": [0.2, 0.3, 0.2, 0.3,0.2, 0.3, 0.2, 0.3, 0.2, 0.3],
+        "kills": [0.2, 0.3, 0.2, 0.3, 0.2, 0.3, 0.2, 0.3, 0.2, 0.3],
         "__target": [1, 0, 0.6, 0.3, 0.8, 0.2, 0.4, 0.1, 1, 0],
     })
 
@@ -312,24 +311,28 @@ def test_cross_validate_is_equal_to_predict_future():
         performances_generator=PerformancesGenerator(Performance(weights=column_weights)),
         predictor=predictor,
         rating_generators=rating_generator,
-        post_rating_transformers=[
+        lag_generators=[
             LagTransformer(features=["kills", "deaths"], lag_length=1, granularity=['player_id'])],
         column_names=column_names,
     )
 
-    cross_validator = MatchCountCrossValidator(
-                                               match_id_column_name=column_names.match_id,
-                                               validation_match_count=1, n_splits=1)
-    cross_validated_df = pipeline.cross_validate_predict(df=df, cross_validator=cross_validator, add_train_prediction=True)
+    cross_validator = MatchKFoldCrossValidator(
+        match_id_column_name=column_names.match_id, n_splits=1, min_validation_date="2023-01-04",
+        date_column_name=column_names.start_date)
+    cross_validated_df = pipeline.cross_validate_predict(df=df, cross_validator=cross_validator,
+                                                         add_train_prediction=True)
 
     historical_df = df[df[column_names.start_date] < pd.to_datetime("2023-01-04")]
     future_df = df[df[column_names.start_date] >= pd.to_datetime("2023-01-04")]
     historical_df_predictions = pipeline.train_predict(df=historical_df)
     future_predict = pipeline.future_predict(df=future_df).reset_index(drop=True)
-    future_cv_df = cross_validated_df[cross_validated_df[column_names.start_date] >= pd.to_datetime("2023-01-04")].reset_index(drop=True)
-    past_cv_df = cross_validated_df[cross_validated_df[column_names.start_date] < pd.to_datetime("2023-01-04")].reset_index(drop=True)
+    future_cv_df = cross_validated_df[
+        cross_validated_df[column_names.start_date] >= pd.to_datetime("2023-01-04")].reset_index(drop=True)
+    past_cv_df = cross_validated_df[
+        cross_validated_df[column_names.start_date] < pd.to_datetime("2023-01-04")].reset_index(drop=True)
     pd.testing.assert_frame_equal(future_cv_df, future_predict, check_like=True, check_dtype=False)
     pd.testing.assert_frame_equal(past_cv_df, historical_df_predictions, check_like=True, check_dtype=False)
+
 
 def test_train_predict_cross_validate_is_equal_to_predict_future():
     df = pd.DataFrame({
@@ -342,7 +345,7 @@ def test_train_predict_cross_validate_is_equal_to_predict_future():
                        pd.to_datetime("2023-01-04"), pd.to_datetime("2023-01-04"),
                        ],
         'deaths': [0.5, 1, 0.7, 2, 0.5, 0.7, 0.2, 2.1, 0.8, 1],
-        "kills": [0.2, 0.3, 0.2, 0.3,0.2, 0.3, 0.2, 0.3, 0.2, 0.3],
+        "kills": [0.2, 0.3, 0.2, 0.3, 0.2, 0.3, 0.2, 0.3, 0.2, 0.3],
         "__target": [1, 0, 0.6, 0.3, 0.8, 0.2, 0.4, 0.1, 1, 0],
     })
 
@@ -364,25 +367,114 @@ def test_train_predict_cross_validate_is_equal_to_predict_future():
         performances_generator=PerformancesGenerator(Performance(weights=column_weights)),
         predictor=predictor,
         rating_generators=rating_generator,
-        post_rating_transformers=[
+        lag_generators=[
             LagTransformer(features=["kills", "deaths"], lag_length=1, granularity=['player_id'])],
         column_names=column_names,
     )
 
-    cross_validator = MatchCountCrossValidator(
-                                               match_id_column_name=column_names.match_id,
-                                               validation_match_count=1, n_splits=1)
+    cross_validator = MatchKFoldCrossValidator(
+        match_id_column_name=column_names.match_id, n_splits=1, min_validation_date="2023-01-04",
+        date_column_name=column_names.start_date)
     cross_validated_df = pipeline.train_predict(df=df, cross_validate_predict=True, cross_validator=cross_validator)
 
     historical_df = df[df[column_names.start_date] < pd.to_datetime("2023-01-04")]
     future_df = df[df[column_names.start_date] >= pd.to_datetime("2023-01-04")]
     historical_df_predictions = pipeline.train_predict(df=historical_df)
     future_predict = pipeline.future_predict(df=future_df).reset_index(drop=True)
-    future_cv_df = cross_validated_df[cross_validated_df[column_names.start_date] >= pd.to_datetime("2023-01-04")].reset_index(drop=True)
-    past_cv_df = cross_validated_df[cross_validated_df[column_names.start_date] < pd.to_datetime("2023-01-04")].reset_index(drop=True)
+    future_cv_df = cross_validated_df[
+        cross_validated_df[column_names.start_date] >= pd.to_datetime("2023-01-04")].reset_index(drop=True)
+    past_cv_df = cross_validated_df[
+        cross_validated_df[column_names.start_date] < pd.to_datetime("2023-01-04")].reset_index(drop=True)
     pd.testing.assert_frame_equal(future_cv_df, future_predict, check_like=True, check_dtype=False)
     pd.testing.assert_frame_equal(past_cv_df, historical_df_predictions, check_like=True, check_dtype=False)
 
 
-def test_cross_validation_does_not_mutate():
-    pass
+def test_post_pre_and_lag_transformers():
+    df = pd.DataFrame({
+        "game_id": [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+        "player_id": [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
+        "team_id": [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
+        "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02"),
+                       pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-03"), pd.to_datetime("2023-01-03"),
+                       pd.to_datetime("2023-01-03"), pd.to_datetime("2023-01-03"),
+                       pd.to_datetime("2023-01-04"), pd.to_datetime("2023-01-04"),
+                       ],
+        'kills': [0.5, 1, 0.7, 2, 0.5, 0.7, 0.2, 2.1, 0.8, 1],
+        "__target": [1, 0, 0.6, 0.3, 0.8, 0.2, 0.4, 0.1, 1, 0],
+    })
+
+    column_weights = [
+        ColumnWeight(name="kills", weight=1)
+    ]
+    predictor = Predictor(estimator=LinearRegression())
+
+    column_names = ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="start_date",
+    )
+    rating_generator = UpdateRatingGenerator(
+        estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+    pre_transformer = PredictorTransformer(
+        predictor=Predictor(estimator=LinearRegression(), estimator_features=rating_generator.features_out),
+    )
+
+    lag_generator = LagTransformer(features=["kills"], lag_length=1, granularity=['player_id'])
+    post_transformer = RatioTeamPredictorTransformer(features=["kills"],
+                                                     predictor=Predictor(estimator=LinearRegression(),
+                                                                         estimator_features=lag_generator.features_out))
+
+    pipeline = Pipeline(
+        performances_generator=PerformancesGenerator(Performance(weights=column_weights)),
+        predictor=predictor,
+        rating_generators=rating_generator,
+        pre_lag_transformers=[pre_transformer],
+        lag_generators=[lag_generator],
+        post_lag_transformers=[post_transformer],
+        column_names=column_names,
+    )
+    train_df = df[df[column_names.start_date] < pd.to_datetime("2023-01-04")]
+    future_df = df[df[column_names.start_date] >= pd.to_datetime("2023-01-04")]
+    trained_df = pipeline.train_predict(train_df, return_features=True)
+
+    for f in rating_generator.estimator_features_out:
+        assert f in trained_df.columns
+        assert f not in train_df.columns
+
+    for f in lag_generator.estimator_features_out:
+        assert f in trained_df.columns
+        assert f not in train_df.columns
+
+    for f in post_transformer.estimator_features_out:
+        assert f in trained_df.columns
+        assert f not in train_df.columns
+
+    for f in pre_transformer.estimator_features_out:
+        assert f in trained_df.columns
+        assert f not in train_df.columns
+
+    assert predictor.pred_column in trained_df.columns
+    assert predictor.pred_column not in train_df.columns
+
+
+    predicted_df = pipeline.future_predict(future_df, return_features=True)
+    for f in rating_generator.estimator_features_out:
+        assert f in predicted_df.columns
+        assert f not in future_df.columns
+
+    for f in lag_generator.estimator_features_out:
+        assert f in predicted_df.columns
+        assert f not in future_df.columns
+
+    for f in post_transformer.estimator_features_out:
+        assert f in predicted_df.columns
+        assert f not in future_df.columns
+
+    for f in pre_transformer.estimator_features_out:
+        assert f in predicted_df.columns
+        assert f not in future_df.columns
+
+    assert predictor.pred_column in predicted_df.columns
+    assert predictor.pred_column not in future_df.columns
+

@@ -214,7 +214,7 @@ class UpdateRatingGenerator(RatingGenerator):
 
         if df is not None and self.column_names:
             _ratings_df = df[
-                [self.column_names.team_id, self.column_names.player_id, self.column_names.match_id]].assign(
+                [self.column_names.team_id, self.column_names.player_id, self.column_names.match_id, self.column_names.start_date]].assign(
                 **potential_feature_values)
             if self._ratings_df is None:
                 self._ratings_df = _ratings_df

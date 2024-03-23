@@ -4,14 +4,13 @@ from typing import Optional, Union
 
 import pandas as pd
 
-from player_performance_ratings.ratings.performances_generator import auto_create_pre_performance_transformations, \
-    Performance
+from player_performance_ratings.ratings.performance_generator import     Performance
 from player_performance_ratings.tuner.utils import get_default_lgbm_classifier_search_range
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
 
 from player_performance_ratings.pipeline import Pipeline
-from player_performance_ratings.ratings import PerformancesGenerator, ColumnWeight
+from player_performance_ratings.ratings.performance_generator import PerformancesGenerator, ColumnWeight
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 
 from player_performance_ratings import PipelineFactory
@@ -62,7 +61,9 @@ class PipelineTuner():
         self._pipeline_factory = PipelineFactory(
             rating_generators=pipeline.rating_generators,
             performances_generator=pipeline.performances_generator,
-            post_rating_transformers=pipeline.post_rating_transformers,
+            post_lag_transformers=pipeline.post_lag_transformers,
+            lag_generators=pipeline.lag_generators,
+            pre_lag_transformers=pipeline.pre_lag_transformers,
             predictor=pipeline.predictor,
             column_names=pipeline.column_names
         )
@@ -71,7 +72,6 @@ class PipelineTuner():
         if isinstance(self.performances_generator_tuners, PerformancesGeneratorTuner):
             self.performances_generator_tuners = [self.performances_generator_tuners]
         self.rating_generator_tuners = rating_generator_tuners or []
-        self._untrained_best_model = None
         self.predictor_tuner = predictor_tuner
         if isinstance(self.rating_generator_tuners, RatingGeneratorTuner):
             self.rating_generator_tuners = [self.rating_generator_tuners]
@@ -103,16 +103,16 @@ class PipelineTuner():
                 ))
 
             if self._pipeline_factory.performances_generator:
-                original_pre_transformations = self._pipeline_factory.performances_generator.original_pre_transformations
+                original_pre_transformations = self._pipeline_factory.performances_generator.original_transformers
                 other_params = {k: v for k, v in self._pipeline_factory.performances_generator.__dict__.items() if
-                                k not in ["performances", "pre_transformations", "original_pre_transformations"]}
+                                k not in ["performances", "transformers", "original_transformers"]}
 
             else:
                 original_pre_transformations = []
                 other_params = {}
 
             self._pipeline_factory.performances_generator = PerformancesGenerator(performances=performances,
-                                                                                  pre_transformations=original_pre_transformations,
+                                                                                  transformers=original_pre_transformations,
                                                                                   **other_params)
 
         self.cross_validator = cross_validator
@@ -187,33 +187,26 @@ class PipelineTuner():
 
                 df = df.assign(**{rating_feature_str: values})
 
-        best_post_transformers = copy.deepcopy(self._pipeline_factory.post_rating_transformers)
-        untrained_best_post_transformers = copy.deepcopy(best_post_transformers)
+   #     best_post_transformers = copy.deepcopy(self._pipeline_factory.post_lag_transformers)
+     #   untrained_best_post_transformers = copy.deepcopy(best_post_transformers)
 
         if self.predictor_tuner:
             logging.info("Tuning Predictor")
             best_predictor = self.predictor_tuner.tune(df=df, cross_validator=self.cross_validator,
-                                                       pipeline_factory=self._pipeline_factory,
-                                                       best_post_rating_transformers=untrained_best_post_transformers)
+                                                       pipeline_factory=self._pipeline_factory)
             untrained_best_predictor = copy.deepcopy(best_predictor)
         else:
             untrained_best_predictor = copy.deepcopy(self._pipeline_factory.predictor)
 
-        self._untrained_best_model = Pipeline(
-            rating_generators=[copy.deepcopy(rating_generator) for rating_generator in
-                               untrained_best_rating_generators],
-            performances_generator=copy.deepcopy(untrained_best_performances_generator),
-            post_rating_transformers=[copy.deepcopy(post_rating_transformer) for post_rating_transformer in
-                                      untrained_best_post_transformers],
-            predictor=untrained_best_predictor,
-            column_names=self.pipeline.column_names
-        )
         best_match_predictor = Pipeline(
             rating_generators=[copy.deepcopy(rating_generator) for rating_generator in
                                untrained_best_rating_generators],
             performances_generator=copy.deepcopy(untrained_best_performances_generator),
-            post_rating_transformers=[copy.deepcopy(post_rating_transformer) for post_rating_transformer in
-                                      untrained_best_post_transformers],
+            lag_generators=[copy.deepcopy(t.reset()) for t in
+                            self._pipeline_factory.lag_generators],
+            post_lag_transformers=[copy.deepcopy(t.reset()) for t in
+                                   self._pipeline_factory.post_lag_transformers],
+            pre_lag_transformers=[copy.deepcopy(t.reset()) for t in self._pipeline_factory.pre_lag_transformers],
             predictor=untrained_best_predictor,
             column_names=self.pipeline.column_names
         )

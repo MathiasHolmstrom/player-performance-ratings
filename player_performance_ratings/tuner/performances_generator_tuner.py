@@ -9,7 +9,7 @@ from optuna.samplers import TPESampler
 from optuna.trial import BaseTrial
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator
-from player_performance_ratings.ratings import ColumnWeight, PerformancesGenerator
+from player_performance_ratings.ratings.performance_generator import ColumnWeight, PerformancesGenerator
 from player_performance_ratings.ratings.enums import RatingEstimatorFeatures
 
 from player_performance_ratings import PipelineFactory
@@ -60,7 +60,7 @@ class PerformancesGeneratorTuner:
                       ) -> float:
 
             best_pre_transformers = [copy.deepcopy(p) for p in
-                                     pipeline_factory.performances_generator.original_pre_transformations]
+                                     pipeline_factory.performances_generator.original_transformers]
             performances = [cw for cw in pipeline_factory.performances_generator.performances]
             for performance_search_range in self.performances_search_ranges:
                 performance_name = performance_search_range.name
@@ -83,7 +83,7 @@ class PerformancesGeneratorTuner:
 
             performances_generator = PerformancesGenerator(
                 performances=performances,
-                pre_transformations=best_pre_transformers,
+                transformers=best_pre_transformers,
                 auto_transform_performance=pipeline_factory.performances_generator.auto_transform_performance
             )
             pipeline = pipeline_factory.create(performances_generator=performances_generator)
@@ -106,7 +106,7 @@ class PerformancesGeneratorTuner:
         performances = [cw for cw in pipeline_factory.performances_generator.performances]
         performances[rating_idx].weights = best_column_weights[rating_idx]
         return PerformancesGenerator(performances=performances,
-                                     pre_transformations=pipeline_factory.performances_generator.original_pre_transformations,
+                                     transformers=pipeline_factory.performances_generator.original_transformers,
                                      )
 
     def _create_column_weights(self, params: dict, remove_string: str, search_range: list[ParameterSearchRange]) -> \

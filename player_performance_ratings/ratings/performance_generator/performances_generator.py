@@ -5,12 +5,11 @@ from typing import Optional, Union
 
 import pandas as pd
 
-from player_performance_ratings.transformation.pre_transformers import \
+from player_performance_ratings.ratings.performance_generator.performances_transformers import \
     SymmetricDistributionTransformer, MinMaxTransformer, PartialStandardScaler
 
-from player_performance_ratings import ColumnNames
 
-from player_performance_ratings.transformation.base_transformer import BaseTransformer
+from player_performance_ratings.transformers.base_transformer import BasePerformancesTransformer
 
 
 @dataclass
@@ -33,9 +32,9 @@ class Performance:
 
 
 def auto_create_pre_performance_transformations(
-        pre_transformations: list[BaseTransformer],
+        pre_transformers: list[BasePerformancesTransformer],
         performances: list[Performance],
-) -> list[BaseTransformer]:
+) -> list[BasePerformancesTransformer]:
     """
     Creates a list of transformers that ensure the performance column is generated in a way that makes sense for the rating model.
     Ensures columns aren't too skewed, scales them to similar ranges, ensure values are between 0 and 1,
@@ -49,46 +48,46 @@ def auto_create_pre_performance_transformations(
         not_transformed_features += [p.name for p in performance.weights if p.name not in not_transformed_features]
 
     distribution_transformer = SymmetricDistributionTransformer(features=not_transformed_features, prefix="")
-    pre_transformations.append(distribution_transformer)
+    pre_transformers.append(distribution_transformer)
 
     all_features = transformed_features + not_transformed_features
 
-    pre_transformations.append(
+    pre_transformers.append(
         PartialStandardScaler(features=all_features, ratio=1, max_value=9999, target_mean=0, prefix=""))
-    pre_transformations.append(MinMaxTransformer(features=all_features))
+    pre_transformers.append(MinMaxTransformer(features=all_features))
 
-    return pre_transformations
+    return pre_transformers
 
 
 class PerformancesGenerator():
 
     def __init__(self,
                  performances: Union[list[Performance], Performance],
-                 pre_transformations: Optional[list[BaseTransformer]] = None,
+                 transformers: Optional[list[BasePerformancesTransformer]] = None,
                  auto_transform_performance: bool = True
                  ):
 
         self.performances = performances if isinstance(performances, list) else [performances]
         self.auto_transform_performance = auto_transform_performance
-        self.original_pre_transformations = [copy.deepcopy(p) for p in
-                                             pre_transformations] if pre_transformations else []
-        self.pre_transformations = pre_transformations or []
+        self.original_transformers = [copy.deepcopy(p) for p in
+                                      transformers] if transformers else []
+        self.transformers = transformers or []
         if self.auto_transform_performance:
-            self.pre_transformations = auto_create_pre_performance_transformations(
-                pre_transformations=self.pre_transformations, performances=self.performances)
+            self.transformers = auto_create_pre_performance_transformations(
+                pre_transformers=self.transformers, performances=self.performances)
 
 
     def generate(self, df):
 
 
-        if self.pre_transformations:
-            for pre_transformation in self.pre_transformations:
-                df = pre_transformation.fit_transform(df)
+        if self.transformers:
+            for transformer in self.transformers:
+                df = transformer.fit_transform(df)
 
         for performance in self.performances:
-            if self.pre_transformations:
-                max_idx = len(self.pre_transformations) - 1
-                column_weighs_mapping = {col_weight.name: self.pre_transformations[max_idx].features_out[idx] for
+            if self.transformers:
+                max_idx = len(self.transformers) - 1
+                column_weighs_mapping = {col_weight.name: self.transformers[max_idx].features_out[idx] for
                                          idx, col_weight in enumerate(performance.weights)}
             else:
                 column_weighs_mapping = None

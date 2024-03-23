@@ -7,7 +7,7 @@ from sklearn.metrics import log_loss, mean_absolute_error
 from player_performance_ratings.scorer import SklearnScorer, OrdinalLossScorer
 
 from player_performance_ratings.cross_validator.cross_validator import CrossValidator, MatchKFoldCrossValidator
-from player_performance_ratings.ratings import PerformancesGenerator
+from player_performance_ratings.ratings.performance_generator import PerformancesGenerator
 
 from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor._base import BasePredictor
@@ -17,7 +17,7 @@ from player_performance_ratings.ratings.league_identifier import LeagueIdentifie
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
-from player_performance_ratings.transformation.base_transformer import BasePostTransformer
+from player_performance_ratings.transformers.base_transformer import BaseTransformer, BaseLagGenerator
 
 
 class Pipeline():
@@ -25,9 +25,11 @@ class Pipeline():
     def __init__(self,
                  predictor: BasePredictor,
                  column_names: ColumnNames,
-                 rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
                  performances_generator: Optional[PerformancesGenerator] = None,
-                 post_rating_transformers: Optional[List[BasePostTransformer]] = None,
+                 rating_generators: Optional[Union[RatingGenerator, list[RatingGenerator]]] = None,
+                 pre_lag_transformers: Optional[list[BaseTransformer]] = None,
+                 post_lag_transformers: Optional[list[BaseTransformer]] = None,
+                 lag_generators: Optional[List[BaseLagGenerator]] = None,
                  ):
 
         """
@@ -39,7 +41,7 @@ class Pipeline():
         :param performances_generator:
         An optional transformer class that take place in order to convert one or multiple column names into the performance value that is used by the rating model
 
-        :param post_rating_transformers:
+        :param lag_generators:
             After rating-generation, additional feature engineering can be performed.
 
         :param predictor:
@@ -76,10 +78,12 @@ class Pipeline():
         if rating_generators is None:
             self.rating_generators: list[RatingGenerator] = []
 
-        self.post_rating_transformers = post_rating_transformers or []
+        self.pre_lag_transformers = pre_lag_transformers or []
+        self.post_lag_transformers = post_lag_transformers or []
+        self.lag_generators = lag_generators or []
         self.column_names = column_names
 
-        for c in self.post_rating_transformers:
+        for c in [*self.lag_generators, *self.pre_lag_transformers, *self.post_lag_transformers]:
             self._estimator_features += [f for f in c.estimator_features_out if f not in self._estimator_features]
         for rating_idx, c in enumerate(self.rating_generators):
             for rating_feature in c.estimator_features_out:
@@ -123,7 +127,9 @@ class Pipeline():
 
         validation_df = cross_validator.generate_validation_df(df=df, predictor=self.predictor,
                                                                column_names=self.column_names,
-                                                               post_transformers=self.post_rating_transformers,
+                                                               post_lag_transformers=self.post_lag_transformers,
+                                                               pre_lag_transformers=self.pre_lag_transformers,
+                                                               lag_generators=self.lag_generators,
                                                                estimator_features=self._estimator_features,
                                                                return_features=False)
 
@@ -167,7 +173,9 @@ class Pipeline():
         cross_validated_df = cross_validator.generate_validation_df(df=cross_validated_df,
                                                                     predictor=self.predictor,
                                                                     column_names=self.column_names,
-                                                                    post_transformers=self.post_rating_transformers,
+                                                                    lag_generators=self.lag_generators,
+                                                                    post_lag_transformers=self.post_lag_transformers,
+                                                                    pre_lag_transformers=self.pre_lag_transformers,
                                                                     estimator_features=self._estimator_features,
                                                                     return_features=return_features,
                                                                     add_train_prediction=add_train_prediction)
@@ -244,10 +252,16 @@ class Pipeline():
                                                           create_rating_features=False, create_performance=False,
                                                           add_train_prediction=True, cross_validator=cross_validator)
 
-        for idx, post_rating_transformer in enumerate(self.post_rating_transformers):
+        for idx in range(len(self.pre_lag_transformers)):
+            self.pre_lag_transformers[idx].reset()
+            df_with_predict = self.pre_lag_transformers[idx].fit_transform(df_with_predict, column_names=self.column_names)
+        for idx in range(len(self.lag_generators)):
+            self.lag_generators[idx].reset()
+            df_with_predict = self.lag_generators[idx].generate_historical(df_with_predict, column_names=self.column_names)
+        for idx in range(len(self.pre_lag_transformers)):
+            self.post_lag_transformers[idx].reset()
+            df_with_predict = self.post_lag_transformers[idx].fit_transform(df_with_predict, column_names=self.column_names)
 
-            self.post_rating_transformers[idx].reset()
-            df_with_predict = post_rating_transformer.generate_historical(df_with_predict, column_names=self.column_names)
 
         self.predictor.train(df=df_with_predict, estimator_features=self._estimator_features)
 
@@ -277,8 +291,8 @@ class Pipeline():
         for idx in range(len(self.rating_generators)):
             self.rating_generators[idx].reset_ratings()
 
-        for idx in range(len(self.post_rating_transformers)):
-            self.post_rating_transformers[idx].reset()
+        for transformer in [*self.lag_generators, *self.pre_lag_transformers, *self.post_lag_transformers]:
+            transformer.reset()
 
 
     def _add_performance(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -385,8 +399,12 @@ class Pipeline():
                     rating_feature_str = rating_feature
                 df_with_predict[rating_feature_str] = values
 
-        for post_rating_transformer in self.post_rating_transformers:
-            df_with_predict = post_rating_transformer.generate_future(df_with_predict)
+        for pre_lag_transformer in self.pre_lag_transformers:
+            df_with_predict = pre_lag_transformer.transform(df_with_predict)
+        for lag_generator in self.lag_generators:
+            df_with_predict = lag_generator.generate_future(df_with_predict)
+        for post_lag_transformer in self.post_lag_transformers:
+            df_with_predict = post_lag_transformer.transform(df_with_predict)
 
         df_with_predict = self.predictor.add_prediction(df_with_predict)
 
