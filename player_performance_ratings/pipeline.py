@@ -83,6 +83,16 @@ class Pipeline():
         self.lag_generators = lag_generators or []
         self.column_names = column_names
 
+        est_feats = []
+        for r in self.rating_generators:
+            est_feats += r.estimator_features_out
+        for f in self.lag_generators:
+            est_feats += f.features_out
+        for idx, post_transformer in enumerate(self.post_lag_transformers):
+            est_feats += post_transformer.features_out
+            if hasattr(post_transformer, "predictor") and not post_transformer.features:
+                self.post_lag_transformers[idx].features = est_feats
+
         for c in [*self.lag_generators, *self.pre_lag_transformers, *self.post_lag_transformers]:
             self._estimator_features += [f for f in c.estimator_features_out if f not in self._estimator_features]
         for rating_idx, c in enumerate(self.rating_generators):
@@ -258,7 +268,7 @@ class Pipeline():
         for idx in range(len(self.lag_generators)):
             self.lag_generators[idx].reset()
             df_with_predict = self.lag_generators[idx].generate_historical(df_with_predict, column_names=self.column_names)
-        for idx in range(len(self.pre_lag_transformers)):
+        for idx in range(len(self.post_lag_transformers)):
             self.post_lag_transformers[idx].reset()
             df_with_predict = self.post_lag_transformers[idx].fit_transform(df_with_predict, column_names=self.column_names)
 

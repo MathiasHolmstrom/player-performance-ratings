@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from enum import Enum
 from typing import Optional
 
 import numpy as np
@@ -78,6 +80,50 @@ class NetOverPredictedPostTransformer(BaseTransformer):
     @property
     def features_out(self) -> list[str]:
         return self._features_out
+
+
+
+class Operation(Enum):
+    SUBTRACT = "subtract"
+
+
+@dataclass
+class ModifyOperation:
+    feature1: str
+    operation: Operation
+    feature2: str
+    new_column_name: Optional[str] = None
+
+    def __post_init__(self):
+        if self.operation == Operation.SUBTRACT and not self.new_column_name:
+            self.new_column_name = f"{self.feature1}_minus_{self.feature2}"
+
+
+class ModifierTransformer(BaseTransformer):
+
+    def __init__(self,
+                 modify_operations: list[ModifyOperation],
+                 features: list[str] = None,
+                 are_estimator_features: bool = True,
+                 ):
+        super().__init__(features=features, are_estimator_features=are_estimator_features)
+        self.modify_operations = modify_operations
+        self._features_out = [operation.new_column_name for operation in self.modify_operations]
+
+    def generate_historical(self, df: pd.DataFrame, column_names: Optional[ColumnNames]) -> pd.DataFrame:
+        self.column_names = column_names
+        return self.generate_future(df)
+
+    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
+        for operation in self.modify_operations:
+            if operation.operation == Operation.SUBTRACT:
+                if operation.feature1 not in df.columns or operation.feature2 not in df.columns:
+                    df = df.assign(**{operation.new_column_name: np.nan})
+
+                else:
+                    df = df.assign(**{operation.new_column_name: df[operation.feature1] - df[operation.feature2]})
+
+        return df
 
 
 class PredictorTransformer(BaseTransformer):
