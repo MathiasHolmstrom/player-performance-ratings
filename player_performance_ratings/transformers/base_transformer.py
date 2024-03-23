@@ -65,6 +65,7 @@ class BaseLagGenerator():
                  prefix: str,
                  are_estimator_features: bool = True,
                  ):
+
         self.features = features
         self._features_out = []
         self._are_estimator_features = are_estimator_features
@@ -76,6 +77,7 @@ class BaseLagGenerator():
         self.prefix = prefix
         self._df = None
         self._entity_features = []
+        self.column_names: Optional[ColumnNames] = None
 
         for feature_name in self.features:
             for lag in iterations:
@@ -116,6 +118,11 @@ class BaseLagGenerator():
                  self.column_names.parent_team_id, self.column_names.update_match_id,
                  self.column_names.start_date])) if f in df.columns]
 
+        if self.column_names.participation_weight in df.columns:
+            cols += [self.column_names.participation_weight]
+        if self.column_names.projected_participation_weight in df.columns:
+            cols += [self.column_names.projected_participation_weight]
+
         if additional_cols_to_use:
             cols += [f for f in additional_cols_to_use if f in df.columns]
 
@@ -136,6 +143,10 @@ class BaseLagGenerator():
                  self.column_names.player_id,
                  self.column_names.parent_team_id, self.column_names.update_match_id,
                  self.column_names.start_date]))
+        if self.column_names.participation_weight in df.columns:
+            cols += [self.column_names.participation_weight]
+        if self.column_names.projected_participation_weight in df.columns:
+            cols += [self.column_names.projected_participation_weight]
 
         if additional_cols_to_use:
             cols += additional_cols_to_use
