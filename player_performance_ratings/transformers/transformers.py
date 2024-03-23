@@ -110,11 +110,11 @@ class ModifierTransformer(BaseTransformer):
         self.modify_operations = modify_operations
         self._features_out = [operation.new_column_name for operation in self.modify_operations]
 
-    def generate_historical(self, df: pd.DataFrame, column_names: Optional[ColumnNames]) -> pd.DataFrame:
+    def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames]) -> pd.DataFrame:
         self.column_names = column_names
-        return self.generate_future(df)
+        return self.transform(df)
 
-    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         for operation in self.modify_operations:
             if operation.operation == Operation.SUBTRACT:
                 if operation.feature1 not in df.columns or operation.feature2 not in df.columns:
