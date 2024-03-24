@@ -111,4 +111,5 @@ class MatchKFoldCrossValidator(CrossValidator):
         if not return_features:
             concat_validation_df = concat_validation_df[ori_cols + predictor.columns_added]
 
-        return concat_validation_df
+        return concat_validation_df.drop_duplicates([column_names.match_id, column_names.team_id, column_names.player_id])
+
