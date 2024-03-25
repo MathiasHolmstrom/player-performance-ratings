@@ -32,6 +32,7 @@ class BaseTransformer(ABC):
         self._are_estimator_features = are_estimator_features
         self._features_out = []
         self.column_names = None
+        self._estimator_features_out = self._features_out if are_estimator_features else []
 
     @abstractmethod
     def fit_transform(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
@@ -47,9 +48,7 @@ class BaseTransformer(ABC):
 
     @property
     def estimator_features_out(self) -> list[str]:
-        if self._are_estimator_features:
-            return self.features_out
-        return []
+        return self._estimator_features_out
 
     def reset(self) -> "BaseTransformer":
         return self

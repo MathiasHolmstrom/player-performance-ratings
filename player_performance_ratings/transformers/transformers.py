@@ -68,6 +68,7 @@ class NetOverPredictedPostTransformer(BaseTransformer):
                 for iteration in lag_generator.iterations:
                     lag_generator._features_out = [f"{lag_generator.prefix}{iteration}_{self.predictor.pred_column}"]
                     self.features_out.extend(lag_generator._features_out.copy())
+                    self._estimator_features_out.extend(lag_generator._features_out.copy())
         if self.prefix is "":
             raise ValueError("Prefix must not be empty")
 
