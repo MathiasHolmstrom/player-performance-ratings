@@ -29,6 +29,7 @@ class BasePredictor(ABC):
         self._deepest_estimator = self.estimator
         self.filters = filters or []
         self.multiclassifier = False
+        self._classes_ = None
 
         iterations = 0
         while hasattr(self._deepest_estimator, "estimator"):
@@ -71,6 +72,8 @@ class BasePredictor(ABC):
 
     @property
     def classes_(self) -> Optional[list[str]]:
+        if self._classes_:
+            return self._classes_
         if 'classes_' not in dir(self.estimator):
             return None
         return self.estimator.classes_

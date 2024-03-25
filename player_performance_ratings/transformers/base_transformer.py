@@ -67,6 +67,7 @@ class BaseLagGenerator():
                  ):
 
         self.features = features
+        self.iterations = iterations
         self._features_out = []
         self._are_estimator_features = are_estimator_features
         self.granularity = granularity

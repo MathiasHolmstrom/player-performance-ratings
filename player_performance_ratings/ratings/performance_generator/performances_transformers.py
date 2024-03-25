@@ -9,37 +9,6 @@ from player_performance_ratings.predictor import Predictor
 from player_performance_ratings.transformers.base_transformer import BasePerformancesTransformer
 
 
-class NetOverPredictedTransformer(BasePerformancesTransformer):
-
-    def __init__(self,
-                 predictor: Predictor,
-                 features: list[str],
-                 prefix: str = "net_over_",
-                 ):
-        super().__init__(features=features)
-        self.prefix = prefix
-        self._predictor = predictor
-        self._features_out = []
-        new_feature_name = self.prefix + self._predictor.pred_column
-        self._features_out.append(new_feature_name)
-        if self.prefix is "":
-            raise ValueError("Prefix must not be empty")
-
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        self._predictor.train(df, estimator_features=self.features)
-        return self.transform(df)
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = self._predictor.add_prediction(df)
-        new_feature_name = self.prefix + self._predictor.pred_column
-        df = df.assign(**{new_feature_name: df[self._predictor.target] - df[self._predictor.pred_column]})
-        df = df.drop(columns=[self._predictor.pred_column])
-
-        return df
-
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out
 
 
 class SklearnEstimatorImputer(BasePerformancesTransformer):

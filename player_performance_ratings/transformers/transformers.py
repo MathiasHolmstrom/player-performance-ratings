@@ -1,3 +1,4 @@
+import copy
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -8,7 +9,7 @@ from player_performance_ratings.predictor import GameTeamPredictor, BasePredicto
 
 from player_performance_ratings import ColumnNames
 
-from player_performance_ratings.transformers.base_transformer import BaseTransformer
+from player_performance_ratings.transformers.base_transformer import BaseTransformer, BaseLagGenerator
 
 
 class NormalizerTransformer(BaseTransformer):
@@ -43,44 +44,66 @@ class NormalizerTransformer(BaseTransformer):
     def reset(self):
         pass
 
+
 class NetOverPredictedPostTransformer(BaseTransformer):
 
     def __init__(self,
-                 predictor: GameTeamPredictor,
+                 predictor: BasePredictor,
                  features: list[str] = None,
+                 lag_generators: Optional[list[BaseLagGenerator]] = None,
                  prefix: str = "net_over_predicted_",
                  are_estimator_features: bool = False,
                  ):
         super().__init__(features=features, are_estimator_features=are_estimator_features)
         self.prefix = prefix
-        self._predictor = predictor
+        self.predictor = predictor
         self._features_out = []
+        self.lag_generators = lag_generators or []
         self.column_names = None
-        new_feature_name = self.prefix + self._predictor.pred_column
+        new_feature_name = self.prefix + self.predictor.pred_column
         self._features_out.append(new_feature_name)
+        for lag_generator in self.lag_generators:
+            if not lag_generator.features:
+                lag_generator.features = [self.predictor.pred_column]
+                for iteration in lag_generator.iterations:
+                    lag_generator._features_out = [f"{lag_generator.prefix}{iteration}_{self.predictor.pred_column}"]
+                    self.features_out.extend(lag_generator._features_out.copy())
         if self.prefix is "":
             raise ValueError("Prefix must not be empty")
 
     def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
         self.column_names = column_names
-        self._predictor.train(df, estimator_features=self.features)
+        self.predictor.train(df, estimator_features=self.features)
+        if self.lag_generators:
+            df = self.predictor.add_prediction(df)
+        for lag_generator in self.lag_generators:
+            df = lag_generator.generate_historical(df, column_names=self.column_names)
         return self.transform(df)
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = self._predictor.add_prediction(df)
-        new_feature_name = self.prefix + self._predictor.pred_column
-        if self._predictor.target not in df.columns:
+        df = self.predictor.add_prediction(df)
+        new_feature_name = self.prefix + self.predictor.pred_column
+        if self.predictor.target not in df.columns:
             df = df.assign(**{new_feature_name: np.nan})
         else:
-            df = df.assign(**{new_feature_name: df[self._predictor.target] - df[self._predictor.pred_column]})
-        df = df.drop(columns=[self._predictor.pred_column])
+            df = df.assign(**{new_feature_name: df[self.predictor.target] - df[self.predictor.pred_column]})
 
-        return df
+        for lag_generator in self.lag_generators:
+            fitted_game_ids = lag_generator._df[self.column_names.match_id].unique()
+            if df[self.column_names.match_id].nunique() != len(
+                    fitted_game_ids) + df[self.column_names.match_id].nunique():
+                df = copy.deepcopy(lag_generator).generate_historical(df, column_names=self.column_names)
+
+        return df.drop(columns=[self.predictor.pred_column])
 
     @property
     def features_out(self) -> list[str]:
         return self._features_out
 
+    def reset(self) -> "BaseTransformer":
+        for lag_generator in self.lag_generators:
+            lag_generator.reset()
+        return self
 
 
 class Operation(Enum):
@@ -150,6 +173,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
                  features: list[str],
                  predictor: BasePredictor,
                  team_total_prediction_column: Optional[str] = None,
+                 lag_generators: Optional[list[BaseLagGenerator]] = None,
                  prefix: str = "_ratio_team"
                  ):
         super().__init__(features=features)
@@ -157,14 +181,21 @@ class RatioTeamPredictorTransformer(BaseTransformer):
         self.team_total_prediction_column = team_total_prediction_column
         self.prefix = prefix
         self.predictor._pred_column = f"__prediction__{self.predictor.target}"
+        self.lag_generators = lag_generators or []
         self._features_out = [self.predictor.target + prefix, self.predictor._pred_column]
         if self.team_total_prediction_column:
             self._features_out.append(self.predictor.target + prefix + "_team_total_multiplied")
+        for lag_generator in self.lag_generators:
+            self._features_out.extend(lag_generator.features_out)
 
     def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
         self.column_names = column_names
         self.predictor.train(df=df, estimator_features=self.features)
-        return self.transform(df)
+        transformed_df = self.transform(df)
+        for lag_generator in self.lag_generators:
+            transformed_df = lag_generator.generate_historical(transformed_df, column_names=self.column_names)
+
+        return transformed_df
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self.predictor.add_prediction(df=df)
@@ -176,11 +207,20 @@ class RatioTeamPredictorTransformer(BaseTransformer):
             df = df.assign(**{self.predictor.target + self.prefix + "_team_total_multiplied": df[self._features_out[
                 0]] * df[
                                                                                                   self.team_total_prediction_column]})
+
+        for lag_transformer in self.lag_generators:
+            df = lag_transformer.generate_historical(df, column_names=self.column_names)
+
         return df.drop(columns=[self.predictor.pred_column + "_sum"])
 
     @property
     def features_out(self) -> list[str]:
         return self._features_out
+
+    def reset(self) -> "BaseTransformer":
+        for lag_generator in self.lag_generators:
+            lag_generator.reset()
+        return self
 
 
 class NormalizerTargetColumnTransformer(BaseTransformer):
@@ -195,10 +235,11 @@ class NormalizerTargetColumnTransformer(BaseTransformer):
         for feature in self.features:
             self._features_out.append(f'{self.prefix}{feature}')
 
-    def generate_historical(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
-        return self.generate_future(df=df)
+    def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
+        self.column_names = column_names
+        return self.transform(df=df)
 
-    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         for feature in self.features:
             df[f"{feature}_sum"] = df.groupby(self.granularity)[feature].transform('sum')
             df = df.assign(
@@ -209,4 +250,3 @@ class NormalizerTargetColumnTransformer(BaseTransformer):
     @property
     def features_out(self) -> list[str]:
         return self._features_out
-

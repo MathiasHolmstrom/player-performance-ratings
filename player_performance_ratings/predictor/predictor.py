@@ -2,7 +2,7 @@ import copy
 import logging
 import warnings
 import pandas as pd
-from lightgbm import LGBMClassifier
+from lightgbm import LGBMClassifier, LGBMRegressor
 from pandas.errors import SettingWithCopyWarning
 from sklearn import clone
 
@@ -179,10 +179,10 @@ class Predictor(BasePredictor):
 
         if estimator is None:
             logging.warning(
-                "model is not set. Will use LGBMClassifier(max_depth=2, n_estimators=400, learning_rate=0.05)")
+                "model is not set. Will use LGBMClassifier(max_depth=2, n_estimators=100, learning_rate=0.1)")
 
         super().__init__(target=self._target, pred_column=pred_column,
-                         estimator=estimator or LGBMClassifier(max_depth=2, n_estimators=300, learning_rate=0.05,
+                         estimator=estimator or LGBMClassifier(max_depth=2, n_estimators=100,
                                                                verbose=-100),
                          pre_transformers=pre_transformers, filters=filters, estimator_features=estimator_features)
 
@@ -268,10 +268,10 @@ class GranularityPredictor(BasePredictor):
 
         if estimator is None:
             logging.warning(
-                "model is not set. Will use LGBMClassifier(max_depth=2, n_estimators=400, learning_rate=0.05)")
+                "model is not set. Will use LGBMClassifier(max_depth=2, n_estimators=100)")
 
         super().__init__(target=self._target, pred_column=pred_column,
-                         estimator=estimator or LGBMClassifier(max_depth=2, n_estimators=300, learning_rate=0.05,
+                         estimator=estimator or LGBMClassifier(max_depth=2, n_estimators=100,
                                                                verbose=-100),
                          pre_transformers=pre_transformers, filters=filters, estimator_features=estimator_features)
 
@@ -344,3 +344,43 @@ class GranularityPredictor(BasePredictor):
 
         df = pd.concat(dfs)
         return df
+
+class PointToClassificationPredictor(BasePredictor):
+
+    def __init__(self,
+                 target: Optional[str] = PredictColumnNames.TARGET,
+                 estimator: Optional = None,
+                 point_estimate_column: Optional[str] = None,
+                 estimator_features: Optional[list[str]] = None,
+                 filters: Optional[list[Filter]] = None,
+                 multiclassifier: bool = False,
+                 pred_column: Optional[str] = None,
+                 column_names: Optional[ColumnNames] = None,
+                 pre_transformers: Optional[list[PredictorTransformer]] = None
+                 ):
+        self._target = target
+        self.multiclassifier = multiclassifier
+        self.point_estimate_column = point_estimate_column
+        self.column_names = column_names
+        self._target_probs = {}
+        super().__init__(target=self._target, pred_column=pred_column,
+                         estimator=estimator or LGBMRegressor(max_depth=2, n_estimators=100, learning_rate=0.05,
+                                                               verbose=-100),
+                         pre_transformers=pre_transformers, filters=filters, estimator_features=estimator_features)
+
+
+    def train(self, df: pd.DataFrame, estimator_features: list[str]) -> None:
+        if self.point_estimate_column is not None:
+            predictions = df[self.point_estimate_column]
+        else:
+            self.estimator.fit(df[estimator_features], df[self._target])
+            predictions = self.estimator.predict(df[estimator_features])
+
+        quantiles = predictions.quantile([q/50 for q in range(1, 50)])
+
+        for idx, quantile in enumerate(quantiles[:-1]):
+            rows = df[(predictions >= quantile) & (predictions < quantiles[idx+1])]
+            value_counts = rows[self._target].value_counts()
+            for target, count in value_counts:
+               self._target_probs[target] = count/len(df)
+

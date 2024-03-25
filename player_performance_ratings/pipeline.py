@@ -89,9 +89,9 @@ class Pipeline():
         for f in self.lag_generators:
             est_feats += f.features_out
         for idx, post_transformer in enumerate(self.post_lag_transformers):
-            est_feats += post_transformer.features_out
             if hasattr(post_transformer, "predictor") and not post_transformer.features:
-                self.post_lag_transformers[idx].features = est_feats
+                self.post_lag_transformers[idx].features = est_feats.copy()
+            est_feats += post_transformer.features_out
 
         for c in [*self.lag_generators, *self.pre_lag_transformers, *self.post_lag_transformers]:
             self._estimator_features += [f for f in c.estimator_features_out if f not in self._estimator_features]
