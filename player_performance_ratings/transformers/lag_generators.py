@@ -175,6 +175,7 @@ class RollingMeanTransformer(BaseLagGenerator):
                  granularity: Union[list[str], str] = None,
                  add_opponent: bool = False,
                  min_periods: int = 1,
+                 are_estimator_features=False,
                  prefix: str = 'rolling_mean_'):
         """
 
@@ -208,7 +209,7 @@ class RollingMeanTransformer(BaseLagGenerator):
             Prefix for the new rolling mean columns
         """
         super().__init__(features=features, add_opponent=add_opponent, iterations=[window],
-                         prefix=prefix, granularity=granularity)
+                         prefix=prefix, granularity=granularity, are_estimator_features=are_estimator_features)
         self.window = window
         self.min_periods = min_periods
 
