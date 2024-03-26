@@ -5,44 +5,11 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-from player_performance_ratings.predictor import GameTeamPredictor, BasePredictor
+from player_performance_ratings.predictor import BasePredictor
 
 from player_performance_ratings import ColumnNames
 
 from player_performance_ratings.transformers.base_transformer import BaseTransformer, BaseLagGenerator
-
-
-class NormalizerTransformer(BaseTransformer):
-
-    def __init__(self, features: list[str], granularity, target_mean: Optional[float] = None,
-                 create_target_as_mean: bool = False):
-        super().__init__(features=features)
-        self.granularity = granularity
-        self.target_mean = target_mean
-        self.create_target_as_mean = create_target_as_mean
-        self._features_to_normalization_target = {}
-
-        if self.target_mean is None and not self.create_target_as_mean:
-            raise ValueError("Either target_sum or create_target_as_mean must be set")
-
-    def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
-        self._features_to_normalization_target = {f: self.target_mean for f in self.features} if self.target_mean else {
-            f: df[f].mean() for f in self.features}
-        return self.transform(df=df)
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = df.assign(**{f'__mean_{feature}': df.groupby(self.granularity)[feature].transform('mean') for feature in
-                          self.features})
-        for feature, target_sum in self._features_to_normalization_target.items():
-            df = df.assign(**{feature: df[feature] / df[f'__mean_{feature}'] * target_sum})
-        return df.drop(columns=[f'__mean_{feature}' for feature in self.features])
-
-    @property
-    def features_out(self) -> list[str]:
-        return self.features
-
-    def reset(self):
-        pass
 
 
 class NetOverPredictedPostTransformer(BaseTransformer):
@@ -54,7 +21,7 @@ class NetOverPredictedPostTransformer(BaseTransformer):
                  prefix: str = "net_over_predicted_",
                  are_estimator_features: bool = False,
                  ):
-        super().__init__(features=features, are_estimator_features=are_estimator_features)
+        super().__init__(features=features, are_estimator_features=are_estimator_features, features_out=[])
         self.prefix = prefix
         self.predictor = predictor
         self._features_out = []
@@ -62,6 +29,7 @@ class NetOverPredictedPostTransformer(BaseTransformer):
         self.column_names = None
         new_feature_name = self.prefix + self.predictor.pred_column
         self._features_out.append(new_feature_name)
+        self._estimator_features_out = []
         for lag_generator in self.lag_generators:
             if not lag_generator.features:
                 lag_generator.features = [self.predictor.pred_column]
@@ -69,6 +37,9 @@ class NetOverPredictedPostTransformer(BaseTransformer):
                     lag_generator._features_out = [f"{lag_generator.prefix}{iteration}_{self.predictor.pred_column}"]
                     self.features_out.extend(lag_generator._features_out.copy())
                     self._estimator_features_out.extend(lag_generator._features_out.copy())
+        if self._are_estimator_features:
+            self._estimator_features_out.append(self.predictor.pred_column)
+            self.features_out.append(self.predictor.pred_column)
         if self.prefix is "":
             raise ValueError("Prefix must not be empty")
 
@@ -130,9 +101,9 @@ class ModifierTransformer(BaseTransformer):
                  features: list[str] = None,
                  are_estimator_features: bool = True,
                  ):
-        super().__init__(features=features, are_estimator_features=are_estimator_features)
         self.modify_operations = modify_operations
-        self._features_out = [operation.new_column_name for operation in self.modify_operations]
+        _features_out = [operation.new_column_name for operation in self.modify_operations]
+        super().__init__(features=features, are_estimator_features=are_estimator_features, features_out=_features_out)
 
     def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames]) -> pd.DataFrame:
         self.column_names = column_names
@@ -154,7 +125,7 @@ class PredictorTransformer(BaseTransformer):
 
     def __init__(self, predictor: BasePredictor, features: list[str] = None):
         self.predictor = predictor
-        super().__init__(features=features)
+        super().__init__(features=features, features_out=[f'{self.predictor.pred_column}'])
 
     def fit_transform(self, df: pd.DataFrame, column_names: Optional[None] = None) -> pd.DataFrame:
         self.predictor.train(df=df, estimator_features=self.features)
@@ -163,10 +134,6 @@ class PredictorTransformer(BaseTransformer):
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self.predictor.add_prediction(df=df)
         return df
-
-    @property
-    def features_out(self) -> list[str]:
-        return [f'{self.predictor.pred_column}']
 
 
 class RatioTeamPredictorTransformer(BaseTransformer):
@@ -177,26 +144,30 @@ class RatioTeamPredictorTransformer(BaseTransformer):
                  lag_generators: Optional[list[BaseLagGenerator]] = None,
                  prefix: str = "_ratio_team"
                  ):
-        super().__init__(features=features)
         self.predictor = predictor
         self.team_total_prediction_column = team_total_prediction_column
         self.prefix = prefix
         self.predictor._pred_column = f"__prediction__{self.predictor.target}"
         self.lag_generators = lag_generators or []
-        self._features_out = [self.predictor.target + prefix, self.predictor._pred_column]
+        super().__init__(features=features, features_out=[self.predictor.target + prefix, self.predictor._pred_column])
+
         if self.team_total_prediction_column:
             self._features_out.append(self.predictor.target + prefix + "_team_total_multiplied")
         for lag_generator in self.lag_generators:
             self._features_out.extend(lag_generator.features_out)
 
+        if self._are_estimator_features:
+            self._estimator_features_out = self._features_out.copy()
+
     def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
+        ori_cols = df.columns.tolist()
         self.column_names = column_names
         self.predictor.train(df=df, estimator_features=self.features)
         transformed_df = self.transform(df)
         for lag_generator in self.lag_generators:
             transformed_df = lag_generator.generate_historical(transformed_df, column_names=self.column_names)
 
-        return transformed_df
+        return df[list(set(ori_cols + self.features_out))]
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self.predictor.add_prediction(df=df)
@@ -222,32 +193,3 @@ class RatioTeamPredictorTransformer(BaseTransformer):
         for lag_generator in self.lag_generators:
             lag_generator.reset()
         return self
-
-
-class NormalizerTargetColumnTransformer(BaseTransformer):
-
-    def __init__(self, features: list[str], granularity, target_sum_column_name: str, prefix: str = "__normalized_"):
-        super().__init__(features=features)
-        self.granularity = granularity
-        self.prefix = prefix
-        self.target_sum_column_name = target_sum_column_name
-        self._features_to_normalization_target = {}
-        self._features_out = []
-        for feature in self.features:
-            self._features_out.append(f'{self.prefix}{feature}')
-
-    def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
-        self.column_names = column_names
-        return self.transform(df=df)
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        for feature in self.features:
-            df[f"{feature}_sum"] = df.groupby(self.granularity)[feature].transform('sum')
-            df = df.assign(
-                **{self.prefix + feature: df[feature] / df[f"{feature}_sum"] * df[self.target_sum_column_name]})
-            df = df.drop(columns=[f"{feature}_sum"])
-        return df
-
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out

@@ -87,7 +87,7 @@ class Pipeline():
         for r in self.rating_generators:
             est_feats += r.estimator_features_out
         for f in self.lag_generators:
-            est_feats += f.features_out
+            est_feats += f.estimator_features_out
         for idx, post_transformer in enumerate(self.post_lag_transformers):
             if hasattr(post_transformer, "predictor") and not post_transformer.features:
                 self.post_lag_transformers[idx].features = est_feats.copy()
@@ -104,7 +104,7 @@ class Pipeline():
                     rating_feature_str = rating_feature
                 if rating_feature_str not in self._estimator_features:
                     self._estimator_features.append(rating_feature_str)
-
+        logging.info(f"Using estimator features {self._estimator_features}")
         self.performances_generator = performances_generator
         self.predictor = predictor
         self.predictor.set_target(PredictColumnNames.TARGET)

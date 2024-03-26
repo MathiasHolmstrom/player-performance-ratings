@@ -27,12 +27,12 @@ class BasePerformancesTransformer(ABC):
 
 class BaseTransformer(ABC):
 
-    def __init__(self, features: list[str], are_estimator_features: bool = True):
+    def __init__(self, features: list[str], features_out: list[str], are_estimator_features: bool = True):
+        self._features_out = features_out
         self.features = features
         self._are_estimator_features = are_estimator_features
-        self._features_out = []
         self.column_names = None
-        self._estimator_features_out = self._features_out if are_estimator_features else []
+        self._estimator_features_out = self._features_out if self._are_estimator_features else []
 
     @abstractmethod
     def fit_transform(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
