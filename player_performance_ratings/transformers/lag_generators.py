@@ -26,9 +26,6 @@ def create_output_column_by_game_group(data: pd.DataFrame, feature_name: str,
     return data
 
 
-
-
-
 class LagTransformer(BaseLagGenerator):
 
     def __init__(self,
@@ -175,7 +172,7 @@ class RollingMeanTransformer(BaseLagGenerator):
                  granularity: Union[list[str], str] = None,
                  add_opponent: bool = False,
                  min_periods: int = 1,
-                 are_estimator_features=False,
+                 are_estimator_features=True,
                  prefix: str = 'rolling_mean_'):
         """
 
@@ -409,7 +406,6 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         return self._features_out
 
 
-
 class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
     def __init__(self,
@@ -443,10 +439,8 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
             for feature_name in self.features:
                 prob_feature = f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}'
                 self._features_out.append(prob_feature)
-            #  self._entity_features.append(prob_feature)
 
-            #  if self.add_opponent:
-            #    self._features_out.append(f'{prob_feature}_opponent')
+        self._estimator_features_out = self._features_out.copy()
 
     def generate_historical(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
         self.column_names = column_names
@@ -495,7 +489,6 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         return transformed_df
 
     def _generate_concat_df_with_feats(self, df: pd.DataFrame) -> pd.DataFrame:
-
 
         additional_cols_to_use = [self.binary_column] + ([self.prob_column] if self.prob_column else [])
         concat_df = self._concat_df(df, additional_cols_to_use=additional_cols_to_use)

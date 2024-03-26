@@ -44,15 +44,21 @@ class NetOverPredictedPostTransformer(BaseTransformer):
             raise ValueError("Prefix must not be empty")
 
     def fit_transform(self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None) -> pd.DataFrame:
+        ori_cols = df.columns.tolist()
         self.column_names = column_names
         self.predictor.train(df, estimator_features=self.features)
-        if self.lag_generators:
-            df = self.predictor.add_prediction(df)
+        df = self.predictor.add_prediction(df)
+        new_feature_name = self.prefix + self.predictor.pred_column
+        if self.predictor.target not in df.columns:
+            df = df.assign(**{new_feature_name: np.nan})
+        else:
+            df = df.assign(**{new_feature_name: df[self.predictor.target] - df[self.predictor.pred_column]})
         for lag_generator in self.lag_generators:
             df = lag_generator.generate_historical(df, column_names=self.column_names)
-        return self.transform(df)
+        return df[list(set(ori_cols + self.features_out))]
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        ori_cols = df.columns.tolist()
         df = self.predictor.add_prediction(df)
         new_feature_name = self.prefix + self.predictor.pred_column
         if self.predictor.target not in df.columns:
@@ -61,12 +67,9 @@ class NetOverPredictedPostTransformer(BaseTransformer):
             df = df.assign(**{new_feature_name: df[self.predictor.target] - df[self.predictor.pred_column]})
 
         for lag_generator in self.lag_generators:
-            fitted_game_ids = lag_generator._df[self.column_names.match_id].unique()
-            if df[self.column_names.match_id].nunique() != len(
-                    fitted_game_ids) + df[self.column_names.match_id].nunique():
-                df = copy.deepcopy(lag_generator).generate_historical(df, column_names=self.column_names)
+            df = lag_generator.generate_future(df)
 
-        return df.drop(columns=[self.predictor.pred_column])
+        return df[list(set(ori_cols + self.features_out))]
 
     @property
     def features_out(self) -> list[str]:
@@ -167,7 +170,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
         for lag_generator in self.lag_generators:
             transformed_df = lag_generator.generate_historical(transformed_df, column_names=self.column_names)
 
-        return df[list(set(ori_cols + self.features_out))]
+        return transformed_df[list(set(ori_cols + self.features_out))]
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self.predictor.add_prediction(df=df)
