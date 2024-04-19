@@ -2,7 +2,7 @@ from typing import Optional, Any
 
 import numpy as np
 import pandas as pd
-from skbase.base import BaseEstimator
+from sklearn.base import BaseEstimator
 from sklearn import clone
 from sklearn.base import ClassifierMixin
 from sklearn.linear_model import LogisticRegression

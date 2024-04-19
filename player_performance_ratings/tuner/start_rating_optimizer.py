@@ -28,7 +28,7 @@ class StartLeagueRatingOptimizer():
     def __init__(self,
                  pipeline_factory: PipelineFactory,
                  cross_validator: CrossValidator,
-                 max_iterations: int = 2,
+                 max_iterations: int = 10,
                  learning_step: int = 20,
                  weight_div: int = 500,
                  indirect_weight: float = 1.5,
