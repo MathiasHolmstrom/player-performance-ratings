@@ -4,7 +4,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
 from player_performance_ratings.ratings.performance_generator import GroupByTransformer, DiminishingValueTransformer, \
-    NetOverPredictedTransformer, SymmetricDistributionTransformer
+     SymmetricDistributionTransformer
 
 
 def test_min_max_transformer():

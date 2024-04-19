@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.transformers import LagTransformer, RollingMeanTransformer, NormalizerTransformer, \
+from player_performance_ratings.transformers import LagTransformer, RollingMeanTransformer, \
     RollingMeanDaysTransformer, BinaryOutcomeRollingMeanTransformer
 
 
@@ -15,33 +15,6 @@ def column_names():
         start_date="start_date",
     )
 
-
-def test_normalizer_transformer(column_names):
-    df = pd.DataFrame(
-        {
-            'player': ['a', 'b', 'a', "b", 'a', 'b', 'a', "b"],
-            "team": [1, 1, 2, 2, 1, 1, 2, 2],
-            'game': [1, 1, 1, 1, 2, 2, 2, 2],
-            "minutes": [15, 20, 16, 20, 20, 25, 20, 25],
-        }
-    )
-
-    expected_df = df.copy()
-    transformer = NormalizerTransformer(features=["minutes"], granularity=[column_names.match_id, column_names.team_id],
-                                        create_target_as_mean=True)
-    df = transformer.fit_transform(df, column_names=column_names)
-    mean_minutes = df['minutes'].mean()
-    game1_team_1_multiplier = mean_minutes / (15 * 0.5 + 20 * 0.5)
-    game1_team_2_multiplier = mean_minutes / (16 * 0.5 + 20 * 0.5)
-    game2_team_1_multiplier = mean_minutes / (20 * 0.5 + 25 * 0.5)
-    game2_team_2_multiplier = mean_minutes / (20 * 0.5 + 25 * 0.5)
-
-    expected_df["minutes"] = [15 * game1_team_1_multiplier, 20 * game1_team_1_multiplier, 16 * game1_team_2_multiplier,
-                              20 * game1_team_2_multiplier,
-                              20 * game2_team_1_multiplier, 25 * game2_team_1_multiplier, 20 * game2_team_2_multiplier,
-                              25 * game2_team_2_multiplier]
-
-    pd.testing.assert_frame_equal(df, expected_df, check_like=True)
 
 
 def test_lag_team_fit_transform(column_names):

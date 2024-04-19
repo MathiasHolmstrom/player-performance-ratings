@@ -249,8 +249,10 @@ class RollingMeanTransformer(BaseLagGenerator):
                 agg_dict).reset_index()
             grp.sort_values(by=[self.column_names.start_date, self.column_names.update_match_id], inplace=True)
 
-            grp = grp.assign(**{output_column_name: grp.groupby(self.granularity)[feature_name].apply(
-                lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())})
+            grp = grp.assign(**{
+                output_column_name: grp.groupby(self.granularity)[feature_name]
+                             .transform(lambda x: x.shift().rolling(self.window, min_periods=self.min_periods).mean())
+            })
 
             concat_df = concat_df.merge(
                 grp[self.granularity + [self.column_names.update_match_id, output_column_name]],
