@@ -394,8 +394,8 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
             df1 = df1.drop(columns=[f'{prefix_day}_{feature_name}_count' for feature_name in self.features])
 
         concat_df[self.column_names.start_date] = pd.to_datetime(concat_df[self.column_names.start_date])
-        concat_df = concat_df.join(df1[[c for c in df1.columns if c in self.features_out]],
-                                   on=[self.column_names.start_date, granularity_concat])
+        concat_df = concat_df.merge(df1[[c for c in df1.columns if c in self.features_out]].reset_index(),
+                                    on=[self.column_names.start_date, granularity_concat])
 
         return concat_df
 
