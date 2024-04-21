@@ -220,8 +220,6 @@ class BaseLagGenerator():
             transformed_df[f].replace(-999.21345, np.nan, inplace=True)
         if not transformed_df[self._entity_features].isnull().all().all():
             transformed_df[self._entity_features] = transformed_df.groupby(self.granularity)[self._entity_features].transform(lambda x: x.fillna(method='ffill'))
-        else:
-            print(self.granularity)
 
         team_features = transformed_df.groupby([self.column_names.team_id, self.column_names.match_id])[
             self._entity_features].mean().reset_index()

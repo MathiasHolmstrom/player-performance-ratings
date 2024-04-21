@@ -78,10 +78,12 @@ class StartRatingGenerator():
         if self.team_weight > 0:
             tot_player_game_count = sum([p.games_played for p in team_pre_match_player_ratings])
             if tot_player_game_count >= self.min_match_count_team_rating:
-                sum_team_rating = sum(player.rating_value * player.match_performance.participation_weight for player in
-                                      team_pre_match_player_ratings)
+                sum_team_rating = sum(
+                    player.rating_value * player.match_performance.projected_participation_weight for player in
+                    team_pre_match_player_ratings)
+
                 sum_participation_weight = sum(
-                    player.match_performance.participation_weight for player in team_pre_match_player_ratings)
+                    player.match_performance.projected_participation_weight for player in team_pre_match_player_ratings)
 
                 existing_team_rating = sum_team_rating / sum_participation_weight if sum_participation_weight > 0 else 0
 

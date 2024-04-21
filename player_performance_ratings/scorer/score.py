@@ -105,41 +105,49 @@ class OrdinalLossScorer(BaseScorer):
         super().__init__(target=target, pred_column=pred_column, filters=filters, granularity=granularity)
 
     def score(self, df: pd.DataFrame) -> float:
-        if self.targets_to_measure is None:
-            self.targets_to_measure = df[self.target].unique().tolist()
-        self.targets_to_measure.sort()
         df = df.copy()
         df = apply_filters(df, self.filters)
         df.reset_index(drop=True, inplace=True)
-        probs = df[self.pred_column_name]
-        last_column_name = f'prob_under_{self.targets_to_measure[0] - 0.5}'
-        df[last_column_name] = probs.apply(lambda x: x[0])
 
+
+        distinct_classes_variations = df.drop_duplicates(subset=['classes'])['classes'].tolist()
+
+        sum_lrs = [0 for _ in range(len(distinct_classes_variations))]
         sum_lr = 0
-
-        for idx, class_ in enumerate(self.targets_to_measure[1:]):
-
-            p_c = 'prob_under_' + str(class_ + 0.5)
-            df[p_c] = probs.apply(lambda x: x[idx+1]) + df[last_column_name]
-
-            count_exact = len(df[df['__target'] == class_])
-            weight_class = count_exact / len(df)
-
-            if self.granularity:
-                grouped = df.groupby(self.granularity + ['__target'])[p_c].mean().reset_index()
+        for variation_idx, distinct_class_variation in enumerate(distinct_classes_variations):
+            if self.targets_to_measure:
+                targets_to_measure = self.targets_to_measure.sort()
             else:
-                grouped = df
+                targets_to_measure = distinct_class_variation
 
-            grouped['min'] = 0.0001
-            grouped['max'] = 0.9999
-            grouped[p_c] = np.minimum(grouped['max'], grouped[p_c])
-            grouped[p_c] = np.maximum(grouped['min'], grouped[p_c])
-            grouped['log_loss'] = 0
-            grouped.loc[grouped['__target'] <= class_, 'log_loss'] = np.log(grouped[p_c])
-            grouped.loc[grouped['__target'] > class_, 'log_loss'] = np.log(1 - grouped[p_c])
-            log_loss = grouped['log_loss'].mean()
-            sum_lr -= log_loss * weight_class
+            rows_target_group = df[df['classes'].apply(lambda x: x == distinct_class_variation)]
+            probs = rows_target_group[self.pred_column_name]
+            last_column_name = f'prob_under_{distinct_class_variation[0] - 0.5}'
+            rows_target_group[last_column_name] = probs.apply(lambda x: x[0])
 
-            last_column_name = p_c
+            for idx, class_ in enumerate(distinct_class_variation[1:]):
 
+                p_c = 'prob_under_' + str(class_ + 0.5)
+                rows_target_group[p_c] = probs.apply(lambda x: x[idx + 1]) + rows_target_group[last_column_name]
+
+                count_exact = len(rows_target_group[rows_target_group['__target'] == class_])
+                weight_class = count_exact / len(rows_target_group)
+
+                if self.granularity:
+                    grouped = rows_target_group.groupby(self.granularity + ['__target'])[p_c].mean().reset_index()
+                else:
+                    grouped = rows_target_group
+
+                grouped['min'] = 0.0001
+                grouped['max'] = 0.9999
+                grouped[p_c] = np.minimum(grouped['max'], grouped[p_c])
+                grouped[p_c] = np.maximum(grouped['min'], grouped[p_c])
+                grouped['log_loss'] = 0
+                grouped.loc[grouped['__target'] <= class_, 'log_loss'] = np.log(grouped[p_c])
+                grouped.loc[grouped['__target'] > class_, 'log_loss'] = np.log(1 - grouped[p_c])
+                log_loss = grouped['log_loss'].mean()
+                sum_lrs[variation_idx] -= log_loss * weight_class
+
+                last_column_name = p_c
+            sum_lr += sum_lrs[variation_idx] * len(rows_target_group) / len(df)
         return sum_lr
