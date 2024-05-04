@@ -4,6 +4,7 @@ import pytest
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.transformers import LagTransformer, RollingMeanTransformer, \
     RollingMeanDaysTransformer, BinaryOutcomeRollingMeanTransformer
+from player_performance_ratings.transformers.lag_generators import RollingMeanTransformerPolars
 
 
 @pytest.fixture
@@ -296,7 +297,7 @@ def test_rolling_mean_fit_transform(column_names):
     )
     original_df = df.copy()
 
-    rolling_mean_transformation = RollingMeanTransformer(
+    rolling_mean_transformation = RollingMeanTransformerPolars(
         features=['points'],
         window=2,
         min_periods=1,
@@ -336,7 +337,7 @@ def test_rolling_mean_fit_transform_and_transform(column_names):
     })
 
     original_future_df = future_df.copy()
-    rolling_mean_transformation = RollingMeanTransformer(
+    rolling_mean_transformation = RollingMeanTransformerPolars(
         features=['points'],
         window=2,
         min_periods=1,
@@ -373,7 +374,7 @@ def test_rolling_mean_transformer_fit_transformer_team_stat(column_names):
 
     expected_df = historical_df.copy()
 
-    rolling_mean_transformation = RollingMeanTransformer(
+    rolling_mean_transformation = RollingMeanTransformerPolars(
         features=['score_difference'],
         window=2,
         min_periods=1,

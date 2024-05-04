@@ -4,11 +4,13 @@ from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
+import polars as pl
 from player_performance_ratings.predictor import GameTeamPredictor
 
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.predictor._base import BasePredictor
-from player_performance_ratings.transformers.base_transformer import BaseTransformer, BaseLagGenerator
+from player_performance_ratings.transformers.base_transformer import BaseTransformer, BaseLagGenerator, \
+    BaseLagGeneratorPolars
 from player_performance_ratings.utils import validate_sorting
 
 
@@ -247,6 +249,7 @@ class RollingMeanTransformer(BaseLagGenerator):
             agg_dict = {feature_name: 'mean', self.column_names.start_date: 'first'}
             grp = concat_df.groupby(self.granularity + [self.column_names.update_match_id]).agg(
                 agg_dict).reset_index()
+            grp = grp[grp[self.column_names.start_date].notnull()]
             grp.sort_values(by=[self.column_names.start_date, self.column_names.update_match_id], inplace=True)
 
             grp = grp.assign(**{
@@ -514,3 +517,118 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         feats_added = [f for f in self.features_out if f in concat_df.columns]
         concat_df[feats_added] = concat_df.groupby(self.granularity)[feats_added].fillna(method='ffill')
         return concat_df
+
+
+class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
+
+    def __init__(self,
+                 features: list[str],
+                 window: int,
+                 granularity: Union[list[str], str] = None,
+                 add_opponent: bool = False,
+                 min_periods: int = 1,
+                 are_estimator_features=True,
+                 prefix: str = 'rolling_mean_'):
+
+        super().__init__(features=features, add_opponent=add_opponent, iterations=[window],
+                         prefix=prefix, granularity=granularity, are_estimator_features=are_estimator_features)
+        self.window = window
+        self.min_periods = min_periods
+
+    def generate_historical(self, df: Union[pd.DataFrame, pl.DataFrame], column_names: ColumnNames) -> Union[
+        pl.DataFrame, pd.DataFrame]:
+        if isinstance(df, pd.DataFrame):
+            ori_type = 'pd'
+            df = pl.DataFrame(df)
+        else:
+            ori_type = 'pl'
+        self.column_names = column_names
+        self.granularity = self.granularity or [self.column_names.player_id]
+        self._store_df(df)
+        concat_df = self._generate_concat_df_with_feats(df)
+        df = self._create_transformed_df(df=df, concat_df=concat_df)
+        if ori_type == 'pd':
+            return df.to_pandas()
+        return df
+
+    def generate_future(self, df: Union[pd.DataFrame, pl.DataFrame]) -> Union[pl.DataFrame, pd.DataFrame]:
+        if isinstance(df, pd.DataFrame):
+            ori_type = 'pd'
+            df = pl.DataFrame(df)
+        else:
+            ori_type = 'pl'
+
+        concat_df = self._generate_concat_df_with_feats(df=df)
+        unique_match_ids = df.select(pl.col(self.column_names.match_id).cast(pl.Utf8).unique()).to_series()
+        transformed_df = concat_df.filter(pl.col(self.column_names.match_id).cast(pl.Utf8).is_in(unique_match_ids))
+        transformed_future = self._generate_future_feats(transformed_df=transformed_df, ori_df=df)
+        if ori_type == 'pd':
+            return transformed_future.to_pandas()
+        return transformed_future
+
+    def _generate_concat_df_with_feats(self, df: pl.DataFrame) -> pl.DataFrame:
+
+        if self._df is None:
+            raise ValueError("fit_transform needs to be called before transform")
+
+        concat_df = self._concat_df(df)
+
+        for feature_name in self.features:
+
+            # Apply weighting if participation_weight column is present
+            if self.column_names.participation_weight:
+                concat_df = concat_df.with_columns(
+                    (concat_df[feature_name] * concat_df[self.column_names.participation_weight]).alias(feature_name)
+                )
+
+            # Generate the output column name
+            output_column_name = f'{self.prefix}{self.window}_{feature_name}'
+
+            # Check if the output column already exists
+            if output_column_name in concat_df.columns:
+                raise ValueError(
+                    f'Column {output_column_name} already exists. Choose a different prefix or ensure no duplication was performed')
+
+            agg_dict = [
+                pl.col(feature_name).mean().alias(feature_name),
+                pl.col(self.column_names.start_date).first().alias(self.column_names.start_date)
+            ]
+
+            grp = concat_df.group_by(self.granularity + [self.column_names.update_match_id]).agg(agg_dict)
+
+            grp = grp.filter(pl.col(self.column_names.start_date).is_not_null())
+
+            grp = (
+                grp
+                .sort([self.column_names.start_date, self.column_names.update_match_id])
+                .with_columns(
+                    pl.col(feature_name)
+                    .shift()  # shift the data
+                    .rolling_mean(window_size=self.window,
+                                  min_periods=self.min_periods
+                                  )  # apply rolling mean
+                    .over(self.granularity)
+                    .alias(output_column_name)  # name the output column
+                )
+            )
+
+            concat_df = concat_df.join(
+                grp.select(self.granularity + [self.column_names.update_match_id, output_column_name]),
+                on=self.granularity + [self.column_names.update_match_id],
+                how='left'
+            )
+
+            concat_df = concat_df.sort(
+                [self.column_names.start_date, self.column_names.match_id, self.column_names.team_id,
+                 self.column_names.player_id])
+
+        feats_added = [f for f in self.features_out if f in concat_df.columns]
+
+        concat_df = concat_df.with_columns(
+            [pl.col(f).forward_fill().over(self.granularity).alias(f) for f in feats_added]
+        )
+        return concat_df
+
+    @property
+    def features_out(self) -> list[str]:
+        return self._features_out

@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from typing import List, Optional, Union, Any
-from dataclasses_json import DataClassJsonMixin
 
 
 @dataclass
@@ -44,7 +43,7 @@ class MatchPerformance:
 
 
 @dataclass
-class PlayerRating(DataClassJsonMixin):
+class PlayerRating:
     id: str
     rating_value: float
     name: Optional[str] = None
@@ -64,7 +63,7 @@ class Team:
 
 
 @dataclass
-class TeamRating(DataClassJsonMixin):
+class TeamRating:
     id: str
     name: str
     rating_value: float

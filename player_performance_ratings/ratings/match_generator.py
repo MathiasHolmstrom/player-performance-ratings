@@ -67,7 +67,7 @@ def convert_df_to_matches(
     validate_sorting(df=df, column_names=column_names)
 
     col_names = column_names
-    df[col_names.start_date] = pd.to_datetime(df[col_names.start_date], format='%Y-%m-%d %H:%M:%S')
+    df[col_names.start_date] = pd.to_datetime(pd.to_datetime(df[col_names.start_date]), format='%Y-%m-%d %H:%M:%S')
     try:
         date_time = df[col_names.start_date].dt.tz_convert('UTC')
     except TypeError:
