@@ -326,27 +326,13 @@ class BaseLagGeneratorPolars():
     def features_out(self) -> list[str]:
         return self._features_out
 
-    def _concat_df(self, df: pl.DataFrame, additional_cols_to_use: Optional[list[str]] = None) -> pl.DataFrame:
+    def _concat_df(self, df: pl.DataFrame) -> pl.DataFrame:
         df = self._string_convert(df=df)
         df = df.with_columns(
             [pl.col(feature).cast(pl.Float64).alias(feature) for feature in self.features if feature in df.columns]
         )
 
         df = df[[c for c in df.columns if c not in self.features_out]]
-
-        cols = [f for f in {*self.features, *self.granularity, self.column_names.match_id, self.column_names.team_id,
-                            self.column_names.player_id,
-                            self.column_names.parent_team_id, self.column_names.update_match_id,
-                            self.column_names.start_date} if f in df.columns]
-
-        if self.column_names.participation_weight in df.columns:
-            cols += [self.column_names.participation_weight]
-        if self.column_names.projected_participation_weight in df.columns:
-            cols += [self.column_names.projected_participation_weight]
-
-        if additional_cols_to_use:
-            cols += [f for f in additional_cols_to_use if f in df.columns]
-
         cols = [c for c in self._df.columns if c in df.columns]
 
         concat_df = pl.concat([self._df, df.select(cols)], how="diagonal_relaxed")

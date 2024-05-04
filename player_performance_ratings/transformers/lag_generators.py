@@ -306,22 +306,34 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         validate_sorting(df=df, column_names=self.column_names)
         self._store_df(df)
         concat_df = self._generate_concat_df_with_feats(df)
-        df = self._create_transformed_df(df=df, concat_df=concat_df)
+        transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
 
         if self.add_count:
             for day in self.days:
-                df = df.assign(**{f'{self.prefix}{day}_count': df[f'{self.prefix}{day}_count'].fillna(0)})
+                transformed_df = transformed_df.assign(
+                    **{f'{self.prefix}{day}_count': transformed_df[f'{self.prefix}{day}_count'].fillna(0)})
                 if self.add_opponent:
-                    df = df.assign(
-                        **{f'{self.prefix}{day}_count_opponent': df[f'{self.prefix}{day}_count_opponent'].fillna(0)})
-        return df
+                    transformed_df = transformed_df.assign(
+                        **{f'{self.prefix}{day}_count_opponent': transformed_df[
+                            f'{self.prefix}{day}_count_opponent'].fillna(0)})
+
+        for c in [self.column_names.player_id, self.column_names.team_id, self.column_names.match_id]:
+            transformed_df[c] = transformed_df[c].astype(df[c].dtype)
+        return df.merge(transformed_df[[self.column_names.match_id, self.column_names.team_id, self.column_names.player_id, *self.features_out]],
+                                    on=[self.column_names.match_id, self.column_names.team_id, self.column_names.player_id])
 
     def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
         concat_df = self._generate_concat_df_with_feats(df=df)
         transformed_df = concat_df[
             concat_df[self.column_names.match_id].isin(df[self.column_names.match_id].astype('str').unique().tolist())]
-        transformed_future = self._generate_future_feats(transformed_df=transformed_df, ori_df=df)
-        return transformed_future
+        transformed_df = self._generate_future_feats(transformed_df=transformed_df, ori_df=df)
+        for c in [self.column_names.player_id, self.column_names.team_id, self.column_names.match_id]:
+            transformed_df[c] = transformed_df[c].astype(df[c].dtype)
+        return df.merge(transformed_df[
+                            [self.column_names.match_id, self.column_names.team_id, self.column_names.player_id,
+                             *self.features_out]],
+                        on=[self.column_names.match_id, self.column_names.team_id, self.column_names.player_id])
+
 
     def _generate_concat_df_with_feats(self, df: pd.DataFrame) -> pd.DataFrame:
         if self._df is None:
