@@ -558,7 +558,14 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         self.granularity = self.granularity or [self.column_names.player_id]
         self._store_df(df)
         concat_df = self._generate_concat_df_with_feats(df)
-        df = self._create_transformed_df(df=df, concat_df=concat_df)
+        transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
+        cn = self.column_names
+        recasts_mapping = {}
+        for c in [cn.player_id, cn.team_id, cn.match_id]:
+            if transformed_df[c].dtype != df[c].dtype:
+                recasts_mapping[c] = df[c].dtype
+        transformed_df = transformed_df.cast(recasts_mapping)
+        df = df.join(transformed_df.select(cn.player_id, cn.team_id, cn.match_id, *self.features_out), on=[cn.player_id, cn.team_id, cn.match_id], how='left')
         if ori_type == 'pd':
             return df.to_pandas()
         return df
@@ -573,10 +580,17 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         concat_df = self._generate_concat_df_with_feats(df=df)
         unique_match_ids = df.select(pl.col(self.column_names.match_id).cast(pl.Utf8).unique()).to_series()
         transformed_df = concat_df.filter(pl.col(self.column_names.match_id).cast(pl.Utf8).is_in(unique_match_ids))
-        transformed_future = self._generate_future_feats(transformed_df=transformed_df, ori_df=df)
+        transformed_df = self._generate_future_feats(transformed_df=transformed_df, ori_df=df)
+        cn = self.column_names
+        recasts_mapping = {}
+        for c in [cn.player_id, cn.team_id, cn.match_id]:
+            if transformed_df[c].dtype != df[c].dtype:
+                recasts_mapping[c] = df[c].dtype
+        transformed_df = transformed_df.cast(recasts_mapping)
+        df = df.join(transformed_df.select(cn.player_id, cn.team_id, cn.match_id, *self.features_out), on=[cn.player_id, cn.team_id, cn.match_id], how='left')
         if ori_type == 'pd':
-            return transformed_future.to_pandas()
-        return transformed_future
+            return df.to_pandas()
+        return df
 
     def _generate_concat_df_with_feats(self, df: pl.DataFrame) -> pl.DataFrame:
 

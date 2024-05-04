@@ -309,10 +309,6 @@ def test_rolling_mean_fit_transform(column_names):
     expected_df = original_df.assign(**{
         f"{rolling_mean_transformation.prefix}2_points": [None, None, 1, (3 + 1) / 2]
     })
-    expected_df['team'] = expected_df['team'].astype('str')
-    expected_df['game'] = expected_df['game'].astype('str')
-    expected_df['player'] = expected_df['player'].astype('str')
-
     pd.testing.assert_frame_equal(df_with_rolling_mean, expected_df, check_like=True, check_dtype=False)
 
 
@@ -352,9 +348,6 @@ def test_rolling_mean_fit_transform_and_transform(column_names):
         f"{rolling_mean_transformation.prefix}2_points": [2.5, 2, 2.5, 2],
         rolling_mean_transformation.features_out[1]: [2, 2.5, 2, 2.5]
     })
-    expected_df['team'] = expected_df['team'].astype('str')
-    expected_df['game'] = expected_df['game'].astype('str')
-    expected_df['player'] = expected_df['player'].astype('str')
     pd.testing.assert_frame_equal(transformed_future_df, expected_df, check_like=True)
 
 
@@ -383,9 +376,6 @@ def test_rolling_mean_transformer_fit_transformer_team_stat(column_names):
 
     transformed_data = rolling_mean_transformation.generate_historical(historical_df, column_names=column_names)
     expected_df[rolling_mean_transformation.prefix + "2_score_difference"] = [None, None, None, None, 10, 10, -10, -10]
-    expected_df['team'] = expected_df['team'].astype('str')
-    expected_df['game'] = expected_df['game'].astype('str')
-    expected_df['player'] = expected_df['player'].astype('str')
     pd.testing.assert_frame_equal(transformed_data, expected_df, check_like=True, check_dtype=False)
 
 
@@ -656,10 +646,6 @@ def test_rolling_mean_transform_parent_match_id(column_names: ColumnNames):
     transformed_df = transformer.generate_historical(historical_df, column_names=column_names)
 
     expected_df = expected_df.assign(**{transformer.features_out[0]: [None, None, 1.5, (1.5 + 3) / 2]})
-    expected_df['team'] = expected_df['team'].astype('str')
-    expected_df['game'] = expected_df['game'].astype('str')
-    expected_df['player'] = expected_df['player'].astype('str')
-    expected_df['series_id'] = expected_df['series_id'].astype('str')
     pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
