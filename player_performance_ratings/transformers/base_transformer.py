@@ -446,10 +446,7 @@ class BaseLagGeneratorPolars():
                 pl.when(pl.col(f) == -999.21345).then(np.nan).otherwise(pl.col(f)).alias(f))
             if transformed_df[f].is_null().sum() == len(transformed_df):
                 transformed_df = transformed_df.with_columns(
-                    [
-                        pl.col(feature).forward_fill().over(self.granularity).alias(feature)
-                        for feature in self._entity_features
-                    ]
+                        pl.col(f).forward_fill().over(self.granularity).alias(f)
                 )
 
         team_features = (
@@ -462,7 +459,6 @@ class BaseLagGeneratorPolars():
             **{f: f"{f}_opponent" for f in self._entity_features}
         }
 
-        # Rename columns using select and alias
         df_opponent_feature = team_features.select([
             pl.col(name).alias(rename_mapping.get(name, name)) for name in team_features.columns
         ])

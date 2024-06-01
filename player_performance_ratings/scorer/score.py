@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -109,16 +110,13 @@ class OrdinalLossScorer(BaseScorer):
         df = apply_filters(df, self.filters)
         df.reset_index(drop=True, inplace=True)
 
-
         distinct_classes_variations = df.drop_duplicates(subset=['classes'])['classes'].tolist()
 
         sum_lrs = [0 for _ in range(len(distinct_classes_variations))]
         sum_lr = 0
         for variation_idx, distinct_class_variation in enumerate(distinct_classes_variations):
-            if self.targets_to_measure:
-                targets_to_measure = self.targets_to_measure.sort()
-            else:
-                targets_to_measure = distinct_class_variation
+            if not isinstance(distinct_class_variation, list) and math.isnan(distinct_class_variation):
+                continue
 
             rows_target_group = df[df['classes'].apply(lambda x: x == distinct_class_variation)]
             probs = rows_target_group[self.pred_column_name]

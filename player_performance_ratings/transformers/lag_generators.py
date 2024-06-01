@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Union
@@ -554,6 +555,10 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
             df = pl.DataFrame(df)
         else:
             ori_type = 'pl'
+        if df.unique(subset=[column_names.player_id, column_names.team_id, column_names.match_id]).shape[0] != df.shape[0]:
+            raise ValueError(
+                f"Duplicated rows in df. Df must be a unique combination of {column_names.player_id} and {column_names.update_match_id}")
+
         self.column_names = column_names
         self.granularity = self.granularity or [self.column_names.player_id]
         self._store_df(df)
@@ -598,55 +603,43 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
             raise ValueError("fit_transform needs to be called before transform")
 
         concat_df = self._concat_df(df)
+        if self.column_names.participation_weight:
+            concat_df = concat_df.with_columns([
+                (concat_df[feature_name] * concat_df[self.column_names.participation_weight]).alias(feature_name)
+                for feature_name in self.features
+            ])
 
-        for feature_name in self.features:
+        agg_dict = [
+            pl.col(feature_name).mean().alias(feature_name)
+            for feature_name in self.features
+        ]
+        agg_dict.append(pl.col(self.column_names.start_date).first().alias(self.column_names.start_date))
 
-            # Apply weighting if participation_weight column is present
-            if self.column_names.participation_weight:
-                concat_df = concat_df.with_columns(
-                    (concat_df[feature_name] * concat_df[self.column_names.participation_weight]).alias(feature_name)
-                )
+        grp = concat_df.group_by(self.granularity + [self.column_names.update_match_id]).agg(agg_dict)
+        grp = grp.filter(pl.col(self.column_names.start_date).is_not_null())
+        grp = grp.sort([self.column_names.start_date, self.column_names.update_match_id])
 
-            # Generate the output column name
-            output_column_name = f'{self.prefix}{self.window}_{feature_name}'
+        rolling_means = [
+            pl.col(feature_name)
+            .shift()
+            .rolling_mean(window_size=self.window, min_periods=self.min_periods)
+            .over(self.granularity)
+            .alias(f'{self.prefix}{self.window}_{feature_name}')
+            for feature_name in self.features
+        ]
+        grp = grp.with_columns(rolling_means)
 
-            # Check if the output column already exists
-            if output_column_name in concat_df.columns:
-                raise ValueError(
-                    f'Column {output_column_name} already exists. Choose a different prefix or ensure no duplication was performed')
+        selection_columns = self.granularity + [self.column_names.update_match_id] + [
+            f'{self.prefix}{self.window}_{feature}' for feature in self.features]
+        concat_df = concat_df.join(
+            grp.select(selection_columns),
+            on=self.granularity + [self.column_names.update_match_id],
+            how='left'
+        )
 
-            agg_dict = [
-                pl.col(feature_name).mean().alias(feature_name),
-                pl.col(self.column_names.start_date).first().alias(self.column_names.start_date)
-            ]
-
-            grp = concat_df.group_by(self.granularity + [self.column_names.update_match_id]).agg(agg_dict)
-
-            grp = grp.filter(pl.col(self.column_names.start_date).is_not_null())
-
-            grp = (
-                grp
-                .sort([self.column_names.start_date, self.column_names.update_match_id])
-                .with_columns(
-                    pl.col(feature_name)
-                    .shift()  # shift the data
-                    .rolling_mean(window_size=self.window,
-                                  min_periods=self.min_periods
-                                  )  # apply rolling mean
-                    .over(self.granularity)
-                    .alias(output_column_name)  # name the output column
-                )
-            )
-
-            concat_df = concat_df.join(
-                grp.select(self.granularity + [self.column_names.update_match_id, output_column_name]),
-                on=self.granularity + [self.column_names.update_match_id],
-                how='left'
-            )
-
-            concat_df = concat_df.sort(
-                [self.column_names.start_date, self.column_names.match_id, self.column_names.team_id,
-                 self.column_names.player_id])
+        concat_df = concat_df.sort(
+            [self.column_names.start_date, self.column_names.match_id, self.column_names.team_id,
+             self.column_names.player_id])
 
         feats_added = [f for f in self.features_out if f in concat_df.columns]
 
