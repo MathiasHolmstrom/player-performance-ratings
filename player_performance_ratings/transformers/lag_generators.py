@@ -474,43 +474,47 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
         return known_future_features
 
-    def _add_weighted_prob(self, transformed_df: pd.DataFrame) -> pd.DataFrame:
-
-        if self.prob_column:
-            for idx, feature_name in enumerate(self.features):
-                weighted_prob_feat_name = f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}'
-                transformed_df[weighted_prob_feat_name] = transformed_df[
-                                                              f'{self.prefix}{self.window}_{feature_name}_1'] * \
-                                                          transformed_df[
-                                                              self.prob_column] + \
-                                                          transformed_df[
-                                                              f'{self.prefix}{self.window}_{feature_name}_0'] * (
-                                                                  1 -
-                                                                  transformed_df[
-                                                                      self.prob_column])
-        return transformed_df
-
     def _generate_concat_df_with_feats(self, df: pd.DataFrame) -> pd.DataFrame:
 
         additional_cols_to_use = [self.binary_column] + ([self.prob_column] if self.prob_column else [])
         concat_df = self._concat_df(df, additional_cols_to_use=additional_cols_to_use)
+        aggregation = {**{f: 'mean' for f in self.features}, **{self.binary_column: 'first'}}
+        grouped = concat_df.groupby(
+            [self.column_names.update_match_id, *self.granularity, self.column_names.start_date]).agg(
+            aggregation).reset_index()
 
+        grouped = grouped.sort_values(by=[self.column_names.start_date, self.column_names.update_match_id])
+
+        feats_added = []
         for feature in self.features:
-            mask_result_1 = concat_df[self.binary_column] == 1
-            mask_result_0 = concat_df[self.binary_column] == 0
+            mask_result_1 = grouped[self.binary_column] == 1
+            mask_result_0 = grouped[self.binary_column] == 0
 
-            concat_df['value_result_1'] = concat_df[feature].where(mask_result_1)
-            concat_df['value_result_0'] = concat_df[feature].where(mask_result_0)
+            grouped['value_result_1'] = grouped[feature].where(mask_result_1)
+            grouped['value_result_0'] = grouped[feature].where(mask_result_0)
 
-            concat_df[f'{self.prefix}{self.window}_{feature}_1'] = concat_df.groupby(self.granularity)[
+            grouped[f'{self.prefix}{self.window}_{feature}_1'] = grouped.groupby(self.granularity)[
                 'value_result_1'].transform(
-                lambda x: x.shift().rolling(window=self.window, min_periods=self.min_periods).mean())
-            concat_df[f'{self.prefix}{self.window}_{feature}_0'] = concat_df.groupby(self.granularity)[
+                lambda x: x.shift().rolling(window=self.window, min_periods=1).mean())
+            grouped[f'{self.prefix}{self.window}_{feature}_0'] = grouped.groupby(self.granularity)[
                 'value_result_0'].transform(
-                lambda x: x.shift().rolling(window=self.window, min_periods=self.min_periods).mean())
+                lambda x: x.shift().rolling(window=self.window, min_periods=1).mean())
 
-            concat_df.drop(['value_result_1', 'value_result_0'], axis=1, inplace=True)
+            feats_added.append(f'{self.prefix}{self.window}_{feature}_1')
+            feats_added.append(f'{self.prefix}{self.window}_{feature}_0')
 
-        feats_added = [f for f in self.features_out if f in concat_df.columns]
+        grouped['count_result_1'] = grouped[grouped[self.binary_column] == 1].groupby([*self.granularity]).cumcount()
+        grouped['count_result_0'] = grouped[grouped[self.binary_column] == 0].groupby(
+            [*self.granularity]).cumcount()
+        grouped['count_result_1'] = grouped.groupby(self.granularity)['count_result_1'].fillna(method='ffill')
+        grouped['count_result_0'] = grouped.groupby(self.granularity)['count_result_0'].fillna(method='ffill')
+        for feature in self.features:
+            grouped.loc[grouped['count_result_1'] < self.window, f'{self.prefix}{self.window}_{feature}_1'] = np.nan
+            grouped.loc[grouped['count_result_0'] < self.window, f'{self.prefix}{self.window}_{feature}_0'] = np.nan
+
+        concat_df = concat_df.merge(
+            grouped[[self.column_names.update_match_id, *self.granularity, *feats_added]],
+            on=[self.column_names.update_match_id, *self.granularity], how='left')
+
         concat_df[feats_added] = concat_df.groupby(self.granularity)[feats_added].fillna(method='ffill')
         return concat_df
