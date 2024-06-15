@@ -1,6 +1,6 @@
 import copy
+from unittest import mock
 
-import mock
 import pytest
 
 from player_performance_ratings.data_structures import MatchTeam, PreMatchPlayerRating, MatchPerformance, \

@@ -1,12 +1,12 @@
 import copy
+from unittest import mock
 
-import mock
 import pandas as pd
+from skbase.utils import deep_equals
 
 from player_performance_ratings.predictor import Predictor
 from player_performance_ratings.tuner.performances_generator_tuner import PerformancesSearchRange
 from player_performance_ratings.tuner.utils import ParameterSearchRange
-from skbase.testing.utils.deep_equals import deep_equals
 
 from player_performance_ratings import ColumnNames, Pipeline
 from player_performance_ratings.ratings import UpdateRatingGenerator

@@ -113,7 +113,7 @@ class BaseLagGenerator():
         df = df[[c for c in df.columns if c not in self.features_out]]
 
         cols = [f for f in list(
-            set([*self.features, *self.granularity, self.column_names.match_id, self.column_names.team_id,
+            set([*self.features, *self.granularity, self.column_names.match_id, self.column_names.team_id, 'is_future',
                  self.column_names.player_id,
                  self.column_names.parent_team_id, self.column_names.update_match_id,
                  self.column_names.start_date])) if f in df.columns]
@@ -142,7 +142,7 @@ class BaseLagGenerator():
             set([*self.features, *self.granularity, self.column_names.match_id, self.column_names.team_id,
                  self.column_names.player_id,
                  self.column_names.parent_team_id, self.column_names.update_match_id,
-                 self.column_names.start_date]))
+                 self.column_names.start_date, 'is_future']))
         if self.column_names.participation_weight in df.columns:
             cols += [self.column_names.participation_weight]
         if self.column_names.projected_participation_weight in df.columns:

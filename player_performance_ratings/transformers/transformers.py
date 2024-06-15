@@ -32,11 +32,12 @@ class NetOverPredictedPostTransformer(BaseTransformer):
         self._estimator_features_out = []
         for lag_generator in self.lag_generators:
             if not lag_generator.features:
-                lag_generator.features = [self.predictor.pred_column]
+                lag_generator.features = [new_feature_name]
                 for iteration in lag_generator.iterations:
-                    lag_generator._features_out = [f"{lag_generator.prefix}{iteration}_{self.predictor.pred_column}"]
+                    lag_generator._features_out = [f"{lag_generator.prefix}{iteration}_{new_feature_name}"]
                     self.features_out.extend(lag_generator._features_out.copy())
                     self._estimator_features_out.extend(lag_generator._features_out.copy())
+
         if self._are_estimator_features:
             self._estimator_features_out.append(self.predictor.pred_column)
             self.features_out.append(self.predictor.pred_column)

@@ -73,19 +73,25 @@ class LagTransformer(BaseLagGenerator):
         self._df = None
 
     def generate_historical(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
+        df = df.assign(is_future=0)
         self.column_names = column_names
         self.granularity = self.granularity or [self.column_names.player_id]
         validate_sorting(df=df, column_names=self.column_names)
         self._store_df(df)
         concat_df = self._generate_concat_df_with_feats(df)
         df = self._create_transformed_df(df=df, concat_df=concat_df)
+        if 'is_future' in df.columns:
+            df = df.drop(columns='is_future')
         return df
 
     def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.assign(is_future=1)
         concat_df = self._generate_concat_df_with_feats(df=df)
         transformed_df = concat_df[
             concat_df[self.column_names.match_id].isin(df[self.column_names.match_id].astype('str').unique().tolist())]
         transformed_future = self._generate_future_feats(transformed_df=transformed_df, ori_df=df)
+        if 'is_future' in transformed_future.columns:
+            transformed_future = transformed_future.drop(columns='is_future')
         return transformed_future
 
     def _generate_concat_df_with_feats(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -211,19 +217,25 @@ class RollingMeanTransformer(BaseLagGenerator):
         self.min_periods = min_periods
 
     def generate_historical(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
+        df = df.assign(is_future=0)
         self.column_names = column_names
         self.granularity = self.granularity or [self.column_names.player_id]
         validate_sorting(df=df, column_names=self.column_names)
         self._store_df(df)
         concat_df = self._generate_concat_df_with_feats(df)
         df = self._create_transformed_df(df=df, concat_df=concat_df)
+        if 'is_future' in df.columns:
+            df = df.drop(columns='is_future')
         return df
 
     def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.assign(is_future=1)
         concat_df = self._generate_concat_df_with_feats(df=df)
         transformed_df = concat_df[
             concat_df[self.column_names.match_id].isin(df[self.column_names.match_id].astype('str').unique().tolist())]
         transformed_future = self._generate_future_feats(transformed_df=transformed_df, ori_df=df)
+        if 'is_future' in transformed_future.columns:
+            transformed_future = transformed_future.drop(columns='is_future')
         return transformed_future
 
     def _generate_concat_df_with_feats(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -298,6 +310,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                     self._features_out.append(f'{self.prefix}{day}_count_opponent')
 
     def generate_historical(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
+        df = df.assign(is_future=0)
         self.column_names = column_names
         self.granularity = self.granularity or [self.column_names.player_id]
         validate_sorting(df=df, column_names=self.column_names)
@@ -311,13 +324,18 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                 if self.add_opponent:
                     df = df.assign(
                         **{f'{self.prefix}{day}_count_opponent': df[f'{self.prefix}{day}_count_opponent'].fillna(0)})
+        if 'is_future' in df.columns:
+            df = df.drop(columns='is_future')
         return df
 
     def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.assign(is_future=1)
         concat_df = self._generate_concat_df_with_feats(df=df)
         transformed_df = concat_df[
             concat_df[self.column_names.match_id].isin(df[self.column_names.match_id].astype('str').unique().tolist())]
         transformed_future = self._generate_future_feats(transformed_df=transformed_df, ori_df=df)
+        if 'is_future' in transformed_future.columns:
+            transformed_future = transformed_future.drop(columns='is_future')
         return transformed_future
 
     def _generate_concat_df_with_feats(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -333,10 +351,10 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                     **{feature_name: concat_df[feature_name] * concat_df[self.column_names.participation_weight]})
 
         concat_df = concat_df.assign(
-            **{self.column_names.start_date: lambda x: x[self.column_names.start_date].dt.date})
+            **{'__date_day': lambda x: x[self.column_names.start_date].dt.date})
 
         aggregations = {feature: 'mean' for feature in self.features}
-        aggregations[self.column_names.start_date] = 'first'
+        aggregations['__date_day'] = 'first'
         grouped = concat_df.groupby(
             [*self.granularity, self.column_names.update_match_id]).agg(
             aggregations).reset_index()
@@ -353,7 +371,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                                     on=self.granularity + [self.column_names.update_match_id], how='left')
         concat_df = concat_df.sort_values(by=[self.column_names.start_date, self.column_names.match_id,
                                               self.column_names.team_id, self.column_names.player_id])
-        return concat_df
+        return concat_df.drop(columns='__date_day')
 
     def _add_rolling_feature(self, concat_df: pd.DataFrame, day: int, granularity: list[str], prefix_day: str):
 
@@ -367,7 +385,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         concat_df['is_nan'] = concat_df[self.features[0]].isna().astype(float)
 
         df1 = (concat_df
-               .groupby([self.column_names.start_date, granularity_concat])[[*self.features, 'is_nan']]
+               .groupby(['__date_day', granularity_concat])[[*self.features, 'is_nan']]
                .agg(['sum', 'size'])
                .unstack()
                .asfreq('d', fill_value=np.nan)
@@ -393,9 +411,9 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
             df1[f'{prefix_day}_count'] = df1[f'{prefix_day}_{self.features[0]}_count']
             df1 = df1.drop(columns=[f'{prefix_day}_{feature_name}_count' for feature_name in self.features])
 
-        concat_df[self.column_names.start_date] = pd.to_datetime(concat_df[self.column_names.start_date])
+        concat_df['__date_day'] = pd.to_datetime(concat_df['__date_day'])
         concat_df = concat_df.merge(df1[[c for c in df1.columns if c in self.features_out]].reset_index(),
-                                    on=[self.column_names.start_date, granularity_concat])
+                                    on=['__date_day', granularity_concat])
 
         return concat_df
 
@@ -445,6 +463,10 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         self._estimator_features_out = self._features_out.copy()
 
     def generate_historical(self, df: pd.DataFrame, column_names: ColumnNames) -> pd.DataFrame:
+        if df[self.binary_column].dtype in ('float64', 'float32', 'float16', 'float'):
+            df = df.assign(**{self.binary_column: df[self.binary_column].astype(int)})
+
+        df = df.assign(is_future=0)
         self.column_names = column_names
         self.granularity = self.granularity or [self.column_names.player_id]
         validate_sorting(df=df, column_names=self.column_names)
@@ -453,16 +475,24 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         concat_df = self._generate_concat_df_with_feats(df)
         concat_df = self._add_weighted_prob(transformed_df=concat_df)
         transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
+        if 'is_future' in transformed_df.columns:
+            transformed_df = transformed_df.drop(columns='is_future')
         return self._add_weighted_prob(transformed_df=transformed_df)
 
     def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
         if self._df is None:
             raise ValueError("generate_historical needs to be called before generate_future")
+        if self.binary_column in df.columns:
+            if df[self.binary_column].dtype in ('float64', 'float32', 'float16', 'float'):
+                df = df.assign(**{self.binary_column: df[self.binary_column].astype(int)})
+        df = df.assign(is_future=1)
         concat_df = self._generate_concat_df_with_feats(df=df)
         transformed_df = concat_df[
             concat_df[self.column_names.match_id].isin(df[self.column_names.match_id].astype('str').unique().tolist())]
         transformed_future = self._generate_future_feats(transformed_df=transformed_df, ori_df=df,
                                                          known_future_features=self._get_known_future_features())
+        if 'is_future' in transformed_future.columns:
+            transformed_future = transformed_future.drop(columns='is_future')
         return self._add_weighted_prob(transformed_df=transformed_future)
 
     def _get_known_future_features(self) -> list[str]:
@@ -474,16 +504,32 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
         return known_future_features
 
+    def _add_weighted_prob(self, transformed_df: pd.DataFrame) -> pd.DataFrame:
+
+        if self.prob_column:
+            for idx, feature_name in enumerate(self.features):
+                weighted_prob_feat_name = f'{self.prefix}{self.window}_{self.prob_column}_{feature_name}'
+                transformed_df[weighted_prob_feat_name] = transformed_df[
+                                                              f'{self.prefix}{self.window}_{feature_name}_1'] * \
+                                                          transformed_df[
+                                                              self.prob_column] + \
+                                                          transformed_df[
+                                                              f'{self.prefix}{self.window}_{feature_name}_0'] * (
+                                                                  1 -
+                                                                  transformed_df[
+                                                                      self.prob_column])
+        return transformed_df
+
     def _generate_concat_df_with_feats(self, df: pd.DataFrame) -> pd.DataFrame:
 
         additional_cols_to_use = [self.binary_column] + ([self.prob_column] if self.prob_column else [])
         concat_df = self._concat_df(df, additional_cols_to_use=additional_cols_to_use)
         aggregation = {**{f: 'mean' for f in self.features}, **{self.binary_column: 'first'}}
         grouped = concat_df.groupby(
-            [self.column_names.update_match_id, *self.granularity, self.column_names.start_date]).agg(
+            [self.column_names.update_match_id, *self.granularity, self.column_names.start_date, 'is_future']).agg(
             aggregation).reset_index()
 
-        grouped = grouped.sort_values(by=[self.column_names.start_date, self.column_names.update_match_id])
+        grouped = grouped.sort_values(by=[self.column_names.start_date, 'is_future', self.column_names.update_match_id])
 
         feats_added = []
         for feature in self.features:
@@ -503,14 +549,16 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
             feats_added.append(f'{self.prefix}{self.window}_{feature}_1')
             feats_added.append(f'{self.prefix}{self.window}_{feature}_0')
 
-        grouped['count_result_1'] = grouped[grouped[self.binary_column] == 1].groupby([*self.granularity]).cumcount()
+        grouped['count_result_1'] = grouped[grouped[self.binary_column] == 1].groupby([*self.granularity]).cumcount()+1
         grouped['count_result_0'] = grouped[grouped[self.binary_column] == 0].groupby(
-            [*self.granularity]).cumcount()
-        grouped['count_result_1'] = grouped.groupby(self.granularity)['count_result_1'].fillna(method='ffill')
-        grouped['count_result_0'] = grouped.groupby(self.granularity)['count_result_0'].fillna(method='ffill')
+            [*self.granularity]).cumcount()+1
+        grouped[['count_result_0', 'count_result_1']] = grouped.groupby(self.granularity)[
+            ['count_result_0', 'count_result_1']].fillna(method='ffill')
         for feature in self.features:
-            grouped.loc[grouped['count_result_1'] < self.window, f'{self.prefix}{self.window}_{feature}_1'] = np.nan
-            grouped.loc[grouped['count_result_0'] < self.window, f'{self.prefix}{self.window}_{feature}_0'] = np.nan
+            grouped.loc[
+                grouped['count_result_1'] < self.min_periods, f'{self.prefix}{self.window}_{feature}_1'] = np.nan
+            grouped.loc[
+                grouped['count_result_0'] < self.min_periods, f'{self.prefix}{self.window}_{feature}_0'] = np.nan
 
         concat_df = concat_df.merge(
             grouped[[self.column_names.update_match_id, *self.granularity, *feats_added]],
