@@ -9,7 +9,8 @@ from player_performance_ratings.scorer import OrdinalLossScorer
 def test_ordinal_loss_scorer_multiclass():
     data = pd.DataFrame({
         'predictions': [[0.1, 0.6, 0.3], [0.5, 0.3, 0.2], [0.2, 0.3, 0.5]],
-        "__target": [1, 0, 2]
+        "__target": [1, 0, 2],
+        "classes": [[0, 1, 2], [0, 1, 2], [0, 1, 2]]
     })
     score = OrdinalLossScorer(pred_column='predictions', targets_to_measure=list(range(3))).score(data)
     assert score > 0
@@ -19,7 +20,8 @@ def test_ordinal_loss_scorer_multiclass():
 def test_sklearn_scorer_multiclass_log_loss():
     data = pd.DataFrame({
         'predictions': [[0.1, 0.6, 0.3], [0.5, 0.3, 0.2], [0.2, 0.3, 0.5]],
-        "__target": [1, 0, 2]
+        "__target": [1, 0, 2],
+        "classes": [[0, 1, 2], [0, 1, 2], [0, 1, 2]]
     })
     score = SklearnScorer(pred_column='predictions', scorer_function=log_loss).score(data)
     assert score > 0

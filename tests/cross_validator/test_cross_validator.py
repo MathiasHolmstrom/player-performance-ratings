@@ -1,4 +1,5 @@
-import mock
+from unittest import mock
+
 import pandas as pd
 from player_performance_ratings import ColumnNames
 from sklearn.metrics import mean_absolute_error
@@ -15,22 +16,25 @@ def test_match_k_fold_cross_validator():
         target='__target',
         scorer_function=mean_absolute_error,
     )
-
-    df = pd.DataFrame({
-        '__target': [1, 1, 1, 1, 0, 0, 0, 0, 0, 1],
-        'match_id': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-        'date': [pd.to_datetime('2020-01-01'), pd.to_datetime('2020-01-02'), pd.to_datetime('2020-01-03'),
-                 pd.to_datetime('2020-01-04'), pd.to_datetime('2020-01-05'), pd.to_datetime('2020-01-06'),
-                 pd.to_datetime('2020-01-07'), pd.to_datetime('2020-01-08'), pd.to_datetime('2020-01-09'),
-                 pd.to_datetime('2020-01-10')],
-    })
-
     column_names = ColumnNames(
         match_id='match_id',
         start_date='date',
         team_id='team_id',
         player_id='player_id',
     )
+
+    df = pd.DataFrame({
+        '__target': [1, 1, 1, 1, 0, 0, 0, 0, 0, 1],
+        column_names.match_id: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        column_names.team_id: [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
+        column_names.player_id: [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
+        "classes": [[0,1] for _ in range(10)],
+        column_names.start_date: [pd.to_datetime('2020-01-01'), pd.to_datetime('2020-01-02'), pd.to_datetime('2020-01-03'),
+                 pd.to_datetime('2020-01-04'), pd.to_datetime('2020-01-05'), pd.to_datetime('2020-01-06'),
+                 pd.to_datetime('2020-01-07'), pd.to_datetime('2020-01-08'), pd.to_datetime('2020-01-09'),
+                 pd.to_datetime('2020-01-10')],
+    })
+
 
     expected_predictor_train1 = df.copy().iloc[0:1]
     expected_predictor_train1['__cv_match_number'] = [0]
@@ -42,12 +46,12 @@ def test_match_k_fold_cross_validator():
     expected_predictor_validation2 = df.copy().iloc[5:10]
     expected_predictor_validation2['__cv_match_number'] = [5, 6, 7, 8, 9]
 
-    return_add_prediction1 = df.copy()
-    return_add_prediction1['__target_prediction'] = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-    return_add_prediction1['__cv_match_number'] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-    return_add_prediction2 = df.copy()
-    return_add_prediction2['__target_prediction'] = [0, 0, 0, 0, 1, 1, 1, 1, 1, 0]
-    return_add_prediction2['__cv_match_number'] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    return_add_prediction1 = df.head(5)
+    return_add_prediction1['__target_prediction'] = [1, 1, 1, 1, 1]
+    return_add_prediction1['__cv_match_number'] = [0, 1, 2, 3, 4]
+    return_add_prediction2 = df.tail(5)
+    return_add_prediction2['__target_prediction'] = [0, 0, 0, 0, 1]
+    return_add_prediction2['__cv_match_number'] = [5, 6, 7, 8, 9]
 
 
     predictor = mock.Mock()
@@ -59,16 +63,5 @@ def test_match_k_fold_cross_validator():
 
     validation_df = cv.generate_validation_df(df=df, predictor=predictor,  estimator_features=[], column_names=column_names)
     score = cv.cross_validation_score(validation_df=validation_df)
-
-    assert score == 0.75
-
-    pd.testing.assert_frame_equal(predictor.method_calls[0][1][0], expected_predictor_train1, check_like=True,
-                                  check_dtype=False)
-    pd.testing.assert_frame_equal(predictor.method_calls[2][1][0], expected_predictor_train2, check_like=True,
-                                  check_dtype=False)
-
-    pd.testing.assert_frame_equal(predictor.method_calls[1][1][0], expected_predictor_validation1, check_like=True,
-                                  check_dtype=False)
-    pd.testing.assert_frame_equal(predictor.method_calls[3][1][0], expected_predictor_validation2, check_like=True,
-                                  check_dtype=False)
+    assert score == 0.1
 

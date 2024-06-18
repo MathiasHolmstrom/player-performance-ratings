@@ -5,17 +5,14 @@ from typing import List, Dict
 from player_performance_ratings.data_structures import Match
 
 
-class LeagueIdentifier():
+class LeagueIdentifier:
 
-    def __init__(self,
-                 matches_back: int = 25
-                 ):
+    def __init__(self, matches_back: int = 25):
         self.matches_back = matches_back
         self.entity_to_match_leagues: Dict[str, List[str]] = {}
         self.entity_to_match_league_counts: Dict[str, Dict[str, int]] = {}
         self.entity_id_to_most_league_count: Dict[str, int] = {}
         self.entity_id_to_most_league_name: Dict[str, str] = {}
-
 
     def identify(self, player_id: str, league_match: str) -> str:
         if player_id not in self.entity_to_match_leagues:
@@ -31,12 +28,17 @@ class LeagueIdentifier():
         if len(self.entity_to_match_leagues[player_id]) > self.matches_back:
             league_drop_out = self.entity_to_match_leagues[player_id][0]
             self.entity_to_match_league_counts[player_id][league_drop_out] -= 1
-            self.entity_to_match_leagues[player_id] = self.entity_to_match_leagues[player_id][1:]
+            self.entity_to_match_leagues[player_id] = self.entity_to_match_leagues[
+                player_id
+            ][1:]
             if league_drop_out == self.entity_id_to_most_league_name[player_id]:
                 self.entity_id_to_most_league_count[player_id] -= 1
 
         self.entity_to_match_league_counts[player_id][league_match] += 1
-        if self.entity_to_match_league_counts[player_id][league_match] > self.entity_id_to_most_league_count[player_id]:
+        if (
+            self.entity_to_match_league_counts[player_id][league_match]
+            > self.entity_id_to_most_league_count[player_id]
+        ):
             self.entity_id_to_most_league_name[player_id] = league_match
 
         if self.entity_id_to_most_league_name[player_id] == league_match:
@@ -44,10 +46,9 @@ class LeagueIdentifier():
 
         return self.entity_id_to_most_league_name[player_id]
 
-
-
-    def _generate_teams_to_leagues(self, team_ids: List[str], team_league_counts: Dict[str, Dict[str, int]]) -> Dict[
-        str, str]:
+    def _generate_teams_to_leagues(
+        self, team_ids: List[str], team_league_counts: Dict[str, Dict[str, int]]
+    ) -> Dict[str, str]:
         team_leagues: Dict[str, str] = {}
         for team_id in team_ids:
             league = self._identify_primary_league_for_team(team_league_counts[team_id])
@@ -65,8 +66,7 @@ class LeagueIdentifier():
 
         return max_league
 
-    def _get_opponent_league(self, team_id: str, team_leagues: Dict[
-        str, str]) -> str:
+    def _get_opponent_league(self, team_id: str, team_leagues: Dict[str, str]) -> str:
 
         for team_id2, league in team_leagues.items():
             if team_id2 != team_id:

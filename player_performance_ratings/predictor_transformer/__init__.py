@@ -1,1 +1,5 @@
-from .transformer import PredictorTransformer, SkLearnTransformerWrapper, ConvertDataFrameToCategoricalTransformer
+from .transformer import (
+    PredictorTransformer,
+    SkLearnTransformerWrapper,
+    ConvertDataFrameToCategoricalTransformer,
+)

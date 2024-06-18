@@ -1,4 +1,5 @@
-import mock
+from unittest import mock
+
 import pandas as pd
 from player_performance_ratings.cross_validator import MatchKFoldCrossValidator
 

@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import List, Optional, Union, Any
 
 
-
 @dataclass
 class ColumnNames:
     team_id: str
@@ -27,10 +26,14 @@ class ColumnNames:
             self.parent_team_id = self.team_id
 
         if self.update_match_id != self.match_id and self.parent_team_id is None:
-            raise ValueError("rating_update_team_id must be passed if rating_update_match_id is passed")
+            raise ValueError(
+                "rating_update_team_id must be passed if rating_update_match_id is passed"
+            )
 
         if self.parent_team_id != self.team_id and self.update_match_id is None:
-            raise ValueError("rating_update_match_id must be passed if rating_update_team_id is passed")
+            raise ValueError(
+                "rating_update_match_id must be passed if rating_update_team_id is passed"
+            )
 
 
 @dataclass
@@ -42,9 +45,8 @@ class MatchPerformance:
     opponent_players_playing_time: Optional[dict[str, float]] = None
 
 
-
 @dataclass
-class PlayerRating():
+class PlayerRating:
     id: str
     rating_value: float
     name: Optional[str] = None
@@ -64,7 +66,7 @@ class Team:
 
 
 @dataclass
-class TeamRating():
+class TeamRating:
     id: str
     name: str
     rating_value: float
@@ -91,7 +93,6 @@ class PreMatchTeamRating:
     rating_value: Optional[float]
     projected_rating_value: float
     league: Optional[str]
-
 
 
 @dataclass
@@ -179,7 +180,6 @@ class MatchTeam:
 
         if self.update_id is None:
             self.update_id = self.id
-
 
 
 @dataclass
