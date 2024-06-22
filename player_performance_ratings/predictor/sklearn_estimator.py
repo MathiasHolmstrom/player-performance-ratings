@@ -10,9 +10,10 @@ from sklearn.linear_model import LogisticRegression
 
 class SkLearnWrapper(BaseEstimator, ClassifierMixin):
 
-    def __init__(self,
-                 estimator: Any,
-                 ):
+    def __init__(
+        self,
+        estimator: Any,
+    ):
         self.estimator = estimator
         self.classes_ = []
         super().__init__()
@@ -30,9 +31,10 @@ class SkLearnWrapper(BaseEstimator, ClassifierMixin):
 
 class OrdinalClassifier(BaseEstimator, ClassifierMixin):
 
-    def __init__(self,
-                 estimator: Optional = None,
-                 ):
+    def __init__(
+        self,
+        estimator: Optional = None,
+    ):
         self.estimator = estimator or LogisticRegression()
         self.clfs = {}
         self.classes_ = []

@@ -1,6 +1,6 @@
 import copy
+from unittest import mock
 
-import mock
 import pandas as pd
 from player_performance_ratings.predictor import Predictor
 
