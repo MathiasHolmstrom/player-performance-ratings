@@ -96,8 +96,9 @@ class BasePredictor(ABC):
                 logging.warning(
                     f"Feature {estimator_feature} not in df, removing from estimator_features"
                 )
+                continue
 
-                feats_to_transform.append(estimator_feature)
+            feats_to_transform.append(estimator_feature)
 
         if feats_to_transform:
             if self._deepest_estimator.__class__.__name__ in (
