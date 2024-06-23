@@ -33,39 +33,17 @@ class ConvertDataFrameToCategoricalTransformer(PredictorTransformer):
         super().__init__(features=features)
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        return self.transform(df)
+        self._features_out = self.features
+        return self.transform(df)[self._features_out]
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         for feature in self.features:
             df = df.assign(**{feature: df[feature].astype("category")})
-        return df
+        return df[self._features_out]
 
     @property
     def features_out(self) -> list[str]:
-        return self.features
-
-
-class TargetMeanTransformer(PredictorTransformer):
-
-    def __init__(
-        self,
-        features: list[str],
-        granularity: Optional[list[str]] = None,
-        target: str = PredictColumnNames.TARGET,
-    ):
-        self.target = target
-        self.granularity = granularity
-        super().__init__(features=features)
-
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        return self.transform(df)
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        raise ValueError("TargetMeanTransformer is not implemented yet")
-
-    @property
-    def features_out(self) -> list[str]:
-        return self.features
+        return self._features_out
 
 
 class SkLearnTransformerWrapper(PredictorTransformer):
@@ -93,7 +71,7 @@ class SkLearnTransformerWrapper(PredictorTransformer):
                 self._features_out[idx]: transformed_values[:, idx]
                 for idx in range(len(self._features_out))
             }
-        )
+        )[self._features_out]
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         try:
@@ -107,7 +85,7 @@ class SkLearnTransformerWrapper(PredictorTransformer):
                 self._features_out[idx]: transformed_values[:, idx]
                 for idx in range(len(self._features_out))
             }
-        )
+        )[self._features_out]
 
     @property
     def features_out(self) -> list[str]:

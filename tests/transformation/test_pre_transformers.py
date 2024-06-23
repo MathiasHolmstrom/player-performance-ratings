@@ -2,9 +2,8 @@ import pandas as pd
 from player_performance_ratings.predictor_transformer import SkLearnTransformerWrapper
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-
 from player_performance_ratings.ratings.performance_generator import GroupByTransformer, DiminishingValueTransformer, \
-     SymmetricDistributionTransformer
+    SymmetricDistributionTransformer
 
 
 def test_min_max_transformer():
@@ -23,18 +22,19 @@ def test_sklearn_transformer_wrapper_one_hot_encoder():
 
     transformed_df = transformer.fit_transform(df)
 
-    assert transformed_df.shape[1] == 4
+    assert transformed_df.shape[1] == 2
 
     df_future = pd.DataFrame({
         'game_id': [1, 2],
         "position": ["a", "c"],
     })
 
-    expected_future_transformed_df = df_future.copy()
     future_transformed_df = transformer.transform(df_future)
 
-    expected_future_transformed_df['position_a'] = [1, 0]
-    expected_future_transformed_df['position_b'] = [0, 0]
+    expected_future_transformed_df = pd.DataFrame({
+        'position_a': [1, 0],
+        'position_b': [0, 0]
+    })
 
     pd.testing.assert_frame_equal(expected_future_transformed_df, future_transformed_df, check_dtype=False)
 
@@ -52,7 +52,7 @@ def test_sklearn_transformer_wrapper_standard_scaler():
 
     transformed_df = transformer.fit_transform(df)
 
-    assert transformed_df.shape[1] == 3
+    assert transformed_df.shape[1] == 1
 
     df_future = pd.DataFrame({
         'game_id': [1, 2],
@@ -172,4 +172,3 @@ def test_symmetric_distribution_transformer_with_granularity_fit_transform():
     transformed_df = transformer.fit_transform(df)
     assert abs(df[lambda x: x.position == 'SG']["performance"].skew()) > transformer.skewness_allowed
     assert abs(transformed_df.loc[lambda x: x.position == 'SG']["performance"].skew()) < transformer.skewness_allowed
-

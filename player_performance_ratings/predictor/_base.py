@@ -23,6 +23,7 @@ class BasePredictor(ABC):
         pre_transformers: Optional[list[PredictorTransformer]] = None,
         pred_column: Optional[str] = None,
         filters: Optional[dict] = None,
+        auto_pre_transform: bool = True,
     ):
         self._estimator_features = estimator_features or []
         self.estimator = estimator
@@ -33,6 +34,7 @@ class BasePredictor(ABC):
         self.filters = filters or []
         self.multiclassifier = False
         self._classes_ = None
+        self.auto_pre_transform = auto_pre_transform
 
         iterations = 0
         while hasattr(self._deepest_estimator, "estimator"):
@@ -84,8 +86,8 @@ class BasePredictor(ABC):
     def set_target(self, new_target_name: str):
         self._target = new_target_name
 
-    def fit_transform_pre_transformers(self, df: pd.DataFrame) -> pd.DataFrame:
-
+    def _create_pre_transformers(self, df: pd.DataFrame) -> list[PredictorTransformer]:
+        pre_transformers = []
         feats_to_transform = []
         for estimator_feature in self._estimator_features.copy():
 
@@ -95,12 +97,6 @@ class BasePredictor(ABC):
                     f"Feature {estimator_feature} not in df, removing from estimator_features"
                 )
 
-            elif df[estimator_feature].dtype in (
-                "str",
-                "object",
-            ) and estimator_feature not in [
-                f.features[0] for f in self.pre_transformers
-            ]:
                 feats_to_transform.append(estimator_feature)
 
         if feats_to_transform:
@@ -111,7 +107,7 @@ class BasePredictor(ABC):
                 logging.info(
                     f"Adding OneHotEncoder to pre_transformers for features: {feats_to_transform}"
                 )
-                self.pre_transformers.append(
+                pre_transformers.append(
                     SkLearnTransformerWrapper(
                         transformer=OneHotEncoder(handle_unknown="ignore"),
                         features=feats_to_transform,
@@ -125,7 +121,7 @@ class BasePredictor(ABC):
                 logging.info(
                     f"Adding ConvertDataFrameToCategoricalTransformer to pre_transformers for features: {feats_to_transform}"
                 )
-                self.pre_transformers.append(
+                pre_transformers.append(
                     ConvertDataFrameToCategoricalTransformer(
                         features=feats_to_transform
                     )
@@ -146,7 +142,7 @@ class BasePredictor(ABC):
                 if hasattr(pre_transformer, "transformer")
             ]:
                 logging.info(f"Adding StandardScaler to pre_transformers")
-                self.pre_transformers.append(
+                pre_transformers.append(
                     SkLearnTransformerWrapper(
                         transformer=StandardScaler(),
                         features=self._estimator_features.copy(),
@@ -158,15 +154,23 @@ class BasePredictor(ABC):
                 for pre_transformer in self.pre_transformers
                 if hasattr(pre_transformer, "transformer")
             ]:
-                self.pre_transformers.append(
+                pre_transformers.append(
                     SkLearnTransformerWrapper(
                         transformer=SimpleImputer(),
                         features=self._estimator_features.copy(),
                     )
                 )
+        return pre_transformers
+
+    def fit_transform_pre_transformers(self, df: pd.DataFrame) -> pd.DataFrame:
+        if self.auto_pre_transform:
+            self.pre_transformers += self._create_pre_transformers(df)
+
 
         for pre_transformer in self.pre_transformers:
-            df = pre_transformer.fit_transform(df)
+            values = pre_transformer.fit_transform(df)
+            features_out = pre_transformer.features_out
+            df[features_out] = values
             self._estimator_features = list(
                 set(pre_transformer.features_out + self._estimator_features)
             )
@@ -174,9 +178,10 @@ class BasePredictor(ABC):
         return df
 
     def transform_pre_transformers(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.pre_transformers:
-            for pre_transformer in self.pre_transformers:
-                df = pre_transformer.transform(df)
+        for pre_transformer in self.pre_transformers:
+            values = pre_transformer.transform(df)
+            features_out = pre_transformer.features_out
+            df[features_out] = values
         return df
 
     @property

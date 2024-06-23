@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -144,6 +145,10 @@ class OrdinalLossScorer(BaseScorer):
         for variation_idx, distinct_class_variation in enumerate(
             distinct_classes_variations
         ):
+
+            if not isinstance(distinct_class_variation, list):
+                if math.isnan(distinct_class_variation):
+                    continue
 
             rows_target_group = df[
                 df["classes"].apply(lambda x: x == distinct_class_variation)

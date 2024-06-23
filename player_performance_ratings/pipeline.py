@@ -2,6 +2,7 @@ import logging
 from typing import List, Optional, Union
 
 import pandas as pd
+import polars as pl
 from sklearn.metrics import log_loss, mean_absolute_error
 
 from player_performance_ratings.scorer import SklearnScorer, OrdinalLossScorer
@@ -25,6 +26,7 @@ from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.transformers.base_transformer import (
     BaseTransformer,
     BaseLagGenerator,
+    BaseLagGeneratorPolars,
 )
 
 
@@ -40,7 +42,9 @@ class Pipeline:
         ] = None,
         pre_lag_transformers: Optional[list[BaseTransformer]] = None,
         post_lag_transformers: Optional[list[BaseTransformer]] = None,
-        lag_generators: Optional[List[BaseLagGenerator]] = None,
+        lag_generators: Optional[
+            List[BaseLagGenerator | BaseLagGeneratorPolars]
+        ] = None,
     ):
         """
 
@@ -330,8 +334,23 @@ class Pipeline:
             df_with_predict = self.pre_lag_transformers[idx].fit_transform(
                 df_with_predict, column_names=self.column_names
             )
+
         for idx in range(len(self.lag_generators)):
             self.lag_generators[idx].reset()
+
+            count_remaining_polars = [
+                l for l in self.lag_generators[idx:] if "Polars" in l.__class__.__name__
+            ] + [
+                l
+                for l in self.post_lag_transformers
+                if "Polars" in l.__class__.__name__
+            ]
+
+            if isinstance(df_with_predict, pd.DataFrame) and  len(count_remaining_polars) == len(
+                self.lag_generators[idx:] + self.post_lag_transformers
+            ):
+                df_with_predict = pl.from_pandas(df_with_predict)
+
             df_with_predict = self.lag_generators[idx].generate_historical(
                 df_with_predict, column_names=self.column_names
             )
@@ -340,6 +359,9 @@ class Pipeline:
             df_with_predict = self.post_lag_transformers[idx].fit_transform(
                 df_with_predict, column_names=self.column_names
             )
+
+        if isinstance(df_with_predict, pl.DataFrame):
+            df_with_predict = df_with_predict.to_pandas()
 
         self.predictor.train(
             df=df_with_predict, estimator_features=self._estimator_features
@@ -527,7 +549,19 @@ class Pipeline:
 
         for pre_lag_transformer in self.pre_lag_transformers:
             df_with_predict = pre_lag_transformer.transform(df_with_predict)
-        for lag_generator in self.lag_generators:
+        for idx, lag_generator in enumerate(self.lag_generators):
+            count_remaining_polars = [
+                                         l for l in self.lag_generators[idx:] if "Polars" in l.__class__.__name__
+                                     ] + [
+                                         l
+                                         for l in self.post_lag_transformers
+                                         if "Polars" in l.__class__.__name__
+                                     ]
+
+            if isinstance(df_with_predict, pd.DataFrame) and len(count_remaining_polars) == len(
+                    self.lag_generators[idx:] + self.post_lag_transformers
+            ):
+                df_with_predict = pl.from_pandas(df_with_predict)
             df_with_predict = lag_generator.generate_future(df_with_predict)
         for post_lag_transformer in self.post_lag_transformers:
             df_with_predict = post_lag_transformer.transform(df_with_predict)

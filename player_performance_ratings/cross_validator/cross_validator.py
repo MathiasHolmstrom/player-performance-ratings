@@ -1,7 +1,6 @@
 import copy
-import inspect
 from typing import Optional
-
+import polars as pl
 import pandas as pd
 from player_performance_ratings import ColumnNames
 
@@ -88,6 +87,21 @@ class MatchKFoldCrossValidator(CrossValidator):
                     )
                     validation_df = pre_lag_transformer.transform(validation_df)
                 for lag_transformer in lag_generators:
+                    count_remaining_polars = [
+                                                 l for l in lag_generators[idx:] if
+                                                 "Polars" in l.__class__.__name__
+                                             ] + [
+                                                 l
+                                                 for l in post_lag_transformers
+                                                 if "Polars" in l.__class__.__name__
+                                             ]
+
+                    if isinstance(train_df, pd.DataFrame) and len(count_remaining_polars) == len(
+                            train_df[idx:] + post_lag_transformers
+                    ):
+                        train_df = pl.from_pandas(train_df)
+
+
                     lag_transformer.reset()
                     train_df = lag_transformer.generate_historical(
                         train_df, column_names=column_names
