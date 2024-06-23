@@ -29,6 +29,7 @@ df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 df['champion_position'] = df['champion'] + df['position']
 df['__target'] = df['result']
 
+
 df = df.drop_duplicates(subset=['gameid', 'teamname', 'playername'])
 
 df = (
@@ -36,6 +37,7 @@ df = (
     .loc[lambda x: x.team_count == 2]
     .drop(columns=['team_count'])
 )
+df = df.drop_duplicates(subset=['gameid', 'teamname', 'playername'])
 
 rating_generator = UpdateRatingGenerator(performance_column='performance')
 

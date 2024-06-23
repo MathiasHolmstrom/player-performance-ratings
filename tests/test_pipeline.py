@@ -10,9 +10,83 @@ from player_performance_ratings.ratings import RatingEstimatorFeatures, UpdateRa
     MatchRatingGenerator
 from player_performance_ratings.ratings.performance_generator import Performance, ColumnWeight, PerformancesGenerator
 
-from player_performance_ratings.transformers import LagTransformer, RatioTeamPredictorTransformer, PredictorTransformer
+from player_performance_ratings.transformers import LagTransformer, RatioTeamPredictorTransformer, PredictorTransformer, \
+    RollingMeanTransformer
 
 from player_performance_ratings import ColumnNames, Pipeline
+from player_performance_ratings.transformers.lag_generators import RollingMeanTransformerPolars
+
+
+def test_pipline_mix_pandas_polars_lags():
+    df = pd.DataFrame({
+        "game_id": [1, 1, 2, 2, 3, 3, 4, 4],
+        "player_id": [1, 2, 1, 2, 1, 2, 1, 2],
+        "team_id": [1, 2, 1, 2, 1, 2, 1, 2],
+        "start_date": [pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-01"), pd.to_datetime("2023-01-02"),
+                       pd.to_datetime("2023-01-02"), pd.to_datetime("2023-01-03"), pd.to_datetime("2023-01-03"),
+                       pd.to_datetime("2023-01-04"), pd.to_datetime("2023-01-05")],
+        'deaths': [1, 1, 1, 2, 2, 2, 3, 2],
+        "kills": [0.2, 0.3, 0.4, 0.5, 2, 0.2, 2, 1],
+        "__target": [1, 0, 1, 0, 1, 0, 1, 0],
+    })
+    lag_generators = [
+
+        RollingMeanTransformer(features=["kills", "deaths"], window=1, granularity=['player_id'],
+                               prefix='rolling_mean_'),
+        RollingMeanTransformerPolars(features=["kills", "deaths"], window=2, granularity=['player_id'],
+                                     prefix='rolling_mean_polars_'),
+        RollingMeanTransformer(features=["kills", "deaths"], window=3, granularity=['player_id'],
+                               prefix='rolling_mean_'),
+    ]
+
+    pipeline = Pipeline(column_names=ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="start_date",
+    ),
+        lag_generators=lag_generators,
+        predictor=Predictor(estimator=LinearRegression())
+    )
+
+    pipeline.train_predict(df=df)
+    pipeline.cross_validate_predict(df=df,
+                                    cross_validator=MatchKFoldCrossValidator(match_id_column_name='game_id', n_splits=1,
+                                                                             date_column_name='start_date'))
+    pipeline.future_predict(df=df)
+
+
+def test_pipelien_constructor():
+    lag_generators = [
+        RollingMeanTransformer(features=["kills", "deaths"], window=1, granularity=['player_id'],
+                               prefix='rolling_mean_'),
+
+    ]
+
+    post_lag_transformers = [PredictorTransformer(predictor=Predictor(estimator=LinearRegression()))]
+    rating_generator = UpdateRatingGenerator(
+        estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+
+    pipeline = Pipeline(column_names=ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="start_date",
+    ),
+        lag_generators=lag_generators,
+        post_lag_transformers=post_lag_transformers,
+        predictor=Predictor(estimator=LinearRegression(), estimator_features=['kills']),
+        rating_generators=rating_generator
+    )
+
+    expected_estimator_features = ['kills'] + [l.features_out for l in lag_generators][0] + [p.predictor.pred_column for
+                                                                                             p in
+                                                                                             post_lag_transformers] + rating_generator.features_out
+    assert pipeline._estimator_features.sort() == expected_estimator_features.sort()
+
+    # asserts estimator_features gets added to the post_transformer that contains a predictor
+    assert post_lag_transformers[0].features.sort() == \
+           [['kills'] + [l.features_out for l in lag_generators][0] + rating_generator.features_out][0].sort()
 
 
 def test_match_predictor_auto_pre_transformers():
@@ -458,7 +532,6 @@ def test_post_pre_and_lag_transformers():
     assert predictor.pred_column in trained_df.columns
     assert predictor.pred_column not in train_df.columns
 
-
     predicted_df = pipeline.future_predict(future_df, return_features=True)
     for f in rating_generator.estimator_features_out:
         assert f in predicted_df.columns
@@ -478,4 +551,3 @@ def test_post_pre_and_lag_transformers():
 
     assert predictor.pred_column in predicted_df.columns
     assert predictor.pred_column not in future_df.columns
-

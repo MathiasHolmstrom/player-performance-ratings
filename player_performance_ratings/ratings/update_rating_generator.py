@@ -58,7 +58,7 @@ class UpdateRatingGenerator(RatingGenerator):
             estimator_features_pass_through=estimator_features_pass_through,
             historical_features_out=historical_features_out,
             performance_column=performance_column,
-            seperate_player_by_position=seperate_player_by_position
+            seperate_player_by_position=seperate_player_by_position,
         )
         self.match_rating_generator = match_rating_generator or MatchRatingGenerator()
         self.distinct_positions = distinct_positions

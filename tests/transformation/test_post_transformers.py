@@ -4,6 +4,7 @@ import pytest
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.transformers import LagTransformer, RollingMeanTransformer, \
     RollingMeanDaysTransformer, BinaryOutcomeRollingMeanTransformer
+from player_performance_ratings.transformers.lag_generators import RollingMeanTransformerPolars
 
 
 @pytest.fixture
@@ -296,7 +297,7 @@ def test_rolling_mean_fit_transform(column_names):
     )
     original_df = df.copy()
 
-    rolling_mean_transformation = RollingMeanTransformer(
+    rolling_mean_transformation = RollingMeanTransformerPolars(
         features=['points'],
         window=2,
         min_periods=1,
@@ -308,10 +309,6 @@ def test_rolling_mean_fit_transform(column_names):
     expected_df = original_df.assign(**{
         f"{rolling_mean_transformation.prefix}2_points": [None, None, 1, (3 + 1) / 2]
     })
-    expected_df['team'] = expected_df['team'].astype('str')
-    expected_df['game'] = expected_df['game'].astype('str')
-    expected_df['player'] = expected_df['player'].astype('str')
-
     pd.testing.assert_frame_equal(df_with_rolling_mean, expected_df, check_like=True, check_dtype=False)
 
 
@@ -336,7 +333,7 @@ def test_rolling_mean_fit_transform_and_transform(column_names):
     })
 
     original_future_df = future_df.copy()
-    rolling_mean_transformation = RollingMeanTransformer(
+    rolling_mean_transformation = RollingMeanTransformerPolars(
         features=['points'],
         window=2,
         min_periods=1,
@@ -351,9 +348,6 @@ def test_rolling_mean_fit_transform_and_transform(column_names):
         f"{rolling_mean_transformation.prefix}2_points": [2.5, 2, 2.5, 2],
         rolling_mean_transformation.features_out[1]: [2, 2.5, 2, 2.5]
     })
-    expected_df['team'] = expected_df['team'].astype('str')
-    expected_df['game'] = expected_df['game'].astype('str')
-    expected_df['player'] = expected_df['player'].astype('str')
     pd.testing.assert_frame_equal(transformed_future_df, expected_df, check_like=True)
 
 
@@ -373,7 +367,7 @@ def test_rolling_mean_transformer_fit_transformer_team_stat(column_names):
 
     expected_df = historical_df.copy()
 
-    rolling_mean_transformation = RollingMeanTransformer(
+    rolling_mean_transformation = RollingMeanTransformerPolars(
         features=['score_difference'],
         window=2,
         min_periods=1,
@@ -382,9 +376,6 @@ def test_rolling_mean_transformer_fit_transformer_team_stat(column_names):
 
     transformed_data = rolling_mean_transformation.generate_historical(historical_df, column_names=column_names)
     expected_df[rolling_mean_transformation.prefix + "2_score_difference"] = [None, None, None, None, 10, 10, -10, -10]
-    expected_df['team'] = expected_df['team'].astype('str')
-    expected_df['game'] = expected_df['game'].astype('str')
-    expected_df['player'] = expected_df['player'].astype('str')
     pd.testing.assert_frame_equal(transformed_data, expected_df, check_like=True, check_dtype=False)
 
 
@@ -419,9 +410,7 @@ def test_rolling_mean_days_fit_transform(column_names):
         rolling_mean_transformation.features_out[2]: [0, 0, 0, 2, 0],
     })
 
-    expected_df['team'] = expected_df['team'].astype('str')
-    expected_df['game'] = expected_df['game'].astype('str')
-    expected_df['player'] = expected_df['player'].astype('str')
+
     pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
@@ -449,10 +438,7 @@ def test_rolling_mean_days_series_id(column_names: ColumnNames):
     transformed_df = transformer.generate_historical(df=historical_df, column_names=column_names)
 
     expected_df = expected_df.assign(**{transformer.features_out[0]: [None, None, 1.5, 3]})
-    expected_df['team'] = expected_df['team'].astype('str')
-    expected_df['game'] = expected_df['game'].astype('str')
-    expected_df['player'] = expected_df['player'].astype('str')
-    expected_df['series_id'] = expected_df['series_id'].astype('str')
+
     pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
@@ -487,9 +473,6 @@ def test_rolling_mean_days_fit_transform_40_days(column_names):
         rolling_mean_transformation.features_out[0]: [None, 1, 1, None, 1.5, 3],
     })
 
-    expected_df['team'] = expected_df['team'].astype('str')
-    expected_df['game'] = expected_df['game'].astype('str')
-    expected_df['player'] = expected_df['player'].astype('str')
     pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
@@ -525,9 +508,7 @@ def test_rolling_mean_days_fit_transform_opponent(column_names):
         rolling_mean_transformation.features_out[1]: [None, None, None, None, 2.5, 2.5, 1.25, 1.25],
     })
 
-    expected_df['team'] = expected_df['team'].astype('str')
-    expected_df['game'] = expected_df['game'].astype('str')
-    expected_df['player'] = expected_df['player'].astype('str')
+
     pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
@@ -569,9 +550,6 @@ def test_rolling_mean_days_transformer_transform(column_names):
         f'{transformer.prefix}10_count_opponent': [0, 0, 1, 1]
     })
 
-    expected_historical_df['team'] = expected_historical_df['team'].astype('str')
-    expected_historical_df['game'] = expected_historical_df['game'].astype('str')
-    expected_historical_df['player'] = expected_historical_df['player'].astype('str')
 
     pd.testing.assert_frame_equal(historical_df, expected_historical_df, check_like=True, check_dtype=False)
 
@@ -585,9 +563,7 @@ def test_rolling_mean_days_transformer_transform(column_names):
         f'{transformer.prefix}10_count': [2, 2, 2, 2],
         f'{transformer.prefix}10_count_opponent': [2, 2, 2, 2],
     })
-    expected_df['team'] = expected_df['team'].astype('str')
-    expected_df['game'] = expected_df['game'].astype('str')
-    expected_df['player'] = expected_df['player'].astype('str')
+
     pd.testing.assert_frame_equal(transformed_future_df, expected_df, check_like=True, check_dtype=False)
 
 
@@ -620,9 +596,6 @@ def test_rolling_mean_days_tranformer_transform_first_future_beyond_window(colum
         f'{transformer.prefix}10_count_opponent': [0, 0, 0, 0],
     })
 
-    expected_historical_df['team'] = expected_historical_df['team'].astype('str')
-    expected_historical_df['game'] = expected_historical_df['game'].astype('str')
-    expected_historical_df['player'] = expected_historical_df['player'].astype('str')
     pd.testing.assert_frame_equal(historical_df, expected_historical_df, check_like=True, check_dtype=False)
 
     future_df = pd.DataFrame(
@@ -645,9 +618,7 @@ def test_rolling_mean_days_tranformer_transform_first_future_beyond_window(colum
         f'{transformer.prefix}10_count': [1, 1, 1, 1],
         f'{transformer.prefix}10_count_opponent': [1, 1, 1, 1],
     })
-    expected_df['team'] = expected_df['team'].astype('str')
-    expected_df['game'] = expected_df['game'].astype('str')
-    expected_df['player'] = expected_df['player'].astype('str')
+
     pd.testing.assert_frame_equal(transformed_future_df, expected_df, check_like=True, check_dtype=False)
 
 
@@ -667,7 +638,7 @@ def test_rolling_mean_transform_parent_match_id(column_names: ColumnNames):
     )
     expected_df = historical_df.copy()
 
-    transformer = RollingMeanTransformer(
+    transformer = RollingMeanTransformerPolars(
         features=['points'],
         window=2,
     )
@@ -675,10 +646,6 @@ def test_rolling_mean_transform_parent_match_id(column_names: ColumnNames):
     transformed_df = transformer.generate_historical(historical_df, column_names=column_names)
 
     expected_df = expected_df.assign(**{transformer.features_out[0]: [None, None, 1.5, (1.5 + 3) / 2]})
-    expected_df['team'] = expected_df['team'].astype('str')
-    expected_df['game'] = expected_df['game'].astype('str')
-    expected_df['player'] = expected_df['player'].astype('str')
-    expected_df['series_id'] = expected_df['series_id'].astype('str')
     pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 

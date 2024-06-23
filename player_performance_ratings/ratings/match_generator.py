@@ -192,7 +192,6 @@ def convert_df_to_matches(
             if separate_player_by_position:
                 player_id = f"{player_id}_{position}"
 
-
         else:
             position = None
 
