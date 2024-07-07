@@ -86,9 +86,9 @@ class MatchKFoldCrossValidator(CrossValidator):
                         train_df, column_names=column_names
                     )
                     validation_df = pre_lag_transformer.transform(validation_df)
-                for lag_transformer in lag_generators:
+                for lag_idx, lag_transformer in enumerate(lag_generators):
                     count_remaining_polars = [
-                                                 l for l in lag_generators[idx:] if
+                                                 l for l in lag_generators[lag_idx:] if
                                                  "Polars" in l.__class__.__name__
                                              ] + [
                                                  l
@@ -97,7 +97,7 @@ class MatchKFoldCrossValidator(CrossValidator):
                                              ]
 
                     if isinstance(train_df, pd.DataFrame) and len(count_remaining_polars) == len(
-                            lag_generators[idx:]) + len(post_lag_transformers):
+                            lag_generators[lag_idx:]) + len(post_lag_transformers):
                         train_df = pl.from_pandas(train_df)
                         validation_df = pl.from_pandas(validation_df)
 
