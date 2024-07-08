@@ -122,13 +122,23 @@ class ModifyOperation:
 
 
 class ModifierTransformer(BaseTransformer):
+    """
+    Performs operations on two columns and stores the result in a new column.
+    An operation can be subtraction, addition, multiplication, or division.
+    """
 
     def __init__(
         self,
         modify_operations: list[ModifyOperation],
-        features: list[str] = None,
+        features: Optional[list[str]] = None,
         are_estimator_features: bool = True,
     ):
+        """
+        :param modify_operations: A list of ModifyOperations to perform
+        :param features: Features need to be passed due to BaseTransformer requring them, although has no effect on the transformer
+            Thus keep it as default None.
+        :param are_estimator_features: Whether the new created columns should be used as estimator features
+        """
         self.modify_operations = modify_operations
         _features_out = [
             operation.new_column_name for operation in self.modify_operations
@@ -166,8 +176,16 @@ class ModifierTransformer(BaseTransformer):
 
 
 class PredictorTransformer(BaseTransformer):
+    """
+    Transformer that uses a predictor to generate predictions on the dataset
+    This is useful if you want to use the output of a feature as input for another model
+    """
 
     def __init__(self, predictor: BasePredictor, features: list[str] = None):
+        """
+        :param predictor: The predictor to use to add add new prediction-columns to the dataset
+        :param features: The features to use for the predictor
+        """
         self.predictor = predictor
         super().__init__(
             features=features, features_out=[f"{self.predictor.pred_column}"]
@@ -185,6 +203,13 @@ class PredictorTransformer(BaseTransformer):
 
 
 class RatioTeamPredictorTransformer(BaseTransformer):
+    """
+    Transformer that trains and uses the output of a predictor and divides it by the sum of the predictions for all the players within the team
+    If team_total_prediction_column is passed in, it will also multiply the ratio by the team_total_prediction_column
+    This is useful to provide a normalized point-estimate for a player for the given feature.
+
+    """
+
     def __init__(
         self,
         features: list[str],
@@ -193,6 +218,14 @@ class RatioTeamPredictorTransformer(BaseTransformer):
         lag_generators: Optional[list[BaseLagGenerator]] = None,
         prefix: str = "_ratio_team",
     ):
+        """
+        :param features: The features to use for the predictor
+        :param predictor: The predictor to use to add add new prediction-columns to the dataset
+        :param team_total_prediction_column: If passed, The column to multiply the ratio by.
+        :param lag_generators: Additional lag-generators (such as rolling-mean) can be performed after the ratio is calculated is passed
+        :param prefix: The prefix to use for the new columns
+        """
+
         self.predictor = predictor
         self.team_total_prediction_column = team_total_prediction_column
         self.prefix = prefix
