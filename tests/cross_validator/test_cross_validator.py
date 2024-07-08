@@ -21,7 +21,7 @@ def column_names():
     )
     return column_names
 
-def test_match_k_fold_cross_validator(column_names, df):
+def test_match_k_fold_cross_validator(column_names):
     df = pd.DataFrame({
         '__target': [1, 1, 1, 1, 0, 0, 0, 0, 0, 1],
         column_names.match_id: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],

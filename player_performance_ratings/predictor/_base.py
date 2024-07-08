@@ -88,7 +88,7 @@ class BasePredictor(ABC):
 
     def _create_pre_transformers(self, df: pd.DataFrame) -> list[PredictorTransformer]:
         pre_transformers = []
-        feats_to_transform = []
+        cat_feats_to_transform = []
         for estimator_feature in self._estimator_features.copy():
 
             if estimator_feature not in df.columns:
@@ -98,20 +98,21 @@ class BasePredictor(ABC):
                 )
                 continue
 
-            feats_to_transform.append(estimator_feature)
+            if not pd.api.types.is_numeric_dtype(df[estimator_feature]):
+                cat_feats_to_transform.append(estimator_feature)
 
-        if feats_to_transform:
+        if cat_feats_to_transform:
             if self._deepest_estimator.__class__.__name__ in (
                 "LogisticRegression",
                 "LinearRegression",
             ):
                 logging.info(
-                    f"Adding OneHotEncoder to pre_transformers for features: {feats_to_transform}"
+                    f"Adding OneHotEncoder to pre_transformers for features: {cat_feats_to_transform}"
                 )
                 pre_transformers.append(
                     SkLearnTransformerWrapper(
                         transformer=OneHotEncoder(handle_unknown="ignore"),
-                        features=feats_to_transform,
+                        features=cat_feats_to_transform,
                     )
                 )
 
@@ -120,11 +121,11 @@ class BasePredictor(ABC):
                 "LGBMClassifier",
             ):
                 logging.info(
-                    f"Adding ConvertDataFrameToCategoricalTransformer to pre_transformers for features: {feats_to_transform}"
+                    f"Adding ConvertDataFrameToCategoricalTransformer to pre_transformers for features: {cat_feats_to_transform}"
                 )
                 pre_transformers.append(
                     ConvertDataFrameToCategoricalTransformer(
-                        features=feats_to_transform
+                        features=cat_feats_to_transform
                     )
                 )
 
