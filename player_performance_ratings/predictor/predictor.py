@@ -23,6 +23,17 @@ from player_performance_ratings.predictor._base import BasePredictor
 
 
 class GameTeamPredictor(BasePredictor):
+    """
+    Wrapper for sklearn models that predicts game results.
+    The GameTeam Predictor is intended to transform predictions from a lower granularity into a GameTeam level.
+    If input data is at game-player, data is converted to game_team before being trained
+    Similar concept if it is at a granularity below game level.
+
+    Can be used similarly to an Sklearn pipeline by injecting pre_transformers into it.
+    By default the Predictor will always create pre_transformers to ensure that the estimator can train on the estimator-features that it receives.
+    Adding basic encoding of categorical features, standardizing or imputation is therefore not required.
+
+    """
 
     def __init__(
         self,
@@ -37,20 +48,23 @@ class GameTeamPredictor(BasePredictor):
         filters: Optional[list[Filter]] = None,
     ):
         """
-        Wrapper for sklearn models that predicts game results.
+        :param game_id_colum - name of game_id column
+        :param team_id_column - name of team_id column
+        :param target - Name of the column that the predictor should predict
+        :param estimator: Sklearn like Estimator
+        :param estimator_features: Features that the estimator should use to train.
+            Note the estimator_features passed to the constructor can be overriden by estimator_features passed to .train()
+        :param multiclassifier: If set to true the output when calling add_prediction() will be in multiclassifier format.
+            This results in the pred_column containing a list of probabilities along with a class column added containing the unique classes.
+            Further a Logistic Regression estimator will be converted to OrdinalClassifier(LogisticRegression())
 
-        The GameTeam Predictor is intended to transform predictions from a lower granularity into a GameTeam level.
-        So if input data is at game-player, data is converted to game_team before being trained
-        Similar concept if it is at a granularity below game level.
-
-
-        :param game_id_colum:
-        :param team_id_column:
-        :param features:
-        :param target:
-        :param estimator:
-        :param multiclassifier:
-        :param pred_column:
+        :param pred_column: Name of the new column added containing predictions or probabilities when calling .add_prediction().
+            Defaults to f"{self._target}_prediction"
+        :param pre_transformers - Transformations to take place before interacting with the estimator.
+            The effect is that each Predictor grants the same functionality as an Sklearn Pipeline.
+            By default the Predictor will always create pre_transformers to ensure that the estimator can train on the estimator-features that it receives.
+            Adding basic encoding of categorical features, standardizing or imputation is therefore not required.
+        :param filters - If filters are added the predictor will only train on a subset of the data.
         """
 
         self.game_id_colum = game_id_colum
@@ -71,6 +85,12 @@ class GameTeamPredictor(BasePredictor):
     def train(
         self, df: pd.DataFrame, estimator_features: list[Optional[str]] = None
     ) -> None:
+        """
+        Performs pre_transformations and trains an Sklearn-like estimator.
+
+        :param df - Dataframe containing the estimator_features and target.
+        :param estimator_features - If Estimator features are passed they will the estimator_features created by the constructor
+        """
 
         if len(df) == 0:
             raise ValueError("df is empty")
@@ -104,7 +124,6 @@ class GameTeamPredictor(BasePredictor):
         self.estimator.fit(grouped[self._estimator_features], grouped[self._target])
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy()
         """
         Adds prediction to df
 
@@ -114,7 +133,7 @@ class GameTeamPredictor(BasePredictor):
 
         if hasattr(self.estimator, "predict_proba"):
             try:
-                df[self._target] = df[self._target].astype("int")
+                df = df.assign(**{self._target: df[self._target].astype("int")})
             except Exception:
                 pass
         if not self._estimator_features:
@@ -212,6 +231,12 @@ class GameTeamPredictor(BasePredictor):
 
 
 class Predictor(BasePredictor):
+    """
+    Wrapper for sklearn models that predicts game results.
+    Can be used similarly to an Sklearn pipeline by injecting pre_transformers into it.
+    By default the Predictor will always create pre_transformers to ensure that the estimator can train on the estimator-features that it receives.
+    Adding basic encoding of categorical features, standardizing or imputation is therefore not required.
+    """
 
     def __init__(
         self,
@@ -224,6 +249,22 @@ class Predictor(BasePredictor):
         column_names: Optional[ColumnNames] = None,
         pre_transformers: Optional[list[PredictorTransformer]] = None,
     ):
+        """
+        :param target - Name of the column that the predictor should predict
+        :param estimator: Sklearn like Estimator
+        :param estimator_features: Features that the estimator should use to train.
+            Note the estimator_features passed to the constructor can be overriden by estimator_features passed to .train()
+        :param multiclassifier: If set to true the output when calling add_prediction() will be in multiclassifier format.
+            This results in the pred_column containing a list of probabilities along with a class column added containing the unique classes.
+            Further a Logistic Regression estimator will be converted to OrdinalClassifier(LogisticRegression())
+        :param pred_column: Name of the new column added containing predictions or probabilities when calling .add_prediction().
+            Defaults to f"{self._target}_prediction"
+        :param pre_transformers - Transformations to take place before interacting with the estimator.
+            The effect is that each Predictor grants the same functionality as an Sklearn Pipeline.
+            By default the Predictor will always create pre_transformers to ensure that the estimator can train on the estimator-features that it receives.
+            Adding basic encoding of categorical features, standardizing or imputation is therefore not required.
+        :param filters - If filters are added the predictor will only train on a subset of the data.
+        """
         self._target = target
         self.multiclassifier = multiclassifier
         self.column_names = column_names
@@ -246,6 +287,12 @@ class Predictor(BasePredictor):
     def train(
         self, df: pd.DataFrame, estimator_features: Optional[list[str]] = None
     ) -> None:
+        """
+        Performs pre_transformations and trains an Sklearn-like estimator.
+
+        :param df - Dataframe containing the estimator_features and target.
+        :param estimator_features - If Estimator features are passed they will the estimator_features created by the constructor
+        """
 
         if len(df) == 0:
             raise ValueError("df is empty")
@@ -290,6 +337,12 @@ class Predictor(BasePredictor):
         )
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Adds prediction to df
+
+        :param df:
+        :return: Input df with prediction column
+        """
         df = df.copy()
         if not self._estimator_features:
             raise ValueError("estimator_features not set. Please train first")
@@ -321,6 +374,9 @@ class Predictor(BasePredictor):
 
 
 class GranularityPredictor(BasePredictor):
+    """
+    Samples the dataset into different subsets based on the granularity column and trains a separate estimator for each.
+    """
 
     def __init__(
         self,
@@ -334,6 +390,23 @@ class GranularityPredictor(BasePredictor):
         column_names: Optional[ColumnNames] = None,
         pre_transformers: Optional[list[PredictorTransformer]] = None,
     ):
+        """
+        :param target - Name of the column that the predictor should predict
+        :param estimator: Sklearn like Estimator
+        :param estimator_features: Features that the estimator should use to train.
+            Note the estimator_features passed to the constructor can be overriden by estimator_features passed to .train()
+        :param multiclassifier: If set to true the output when calling add_prediction() will be in multiclassifier format.
+            This results in the pred_column containing a list of probabilities along with a class column added containing the unique classes.
+            Further a Logistic Regression estimator will be converted to OrdinalClassifier(LogisticRegression())
+        :param pred_column: Name of the new column added containing predictions or probabilities when calling .add_prediction().
+            Defaults to f"{self._target}_prediction"
+        :param pre_transformers - Transformations to take place before interacting with the estimator.
+            The effect is that each Predictor grants the same functionality as an Sklearn Pipeline.
+            By default the Predictor will always create pre_transformers to ensure that the estimator can train on the estimator-features that it receives.
+            Adding basic encoding of categorical features, standardizing or imputation is therefore not required.
+        :param filters - If filters are added the predictor will only train on a subset of the data.
+        """
+
         self._target = target
         self.granularity_column_name = granularity_column_name
         self.multiclassifier = multiclassifier
@@ -357,6 +430,12 @@ class GranularityPredictor(BasePredictor):
         )
 
     def train(self, df: pd.DataFrame, estimator_features: list[str]) -> None:
+        """
+        Performs pre_transformations and trains an Sklearn-like estimator.
+
+        :param df - Dataframe containing the estimator_features and target.
+        :param estimator_features - If Estimator features are passed they will the estimator_features created by the constructor
+        """
 
         if len(df) == 0:
             raise ValueError("df is empty")
@@ -406,6 +485,12 @@ class GranularityPredictor(BasePredictor):
             )
 
     def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Adds prediction to df
+
+               :param df:
+               :return: Input df with prediction column
+        """
         if not self._estimator_features:
             raise ValueError("estimator_features not set. Please train first")
 
@@ -458,6 +543,12 @@ class GranularityPredictor(BasePredictor):
 
 
 class SeriesWinLosePredictor(BasePredictor):
+    """
+    Trains a separate model for when target is 1 vs when target is 0.
+    For a bo1, the probability is then calculated as Probabilities given team wins * Game Win Probability + (1-Game Win Probabiliy) * Probability Given Team Loses
+    This can be extended to bo3, bo5 based on the format-column.
+    """
+
     def __init__(
         self,
         format_column_name: str,

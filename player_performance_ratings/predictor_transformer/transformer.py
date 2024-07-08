@@ -28,6 +28,9 @@ class PredictorTransformer(ABC):
 
 
 class ConvertDataFrameToCategoricalTransformer(PredictorTransformer):
+    """
+    Converts a specified list of columns to categorical dtype
+    """
 
     def __init__(self, features: list[str]):
         super().__init__(features=features)
@@ -47,6 +50,9 @@ class ConvertDataFrameToCategoricalTransformer(PredictorTransformer):
 
 
 class SkLearnTransformerWrapper(PredictorTransformer):
+    """
+    A wrapper around an Sklearn Transformer
+    """
 
     def __init__(self, transformer, features: list[str]):
         self.transformer = transformer

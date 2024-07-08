@@ -229,47 +229,40 @@ class LagTransformer(BaseLagGenerator):
 
 
 class RollingMeanTransformer(BaseLagGenerator):
+    """
+    Calculates the rolling mean for a list of features over a window of matches.
+    Rolling Mean Values are also shifted by one match to avoid data leakage.
+
+    Use .generate_historical() to generate rolling mean for historical data.
+        The historical data is stored as instance-variables after calling .generate_historical()
+    Use .generate_future() to generate rolling mean for future data after having called .generate_historical()
+    """
 
     def __init__(
         self,
         features: list[str],
         window: int,
+        min_periods: int = 1,
         granularity: Union[list[str], str] = None,
         add_opponent: bool = False,
-        min_periods: int = 1,
         are_estimator_features=True,
         prefix: str = "rolling_mean_",
     ):
         """
+        Calculates the rolling mean for a list of features over a window of matches.
+        Rolling Mean Values are also shifted by one match to avoid data leakage.
 
-        :param features:
-            Features to create rolling mean for
-
-        :param granularity:
-            Columns to group by before rolling mean. E.g. player_id or [player_id, position].
+        :param features:   Features to create rolling mean for
+        :param window: Window size for rolling mean.
+            If 10 will calculate rolling mean over the prior 10 observations
+        :param min_periods: Minimum number of observations in window required to have a non-null result
+        :param granularity: Columns to group by before rolling mean. E.g. player_id or [player_id, position].
              In the latter case it will get the rolling mean for each player_id and position combination.
-
-        :param window:
-            Window size for rolling mean, if 10 will calculate rolling mean over the prior 10 observations
-
-        :param game_id:
-            Column name of game_id.
-            If there are more multiple rows per granularity per game_id and you want to add the rolling mean per game_id, set game_id
-            This will calculate the mean of the features per game and the rolling mean will be calculated on that.
-
-        :param weight_column:
-            Only used if game_id is set.
-            Will calculate weighted mean of the features per game and the rolling mean will be the prior weighted means.
-            This is useful when working with partial game-data of different lengths.
-            In that case it can beneficial to set the game-length as weight_colum.
-
-        :param df: Optional parameter to pass in a dataframe to calculate the rolling mean on.
-            If not passed in, it will use the dataframe passed in the transform method.
-            This is useful if you want to calculate the rolling mean on a different dataframe than the one you want to transform.
-            Will merge the two dataframes on game_id and granularity.
-
-        :param prefix:
-            Prefix for the new rolling mean columns
+             Defaults to player_id
+        :param add_opponent: If True, will add new columns containing rolling mean for the opponent team.
+        :param are_estimator_features: If True, the features will be added to the estimator features.
+            If false, it makes it possible for the outer layer (Pipeline) to exclude these features from the estimator.
+        :param prefix: Prefix for the new rolling mean columns
         """
         super().__init__(
             features=features,
@@ -285,6 +278,15 @@ class RollingMeanTransformer(BaseLagGenerator):
     def generate_historical(
         self, df: pd.DataFrame, column_names: ColumnNames
     ) -> pd.DataFrame:
+        """
+        Generates rolling mean for historical data
+        Stored the historical data as instance-variables so it's possible to generate future data afterwards
+        The calculation is done using Polars.
+         However, Pandas Dataframe can be used as input and it will also output a pandas dataframe in that case.
+
+        :param df: Historical data
+        :param column_names: Column names
+        """
         df = df.assign(is_future=0)
         self.column_names = column_names
         self.granularity = self.granularity or [self.column_names.player_id]
@@ -297,6 +299,15 @@ class RollingMeanTransformer(BaseLagGenerator):
         return df
 
     def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Generates rolling mean for future data
+        Assumes that .generate_historical() has been called before
+
+        Regardless of the scheduled data of the future match, all future matches are perceived as being played in the same date.
+        That is to ensure that a team's 2nd future match has the same rolling means as the 1st future match.
+        :param df: Future data
+        """
+
         df = df.assign(is_future=1)
         concat_df = self._generate_concat_df_with_feats(df=df)
         transformed_df = concat_df[
@@ -460,6 +471,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         return df
 
     def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
+
         ori_types = {c: df[c].dtype for c in df.columns}
         df = df.assign(is_future=1)
         concat_df = self._generate_concat_df_with_feats(df=df)
@@ -828,6 +840,14 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
 
 class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
+    """
+    Calculates the rolling mean for a list of features over a window of matches.
+    Rolling Mean Values are also shifted by one match to avoid data leakage.
+
+    Use .generate_historical() to generate rolling mean for historical data.
+        The historical data is stored as instance-variables after calling .generate_historical()
+    Use .generate_future() to generate rolling mean for future data after having called .generate_historical()
+    """
 
     def __init__(
         self,
@@ -839,6 +859,19 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         are_estimator_features=True,
         prefix: str = "rolling_mean_",
     ):
+        """
+        :param features:   Features to create rolling mean for
+        :param window: Window size for rolling mean.
+            If 10 will calculate rolling mean over the prior 10 observations
+        :param min_periods: Minimum number of observations in window required to have a non-null result
+        :param granularity: Columns to group by before rolling mean. E.g. player_id or [player_id, position].
+             In the latter case it will get the rolling mean for each player_id and position combination.
+             Defaults to player_id
+        :param add_opponent: If True, will add new columns containing rolling mean for the opponent team.
+        :param are_estimator_features: If True, the features will be added to the estimator features.
+            If false, it makes it possible for the outer layer (Pipeline) to exclude these features from the estimator.
+        :param prefix: Prefix for the new rolling mean columns
+        """
 
         super().__init__(
             features=features,
@@ -854,6 +887,15 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
     def generate_historical(
         self, df: Union[pd.DataFrame, pl.DataFrame], column_names: ColumnNames
     ) -> Union[pl.DataFrame, pd.DataFrame]:
+        """
+        Generates rolling mean for historical data
+        Stored the historical data as instance-variables so it's possible to generate future data afterwards
+        The calculation is done using Polars.
+         However, Pandas Dataframe can be used as input and it will also output a pandas dataframe in that case.
+
+        :param df: Historical data
+        :param column_names: Column names
+        """
         if isinstance(df, pd.DataFrame):
             ori_type = "pd"
             df = pl.DataFrame(df)
@@ -903,6 +945,17 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
     def generate_future(
         self, df: Union[pd.DataFrame, pl.DataFrame]
     ) -> Union[pl.DataFrame, pd.DataFrame]:
+        """
+        Generates rolling mean for future data
+        Assumes that .generate_historical() has been called before
+        The calculation is done using Polars.
+         However, Pandas Dataframe can be used as input and it will also output a pandas dataframe in that case.
+
+        Regardless of the scheduled data of the future match, all future matches are perceived as being played in the same date.
+        That is to ensure that a team's 2nd future match has the same rolling means as the 1st future match.
+        :param df: Future data
+        """
+
         if isinstance(df, pd.DataFrame):
             ori_type = "pd"
             df = pl.DataFrame(df)

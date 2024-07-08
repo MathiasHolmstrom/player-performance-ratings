@@ -167,7 +167,6 @@ class BasePredictor(ABC):
         if self.auto_pre_transform:
             self.pre_transformers += self._create_pre_transformers(df)
 
-
         for pre_transformer in self.pre_transformers:
             values = pre_transformer.fit_transform(df)
             features_out = pre_transformer.features_out
@@ -181,8 +180,7 @@ class BasePredictor(ABC):
     def transform_pre_transformers(self, df: pd.DataFrame) -> pd.DataFrame:
         for pre_transformer in self.pre_transformers:
             values = pre_transformer.transform(df)
-            features_out = pre_transformer.features_out
-            df[features_out] = values
+            df = df.assign(**{col: values[col] for col in values.columns})
         return df
 
     @property

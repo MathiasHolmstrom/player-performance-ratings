@@ -167,7 +167,7 @@ class PipelineTuner:
     ) -> Union[Pipeline, tuple[Pipeline, pd.DataFrame]]:
 
         if self.cross_validator is None:
-            self.cross_validator = self.pipeline.create_default_cross_validator(df)
+            self.cross_validator = self.pipeline._create_default_cross_validator(df)
 
         original_df = df.copy()
 
@@ -294,7 +294,7 @@ class PipelineTuner:
             logging.info("Retraining best match predictor with all data")
             df = best_match_predictor.train_predict(
                 df=original_df,
-                store_ratings=True,
+                store_match_ratings=True,
                 return_features=True,
                 cross_validate_predict=return_cross_validated_predictions,
                 cross_validator=self.cross_validator,
