@@ -89,6 +89,7 @@ class BasePredictor(ABC):
     def _create_pre_transformers(self, df: pd.DataFrame) -> list[PredictorTransformer]:
         pre_transformers = []
         cat_feats_to_transform = []
+        all_feats_in_pre_transformers = [f for c in self.pre_transformers for f in c.features]
         for estimator_feature in self._estimator_features.copy():
 
             if estimator_feature not in df.columns:
@@ -99,7 +100,8 @@ class BasePredictor(ABC):
                 continue
 
             if not pd.api.types.is_numeric_dtype(df[estimator_feature]):
-                cat_feats_to_transform.append(estimator_feature)
+                if estimator_feature not in all_feats_in_pre_transformers:
+                    cat_feats_to_transform.append(estimator_feature)
 
         if cat_feats_to_transform:
             if self._deepest_estimator.__class__.__name__ in (
@@ -144,10 +146,11 @@ class BasePredictor(ABC):
                 if hasattr(pre_transformer, "transformer")
             ]:
                 logging.info(f"Adding StandardScaler to pre_transformers")
+                numeric_feats = [f for f in self._estimator_features if f not in cat_feats_to_transform]
                 pre_transformers.append(
                     SkLearnTransformerWrapper(
                         transformer=StandardScaler(),
-                        features=self._estimator_features.copy(),
+                        features=numeric_feats,
                     )
                 )
 
@@ -156,10 +159,11 @@ class BasePredictor(ABC):
                 for pre_transformer in self.pre_transformers
                 if hasattr(pre_transformer, "transformer")
             ]:
+                numeric_feats = [f for f in self._estimator_features if f not in cat_feats_to_transform]
                 pre_transformers.append(
                     SkLearnTransformerWrapper(
                         transformer=SimpleImputer(),
-                        features=self._estimator_features.copy(),
+                        features=numeric_feats,
                     )
                 )
         return pre_transformers
@@ -172,6 +176,9 @@ class BasePredictor(ABC):
             values = pre_transformer.fit_transform(df)
             features_out = pre_transformer.features_out
             df[features_out] = values
+            feats_to_remove = [f for f in pre_transformer.features if f in self._estimator_features]
+            if feats_to_remove:
+                self._estimator_features.remove(*feats_to_remove)
             self._estimator_features = list(
                 set(pre_transformer.features_out + self._estimator_features)
             )

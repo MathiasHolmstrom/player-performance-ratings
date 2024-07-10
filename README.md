@@ -11,6 +11,51 @@ pip install player-performance-ratings
 
 
 ## Example Useage
+Ensure you have a dataset where each row is a unique combination of game_ids and player_ids.
+There are multiple different use-cases for the framework, such as:
+1. Creating ratings for players/teams.
+2. Predicting the outcome.
+3. Creating features or other types of data-transformations
+
+### Training a Rating Model
+
+If you only desire to generate ratings this is quite simple:
+
+
+df = pd.read_pickle("data/game_player_subsample.pickle")
+
+# Defines the column names as they appear in the dataframe
+column_names = ColumnNames(
+    team_id='team_id',
+    match_id='game_id',
+    start_date="start_date",
+    player_id="player_name",
+)
+# Sorts the dataframe. The dataframe must always be sorted as below
+df = df.sort_values(by=[column_names.start_date, column_names.match_id, column_names.team_id, column_names.player_id])
+
+# Defines the target column we inted to predict
+df[PredictColumnNames.TARGET] = df['won']
+
+# Drops games with less or more than 2 teams
+df = (
+    df.assign(team_count=df.groupby(column_names.match_id)[column_names.team_id].transform('nunique'))
+    .loc[lambda x: x.team_count == 2]
+    .drop(columns=['team_count'])
+)
+
+# Pretends the last 10 games are future games. The most will be trained on everything before that.
+most_recent_10_games = df[column_names.match_id].unique()[-10:]
+historical_df = df[~df[column_names.match_id].isin(most_recent_10_games)]
+future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(columns=[PredictColumnNames.TARGET, 'won'])
+
+# Defining a simple rating-generator. It will use the "won" column to update the ratings.
+# In contrast to a typical Elo, ratings will follow players.
+rating_generator = UpdateRatingGenerator(performance_column='won')
+
+rating_g
+
+### Predicting Game-Winner
 
 Ensure you have a dataset where each row is a unique combination of game_ids and player_ids. 
 Even if the concept of a player doesn't exist in the dataset, you can use team_id instead of player_id.
@@ -87,9 +132,10 @@ team_grouped_predictions = future_predictions.groupby(column_names.match_id).fir
     [column_names.start_date, column_names.team_id, 'team_id_opponent', predictor.pred_column]]
 
 print(team_grouped_predictions)
-
-
 ```
+
+### Calculating Rolling Means, Lags and Ratings in the same Pipeline
+
 
 For more advanced usecases, check the examples directory.
 
@@ -116,17 +162,5 @@ Or, user can also use a combination of statistics, such as true shooting percent
 
 The user can configure classes inside the preprocessing folder to create the performance_column.
 The user can also create custom classes with more specific functionality. 
-
-
-### Rating Calculation
-
-### PostProcessing
-
-### Model Predictions
-
-### Scoring
-
-### Hyperparameter Tuning
-
 
 

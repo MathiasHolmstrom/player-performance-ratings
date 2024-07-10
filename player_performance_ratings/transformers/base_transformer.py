@@ -584,7 +584,7 @@ class BaseLagGeneratorPolars:
         return transformed_df.select(list(set(df.columns + self.features_out)))
 
     def _add_opponent_features(self, df: pl.DataFrame) -> pl.DataFrame:
-        team_features = df.groupby(
+        team_features = df.group_by(
             [self.column_names.team_id, self.column_names.match_id]
         ).agg(**{col: pl.mean(col) for col in self._entity_features})
 
