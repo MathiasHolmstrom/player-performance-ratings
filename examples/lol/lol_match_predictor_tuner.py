@@ -1,7 +1,4 @@
-import pickle
-
 import pandas as pd
-from sklearn.linear_model import LogisticRegression
 
 from player_performance_ratings.pipeline import Pipeline
 from player_performance_ratings.predictor import GameTeamPredictor
@@ -29,7 +26,6 @@ df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
 df['champion_position'] = df['champion'] + df['position']
 df['__target'] = df['result']
 
-
 df = df.drop_duplicates(subset=['gameid', 'teamname', 'playername'])
 
 df = (
@@ -40,6 +36,17 @@ df = (
 df = df.drop_duplicates(subset=['gameid', 'teamname', 'playername'])
 
 rating_generator = UpdateRatingGenerator(performance_column='performance')
+
+predictor = GameTeamPredictor(
+    game_id_colum="gameid",
+    team_id_column="teamname",
+)
+
+pipeline = Pipeline(
+    rating_generators=rating_generator,
+    predictor=predictor,
+    column_names=column_names
+)
 
 start_rating_search_range = [
     ParameterSearchRange(
@@ -100,22 +107,12 @@ rating_generator_tuner = UpdateRatingGeneratorTuner(
     team_rating_n_trials=3
 )
 
-predictor = GameTeamPredictor(
-    game_id_colum="gameid",
-    team_id_column="teamname",
-)
-
-pipeline = Pipeline(
-    rating_generators=rating_generator,
-    predictor=predictor,
-    column_names=column_names
-)
-
 tuner = PipelineTuner(
     performances_generator_tuners=performance_generator_tuner,
     rating_generator_tuners=rating_generator_tuner,
-    predictor_tuner=PredictorTuner(n_trials=1, search_ranges=[ParameterSearchRange(name='C', type='categorical', choices=[1.0, 0.5])]),
+    predictor_tuner=PredictorTuner(n_trials=1, search_ranges=[
+        ParameterSearchRange(name='C', type='categorical', choices=[1.0, 0.5])]),
     fit_best=True,
     pipeline=pipeline,
 )
-best_match_predictor,df = tuner.tune(df=df, return_df=True, return_cross_validated_predictions=True)
+best_match_predictor, df = tuner.tune(df=df, return_df=True, return_cross_validated_predictions=True)

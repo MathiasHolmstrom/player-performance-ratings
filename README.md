@@ -1,6 +1,6 @@
 # player-performance-ratings
 
-Framework designed to predict outcomes in sports games using player-based ratings.
+Framework designed to predict outcomes in sports games using player-based ratings or other forms of engineered features such as rolling means.
 Ratings can be used to predict game-winner, but also other outcomes such as total points scored, total yards gained, etc.
 
 ## Installation
@@ -10,7 +10,7 @@ pip install player-performance-ratings
 ```
 
 
-## Example Useage
+## Examples
 Ensure you have a dataset where each row is a unique combination of game_ids and player_ids.
 There are multiple different use-cases for the framework, such as:
 1. Creating ratings for players/teams.
@@ -20,7 +20,13 @@ There are multiple different use-cases for the framework, such as:
 ### Training a Rating Model
 
 If you only desire to generate ratings this is quite simple:
+```
+import pandas as pd
+from player_performance_ratings import PredictColumnNames
 
+from player_performance_ratings.ratings import UpdateRatingGenerator, RatingEstimatorFeatures
+
+from player_performance_ratings.data_structures import ColumnNames
 
 df = pd.read_pickle("data/game_player_subsample.pickle")
 
@@ -53,7 +59,20 @@ future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(column
 # In contrast to a typical Elo, ratings will follow players.
 rating_generator = UpdateRatingGenerator(performance_column='won')
 
-rating_g
+# Calculate Ratings on Historical data
+match_ratings = rating_generator.generate_historical(historical_df, column_names=column_names)
+
+# The historical pre_match_rating_difference for each match is inserted into the dataframe
+historical_df['rating_difference'] = match_ratings[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]
+
+# Printing out the 10 highest rated teams and the ratings of the players for the team
+team_ratings = rating_generator.team_ratings
+print(team_ratings[:10])
+
+#Calculating Ratings for Future Matches
+future_match_ratings = rating_generator.generate_future(future_df)
+future_match_ratings['rating_difference'] = future_match_ratings[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]
+```
 
 ### Predicting Game-Winner
 
@@ -136,31 +155,196 @@ print(team_grouped_predictions)
 
 ### Calculating Rolling Means, Lags and Ratings in the same Pipeline
 
+If the user simply wants to calculate features without directly feeding into a prediction-model, this can be done using PipelineTransformer.
+The example below calculates rolling-means and lags for kills, deaths, the result and calculates a rating based on the result.
+It then outputs the dataframe with the new features.
+```
+import pandas as pd
 
-For more advanced usecases, check the examples directory.
+from player_performance_ratings import ColumnNames, PredictColumnNames
+from player_performance_ratings.pipeline_transformer import PipelineTransformer
+from player_performance_ratings.ratings import UpdateRatingGenerator, MatchRatingGenerator, StartRatingGenerator, \
+    RatingEstimatorFeatures
+from player_performance_ratings.transformers import LagTransformer
+from player_performance_ratings.transformers.lag_generators import RollingMeanTransformerPolars
+
+column_names = ColumnNames(
+    team_id='teamname',
+    match_id='gameid',
+    start_date="date",
+    player_id="playername",
+    league='league',
+    position='position',
+)
+df = pd.read_parquet("data/subsample_lol_data")
+df = (
+    df.loc[lambda x: x.position != 'team']
+    .assign(team_count=df.groupby('gameid')['teamname'].transform('nunique'))
+    .loc[lambda x: x.team_count == 2]
+    .assign(player_count=df.groupby(['gameid', 'teamname'])['playername'].transform('nunique'))
+    .loc[lambda x: x.player_count == 5]
+)
+df = (df
+.assign(team_count=df.groupby('gameid')['teamname'].transform('nunique'))
+.loc[lambda x: x.team_count == 2]
+)
 
 
+# Pretends the last 10 games are future games. The most will be trained on everything before that.
+most_recent_10_games = df[column_names.match_id].unique()[-10:]
+historical_df = df[~df[column_names.match_id].isin(most_recent_10_games)]
+future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(columns=['result'])
 
-## Description
+rating_generator = UpdateRatingGenerator(
+    estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED],
+    performance_column='result'
+)
+
+lag_generators = [
+    LagTransformer(
+        features=["kills", "deaths", "result"],
+        lag_length=3,
+        granularity=['playername']
+    ),
+    RollingMeanTransformerPolars(
+        features=["kills", "deaths", "result"],
+        window=20,
+        min_periods=1,
+        granularity=['playername']
+    )
+]
 
 
-The flexibility of the rating model grants the potential for significantly higher accuracy than other models, such as Elo,Glicko and Trueskill which are based on team performance.
-Both team and player outcomes can be predicted.
-The user has freedom to combine the ratings with other features, such as home/away, weather, etc.
-The user can also use some of the already created machine-learning models or create any custom model that they believe will work better.
+transformer = PipelineTransformer(
+    column_names=column_names,
+    rating_generators=rating_generator,
+    lag_generators=lag_generators
+)
 
-The framework consists of the following components:
+historical_df = transformer.fit_transform(historical_df)
 
-### Preprocessing
+future_df = transformer.transform(future_df)
+print(future_df.head())
+```
 
-If the intention is a simple elo-model or equivalent, no preprocessing is required. 
-However, typically a lot of value can be gained through intelligent preprocessing before the ratings are calculated.
-The rating-model will take a performance_column as input and update ratings on that. 
-A well designed performance that is a good indicator of future success is crucial for the model to work well.
-For instance, if the user suspects that a players true shooting percentage is a better indicator of future points scored by the player than actual points scored, the user can use that.
-Or, user can also use a combination of statistics, such as true shooting percentage and points scored to calculate the "match-performance".
+### Hyperparameter tuning
+Tuning the parameters can often lead to higher accuracy.
+For player-performance-ratings, hyperparameter-tuning is easy to implement. 
+Hyperparameter-tuning can be used for the predictor-parameters, but also for the rating-generator-parameters.
+In the example below, the optimal way to calculate the margin of victory by determining the weight of multiple columns is designed as a hyperparameter-tuning problem
 
-The user can configure classes inside the preprocessing folder to create the performance_column.
-The user can also create custom classes with more specific functionality. 
+```
+import pandas as pd
+
+from player_performance_ratings.pipeline import Pipeline
+from player_performance_ratings.predictor import GameTeamPredictor
+from player_performance_ratings.tuner.performances_generator_tuner import PerformancesSearchRange
+from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
+
+from player_performance_ratings.tuner.rating_generator_tuner import UpdateRatingGeneratorTuner
+from player_performance_ratings.ratings import UpdateRatingGenerator
+
+from player_performance_ratings.data_structures import ColumnNames
+
+from player_performance_ratings.tuner import PipelineTuner, PerformancesGeneratorTuner
+from player_performance_ratings.tuner.utils import ParameterSearchRange, get_default_team_rating_search_range
+
+column_names = ColumnNames(
+    team_id='teamname',
+    match_id='gameid',
+    start_date="date",
+    player_id="playername",
+    league='league',
+    position='position',
+)
+df = pd.read_parquet("data/subsample_lol_data")
+df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
+df['champion_position'] = df['champion'] + df['position']
+df['__target'] = df['result']
+
+df = df.drop_duplicates(subset=['gameid', 'teamname', 'playername'])
+
+df = (
+    df.assign(team_count=df.groupby('gameid')['teamname'].transform('nunique'))
+    .loc[lambda x: x.team_count == 2]
+    .drop(columns=['team_count'])
+)
+df = df.drop_duplicates(subset=['gameid', 'teamname', 'playername'])
+
+rating_generator = UpdateRatingGenerator(performance_column='performance')
+
+predictor = GameTeamPredictor(
+    game_id_colum="gameid",
+    team_id_column="teamname",
+)
+
+pipeline = Pipeline(
+    rating_generators=rating_generator,
+    predictor=predictor,
+    column_names=column_names
+)
+
+
+performance_generator_tuner = PerformancesGeneratorTuner(
+    performances_search_range=PerformancesSearchRange(search_ranges=[
+        ParameterSearchRange(
+            name='damagetochampions',
+            type='uniform',
+            low=0,
+            high=0.45
+        ),
+        ParameterSearchRange(
+            name='deaths',
+            type='uniform',
+            low=0,
+            high=.3,
+            lower_is_better=True
+        ),
+        ParameterSearchRange(
+            name='kills',
+            type='uniform',
+            low=0,
+            high=0.3
+        ),
+        ParameterSearchRange(
+            name='result',
+            type='uniform',
+            low=0.25,
+            high=0.85
+        ),
+    ]),
+    n_trials=3
+)
+
+rating_generator_tuner = UpdateRatingGeneratorTuner(
+    team_rating_search_ranges=get_default_team_rating_search_range(),
+    start_rating_search_ranges=start_rating_search_range,
+    optimize_league_ratings=True,
+    team_rating_n_trials=3
+)
+
+tuner = PipelineTuner(
+    performances_generator_tuners=performance_generator_tuner,
+    predictor_tuner=PredictorTuner(n_trials=1, search_ranges=[
+        ParameterSearchRange(name='C', type='categorical', choices=[1.0, 0.5])]),
+    fit_best=True,
+    pipeline=pipeline,
+)
+best_match_predictor, df = tuner.tune(df=df, return_df=True, return_cross_validated_predictions=True)
+
+```
+
+## Advanced usecases
+
+The listed examples above are quite simple. 
+However, the framework is designed to be flexible and can easily be extended in order to create better models:
+Examples:
+
+* Create a better margin of victory bombine multiple columns to create a performance_column which ratings will be calculated based on.
+* Combine rolling-means, lags with ratings to create a more complex model.
+* Add other features such as weather, home/away, etc.
+* Predict other outcomes than game-winner, such as total points scored, total yards gained, etc.
+* Create custom transformations utilizing domain knowledge of the sport.
+
 
 
