@@ -1,6 +1,14 @@
 import pandas as pd
 
 from player_performance_ratings import ColumnNames
+import polars as pl
+
+
+def convert_pandas_to_polars(df: pd.DataFrame) -> pl.DataFrame:
+    for column in df.select_dtypes(include=['category']).columns:
+        df[column] = df[column].astype(str)
+
+    return pl.from_pandas(df)
 
 
 def validate_sorting(df: pd.DataFrame, column_names: ColumnNames) -> None:

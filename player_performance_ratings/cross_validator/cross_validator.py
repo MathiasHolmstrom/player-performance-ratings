@@ -12,6 +12,7 @@ from player_performance_ratings.transformers.base_transformer import (
 
 from player_performance_ratings.cross_validator._base import CrossValidator
 from player_performance_ratings.predictor._base import BasePredictor
+from player_performance_ratings.utils import convert_pandas_to_polars
 
 
 class MatchKFoldCrossValidator(CrossValidator):
@@ -129,8 +130,8 @@ class MatchKFoldCrossValidator(CrossValidator):
                     if isinstance(train_df, pd.DataFrame) and len(
                         count_remaining_polars
                     ) == len(lag_generators[lag_idx:]) + len(post_lag_transformers):
-                        train_df = pl.from_pandas(train_df)
-                        validation_df = pl.from_pandas(validation_df)
+                        train_df = convert_pandas_to_polars(train_df)
+                        validation_df = convert_pandas_to_polars(validation_df)
 
                     lag_transformer.reset()
                     train_df = lag_transformer.generate_historical(
@@ -147,6 +148,10 @@ class MatchKFoldCrossValidator(CrossValidator):
                 )
                 validation_df = post_lag_transformer.transform(validation_df)
 
+            if isinstance(train_df, pl.DataFrame):
+                train_df = train_df.to_pandas()
+            if isinstance(validation_df, pl.DataFrame):
+                validation_df = validation_df.to_pandas()
             predictor.train(train_df, estimator_features=estimator_features)
 
             if idx == 0 and add_train_prediction:

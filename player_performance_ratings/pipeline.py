@@ -28,6 +28,7 @@ from player_performance_ratings.transformers.base_transformer import (
     BaseLagGenerator,
     BaseLagGeneratorPolars,
 )
+from player_performance_ratings.utils import convert_pandas_to_polars
 
 DataFrameType = TypeVar("DataFrameType", pd.DataFrame, pl.DataFrame)
 
@@ -384,7 +385,7 @@ class Pipeline:
             if isinstance(df_with_predict, pd.DataFrame) and len(
                 count_remaining_polars
             ) == len(self.lag_generators[idx:] + self.post_lag_transformers):
-                df_with_predict = pl.from_pandas(df_with_predict)
+                df_with_predict = convert_pandas_to_polars(df_with_predict)
 
             df_with_predict = self.lag_generators[idx].generate_historical(
                 df_with_predict, column_names=self.column_names
@@ -562,7 +563,7 @@ class Pipeline:
             if isinstance(df_with_predict, pd.DataFrame) and len(
                 count_remaining_polars
             ) == len(self.lag_generators[idx:] + self.post_lag_transformers):
-                df_with_predict = pl.from_pandas(df_with_predict)
+                df_with_predict = convert_pandas_to_polars(df_with_predict)
             df_with_predict = lag_generator.generate_future(df_with_predict)
         for post_lag_transformer in self.post_lag_transformers:
             df_with_predict = post_lag_transformer.transform(df_with_predict)
