@@ -146,6 +146,8 @@ def test_rating_generator_update_id_different_from_match_id():
     )
 
     rating_generator = UpdateRatingGenerator(
+    non_estimator_known_features_out = [RatingKnownFeatures.PLAYER_RATING],
+    historical_features_out = [RatingHistoricalFeatures.PLAYER_RATING_CHANGE],
         match_rating_generator=MatchRatingGenerator(
             rating_change_multiplier=rating_change_multiplier, confidence_weight=0
         )
@@ -154,6 +156,10 @@ def test_rating_generator_update_id_different_from_match_id():
     ratings = rating_generator.generate_historical_by_matches(
         matches=matches, column_names=column_names
     )
+
+    assert RatingKnownFeatures.PLAYER_RATING in ratings
+    assert RatingHistoricalFeatures.PLAYER_RATING_CHANGE in ratings
+
 
     expected_player_game_1_player1 = (0.7 - 0.5) * rating_change_multiplier * 0.1
     expected_player_game_1_player2 = (1 - 0.5) * rating_change_multiplier * 0.1
@@ -169,32 +175,32 @@ def test_rating_generator_update_id_different_from_match_id():
         "1": PlayerRating(
             id="1",
             rating_value=1000
-            + expected_player_game_1_player1
-            + expected_player_game_2_player1,
+                         + expected_player_game_1_player1
+                         + expected_player_game_2_player1,
             games_played=0.3,
             confidence_sum=new_confidence_sum,
         ),
         "2": PlayerRating(
             id="2",
             rating_value=1000
-            + expected_player_game_1_player2
-            + expected_player_game_2_player2,
+                         + expected_player_game_1_player2
+                         + expected_player_game_2_player2,
             games_played=0.3,
             confidence_sum=new_confidence_sum,
         ),
         "3": PlayerRating(
             id="3",
             rating_value=1000
-            + expected_player_game_1_player3
-            + expected_player_game_2_player3,
+                         + expected_player_game_1_player3
+                         + expected_player_game_2_player3,
             games_played=0.3,
             confidence_sum=new_confidence_sum,
         ),
         "4": PlayerRating(
             id="4",
             rating_value=1000
-            + expected_player_game_1_player4
-            + expected_player_game_2_player4,
+                         + expected_player_game_1_player4
+                         + expected_player_game_2_player4,
             games_played=0.3,
             confidence_sum=new_confidence_sum,
         ),
@@ -409,16 +415,16 @@ def test_opponent_adjusted_rating_generator_with_projected_performance():
     )
 
     assert (
-        df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[4]
-        == df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[5]
+            df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[4]
+            == df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[5]
     )
     assert (
-        df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[6]
-        == df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED][7]
+            df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[6]
+            == df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED][7]
     )
     assert (
-        df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[4]
-        < df_with_ratings[RatingHistoricalFeatures.TEAM_RATING][4]
+            df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[4]
+            < df_with_ratings[RatingHistoricalFeatures.TEAM_RATING][4]
     )
 
 

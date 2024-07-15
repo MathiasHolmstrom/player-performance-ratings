@@ -129,7 +129,7 @@ class UpdateRatingGenerator(RatingGenerator):
         )
         return {
             f: potential_feature_values[f]
-            for f in known_features_out + historical_features_out
+            for f in list(set(known_features_out + historical_features_out + self._non_estimator_rating_features_out))
         }
 
     def generate_historical(

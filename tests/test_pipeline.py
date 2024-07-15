@@ -718,7 +718,9 @@ def test_post_pre_and_lag_transformers():
         start_date="start_date",
     )
     rating_generator = UpdateRatingGenerator(
-        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
+        non_estimator_known_features_out=[RatingKnownFeatures.PLAYER_RATING],
+        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+        historical_features_out=[RatingHistoricalFeatures.TEAM_RATING],
     )
     pre_transformer = PredictorTransformer(
         predictor=Predictor(
@@ -780,11 +782,19 @@ def test_post_pre_and_lag_transformers():
         assert f in predicted_df.columns
         assert f not in future_df.columns
 
+    for f in rating_generator.historical_features_out:
+        assert f in predicted_df.columns
+        assert f not in future_df.columns
+
     for f in post_transformer.estimator_features_out:
         assert f in predicted_df.columns
         assert f not in future_df.columns
 
     for f in pre_transformer.estimator_features_out:
+        assert f in predicted_df.columns
+        assert f not in future_df.columns
+
+    for f in rating_generator.non_estimator_known_features_out:
         assert f in predicted_df.columns
         assert f not in future_df.columns
 
