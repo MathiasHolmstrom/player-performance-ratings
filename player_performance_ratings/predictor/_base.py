@@ -89,7 +89,9 @@ class BasePredictor(ABC):
     def _create_pre_transformers(self, df: pd.DataFrame) -> list[PredictorTransformer]:
         pre_transformers = []
         cat_feats_to_transform = []
-        all_feats_in_pre_transformers = [f for c in self.pre_transformers for f in c.features]
+        all_feats_in_pre_transformers = [
+            f for c in self.pre_transformers for f in c.features
+        ]
         for estimator_feature in self._estimator_features.copy():
 
             if estimator_feature not in df.columns:
@@ -146,7 +148,11 @@ class BasePredictor(ABC):
                 if hasattr(pre_transformer, "transformer")
             ]:
                 logging.info(f"Adding StandardScaler to pre_transformers")
-                numeric_feats = [f for f in self._estimator_features if f not in cat_feats_to_transform]
+                numeric_feats = [
+                    f
+                    for f in self._estimator_features
+                    if f not in cat_feats_to_transform
+                ]
                 pre_transformers.append(
                     SkLearnTransformerWrapper(
                         transformer=StandardScaler(),
@@ -159,7 +165,11 @@ class BasePredictor(ABC):
                 for pre_transformer in self.pre_transformers
                 if hasattr(pre_transformer, "transformer")
             ]:
-                numeric_feats = [f for f in self._estimator_features if f not in cat_feats_to_transform]
+                numeric_feats = [
+                    f
+                    for f in self._estimator_features
+                    if f not in cat_feats_to_transform
+                ]
                 pre_transformers.append(
                     SkLearnTransformerWrapper(
                         transformer=SimpleImputer(),
@@ -176,7 +186,9 @@ class BasePredictor(ABC):
             values = pre_transformer.fit_transform(df)
             features_out = pre_transformer.features_out
             df[features_out] = values
-            feats_to_remove = [f for f in pre_transformer.features if f in self._estimator_features]
+            feats_to_remove = [
+                f for f in pre_transformer.features if f in self._estimator_features
+            ]
             if feats_to_remove:
                 for feat in feats_to_remove:
                     self._estimator_features.remove(feat)

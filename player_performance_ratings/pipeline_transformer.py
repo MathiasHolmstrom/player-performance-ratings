@@ -6,13 +6,18 @@ import polars as pl
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.pipeline import DataFrameType
 from player_performance_ratings.ratings import convert_df_to_matches, LeagueIdentifier
-from player_performance_ratings.ratings.performance_generator import PerformancesGenerator
+from player_performance_ratings.ratings.performance_generator import (
+    PerformancesGenerator,
+)
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
-from player_performance_ratings.transformers.base_transformer import BaseLagGenerator, BaseLagGeneratorPolars, \
-    BaseTransformer
+from player_performance_ratings.transformers.base_transformer import (
+    BaseLagGenerator,
+    BaseLagGeneratorPolars,
+    BaseTransformer,
+)
 
 
-class PipelineTransformer():
+class PipelineTransformer:
     """
     Pipeline of rating_generators, lag_generators and transformers to be applied to a dataframe
     For historical data use fit_transform
@@ -20,17 +25,17 @@ class PipelineTransformer():
     """
 
     def __init__(
-            self,
-            column_names: ColumnNames,
-            performances_generator: Optional[PerformancesGenerator] = None,
-            rating_generators: Optional[
-                Union[RatingGenerator, list[RatingGenerator]]
-            ] = None,
-            pre_lag_transformers: Optional[list[BaseTransformer]] = None,
-            lag_generators: Optional[
-                List[BaseLagGenerator | BaseLagGeneratorPolars]
-            ] = None,
-            post_lag_transformers: Optional[list[BaseTransformer]] = None,
+        self,
+        column_names: ColumnNames,
+        performances_generator: Optional[PerformancesGenerator] = None,
+        rating_generators: Optional[
+            Union[RatingGenerator, list[RatingGenerator]]
+        ] = None,
+        pre_lag_transformers: Optional[list[BaseTransformer]] = None,
+        lag_generators: Optional[
+            List[BaseLagGenerator | BaseLagGeneratorPolars]
+        ] = None,
+        post_lag_transformers: Optional[list[BaseTransformer]] = None,
     ):
         self.column_names = column_names
         self.performances_generator = performances_generator
@@ -53,15 +58,18 @@ class PipelineTransformer():
             df = self.performances_generator.generate(df)
 
         if self.rating_generators:
-            matches = convert_df_to_matches(column_names=self.column_names,
-                                            df=df,
-                                            league_identifier=LeagueIdentifier(),
-                                            performance_column_name=self.rating_generators[0].performance_column)
+            matches = convert_df_to_matches(
+                column_names=self.column_names,
+                df=df,
+                league_identifier=LeagueIdentifier(),
+                performance_column_name=self.rating_generators[0].performance_column,
+            )
         else:
             matches = []
         for rating_idx, rating_generator in enumerate(self.rating_generators):
-            match_ratings = rating_generator.generate_historical_by_matches(column_names=self.column_names,
-                                                                         matches=matches)
+            match_ratings = rating_generator.generate_historical_by_matches(
+                column_names=self.column_names, matches=matches
+            )
             for rating_feature, values in match_ratings.items():
                 if len(self.rating_generators) > 1:
                     rating_feature_str = rating_feature + str(rating_idx)
@@ -70,12 +78,13 @@ class PipelineTransformer():
 
                 df = df.assign(**{rating_feature_str: values})
 
-
         for transformer in self.pre_lag_transformers:
             df = transformer.fit_transform(df=df, column_names=self.column_names)
 
         for lag_generator in self.lag_generators:
-            df = lag_generator.generate_historical(df=df, column_names=self.column_names)
+            df = lag_generator.generate_historical(
+                df=df, column_names=self.column_names
+            )
 
         return df
 
@@ -88,10 +97,12 @@ class PipelineTransformer():
             df = self.performances_generator.generate(df)
 
         if self.rating_generators:
-            matches = convert_df_to_matches(column_names=self.column_names,
-                                            df=df,
-                                            league_identifier=LeagueIdentifier(),
-                                            performance_column_name=self.rating_generators[0].performance_column)
+            matches = convert_df_to_matches(
+                column_names=self.column_names,
+                df=df,
+                league_identifier=LeagueIdentifier(),
+                performance_column_name=self.rating_generators[0].performance_column,
+            )
         else:
             matches = []
 

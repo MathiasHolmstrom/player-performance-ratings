@@ -20,12 +20,12 @@ from player_performance_ratings.data_structures import (
 class RatingGenerator(ABC):
 
     def __init__(
-            self,
-            performance_column: str,
-            non_estimator_rating_features_out: Optional[list[RatingFutureFeatures]],
-            historical_features_out: Optional[list[RatingHistoricalFeatures]],
-            match_rating_generator: MatchRatingGenerator,
-            seperate_player_by_position: Optional[bool] = False,
+        self,
+        performance_column: str,
+        non_estimator_rating_features_out: Optional[list[RatingFutureFeatures]],
+        historical_features_out: Optional[list[RatingHistoricalFeatures]],
+        match_rating_generator: MatchRatingGenerator,
+        seperate_player_by_position: Optional[bool] = False,
     ):
         self.performance_column = performance_column
         self.seperate_player_by_position = seperate_player_by_position
@@ -40,29 +40,34 @@ class RatingGenerator(ABC):
         self._calculated_match_ids = []
 
     @abstractmethod
-    def generate_historical_by_matches(self,
-                                       matches: list[Match],
-                                       column_names: ColumnNames,
-                                       historical_features_out: Optional[list[RatingHistoricalFeatures]] = None,
-                                       future_features_out: Optional[list[RatingFutureFeatures]] = None,
-                                       ) -> dict[
-        Union[RatingFutureFeatures, RatingHistoricalFeatures], list[float]]:
+    def generate_historical_by_matches(
+        self,
+        matches: list[Match],
+        column_names: ColumnNames,
+        historical_features_out: Optional[list[RatingHistoricalFeatures]] = None,
+        future_features_out: Optional[list[RatingFutureFeatures]] = None,
+    ) -> dict[Union[RatingFutureFeatures, RatingHistoricalFeatures], list[float]]:
         pass
 
     @abstractmethod
     def generate_historical(
-            self,
-            df: pd.DataFrame,
-            column_names: ColumnNames,
+        self,
+        df: pd.DataFrame,
+        column_names: ColumnNames,
+        historical_features_out: Optional[list[RatingHistoricalFeatures]] = None,
+        future_features_out: Optional[list[RatingFutureFeatures]] = None,
     ) -> pd.DataFrame:
         pass
 
     @abstractmethod
     def generate_future(
-            self, df: Optional[pd.DataFrame], matches: Optional[list[Match]] = None
+        self,
+        df: Optional[pd.DataFrame],
+        matches: Optional[list[Match]] = None,
+        historical_features_out: Optional[list[RatingHistoricalFeatures]] = None,
+        future_features_out: Optional[list[RatingFutureFeatures]] = None,
     ) -> pd.DataFrame:
         pass
-
 
     @property
     def future_features_out(self) -> list[RatingFutureFeatures]:
@@ -70,21 +75,17 @@ class RatingGenerator(ABC):
 
     @property
     def features_out(
-            self,
+        self,
     ) -> list[Union[RatingFutureFeatures, RatingHistoricalFeatures]]:
         return self._future_features_out + self._historical_features_out
 
     @property
-    def estimator_features_return(self) -> list[RatingFutureFeatures]:
+    def future_features_return(self) -> list[RatingFutureFeatures]:
         if self._non_estimator_rating_features_out:
             return list(
                 set(self._non_estimator_rating_features_out + self.future_features_out)
             )
         return self.future_features_out
-
-    @property
-    def ratings_df(self) -> pd.DataFrame:
-        return self._ratings_df
 
     @property
     def player_ratings(self) -> dict[str, PlayerRating]:
@@ -120,7 +121,6 @@ class RatingGenerator(ABC):
             sorted(team_id_ratings, key=lambda team: team.rating_value, reverse=True)
         )
 
-
     @property
     def calculated_match_ids(self) -> list[str]:
         return self._calculated_match_ids
@@ -128,5 +128,3 @@ class RatingGenerator(ABC):
     def _validate_match(self, match: Match):
         if len(match.teams) < 2:
             raise ValueError(f"{match.id} only contains {len(match.teams)} teams")
-
-

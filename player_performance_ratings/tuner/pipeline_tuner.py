@@ -237,14 +237,16 @@ class PipelineTuner:
                 untrained_best_rating_generators[rating_idx] = copy.deepcopy(
                     tuned_rating_generator
                 )
-            match_ratings = best_rating_generators[rating_idx].generate_historical_by_matches(
+            match_ratings = best_rating_generators[
+                rating_idx
+            ].generate_historical_by_matches(
                 matches=matches[rating_idx],
                 column_names=self.pipeline.column_names,
             )
 
             for rating_feature in best_rating_generators[
                 rating_idx
-            ].estimator_features_return:
+            ].future_features_return:
                 values = match_ratings[rating_feature]
 
                 if len(self.rating_generator_tuners) > 1:

@@ -3,14 +3,25 @@ from unittest import mock
 
 import pytest
 
-from player_performance_ratings.data_structures import MatchTeam, PreMatchPlayerRating, MatchPerformance, \
-    MatchPlayer, PreMatchTeamRating, PlayerRating, TeamRatingChange, PlayerRatingChange
-from player_performance_ratings.ratings.rating_calculators.match_rating_generator import EXPECTED_MEAN_CONFIDENCE_SUM, \
-    MatchRatingGenerator
+from player_performance_ratings.data_structures import (
+    MatchTeam,
+    PreMatchPlayerRating,
+    MatchPerformance,
+    MatchPlayer,
+    PreMatchTeamRating,
+    PlayerRating,
+    TeamRatingChange,
+    PlayerRatingChange,
+)
+from player_performance_ratings.ratings.rating_calculators.match_rating_generator import (
+    EXPECTED_MEAN_CONFIDENCE_SUM,
+    MatchRatingGenerator,
+)
 
-from player_performance_ratings.ratings.rating_calculators.performance_predictor import RatingDifferencePerformancePredictor, \
-    MATCH_CONTRIBUTION_TO_SUM_VALUE
-
+from player_performance_ratings.ratings.rating_calculators.performance_predictor import (
+    RatingDifferencePerformancePredictor,
+    MATCH_CONTRIBUTION_TO_SUM_VALUE,
+)
 
 
 def test_generate_pre_match_team_rating():
@@ -58,7 +69,7 @@ def test_generate_pre_match_team_rating():
             games_played=0,
             confidence_sum=0,
             prev_rating_changes=[],
-        )
+        ),
     }
 
     pre_match_team_rating = team_rating_generator.generate_pre_match_team_rating(
@@ -80,7 +91,7 @@ def test_generate_pre_match_team_rating():
                     participation_weight=0.5,
                     projected_participation_weight=0.2,
                 ),
-                position=None
+                position=None,
             ),
             PreMatchPlayerRating(
                 id="2",
@@ -92,14 +103,13 @@ def test_generate_pre_match_team_rating():
                     participation_weight=0.3,
                     projected_participation_weight=0.8,
                 ),
-                position=None
+                position=None,
             ),
         ],
         rating_value=(1100 * 0.5 + 900 * 0.3) / (0.5 + 0.3),
-        projected_rating_value=(1100 * 0.2 + 900 * 0.8) / (0.2 + 0.8)
+        projected_rating_value=(1100 * 0.2 + 900 * 0.8) / (0.2 + 0.8),
     )
     assert pre_match_team_rating == expected_pre_match_team_rating
-
 
 
 @pytest.mark.parametrize("confidence_sum", [0, 25, 50, 75, 100])
@@ -112,9 +122,11 @@ def test_generate_rating_change(confidence_sum):
 
     """
 
-    performance_predictor = RatingDifferencePerformancePredictor(rating_diff_coef=0.005757,
-                                                                 rating_diff_team_from_entity_coef=0.0,
-                                                                 team_rating_diff_coef=0.0)
+    performance_predictor = RatingDifferencePerformancePredictor(
+        rating_diff_coef=0.005757,
+        rating_diff_team_from_entity_coef=0.0,
+        team_rating_diff_coef=0.0,
+    )
 
     team_rating_generator = MatchRatingGenerator(
         confidence_weight=1,
@@ -122,7 +134,7 @@ def test_generate_rating_change(confidence_sum):
         confidence_max_days=100,
         rating_change_multiplier=10,
         confidence_days_ago_multiplier=0.06,
-        performance_predictor=performance_predictor
+        performance_predictor=performance_predictor,
     )
 
     team_rating_generator.player_ratings = {
@@ -153,7 +165,7 @@ def test_generate_rating_change(confidence_sum):
             games_played=0,
             confidence_sum=confidence_sum,
             prev_rating_changes=[],
-        )
+        ),
     }
 
     pre_match_team_ratings = [
@@ -171,7 +183,7 @@ def test_generate_rating_change(confidence_sum):
                         participation_weight=0.5,
                         projected_participation_weight=0.5,
                     ),
-                    position=None
+                    position=None,
                 ),
                 PreMatchPlayerRating(
                     id="2",
@@ -183,7 +195,7 @@ def test_generate_rating_change(confidence_sum):
                         participation_weight=0.3,
                         projected_participation_weight=0.3,
                     ),
-                    position=None
+                    position=None,
                 ),
             ],
             rating_value=(1100 * 0.5 + 900 * 0.3) / (0.5 + 0.3),
@@ -198,36 +210,52 @@ def test_generate_rating_change(confidence_sum):
         ),
     ]
 
-    rating_change = team_rating_generator.generate_rating_change(day_number=1,
-                                                                 pre_match_team_rating=pre_match_team_ratings[0],
-                                                                 pre_match_opponent_team_rating=pre_match_team_ratings[
-                                                                     1])
+    rating_change = team_rating_generator.generate_rating_change(
+        day_number=1,
+        pre_match_team_rating=pre_match_team_ratings[0],
+        pre_match_opponent_team_rating=pre_match_team_ratings[1],
+    )
 
     expected_player1_predicted_performance = performance_predictor.predict_performance(
         player_rating=pre_match_team_ratings[0].players[0],
         opponent_team_rating=pre_match_team_ratings[1],
-        team_rating=pre_match_team_ratings[0]
+        team_rating=pre_match_team_ratings[0],
     )
 
     expected_player2_predicted_performance = performance_predictor.predict_performance(
         player_rating=pre_match_team_ratings[0].players[1],
         opponent_team_rating=pre_match_team_ratings[1],
-        team_rating=pre_match_team_ratings[0]
+        team_rating=pre_match_team_ratings[0],
     )
 
-    expected_rating_change_multiplier = max(team_rating_generator.rating_change_multiplier * (
-            (EXPECTED_MEAN_CONFIDENCE_SUM - confidence_sum) / team_rating_generator.confidence_value_denom + 1),
-                                            team_rating_generator.rating_change_multiplier * team_rating_generator.min_rating_change_multiplier_ratio)
+    expected_rating_change_multiplier = max(
+        team_rating_generator.rating_change_multiplier
+        * (
+            (EXPECTED_MEAN_CONFIDENCE_SUM - confidence_sum)
+            / team_rating_generator.confidence_value_denom
+            + 1
+        ),
+        team_rating_generator.rating_change_multiplier
+        * team_rating_generator.min_rating_change_multiplier_ratio,
+    )
 
-    expected_player1_rating_change_value = (pre_match_team_ratings[0].players[
-                                                0].match_performance.performance_value - expected_player1_predicted_performance) * \
-                                           expected_rating_change_multiplier * pre_match_team_ratings[0].players[
-                                               0].match_performance.participation_weight
+    expected_player1_rating_change_value = (
+        (
+            pre_match_team_ratings[0].players[0].match_performance.performance_value
+            - expected_player1_predicted_performance
+        )
+        * expected_rating_change_multiplier
+        * pre_match_team_ratings[0].players[0].match_performance.participation_weight
+    )
 
-    expected_player2_rating_change_value = (pre_match_team_ratings[0].players[
-                                                1].match_performance.performance_value - expected_player2_predicted_performance) * \
-                                           expected_rating_change_multiplier * pre_match_team_ratings[0].players[
-                                               1].match_performance.participation_weight
+    expected_player2_rating_change_value = (
+        (
+            pre_match_team_ratings[0].players[1].match_performance.performance_value
+            - expected_player2_predicted_performance
+        )
+        * expected_rating_change_multiplier
+        * pre_match_team_ratings[0].players[1].match_performance.participation_weight
+    )
 
     expected_rating_change = TeamRatingChange(
         id="1",
@@ -235,9 +263,12 @@ def test_generate_rating_change(confidence_sum):
         performance=(1 * 0.5 + 0.8 * 0.3) / (0.5 + 0.3),
         pre_match_projected_rating_value=(1100 * 0.5 + 900 * 0.3) / (0.5 + 0.3),
         predicted_performance=(
-                                      expected_player1_predicted_performance * 0.5 + expected_player2_predicted_performance * 0.3) / (
-                                      0.5 + 0.3),
-        rating_change_value=expected_player1_rating_change_value * 0.5 + expected_player2_rating_change_value * 0.3,
+            expected_player1_predicted_performance * 0.5
+            + expected_player2_predicted_performance * 0.3
+        )
+        / (0.5 + 0.3),
+        rating_change_value=expected_player1_rating_change_value * 0.5
+        + expected_player2_rating_change_value * 0.3,
         players=[
             PlayerRatingChange(
                 id="1",
@@ -259,7 +290,7 @@ def test_generate_rating_change(confidence_sum):
                 pre_match_rating_value=900,
                 rating_change_value=expected_player2_rating_change_value,
             ),
-        ]
+        ],
     )
     assert rating_change == expected_rating_change
 
@@ -302,7 +333,7 @@ def test_update_by_team_rating_change():
                 pre_match_rating_value=900,
                 rating_change_value=3,
             ),
-        ]
+        ],
     )
 
     team_rating_generator = MatchRatingGenerator()
@@ -322,39 +353,50 @@ def test_update_by_team_rating_change():
             games_played=1,
             confidence_sum=1,
             prev_rating_changes=[],
-        )
+        ),
     }
     team_rating_generator.player_ratings = copy.deepcopy(original_player_ratings)
-    team_rating_generator.update_rating_by_team_rating_change(team_rating_change=team_rating_change,opponent_team_rating_change=opponent_team_rating_change_mock)
+    team_rating_generator.update_rating_by_team_rating_change(
+        team_rating_change=team_rating_change,
+        opponent_team_rating_change=opponent_team_rating_change_mock,
+    )
 
-    expected_player1_confidence_sum = original_player_ratings[
-                                          "1"].confidence_sum - 1 * team_rating_generator.confidence_days_ago_multiplier + \
-                                      MATCH_CONTRIBUTION_TO_SUM_VALUE * team_rating_change.players[
-                                          0].participation_weight
-    expected_player2_confidence_sum = original_player_ratings[
-                                          "2"].confidence_sum - 1 * team_rating_generator.confidence_days_ago_multiplier + \
-                                      MATCH_CONTRIBUTION_TO_SUM_VALUE * team_rating_change.players[
-                                          1].participation_weight
+    expected_player1_confidence_sum = (
+        original_player_ratings["1"].confidence_sum
+        - 1 * team_rating_generator.confidence_days_ago_multiplier
+        + MATCH_CONTRIBUTION_TO_SUM_VALUE
+        * team_rating_change.players[0].participation_weight
+    )
+    expected_player2_confidence_sum = (
+        original_player_ratings["2"].confidence_sum
+        - 1 * team_rating_generator.confidence_days_ago_multiplier
+        + MATCH_CONTRIBUTION_TO_SUM_VALUE
+        * team_rating_change.players[1].participation_weight
+    )
 
     expected_player_ratings = {
         "1": PlayerRating(
             id="1",
-            rating_value=team_rating_change.players[0].rating_change_value + original_player_ratings["1"].rating_value,
-            games_played=team_rating_change.players[0].participation_weight + original_player_ratings["1"].games_played,
+            rating_value=team_rating_change.players[0].rating_change_value
+            + original_player_ratings["1"].rating_value,
+            games_played=team_rating_change.players[0].participation_weight
+            + original_player_ratings["1"].games_played,
             last_match_day_number=1,
             confidence_sum=expected_player1_confidence_sum,
             prev_rating_changes=[],
-            most_recent_team_id="1"
+            most_recent_team_id="1",
         ),
         "2": PlayerRating(
             id="2",
-            rating_value=team_rating_change.players[1].rating_change_value + original_player_ratings["2"].rating_value,
-            games_played=team_rating_change.players[1].participation_weight + original_player_ratings["2"].games_played,
+            rating_value=team_rating_change.players[1].rating_change_value
+            + original_player_ratings["2"].rating_value,
+            games_played=team_rating_change.players[1].participation_weight
+            + original_player_ratings["2"].games_played,
             last_match_day_number=1,
             confidence_sum=expected_player2_confidence_sum,
             prev_rating_changes=[],
-            most_recent_team_id="1"
-        )
+            most_recent_team_id="1",
+        ),
     }
 
     assert team_rating_generator.player_ratings == expected_player_ratings
@@ -398,14 +440,14 @@ def test_league_ratings_are_updated_when_player_ratings_are_updated():
                 pre_match_rating_value=900,
                 rating_change_value=3,
             ),
-        ]
+        ],
     )
 
     start_rating_mock = mock.Mock()
 
     team_rating_generator = MatchRatingGenerator(
         start_rating_generator=start_rating_mock,
-        league_rating_change_update_threshold=100
+        league_rating_change_update_threshold=100,
     )
     original_player_ratings = {
         "1": PlayerRating(
@@ -423,18 +465,23 @@ def test_league_ratings_are_updated_when_player_ratings_are_updated():
             games_played=1,
             confidence_sum=1,
             prev_rating_changes=[],
-        )
+        ),
     }
     team_rating_generator.player_ratings = copy.deepcopy(original_player_ratings)
-    team_rating_generator.update_rating_by_team_rating_change(team_rating_change=team_rating_change, opponent_team_rating_change=opponent_team_rating_change_mock)
+    team_rating_generator.update_rating_by_team_rating_change(
+        team_rating_change=team_rating_change,
+        opponent_team_rating_change=opponent_team_rating_change_mock,
+    )
 
-    assert team_rating_generator._league_rating_changes["league1"] == team_rating_change.players[
-        0].rating_change_value + team_rating_change.players[1].rating_change_value
+    assert (
+        team_rating_generator._league_rating_changes["league1"]
+        == team_rating_change.players[0].rating_change_value
+        + team_rating_change.players[1].rating_change_value
+    )
 
 
 def test_player_ratings_are_updated_when_league_ratings_reaches_threshold():
-    """
-    """
+    """ """
 
     team_rating_change = TeamRatingChange(
         id="1",
@@ -454,7 +501,7 @@ def test_player_ratings_are_updated_when_league_ratings_reaches_threshold():
                 pre_match_rating_value=1100,
                 rating_change_value=5,
             ),
-        ]
+        ],
     )
 
     team_rating_generator = MatchRatingGenerator(
@@ -471,23 +518,33 @@ def test_player_ratings_are_updated_when_league_ratings_reaches_threshold():
         ),
     }
     team_rating_generator._league_rating_changes = {
-        "league1": team_rating_generator.league_rating_change_update_threshold - 4}
+        "league1": team_rating_generator.league_rating_change_update_threshold - 4
+    }
     team_rating_generator._league_rating_changes_count = {"league1": 1}
 
     team_rating_generator.player_ratings = copy.deepcopy(original_player_ratings)
 
-    expected_new_player_rating = original_player_ratings["1"].rating_value + team_rating_change.players[
-        0].rating_change_value + (team_rating_generator.league_rating_change_update_threshold - 4 +
-                                  team_rating_change.players[
-                                      0].rating_change_value)  * team_rating_generator.league_rating_adjustor_multiplier
+    expected_new_player_rating = (
+        original_player_ratings["1"].rating_value
+        + team_rating_change.players[0].rating_change_value
+        + (
+            team_rating_generator.league_rating_change_update_threshold
+            - 4
+            + team_rating_change.players[0].rating_change_value
+        )
+        * team_rating_generator.league_rating_adjustor_multiplier
+    )
 
     opponent_team_rating_change_mock = mock.Mock()
     opponent_team_rating_change_mock.league = "league2"
 
-    team_rating_generator.update_rating_by_team_rating_change(team_rating_change=team_rating_change, opponent_team_rating_change=opponent_team_rating_change_mock)
+    team_rating_generator.update_rating_by_team_rating_change(
+        team_rating_change=team_rating_change,
+        opponent_team_rating_change=opponent_team_rating_change_mock,
+    )
 
     assert team_rating_generator._league_rating_changes["league1"] == 0
-    assert team_rating_generator.player_ratings["1"].rating_value == expected_new_player_rating
-
-
-
+    assert (
+        team_rating_generator.player_ratings["1"].rating_value
+        == expected_new_player_rating
+    )

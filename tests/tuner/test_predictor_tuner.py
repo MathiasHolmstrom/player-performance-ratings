@@ -21,34 +21,40 @@ def test_predictor_tuner():
             "won": [1, 0, 0, 1],
             "rating_difference": [100, -100, -20, 20],
             "start_date": ["2020-01-01", "2020-01-01", "2020-01-02", "2020-01-02"],
-            "__target": [1, 0, 0, 1]
+            "__target": [1, 0, 0, 1],
         }
     )
 
     predictor_factory = PipelineFactory(
-        predictor=Predictor(estimator=LogisticRegression(), estimator_features=["rating_difference"], target="__target"),
-        column_names=None
+        predictor=Predictor(
+            estimator=LogisticRegression(),
+            estimator_features=["rating_difference"],
+            target="__target",
+        ),
+        column_names=None,
     )
 
     search_ranges = [
-        ParameterSearchRange(
-            name='C',
-            type='categorical',
-            choices=[1.0, 0.5]
-        )
+        ParameterSearchRange(name="C", type="categorical", choices=[1.0, 0.5])
     ]
 
     predictor_tuner = PredictorTuner(search_ranges=search_ranges, n_trials=2)
     cross_validator = mock.Mock()
     cross_validator.cross_validation_score.side_effect = [0.5, 0.3]
-    best_predictor = predictor_tuner.tune(df=df, cross_validator=cross_validator,
-                                          pipeline_factory=predictor_factory)
+    best_predictor = predictor_tuner.tune(
+        df=df, cross_validator=cross_validator, pipeline_factory=predictor_factory
+    )
 
-    expected_best_predictor = Predictor(estimator=LogisticRegression(C=0.5), estimator_features=["rating_difference"],
-                                        target="__target")
+    expected_best_predictor = Predictor(
+        estimator=LogisticRegression(C=0.5),
+        estimator_features=["rating_difference"],
+        target="__target",
+    )
 
     diff = DeepDiff(best_predictor.estimator, expected_best_predictor.estimator)
     assert diff == {}
 
-    assert expected_best_predictor._estimator_features == best_predictor.estimator_features
+    assert (
+        expected_best_predictor._estimator_features == best_predictor.estimator_features
+    )
     assert expected_best_predictor.target == best_predictor.target

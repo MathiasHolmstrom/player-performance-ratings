@@ -30,7 +30,8 @@ from player_performance_ratings.transformers.base_transformer import (
 )
 
 
-DataFrameType = TypeVar('DataFrameType', pd.DataFrame, pl.DataFrame)
+DataFrameType = TypeVar("DataFrameType", pd.DataFrame, pl.DataFrame)
+
 
 class Pipeline:
     """
@@ -154,7 +155,7 @@ class Pipeline:
         for rating_generator in self.rating_generators:
             create_rating_features = any(
                 feature not in df.columns
-                for feature in rating_generator.estimator_features_return
+                for feature in rating_generator.future_features_return
             )
             if create_rating_features:
                 break
@@ -190,7 +191,7 @@ class Pipeline:
         create_rating_features: bool = True,
         return_features: bool = False,
         add_train_prediction: bool = False,
-    ) ->DataFrameType:
+    ) -> DataFrameType:
         """
         Generates predictions on the validation dataset from the entire pipeline
 
@@ -222,7 +223,7 @@ class Pipeline:
         for rating_generator in self.rating_generators:
             create_rating_features = any(
                 feature not in df.columns
-                for feature in rating_generator.estimator_features_return
+                for feature in rating_generator.future_features_return
             )
             if create_rating_features:
                 break
@@ -475,10 +476,18 @@ class Pipeline:
 
         rg = self.rating_generators[0]
         match_ids_calculated = rg.calculated_match_ids
-        not_calculated_match_ids = df[~df[self.column_names.match_id].isin(match_ids_calculated)][self.column_names.match_id].unique().tolist()
+        not_calculated_match_ids = (
+            df[~df[self.column_names.match_id].isin(match_ids_calculated)][
+                self.column_names.match_id
+            ]
+            .unique()
+            .tolist()
+        )
 
         df_no_ratings = df[~df[self.column_names.match_id].isin(match_ids_calculated)]
-        df_calculated_ratings = df[df[self.column_names.match_id].isin(match_ids_calculated)]
+        df_calculated_ratings = df[
+            df[self.column_names.match_id].isin(match_ids_calculated)
+        ]
         for rating_idx, rating_generator in enumerate(self.rating_generators):
             if len(df_no_ratings) > 0:
 
@@ -493,12 +502,15 @@ class Pipeline:
                     rating_matches = matches[rating_idx]
                     if len(df_no_ratings) != len(df):
                         rating_matches = [
-                            m for m in rating_matches if m.id in not_calculated_match_ids
+                            m
+                            for m in rating_matches
+                            if m.id in not_calculated_match_ids
                         ]
 
                 if store_match_ratings:
                     match_ratings = rating_generator.generate_historical_by_matches(
-                        matches=rating_matches, column_names=self.column_names,
+                        matches=rating_matches,
+                        column_names=self.column_names,
                     )
                 else:
                     match_ratings = rating_generator.generate_historical_by_matches(
@@ -514,7 +526,7 @@ class Pipeline:
 
             if len(df_calculated_ratings) > 0:
                 ratings_df = rating_generator.ratings_df
-                rating_cols = rating_generator.estimator_features_return + [
+                rating_cols = rating_generator.future_features_return + [
                     rating_generator.column_names.match_id,
                     rating_generator.column_names.team_id,
                     rating_generator.column_names.player_id,
@@ -523,7 +535,7 @@ class Pipeline:
                     [
                         f
                         for f in df_calculated_ratings.columns
-                        if f not in rating_generator.estimator_features_return
+                        if f not in rating_generator.future_features_return
                     ]
                 ].merge(
                     ratings_df[rating_cols],
