@@ -93,7 +93,7 @@ class Pipeline:
 
         est_feats = []
         for r in self.rating_generators:
-            if not len(set(r.known_features_out + est_feats)) == len(
+            if not len(set(r.known_features_return + est_feats)) == len(
                 r.known_features_return + est_feats
             ):
                 duplicated_feats = set(r.known_features_return + est_feats).intersection(
