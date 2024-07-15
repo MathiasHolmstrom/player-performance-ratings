@@ -178,7 +178,8 @@ class BasePredictor(ABC):
             df[features_out] = values
             feats_to_remove = [f for f in pre_transformer.features if f in self._estimator_features]
             if feats_to_remove:
-                self._estimator_features.remove(*feats_to_remove)
+                for feat in feats_to_remove:
+                    self._estimator_features.remove(feat)
             self._estimator_features = list(
                 set(pre_transformer.features_out + self._estimator_features)
             )

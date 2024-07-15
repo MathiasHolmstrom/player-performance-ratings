@@ -6,8 +6,8 @@ from player_performance_ratings.cross_validator import MatchKFoldCrossValidator
 from player_performance_ratings.predictor import Predictor
 from sklearn.linear_model import LinearRegression
 
-from player_performance_ratings.ratings import RatingEstimatorFeatures, UpdateRatingGenerator, \
-    MatchRatingGenerator
+from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
+from player_performance_ratings.ratings import RatingFutureFeatures, UpdateRatingGenerator
 from player_performance_ratings.ratings.performance_generator import Performance, ColumnWeight, PerformancesGenerator
 
 from player_performance_ratings.transformers import LagTransformer, RatioTeamPredictorTransformer, PredictorTransformer, \
@@ -65,7 +65,7 @@ def test_pipelien_constructor():
 
     post_lag_transformers = [PredictorTransformer(predictor=Predictor(estimator=LinearRegression()))]
     rating_generator = UpdateRatingGenerator(
-        estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+        future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED])
 
     pipeline = Pipeline(column_names=ColumnNames(
         match_id="game_id",
@@ -112,11 +112,11 @@ def test_match_predictor_auto_pre_transformers():
     predictor_mock = mock.Mock()
     predictor_mock.target = "__target"
     predictor_mock.columns_added = ['prediction']
-    predictor_mock._estimator_features = [RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]
+    predictor_mock._estimator_features = [RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED]
 
     predictor_mock.add_prediction.return_value = expected_df
     rating_generators = UpdateRatingGenerator(
-        estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED],
+        future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED],
         performance_column="weighted_performance"
     )
 
@@ -169,13 +169,13 @@ def test_match_predictor_multiple_rating_generators_same_performance():
     predictor_mock.target = "__target"
     predictor_mock.add_prediction.return_value = expected_df
     predictor_mock.columns_added = ['prediction']
-    predictor_mock._estimator_features = [RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]
+    predictor_mock._estimator_features = [RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED]
 
     match_predictor = Pipeline(
         rating_generators=[
-            UpdateRatingGenerator(estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]),
+            UpdateRatingGenerator(future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED]),
             UpdateRatingGenerator(match_rating_generator=MatchRatingGenerator(rating_change_multiplier=20),
-                                  estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])],
+                                  future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED])],
         lag_generators=[],
         predictor=predictor_mock,
         column_names=column_names1
@@ -188,11 +188,11 @@ def test_match_predictor_multiple_rating_generators_same_performance():
 
     col_names_predictor_add = predictor_mock.add_prediction.call_args[1]['df'].columns.tolist()
 
-    assert RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED + str(1) in col_names_predictor_add
-    assert RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED + str(1) in col_names_predictor_train
+    assert RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED + str(1) in col_names_predictor_add
+    assert RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED + str(1) in col_names_predictor_train
 
-    assert RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED + str(0) in col_names_predictor_add
-    assert RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED + str(0) in col_names_predictor_train
+    assert RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED + str(0) in col_names_predictor_add
+    assert RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED + str(0) in col_names_predictor_train
 
 
 def test_match_predictor_0_rating_generators():
@@ -217,7 +217,7 @@ def test_match_predictor_0_rating_generators():
     predictor_mock.target = "__target"
     predictor_mock.columns_added = ['prediction']
     predictor_mock.add_prediction.return_value = expected_df
-    predictor_mock._estimator_features = [RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]
+    predictor_mock._estimator_features = [RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED]
 
     column_names = ColumnNames(
         match_id="game_id",
@@ -285,7 +285,7 @@ def test_match_predictor_generate_and_predict():
     predictor_mock.target = "__target"
     predictor_mock.columns_added = ['prediction']
     predictor_mock.add_prediction.side_effect = [historical_df_mock_return_with_prediction, expected_future_df]
-    predictor_mock._estimator_features = [RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]
+    predictor_mock._estimator_features = [RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED]
 
     column_names = ColumnNames(
         match_id="game_id",
@@ -294,7 +294,7 @@ def test_match_predictor_generate_and_predict():
         start_date="start_date",
     )
     rating_generator = UpdateRatingGenerator(
-        estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+        future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED])
 
     pipeline = Pipeline(
         performances_generator=PerformancesGenerator(Performance(weights=column_weights)),
@@ -339,7 +339,7 @@ def test_train_predict_cross_validate():
         start_date="start_date",
     )
     rating_generator = UpdateRatingGenerator(
-        estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+        future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED])
 
     pipeline = Pipeline(
         performances_generator=PerformancesGenerator(Performance(weights=column_weights)),
@@ -380,7 +380,7 @@ def test_cross_validate_is_equal_to_predict_future():
         start_date="start_date",
     )
     rating_generator = UpdateRatingGenerator(
-        estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+        future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED])
 
     pipeline = Pipeline(
         performances_generator=PerformancesGenerator(Performance(weights=column_weights)),
@@ -436,7 +436,7 @@ def test_train_predict_cross_validate_is_equal_to_predict_future():
         start_date="start_date",
     )
     rating_generator = UpdateRatingGenerator(
-        estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+        future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED])
 
     pipeline = Pipeline(
         performances_generator=PerformancesGenerator(Performance(weights=column_weights)),
@@ -490,7 +490,7 @@ def test_post_pre_and_lag_transformers():
         start_date="start_date",
     )
     rating_generator = UpdateRatingGenerator(
-        estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+        future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED])
     pre_transformer = PredictorTransformer(
         predictor=Predictor(estimator=LinearRegression(), estimator_features=rating_generator.features_out),
     )
@@ -513,7 +513,7 @@ def test_post_pre_and_lag_transformers():
     future_df = df[df[column_names.start_date] >= pd.to_datetime("2023-01-04")]
     trained_df = pipeline.train_predict(train_df, return_features=True)
 
-    for f in rating_generator.estimator_features_out:
+    for f in rating_generator.future_features_out:
         assert f in trained_df.columns
         assert f not in train_df.columns
 
@@ -533,7 +533,7 @@ def test_post_pre_and_lag_transformers():
     assert predictor.pred_column not in train_df.columns
 
     predicted_df = pipeline.future_predict(future_df, return_features=True)
-    for f in rating_generator.estimator_features_out:
+    for f in rating_generator.future_features_out:
         assert f in predicted_df.columns
         assert f not in future_df.columns
 

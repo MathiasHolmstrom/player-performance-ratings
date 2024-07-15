@@ -237,8 +237,7 @@ class PipelineTuner:
                 untrained_best_rating_generators[rating_idx] = copy.deepcopy(
                     tuned_rating_generator
                 )
-            match_ratings = best_rating_generators[rating_idx].generate_historical(
-                df=df,
+            match_ratings = best_rating_generators[rating_idx].generate_historical_by_matches(
                 matches=matches[rating_idx],
                 column_names=self.pipeline.column_names,
             )

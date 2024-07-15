@@ -3,7 +3,7 @@ import pandas as pd
 from player_performance_ratings import ColumnNames, Pipeline
 from player_performance_ratings.pipeline_transformer import PipelineTransformer
 from player_performance_ratings.predictor import Predictor
-from player_performance_ratings.ratings import UpdateRatingGenerator, RatingEstimatorFeatures
+from player_performance_ratings.ratings import UpdateRatingGenerator, RatingFutureFeatures
 from player_performance_ratings.ratings.performance_generator import ColumnWeight, Performance, PerformancesGenerator
 from player_performance_ratings.transformers import LagTransformer
 
@@ -33,7 +33,7 @@ def test_pipelien_transformer():
         start_date="start_date",
     )
     rating_generator = UpdateRatingGenerator(
-        estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+        future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED])
 
     pipeline = PipelineTransformer(
         performances_generator=PerformancesGenerator(Performance(weights=column_weights)),

@@ -13,7 +13,7 @@ from player_performance_ratings.ratings.performance_generator import (
     ColumnWeight,
     PerformancesGenerator,
 )
-from player_performance_ratings.ratings.enums import RatingEstimatorFeatures
+from player_performance_ratings.ratings.enums import RatingFutureFeatures
 
 from player_performance_ratings import PipelineFactory
 
@@ -22,7 +22,7 @@ from player_performance_ratings.tuner.utils import (
     ParameterSearchRange,
 )
 
-RC = RatingEstimatorFeatures
+RC = RatingFutureFeatures
 
 
 @dataclass

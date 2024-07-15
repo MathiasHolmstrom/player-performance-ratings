@@ -7,7 +7,7 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from player_performance_ratings import ColumnNames,  PipelineFactory
 from player_performance_ratings.predictor import Predictor
-from player_performance_ratings.ratings import RatingEstimatorFeatures, UpdateRatingGenerator
+from player_performance_ratings.ratings import RatingFutureFeatures, UpdateRatingGenerator
 from player_performance_ratings.ratings.performance_generator import Performance, PerformancesGenerator, ColumnWeight
 
 from player_performance_ratings.tuner import PerformancesGeneratorTuner
@@ -25,15 +25,15 @@ def test_transformer_tuner():
     )
 
     rating_generator1 = UpdateRatingGenerator(
-        estimator_features_out=[
-            RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+        future_features_out=[
+            RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED])
 
     pipeline_factory = PipelineFactory(
         performances_generator=PerformancesGenerator(performances=Performance(name="performance", weights=[])),
         column_names=column_names,
         rating_generators=rating_generator1,
         predictor=Predictor(estimator=LogisticRegression(),
-                            estimator_features=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+                            estimator_features=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED])
     )
 
     performances_generator_tuner = PerformancesGeneratorTuner(
@@ -130,20 +130,20 @@ def test_transformer_tuner_2_performances(estimator):
 
     rating_generator1 = UpdateRatingGenerator(
         performance_column="performance1",
-        estimator_features_out=[
-            RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+        future_features_out=[
+            RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED])
 
     rating_generator2 = UpdateRatingGenerator(
         performance_column="performance2",
-        estimator_features_out=[
-            RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED])
+        future_features_out=[
+            RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED])
 
     rating_generators = [rating_generator1, rating_generator2]
 
     match_predictor_factory = PipelineFactory(
         rating_generators=rating_generators,
         predictor=Predictor(estimator=estimator,
-                            estimator_features=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]),
+                            estimator_features=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED]),
         column_names=column_names1,
         performances_generator=PerformancesGenerator(performances=[
             Performance(name="performance1",

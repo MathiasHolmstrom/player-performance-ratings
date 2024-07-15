@@ -3,7 +3,7 @@ import pandas as pd
 from player_performance_ratings import ColumnNames, PredictColumnNames
 from player_performance_ratings.pipeline_transformer import PipelineTransformer
 from player_performance_ratings.ratings import UpdateRatingGenerator, MatchRatingGenerator, StartRatingGenerator, \
-    RatingEstimatorFeatures
+    RatingFutureFeatures
 from player_performance_ratings.transformers import LagTransformer
 from player_performance_ratings.transformers.lag_generators import RollingMeanTransformerPolars
 
@@ -35,7 +35,7 @@ historical_df = df[~df[column_names.match_id].isin(most_recent_10_games)]
 future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(columns=['result'])
 
 rating_generator = UpdateRatingGenerator(
-    estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED],
+    future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED],
     performance_column='result'
 )
 

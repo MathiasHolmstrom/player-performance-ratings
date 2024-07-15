@@ -60,7 +60,7 @@ class PipelineTransformer():
         else:
             matches = []
         for rating_idx, rating_generator in enumerate(self.rating_generators):
-            match_ratings = rating_generator.generate_historical(df=df, column_names=self.column_names,
+            match_ratings = rating_generator.generate_historical_by_matches(column_names=self.column_names,
                                                                          matches=matches)
             for rating_feature, values in match_ratings.items():
                 if len(self.rating_generators) > 1:
@@ -96,14 +96,7 @@ class PipelineTransformer():
             matches = []
 
         for rating_idx, rating_generator in enumerate(self.rating_generators):
-            match_ratings = rating_generator.generate_future(df=df, matches=matches)
-            for rating_feature, values in match_ratings.items():
-                if len(self.rating_generators) > 1:
-                    rating_feature_str = rating_feature + str(rating_idx)
-                else:
-                    rating_feature_str = rating_feature
-
-                df = df.assign(**{rating_feature_str: values})
+            df = rating_generator.generate_future(df=df, matches=matches)
 
         for transformer in self.pre_lag_transformers:
             df = transformer.transform(df)

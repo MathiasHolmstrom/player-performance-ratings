@@ -60,18 +60,14 @@ future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(column
 rating_generator = UpdateRatingGenerator(performance_column='won')
 
 # Calculate Ratings on Historical data
-match_ratings = rating_generator.generate_historical(historical_df, column_names=column_names)
-
-# The historical pre_match_rating_difference for each match is inserted into the dataframe
-historical_df['rating_difference'] = match_ratings[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]
+historical_df_with_ratings = rating_generator.generate_historical(historical_df, column_names=column_names)
 
 # Printing out the 10 highest rated teams and the ratings of the players for the team
 team_ratings = rating_generator.team_ratings
 print(team_ratings[:10])
 
 #Calculating Ratings for Future Matches
-future_match_ratings = rating_generator.generate_future(future_df)
-future_match_ratings['rating_difference'] = future_match_ratings[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED]
+future_df_with_ratings = rating_generator.generate_future(future_df)
 ```
 
 ### Predicting Game-Winner

@@ -192,8 +192,8 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
 
         return UpdateRatingGenerator(
             match_rating_generator=best_rating_generator.match_rating_generator,
-            estimator_features_pass_through=best_rating_generator._estimator_features_pass_through,
-            estimator_features_out=best_rating_generator._estimator_features_out,
+            non_estimator_rating_features_out=best_rating_generator._non_estimator_rating_features_out,
+            future_features_out=best_rating_generator._future_features_out,
             performance_column=best_rating_generator.performance_column,
         )
 

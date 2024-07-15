@@ -93,7 +93,7 @@ class Pipeline:
 
         est_feats = []
         for r in self.rating_generators:
-            est_feats += r.estimator_features_out
+            est_feats += r.future_features_out
         for f in self.lag_generators:
             est_feats += f.estimator_features_out
         for idx, post_transformer in enumerate(self.post_lag_transformers):
@@ -110,7 +110,7 @@ class Pipeline:
                 f for f in c.estimator_features_out if f not in self._estimator_features
             ]
         for rating_idx, c in enumerate(self.rating_generators):
-            for rating_feature in c.estimator_features_out:
+            for rating_feature in c.future_features_out:
                 if len(self.rating_generators) > 1:
                     rating_feature_str = rating_feature + str(rating_idx)
 
@@ -474,16 +474,11 @@ class Pipeline:
                 matches = [matches for _ in self.rating_generators]
 
         rg = self.rating_generators[0]
-        ratings_df = rg.ratings_df
+        match_ids_calculated = rg.calculated_match_ids
+        not_calculated_match_ids = df[~df[self.column_names.match_id].isin(match_ids_calculated)][self.column_names.match_id].unique().tolist()
 
-        if isinstance(ratings_df, pd.DataFrame):
-            rating_game_ids = ratings_df[rg.column_names.match_id].unique()
-            new_game_ids = df[rg.column_names.match_id].unique()
-        else:
-            rating_game_ids = []
-
-        df_no_ratings = df[~df[self.column_names.match_id].isin(rating_game_ids)]
-        df_calculated_ratings = df[df[self.column_names.match_id].isin(rating_game_ids)]
+        df_no_ratings = df[~df[self.column_names.match_id].isin(match_ids_calculated)]
+        df_calculated_ratings = df[df[self.column_names.match_id].isin(match_ids_calculated)]
         for rating_idx, rating_generator in enumerate(self.rating_generators):
             if len(df_no_ratings) > 0:
 
@@ -498,16 +493,16 @@ class Pipeline:
                     rating_matches = matches[rating_idx]
                     if len(df_no_ratings) != len(df):
                         rating_matches = [
-                            m for m in rating_matches if m.id in new_game_ids
+                            m for m in rating_matches if m.id in not_calculated_match_ids
                         ]
 
                 if store_match_ratings:
-                    match_ratings = rating_generator.generate_historical(
-                        matches=rating_matches, column_names=self.column_names, df=df
+                    match_ratings = rating_generator.generate_historical_by_matches(
+                        matches=rating_matches, column_names=self.column_names,
                     )
                 else:
-                    match_ratings = rating_generator.generate_historical(
-                        df=None, matches=rating_matches, column_names=self.column_names
+                    match_ratings = rating_generator.generate_historical_by_matches(
+                        matches=rating_matches, column_names=self.column_names
                     )
 
                 for rating_feature, values in match_ratings.items():
@@ -576,16 +571,9 @@ class Pipeline:
                 performance_column_name=rating_generator.performance_column,
             )
 
-            match_ratings = rating_generator.generate_future(
+            df_with_predict = rating_generator.generate_future(
                 matches=matches, df=df_with_predict
             )
-            for rating_feature, values in match_ratings.items():
-
-                if len(self.rating_generators) > 1:
-                    rating_feature_str = rating_feature + str(rating_idx)
-                else:
-                    rating_feature_str = rating_feature
-                df_with_predict[rating_feature_str] = values
 
         for pre_lag_transformer in self.pre_lag_transformers:
             df_with_predict = pre_lag_transformer.transform(df_with_predict)
