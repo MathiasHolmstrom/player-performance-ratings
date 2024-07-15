@@ -567,7 +567,8 @@ class Pipeline:
             df_with_predict = lag_generator.generate_future(df_with_predict)
         for post_lag_transformer in self.post_lag_transformers:
             df_with_predict = post_lag_transformer.transform(df_with_predict)
-
+        if isinstance(df_with_predict, pl.DataFrame):
+            df_with_predict = df_with_predict.to_pandas()
         df_with_predict = self.predictor.add_prediction(df_with_predict)
 
         cn = self.column_names
