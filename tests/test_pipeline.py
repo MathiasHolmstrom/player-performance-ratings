@@ -10,6 +10,7 @@ from player_performance_ratings.ratings.rating_calculators import MatchRatingGen
 from player_performance_ratings.ratings import (
     RatingKnownFeatures,
     UpdateRatingGenerator,
+    RatingHistoricalFeatures,
 )
 from player_performance_ratings.ratings.performance_generator import (
     Performance,
@@ -72,6 +73,12 @@ def test_pipline_mix_pandas_polars_lags():
         ),
     ]
 
+    rating_generator = UpdateRatingGenerator(
+        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+        historical_features_out=[RatingHistoricalFeatures.TEAM_RATING],
+        performance_column="kills",
+    )
+
     pipeline = Pipeline(
         column_names=ColumnNames(
             match_id="game_id",
@@ -80,20 +87,30 @@ def test_pipline_mix_pandas_polars_lags():
             start_date="start_date",
         ),
         lag_generators=lag_generators,
+        performances_generator=PerformancesGenerator(
+            performances=Performance(name="kills")
+        ),
         predictor=Predictor(estimator=LinearRegression()),
+        rating_generators=rating_generator,
     )
 
-    pipeline.train_predict(df=df)
+    df_with_predict_and_features = pipeline.train_predict(df=df, return_features=True)
     pipeline.cross_validate_predict(
         df=df,
         cross_validator=MatchKFoldCrossValidator(
             match_id_column_name="game_id", n_splits=1, date_column_name="start_date"
         ),
     )
-    pipeline.future_predict(df=df)
+    df_with_future = pipeline.future_predict(df=df, return_features=True)
+    assert df_with_predict_and_features.shape[0] == df_with_future.shape[0]
+    assert (
+        RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED
+        in df_with_predict_and_features.columns
+    )
+    assert RatingHistoricalFeatures.TEAM_RATING in df_with_predict_and_features.columns
 
 
-def test_pipelien_constructor():
+def test_pipeline_constructor():
     lag_generators = [
         RollingMeanTransformer(
             features=["kills", "deaths"],
@@ -255,13 +272,15 @@ def test_match_predictor_multiple_rating_generators_same_performance():
     match_predictor = Pipeline(
         rating_generators=[
             UpdateRatingGenerator(
-                known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
+                known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+                prefix="rating_1",
             ),
             UpdateRatingGenerator(
                 match_rating_generator=MatchRatingGenerator(
                     rating_change_multiplier=20
                 ),
                 known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+                prefix="rating_2",
             ),
         ],
         lag_generators=[],
@@ -279,21 +298,19 @@ def test_match_predictor_multiple_rating_generators_same_performance():
     ].columns.tolist()
 
     assert (
-            RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED + str(1)
-            in col_names_predictor_add
+        match_predictor.rating_generators[0].features_out[0] in col_names_predictor_add
     )
     assert (
-            RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED + str(1)
-            in col_names_predictor_train
+        match_predictor.rating_generators[0].features_out[0]
+        in col_names_predictor_train
     )
 
     assert (
-            RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED + str(0)
-            in col_names_predictor_add
+        match_predictor.rating_generators[1].features_out[0] in col_names_predictor_add
     )
     assert (
-            RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED + str(0)
-            in col_names_predictor_train
+        match_predictor.rating_generators[1].features_out[0]
+        in col_names_predictor_train
     )
 
 

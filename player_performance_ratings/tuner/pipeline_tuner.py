@@ -295,7 +295,6 @@ class PipelineTuner:
             logging.info("Retraining best match predictor with all data")
             df = best_match_predictor.train_predict(
                 df=original_df,
-                store_match_ratings=True,
                 return_features=True,
                 cross_validate_predict=return_cross_validated_predictions,
                 cross_validator=self.cross_validator,

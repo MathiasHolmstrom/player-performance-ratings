@@ -126,6 +126,7 @@ def test_transformer_tuner_2_performances(estimator):
     rating_generator2 = UpdateRatingGenerator(
         performance_column="performance2",
         known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+        prefix="rating2",
     )
 
     rating_generators = [rating_generator1, rating_generator2]

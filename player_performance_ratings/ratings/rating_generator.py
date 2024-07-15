@@ -26,6 +26,7 @@ class RatingGenerator(ABC):
         historical_features_out: Optional[list[RatingHistoricalFeatures]],
         match_rating_generator: MatchRatingGenerator,
         seperate_player_by_position: Optional[bool] = False,
+        prefix: str = "",
     ):
         self.performance_column = performance_column
         self.seperate_player_by_position = seperate_player_by_position
@@ -33,6 +34,7 @@ class RatingGenerator(ABC):
         self._known_features_out = []
         self._historical_features_out = historical_features_out or []
         self.non_estimator_known_features_out = non_estimator_known_features_out
+        self.prefix = prefix
         self.column_names = None
         self._calculated_match_ids = []
 
@@ -70,17 +72,23 @@ class RatingGenerator(ABC):
         pass
 
     @property
-    def known_features_out(self) -> list[RatingKnownFeatures]:
+    def known_features_out(self) -> list[str]:
         return self._known_features_out
 
     @property
     def features_out(
         self,
-    ) -> list[Union[RatingKnownFeatures, RatingHistoricalFeatures]]:
-        return self._known_features_out + self._historical_features_out
+    ) -> list[str]:
+        return [*self.known_features_out, *self.historical_features_out]
 
     @property
-    def known_features_return(self) -> list[RatingKnownFeatures]:
+    def historical_features_out(self) -> list[str]:
+        if self._historical_features_out:
+            return self._historical_features_out
+        return []
+
+    @property
+    def known_features_return(self) -> list[str]:
         if self.non_estimator_known_features_out:
             return list(
                 set(self.non_estimator_known_features_out + self.known_features_out)

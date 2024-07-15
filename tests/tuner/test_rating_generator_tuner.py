@@ -44,7 +44,8 @@ def test_opponent_adjusted_rating_generator_tuner_team_rating():
         match_rating_generator=MatchRatingGenerator(confidence_weight=0.5)
     )
     rating_generator2 = UpdateRatingGenerator(
-        match_rating_generator=MatchRatingGenerator(confidence_weight=0.4)
+        match_rating_generator=MatchRatingGenerator(confidence_weight=0.4),
+        prefix="rating2",
     )
     rating_generators = [rating_generator1, rating_generator2]
 
@@ -130,6 +131,7 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
                 max_predict_value=0.4
             ),
         ),
+        prefix="rating2",
     )
     rating_generators = [rating_generator1, rating_generator2]
 
@@ -192,7 +194,7 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
     assert tuned_model.team_ratings == []
 
 
-def test_opponent_adjusted_rating_generator_tuner_start_rating():
+def test_update_rating_generator_tuner_start_rating():
     team_rating_search = [
         ParameterSearchRange(
             name="confidence_days_ago_multiplier",
@@ -230,6 +232,7 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
             confidence_weight=0.4,
             start_rating_generator=StartRatingGenerator(team_weight=0.4),
         ),
+        prefix="rating_2",
     )
     rating_generators = [rating_generator1, rating_generator2]
 
