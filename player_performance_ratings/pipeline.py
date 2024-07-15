@@ -96,7 +96,7 @@ class Pipeline:
             if not len(set(r.known_features_out + est_feats)) == len(
                 r.known_features_return + est_feats
             ):
-                duplicated_feats = set(r.known_features_out + est_feats).intersection(
+                duplicated_feats = set(r.known_features_return + est_feats).intersection(
                     r.known_features_return + est_feats
                 )
                 raise ValueError(
