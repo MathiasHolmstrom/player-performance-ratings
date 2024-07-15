@@ -5,7 +5,7 @@ import pandas as pd
 
 from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
 from player_performance_ratings.ratings.enums import (
-    RatingFutureFeatures,
+    RatingKnownFeatures,
     RatingHistoricalFeatures,
 )
 
@@ -22,7 +22,7 @@ class RatingGenerator(ABC):
     def __init__(
         self,
         performance_column: str,
-        non_estimator_rating_features_out: Optional[list[RatingFutureFeatures]],
+        non_estimator_known_features_out: Optional[list[RatingKnownFeatures]],
         historical_features_out: Optional[list[RatingHistoricalFeatures]],
         match_rating_generator: MatchRatingGenerator,
         seperate_player_by_position: Optional[bool] = False,
@@ -30,9 +30,9 @@ class RatingGenerator(ABC):
         self.performance_column = performance_column
         self.seperate_player_by_position = seperate_player_by_position
         self.match_rating_generator = match_rating_generator
-        self._future_features_out = []
+        self._known_features_out = []
         self._historical_features_out = historical_features_out or []
-        self._non_estimator_rating_features_out = non_estimator_rating_features_out
+        self.non_estimator_known_features_out = non_estimator_known_features_out
         self.column_names = None
         self._calculated_match_ids = []
 
@@ -45,8 +45,8 @@ class RatingGenerator(ABC):
         matches: list[Match],
         column_names: ColumnNames,
         historical_features_out: Optional[list[RatingHistoricalFeatures]] = None,
-        future_features_out: Optional[list[RatingFutureFeatures]] = None,
-    ) -> dict[Union[RatingFutureFeatures, RatingHistoricalFeatures], list[float]]:
+        known_features_out: Optional[list[RatingKnownFeatures]] = None,
+    ) -> dict[Union[RatingKnownFeatures, RatingHistoricalFeatures], list[float]]:
         pass
 
     @abstractmethod
@@ -55,7 +55,7 @@ class RatingGenerator(ABC):
         df: pd.DataFrame,
         column_names: ColumnNames,
         historical_features_out: Optional[list[RatingHistoricalFeatures]] = None,
-        future_features_out: Optional[list[RatingFutureFeatures]] = None,
+        known_features_out: Optional[list[RatingKnownFeatures]] = None,
     ) -> pd.DataFrame:
         pass
 
@@ -65,27 +65,27 @@ class RatingGenerator(ABC):
         df: Optional[pd.DataFrame],
         matches: Optional[list[Match]] = None,
         historical_features_out: Optional[list[RatingHistoricalFeatures]] = None,
-        future_features_out: Optional[list[RatingFutureFeatures]] = None,
+        known_features_out: Optional[list[RatingKnownFeatures]] = None,
     ) -> pd.DataFrame:
         pass
 
     @property
-    def future_features_out(self) -> list[RatingFutureFeatures]:
-        return self._future_features_out
+    def known_features_out(self) -> list[RatingKnownFeatures]:
+        return self._known_features_out
 
     @property
     def features_out(
         self,
-    ) -> list[Union[RatingFutureFeatures, RatingHistoricalFeatures]]:
-        return self._future_features_out + self._historical_features_out
+    ) -> list[Union[RatingKnownFeatures, RatingHistoricalFeatures]]:
+        return self._known_features_out + self._historical_features_out
 
     @property
-    def future_features_return(self) -> list[RatingFutureFeatures]:
-        if self._non_estimator_rating_features_out:
+    def known_features_return(self) -> list[RatingKnownFeatures]:
+        if self.non_estimator_known_features_out:
             return list(
-                set(self._non_estimator_rating_features_out + self.future_features_out)
+                set(self.non_estimator_known_features_out + self.known_features_out)
             )
-        return self.future_features_out
+        return self.known_features_out
 
     @property
     def player_ratings(self) -> dict[str, PlayerRating]:

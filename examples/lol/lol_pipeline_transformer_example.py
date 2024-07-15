@@ -6,7 +6,7 @@ from player_performance_ratings.ratings import (
     UpdateRatingGenerator,
     MatchRatingGenerator,
     StartRatingGenerator,
-    RatingFutureFeatures,
+    RatingKnownFeatures,
 )
 from player_performance_ratings.transformers import LagTransformer
 from player_performance_ratings.transformers.lag_generators import (
@@ -46,7 +46,7 @@ future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(
 )
 
 rating_generator = UpdateRatingGenerator(
-    future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED],
+    known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
     performance_column="result",
 )
 

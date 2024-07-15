@@ -11,7 +11,7 @@ from player_performance_ratings.cross_validator._base import CrossValidator
 from player_performance_ratings import PipelineFactory
 from player_performance_ratings.ratings import UpdateRatingGenerator
 from player_performance_ratings.ratings.enums import (
-    RatingFutureFeatures,
+    RatingKnownFeatures,
     RatingHistoricalFeatures,
 )
 from player_performance_ratings.ratings.rating_calculators.start_rating_generator import (
@@ -101,10 +101,10 @@ class StartLeagueRatingOptimizer:
                 matches=matches,
                 column_names=column_names,
                 historical_features_out=[RatingHistoricalFeatures.PLAYER_RATING_CHANGE],
-                future_features_out=[
-                    RatingFutureFeatures.PLAYER_RATING,
-                    RatingFutureFeatures.OPPONENT_LEAGUE,
-                    RatingFutureFeatures.PLAYER_LEAGUE,
+                known_features_out=[
+                    RatingKnownFeatures.PLAYER_RATING,
+                    RatingKnownFeatures.OPPONENT_LEAGUE,
+                    RatingKnownFeatures.PLAYER_LEAGUE,
                 ],
             )
 
@@ -139,8 +139,8 @@ class StartLeagueRatingOptimizer:
             league_rating_changes = (
                 df_with_ratings.groupby(
                     [
-                        RatingFutureFeatures.PLAYER_LEAGUE,
-                        RatingFutureFeatures.OPPONENT_LEAGUE,
+                        RatingKnownFeatures.PLAYER_LEAGUE,
+                        RatingKnownFeatures.OPPONENT_LEAGUE,
                     ]
                 )
                 .agg(
@@ -158,7 +158,7 @@ class StartLeagueRatingOptimizer:
                 )
             )
             leagues = (
-                league_rating_changes[RatingFutureFeatures.PLAYER_LEAGUE]
+                league_rating_changes[RatingKnownFeatures.PLAYER_LEAGUE]
                 .unique()
                 .tolist()
             )
@@ -169,9 +169,9 @@ class StartLeagueRatingOptimizer:
             for league in leagues:
                 league_to_played_against_leagues[league] = (
                     league_rating_changes[
-                        league_rating_changes[RatingFutureFeatures.PLAYER_LEAGUE]
+                        league_rating_changes[RatingKnownFeatures.PLAYER_LEAGUE]
                         == league
-                    ][RatingFutureFeatures.OPPONENT_LEAGUE]
+                    ][RatingKnownFeatures.OPPONENT_LEAGUE]
                     .unique()
                     .tolist()
                 )
@@ -183,11 +183,11 @@ class StartLeagueRatingOptimizer:
 
                     rows = league_rating_changes[
                         (
-                            league_rating_changes[RatingFutureFeatures.PLAYER_LEAGUE]
+                            league_rating_changes[RatingKnownFeatures.PLAYER_LEAGUE]
                             == league
                         )
                         & (
-                            league_rating_changes[RatingFutureFeatures.OPPONENT_LEAGUE]
+                            league_rating_changes[RatingKnownFeatures.OPPONENT_LEAGUE]
                             == opp_league
                         )
                     ]

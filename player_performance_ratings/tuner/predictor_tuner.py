@@ -134,7 +134,7 @@ class PredictorTuner:
             for rating_generator in pipeline.rating_generators:
                 create_rating_features = any(
                     feature not in df.columns
-                    for feature in rating_generator.future_features_return
+                    for feature in rating_generator.known_features_return
                 )
                 if create_rating_features:
                     break

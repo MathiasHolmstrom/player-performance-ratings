@@ -5,7 +5,7 @@ from player_performance_ratings.pipeline_transformer import PipelineTransformer
 from player_performance_ratings.predictor import Predictor
 from player_performance_ratings.ratings import (
     UpdateRatingGenerator,
-    RatingFutureFeatures,
+    RatingKnownFeatures,
 )
 from player_performance_ratings.ratings.performance_generator import (
     ColumnWeight,
@@ -47,7 +47,7 @@ def test_pipelien_transformer():
         start_date="start_date",
     )
     rating_generator = UpdateRatingGenerator(
-        future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED]
+        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
     )
 
     pipeline = PipelineTransformer(

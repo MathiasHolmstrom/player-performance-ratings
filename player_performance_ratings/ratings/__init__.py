@@ -1,5 +1,5 @@
 from .enums import (
-    RatingFutureFeatures,
+    RatingKnownFeatures,
     RatingHistoricalFeatures,
     PredictedRatingMethod,
     InputColumnNames,

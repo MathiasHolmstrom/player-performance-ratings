@@ -7,7 +7,7 @@ from player_performance_ratings.predictor import Predictor
 from player_performance_ratings import ColumnNames, PredictColumnNames, PipelineFactory
 from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
 from player_performance_ratings.ratings import (
-    RatingFutureFeatures,
+    RatingKnownFeatures,
     UpdateRatingGenerator,
 )
 from player_performance_ratings.ratings.match_generator import convert_df_to_matches
@@ -137,8 +137,8 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
         rating_generators=rating_generators,
         predictor=Predictor(
             estimator_features=[
-                f"{RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED}0",
-                f"{RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED}1",
+                f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}0",
+                f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}1",
             ],
             target=PredictColumnNames.TARGET,
         ),
@@ -237,8 +237,8 @@ def test_opponent_adjusted_rating_generator_tuner_start_rating():
         rating_generators=rating_generators,
         predictor=Predictor(
             estimator_features=[
-                f"{RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED}0",
-                f"{RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED}1",
+                f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}0",
+                f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}1",
             ],
             target=PredictColumnNames.TARGET,
         ),

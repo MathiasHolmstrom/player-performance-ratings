@@ -9,7 +9,7 @@ class InputColumnNames:
 
 
 @dataclass
-class RatingFutureFeatures:
+class RatingKnownFeatures:
     PLAYER_RATING = "player_rating"
     PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED = (
         "player_rating_difference_from_team_projected"

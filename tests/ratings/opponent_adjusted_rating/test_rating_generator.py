@@ -12,7 +12,7 @@ from player_performance_ratings.data_structures import (
 )
 from player_performance_ratings.ratings import UpdateRatingGenerator
 from player_performance_ratings.ratings.enums import (
-    RatingFutureFeatures,
+    RatingKnownFeatures,
     RatingHistoricalFeatures,
 )
 from player_performance_ratings.ratings.rating_calculators import (
@@ -283,10 +283,10 @@ def test_update_rating_generator_adds_correct_columns(column_names):
         matches=matches,
         column_names=column_names,
         historical_features_out=[RatingHistoricalFeatures.PLAYER_RATING_CHANGE],
-        future_features_out=[RatingFutureFeatures.PLAYER_RATING],
+        known_features_out=[RatingKnownFeatures.PLAYER_RATING],
     )
     assert RatingHistoricalFeatures.PLAYER_RATING_CHANGE in ratings
-    assert RatingFutureFeatures.PLAYER_RATING in ratings
+    assert RatingKnownFeatures.PLAYER_RATING in ratings
 
 
 def test_rating_generator_1_match(column_names):
@@ -365,7 +365,7 @@ def test_opponent_adjusted_rating_generator_with_projected_performance():
     )
 
     rating_generator = UpdateRatingGenerator(
-        future_features_out=[RatingFutureFeatures.TEAM_RATING_PROJECTED],
+        known_features_out=[RatingKnownFeatures.TEAM_RATING_PROJECTED],
         match_rating_generator=MatchRatingGenerator(
             confidence_weight=0,
             start_rating_generator=StartRatingGenerator(harcoded_start_rating=1000),
@@ -409,15 +409,15 @@ def test_opponent_adjusted_rating_generator_with_projected_performance():
     )
 
     assert (
-        df_with_ratings[RatingFutureFeatures.TEAM_RATING_PROJECTED].iloc[4]
-        == df_with_ratings[RatingFutureFeatures.TEAM_RATING_PROJECTED].iloc[5]
+        df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[4]
+        == df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[5]
     )
     assert (
-        df_with_ratings[RatingFutureFeatures.TEAM_RATING_PROJECTED].iloc[6]
-        == df_with_ratings[RatingFutureFeatures.TEAM_RATING_PROJECTED][7]
+        df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[6]
+        == df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED][7]
     )
     assert (
-        df_with_ratings[RatingFutureFeatures.TEAM_RATING_PROJECTED].iloc[4]
+        df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[4]
         < df_with_ratings[RatingHistoricalFeatures.TEAM_RATING][4]
     )
 
@@ -432,12 +432,12 @@ def test_update_rating_generator_generate_historical():
         participation_weight="participation_weight",
     )
     rating_generator = UpdateRatingGenerator(
-        future_features_out=[
-            RatingFutureFeatures.TEAM_RATING_PROJECTED,
-            RatingFutureFeatures.PLAYER_RATING,
-            RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED,
-            RatingFutureFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
-            RatingFutureFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED,
+        known_features_out=[
+            RatingKnownFeatures.TEAM_RATING_PROJECTED,
+            RatingKnownFeatures.PLAYER_RATING,
+            RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED,
+            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
+            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED,
         ],
         match_rating_generator=MatchRatingGenerator(
             confidence_weight=0,
@@ -479,7 +479,7 @@ def test_update_rating_generator_generate_historical():
     cols = [
         *df.columns.tolist(),
         *rating_generator._historical_features_out,
-        *rating_generator.future_features_out,
+        *rating_generator.known_features_out,
     ]
     for col in cols:
         assert col in ratings_df.columns
@@ -497,12 +497,12 @@ def test_update_rating_generator_historical_and_future():
         participation_weight="participation_weight",
     )
     rating_generator = UpdateRatingGenerator(
-        future_features_out=[
-            RatingFutureFeatures.TEAM_RATING_PROJECTED,
-            RatingFutureFeatures.PLAYER_RATING,
-            RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED,
-            RatingFutureFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
-            RatingFutureFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED,
+        known_features_out=[
+            RatingKnownFeatures.TEAM_RATING_PROJECTED,
+            RatingKnownFeatures.PLAYER_RATING,
+            RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED,
+            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
+            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED,
         ],
         historical_features_out=[RatingHistoricalFeatures.PLAYER_RATING_CHANGE],
         match_rating_generator=MatchRatingGenerator(
@@ -570,31 +570,31 @@ def test_update_rating_generator_historical_and_future():
     team_rating2 = player_rating_3 * 0.5 + player_rating_4 * 0.5
 
     expected_future_ratings = {
-        RatingFutureFeatures.TEAM_RATING_PROJECTED: [
+        RatingKnownFeatures.TEAM_RATING_PROJECTED: [
             team_rating1,
             team_rating1,
             team_rating2,
             team_rating2,
         ],
-        RatingFutureFeatures.PLAYER_RATING: [
+        RatingKnownFeatures.PLAYER_RATING: [
             player_rating_1,
             player_rating_2,
             player_rating_3,
             player_rating_4,
         ],
-        RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED: [
+        RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED: [
             team_rating1 - team_rating2,
             team_rating1 - team_rating2,
             team_rating2 - team_rating1,
             team_rating2 - team_rating1,
         ],
-        RatingFutureFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED: [
+        RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED: [
             player_rating_1 - team_rating2,
             player_rating_2 - team_rating2,
             player_rating_3 - team_rating1,
             player_rating_4 - team_rating1,
         ],
-        RatingFutureFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED: [
+        RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED: [
             player_rating_1 - team_rating1,
             player_rating_2 - team_rating1,
             player_rating_3 - team_rating2,

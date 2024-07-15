@@ -94,7 +94,7 @@ class Pipeline:
 
         est_feats = []
         for r in self.rating_generators:
-            est_feats += r.future_features_out
+            est_feats += r.known_features_out
         for f in self.lag_generators:
             est_feats += f.estimator_features_out
         for idx, post_transformer in enumerate(self.post_lag_transformers):
@@ -111,7 +111,7 @@ class Pipeline:
                 f for f in c.estimator_features_out if f not in self._estimator_features
             ]
         for rating_idx, c in enumerate(self.rating_generators):
-            for rating_feature in c.future_features_out:
+            for rating_feature in c.known_features_out:
                 if len(self.rating_generators) > 1:
                     rating_feature_str = rating_feature + str(rating_idx)
 
@@ -155,7 +155,7 @@ class Pipeline:
         for rating_generator in self.rating_generators:
             create_rating_features = any(
                 feature not in df.columns
-                for feature in rating_generator.future_features_return
+                for feature in rating_generator.known_features_return
             )
             if create_rating_features:
                 break
@@ -223,7 +223,7 @@ class Pipeline:
         for rating_generator in self.rating_generators:
             create_rating_features = any(
                 feature not in df.columns
-                for feature in rating_generator.future_features_return
+                for feature in rating_generator.known_features_return
             )
             if create_rating_features:
                 break
@@ -526,7 +526,7 @@ class Pipeline:
 
             if len(df_calculated_ratings) > 0:
                 ratings_df = rating_generator.ratings_df
-                rating_cols = rating_generator.future_features_return + [
+                rating_cols = rating_generator.known_features_return + [
                     rating_generator.column_names.match_id,
                     rating_generator.column_names.team_id,
                     rating_generator.column_names.player_id,
@@ -535,7 +535,7 @@ class Pipeline:
                     [
                         f
                         for f in df_calculated_ratings.columns
-                        if f not in rating_generator.future_features_return
+                        if f not in rating_generator.known_features_return
                     ]
                 ].merge(
                     ratings_df[rating_cols],

@@ -8,7 +8,7 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 from player_performance_ratings import ColumnNames, PipelineFactory
 from player_performance_ratings.predictor import Predictor
 from player_performance_ratings.ratings import (
-    RatingFutureFeatures,
+    RatingKnownFeatures,
     UpdateRatingGenerator,
 )
 from player_performance_ratings.ratings.performance_generator import (
@@ -34,7 +34,7 @@ def test_transformer_tuner():
     )
 
     rating_generator1 = UpdateRatingGenerator(
-        future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED]
+        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
     )
 
     pipeline_factory = PipelineFactory(
@@ -45,7 +45,7 @@ def test_transformer_tuner():
         rating_generators=rating_generator1,
         predictor=Predictor(
             estimator=LogisticRegression(),
-            estimator_features=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED],
+            estimator_features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         ),
     )
 
@@ -120,12 +120,12 @@ def test_transformer_tuner_2_performances(estimator):
 
     rating_generator1 = UpdateRatingGenerator(
         performance_column="performance1",
-        future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED],
+        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
     )
 
     rating_generator2 = UpdateRatingGenerator(
         performance_column="performance2",
-        future_features_out=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED],
+        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
     )
 
     rating_generators = [rating_generator1, rating_generator2]
@@ -134,7 +134,7 @@ def test_transformer_tuner_2_performances(estimator):
         rating_generators=rating_generators,
         predictor=Predictor(
             estimator=estimator,
-            estimator_features=[RatingFutureFeatures.RATING_DIFFERENCE_PROJECTED],
+            estimator_features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         ),
         column_names=column_names1,
         performances_generator=PerformancesGenerator(

@@ -246,7 +246,7 @@ class PipelineTuner:
 
             for rating_feature in best_rating_generators[
                 rating_idx
-            ].future_features_return:
+            ].known_features_return:
                 values = match_ratings[rating_feature]
 
                 if len(self.rating_generator_tuners) > 1:
