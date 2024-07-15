@@ -149,9 +149,9 @@ class MatchKFoldCrossValidator(CrossValidator):
                 validation_df = post_lag_transformer.transform(validation_df)
 
             if isinstance(train_df, pl.DataFrame):
-                train_df = train_df.to_pandas()
+                train_df = convert_pandas_to_polars(train_df)
             if isinstance(validation_df, pl.DataFrame):
-                validation_df = validation_df.to_pandas()
+                validation_df = convert_pandas_to_polars(validation_df)
             predictor.train(train_df, estimator_features=estimator_features)
 
             if idx == 0 and add_train_prediction:
