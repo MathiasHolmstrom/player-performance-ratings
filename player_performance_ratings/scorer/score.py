@@ -66,7 +66,7 @@ class BaseScorer(ABC):
         self.granularity = granularity
 
     @abstractmethod
-    def score(self, df: pd.DataFrame) -> float:
+    def score(self, df: pd.DataFrame, **kwargs) -> float:
         pass
 
 
@@ -89,7 +89,7 @@ class SklearnScorer(BaseScorer):
             filters=filters,
         )
 
-    def score(self, df: pd.DataFrame) -> float:
+    def score(self, df: pd.DataFrame, **kwargs) -> float:
         df = df.copy()
         df = apply_filters(df, self.filters)
         if self.granularity:
@@ -131,13 +131,15 @@ class OrdinalLossScorer(BaseScorer):
             granularity=granularity,
         )
 
-    def score(self, df: pd.DataFrame) -> float:
+    def score(self, df: pd.DataFrame, **kwargs) -> float:
+
+        class_column_name = kwargs['class_column_name'] if 'class_column_name' in kwargs else 'classes'
         df = df.copy()
         df = apply_filters(df, self.filters)
         df.reset_index(drop=True, inplace=True)
 
-        distinct_classes_variations = df.drop_duplicates(subset=["classes"])[
-            "classes"
+        distinct_classes_variations = df.drop_duplicates(subset=[class_column_name])[
+            class_column_name
         ].tolist()
 
         sum_lrs = [0 for _ in range(len(distinct_classes_variations))]
@@ -151,7 +153,7 @@ class OrdinalLossScorer(BaseScorer):
                     continue
 
             rows_target_group = df[
-                df["classes"].apply(lambda x: x == distinct_class_variation)
+                df[class_column_name].apply(lambda x: x == distinct_class_variation)
             ]
             probs = rows_target_group[self.pred_column_name]
             last_column_name = f"prob_under_{distinct_class_variation[0] - 0.5}"
