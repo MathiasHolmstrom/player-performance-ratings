@@ -1,4 +1,6 @@
 import pandas as pd
+from sklearn.metrics import log_loss
+
 from player_performance_ratings import PredictColumnNames
 
 from player_performance_ratings.pipeline import Pipeline
@@ -7,6 +9,7 @@ from player_performance_ratings.predictor import GameTeamPredictor
 from player_performance_ratings.ratings import UpdateRatingGenerator
 
 from player_performance_ratings.data_structures import ColumnNames
+from player_performance_ratings.scorer import SklearnScorer
 
 df = pd.read_pickle("data/game_player_subsample.pickle")
 
@@ -28,7 +31,7 @@ df = df.sort_values(
 )
 
 # Defines the target column we inted to predict
-df[PredictColumnNames.TARGET] = df["won"]
+df[PredictColumnNames.TARGET] = df["won"].astype(int)
 
 # Drops games with less or more than 2 teams
 df = (
@@ -74,6 +77,24 @@ historical_predictions = pipeline.train_predict(
     df=historical_df, cross_validate_predict=True
 )
 
+
+historical_grouped_predictions = historical_predictions.groupby(column_names.match_id).first()[
+    [
+        column_names.start_date,
+        column_names.team_id,
+        "team_id_opponent",
+        predictor.pred_column,
+        predictor.target,
+        "is_validation"
+    ]
+].reset_index()
+scorer = SklearnScorer(pred_column=predictor.pred_column, target=predictor.target, scorer_function=log_loss,
+                       validation_column="is_validation")
+
+score = scorer.score(df=historical_grouped_predictions)
+print(f"Logloss Score on historical data: {score}")
+
+
 # Future predictions on future results
 future_predictions = pipeline.future_predict(df=future_df)
 
@@ -84,6 +105,7 @@ team_grouped_predictions = future_predictions.groupby(column_names.match_id).fir
         column_names.team_id,
         "team_id_opponent",
         predictor.pred_column,
+
     ]
 ]
 

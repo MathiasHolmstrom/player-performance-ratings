@@ -159,12 +159,14 @@ class MatchKFoldCrossValidator(CrossValidator):
                     [c for c in train_df.columns if c not in predictor.columns_added]
                 ]
                 train_df = predictor.add_prediction(train_df)
+                train_df = train_df.assign(**{self.validation_column_name: 0})
                 validation_dfs.append(train_df)
 
             validation_df = validation_df[
                 [c for c in validation_df.columns if c not in predictor.columns_added]
             ]
             validation_df = predictor.add_prediction(validation_df)
+            validation_df = validation_df.assign(**{self.validation_column_name: 1})
             validation_dfs.append(validation_df)
 
             train_cut_off_match_number = train_cut_off_match_number + step_matches
@@ -187,9 +189,9 @@ class MatchKFoldCrossValidator(CrossValidator):
             columns=["__cv_match_number"]
         )
         if not return_features:
-            concat_validation_df = concat_validation_df[
-                ori_cols + predictor.columns_added
-            ]
+            concat_validation_df = concat_validation_df[[
+                *ori_cols, *predictor.columns_added, self.validation_column_name
+            ]]
 
         return concat_validation_df.drop_duplicates(
             [column_names.match_id, column_names.team_id, column_names.player_id]

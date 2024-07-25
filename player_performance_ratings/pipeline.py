@@ -281,7 +281,7 @@ class Pipeline:
 
         return df.merge(
             cross_validated_df[
-                predictor_cols_added + [cn.match_id, cn.team_id, cn.player_id]
+                predictor_cols_added + [cn.match_id, cn.team_id, cn.player_id, cross_validator.validation_column_name]
             ],
             on=[cn.match_id, cn.team_id, cn.player_id],
             how="left",
@@ -356,6 +356,7 @@ class Pipeline:
             )
 
         if cross_validate_predict:
+            cols = df_with_predict.columns.tolist()
             df_cv_predict = self.cross_validate_predict(
                 df=df_with_predict,
                 return_features=return_features,
@@ -364,6 +365,9 @@ class Pipeline:
                 add_train_prediction=True,
                 cross_validator=cross_validator,
             )
+            cv_cols_added = [c for c in df_cv_predict.columns if c not in cols]
+        else:
+            cv_cols_added = []
 
         for idx in range(len(self.pre_lag_transformers)):
             self.pre_lag_transformers[idx].reset()
@@ -431,7 +435,7 @@ class Pipeline:
 
         return df.merge(
             df_with_predict[
-                predictor_cols_added + [cn.match_id, cn.team_id, cn.player_id]
+                predictor_cols_added + [cn.match_id, cn.team_id, cn.player_id] + cv_cols_added
             ],
             on=[cn.match_id, cn.team_id, cn.player_id],
             how="left",

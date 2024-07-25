@@ -57,11 +57,13 @@ class BaseScorer(ABC):
             self,
             target: str,
             pred_column: str,
+            validation_column: Optional[str],
             filters: Optional[list[Filter]] = None,
             granularity: Optional[list[str]] = None,
     ):
         self.target = target
         self.pred_column = pred_column
+        self.validation_column = validation_column
         self.filters = filters or []
         self.granularity = granularity
 
@@ -77,9 +79,20 @@ class SklearnScorer(BaseScorer):
             pred_column: str,
             scorer_function: Callable,
             target: Optional[str] = PredictColumnNames.TARGET,
+            validation_column: Optional[str] = None,
             granularity: Optional[list[str]] = None,
             filters: Optional[list[Filter]] = None,
     ):
+        """
+        :param pred_column: The column name of the predictions
+        :param scorer_function: SKlearn scorer function, e.g. los_loss
+        :param target: The column name of the target
+        :param validation_column: The column name of the validation column.
+            If set, the scorer will be calculated only once the values of the validation column are equal to 1
+        :param granularity: The columns to group by before calculating the score
+        :param filters: The filters to apply before calculating
+        """
+
         self.pred_column_name = pred_column
         self.scorer_function = scorer_function
         super().__init__(
@@ -87,11 +100,16 @@ class SklearnScorer(BaseScorer):
             pred_column=pred_column,
             granularity=granularity,
             filters=filters,
+            validation_column=validation_column,
         )
 
     def score(self, df: pd.DataFrame) -> float:
         df = df.copy()
-        df = apply_filters(df, self.filters)
+        if self.validation_column:
+            filters = self.filters or [] + [Filter(self.validation_column, 1, Operator.EQUALS)]
+        else:
+            filters = self.filters or []
+        df = apply_filters(df, filters)
         if self.granularity:
             grouped = (
                 df.groupby(self.granularity)[self.pred_column_name, self.target]
@@ -106,7 +124,7 @@ class SklearnScorer(BaseScorer):
                 np.asarray(grouped[self.pred_column_name]).tolist(),
             )
         return self.scorer_function(
-            grouped[self.target], grouped[self.pred_column_name]
+            grouped[self.target].astype(int), grouped[self.pred_column_name]
         )
 
 
@@ -116,21 +134,31 @@ class OrdinalLossScorer(BaseScorer):
             self,
             pred_column: str,
             class_column_name: str = "classes",
-            targets_to_measure: Optional[list[int]] = None,
             target: Optional[str] = PredictColumnNames.TARGET,
+            validation_column: Optional[str] = None,
             granularity: Optional[list[str]] = None,
             filters: Optional[list[Filter]] = None,
     ):
+        """
+        :param pred_column: The column name of the predictions
+        :param class_column_name: The column name that contains the integer values of the classes.
+        :param scorer_function: SKlearn scorer function, e.g. los_loss
+        :param target: The column name of the target
+        :param validation_column: The column name of the validation column.
+            If set, the scorer will be calculated only once the values of the validation column are equal to 1
+        :param granularity: The columns to group by before calculating the score
+        :param filters: The filters to apply before calculating
+        """
 
         self.pred_column_name = pred_column
         self.class_column_name = class_column_name
-        self.targets_to_measure = targets_to_measure
         self.granularity = granularity
         super().__init__(
             target=target,
             pred_column=pred_column,
             filters=filters,
             granularity=granularity,
+            validation_column=validation_column,
         )
 
     def score(self, df: pd.DataFrame) -> float:

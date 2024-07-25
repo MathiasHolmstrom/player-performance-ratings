@@ -17,6 +17,11 @@ class CrossValidator(ABC):
     def __init__(self, scorer: Optional[BaseScorer]):
         self.scorer = scorer
 
+
+    @property
+    def validation_column_name(self) -> str:
+        return "is_validation"
+
     @abstractmethod
     def generate_validation_df(
         self,
