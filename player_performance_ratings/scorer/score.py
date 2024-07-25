@@ -54,11 +54,11 @@ def apply_filters(df: pd.DataFrame, filters: list[Filter]) -> pd.DataFrame:
 class BaseScorer(ABC):
 
     def __init__(
-        self,
-        target: str,
-        pred_column: str,
-        filters: Optional[list[Filter]] = None,
-        granularity: Optional[list[str]] = None,
+            self,
+            target: str,
+            pred_column: str,
+            filters: Optional[list[Filter]] = None,
+            granularity: Optional[list[str]] = None,
     ):
         self.target = target
         self.pred_column = pred_column
@@ -66,19 +66,19 @@ class BaseScorer(ABC):
         self.granularity = granularity
 
     @abstractmethod
-    def score(self, df: pd.DataFrame, **kwargs) -> float:
+    def score(self, df: pd.DataFrame) -> float:
         pass
 
 
 class SklearnScorer(BaseScorer):
 
     def __init__(
-        self,
-        pred_column: str,
-        scorer_function: Callable,
-        target: Optional[str] = PredictColumnNames.TARGET,
-        granularity: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
+            self,
+            pred_column: str,
+            scorer_function: Callable,
+            target: Optional[str] = PredictColumnNames.TARGET,
+            granularity: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
     ):
         self.pred_column_name = pred_column
         self.scorer_function = scorer_function
@@ -89,7 +89,7 @@ class SklearnScorer(BaseScorer):
             filters=filters,
         )
 
-    def score(self, df: pd.DataFrame, **kwargs) -> float:
+    def score(self, df: pd.DataFrame) -> float:
         df = df.copy()
         df = apply_filters(df, self.filters)
         if self.granularity:
@@ -113,15 +113,17 @@ class SklearnScorer(BaseScorer):
 class OrdinalLossScorer(BaseScorer):
 
     def __init__(
-        self,
-        pred_column: str,
-        targets_to_measure: Optional[list[int]] = None,
-        target: Optional[str] = PredictColumnNames.TARGET,
-        granularity: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
+            self,
+            pred_column: str,
+            class_column_name: str = "classes",
+            targets_to_measure: Optional[list[int]] = None,
+            target: Optional[str] = PredictColumnNames.TARGET,
+            granularity: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
     ):
 
         self.pred_column_name = pred_column
+        self.class_column_name = class_column_name
         self.targets_to_measure = targets_to_measure
         self.granularity = granularity
         super().__init__(
@@ -131,21 +133,20 @@ class OrdinalLossScorer(BaseScorer):
             granularity=granularity,
         )
 
-    def score(self, df: pd.DataFrame, **kwargs) -> float:
+    def score(self, df: pd.DataFrame) -> float:
 
-        class_column_name = kwargs['class_column_name'] if 'class_column_name' in kwargs else 'classes'
         df = df.copy()
         df = apply_filters(df, self.filters)
         df.reset_index(drop=True, inplace=True)
 
-        distinct_classes_variations = df.drop_duplicates(subset=[class_column_name])[
-            class_column_name
+        distinct_classes_variations = df.drop_duplicates(subset=[self.class_column_name])[
+            self.class_column_name
         ].tolist()
 
         sum_lrs = [0 for _ in range(len(distinct_classes_variations))]
         sum_lr = 0
         for variation_idx, distinct_class_variation in enumerate(
-            distinct_classes_variations
+                distinct_classes_variations
         ):
 
             if not isinstance(distinct_class_variation, list):
@@ -153,7 +154,7 @@ class OrdinalLossScorer(BaseScorer):
                     continue
 
             rows_target_group = df[
-                df[class_column_name].apply(lambda x: x == distinct_class_variation)
+                df[self.class_column_name].apply(lambda x: x == distinct_class_variation)
             ]
             probs = rows_target_group[self.pred_column_name]
             last_column_name = f"prob_under_{distinct_class_variation[0] - 0.5}"
@@ -163,8 +164,8 @@ class OrdinalLossScorer(BaseScorer):
 
                 p_c = "prob_under_" + str(class_ + 0.5)
                 rows_target_group[p_c] = (
-                    probs.apply(lambda x: x[idx + 1])
-                    + rows_target_group[last_column_name]
+                        probs.apply(lambda x: x[idx + 1])
+                        + rows_target_group[last_column_name]
                 )
 
                 count_exact = len(
