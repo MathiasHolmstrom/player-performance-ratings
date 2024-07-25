@@ -435,7 +435,7 @@ class Pipeline:
 
         return df.merge(
             df_with_predict[
-                predictor_cols_added + [cn.match_id, cn.team_id, cn.player_id] + cv_cols_added
+                predictor_cols_added + [cn.match_id, cn.team_id, cn.player_id] + [c for c in cv_cols_added if c not in predictor_cols_added]
             ],
             on=[cn.match_id, cn.team_id, cn.player_id],
             how="left",
