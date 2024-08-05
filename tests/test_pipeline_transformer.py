@@ -1,8 +1,9 @@
 import pandas as pd
+import pytest
+import polars as pl
 
-from player_performance_ratings import ColumnNames, Pipeline
+from player_performance_ratings import ColumnNames
 from player_performance_ratings.pipeline_transformer import PipelineTransformer
-from player_performance_ratings.predictor import Predictor
 from player_performance_ratings.ratings import (
     UpdateRatingGenerator,
     RatingKnownFeatures,
@@ -15,7 +16,8 @@ from player_performance_ratings.ratings.performance_generator import (
 from player_performance_ratings.transformers import LagTransformer
 
 
-def test_pipelien_transformer():
+@pytest.mark.parametrize("to_polars", [True, False])
+def test_pipeline_transformer(to_polars):
     df = pd.DataFrame(
         {
             "game_id": [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
@@ -63,11 +65,19 @@ def test_pipelien_transformer():
         column_names=column_names,
     )
 
+
     historical_df = df[df[column_names.start_date] < pd.to_datetime("2023-01-04")]
     future_df = df[df[column_names.start_date] >= pd.to_datetime("2023-01-04")]
-    historical_df_predictions = pipeline.fit_transform(df=historical_df)
 
+    if to_polars:
+        historical_df = pl.DataFrame(df)
+        future_df = pl.DataFrame(df)
+
+    historical_df_predictions = pipeline.fit_transform(df=historical_df)
     future_predict = pipeline.transform(df=future_df)
+    if to_polars:
+        historical_df_predictions = historical_df_predictions.to_pandas()
+        future_predict = future_predict.to_pandas()
 
     for lag_generator in pipeline.lag_generators:
         for feature_out in lag_generator.features_out:

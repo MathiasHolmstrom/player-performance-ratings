@@ -54,6 +54,12 @@ class PipelineTransformer:
         Fit and transform the pipeline on historical data
         :param df: Either polars or Pandas dataframe
         """
+
+        original_is_polars = False
+        if isinstance(df, pl.DataFrame):
+            original_is_polars = True
+            df = df.to_pandas()
+
         if self.performances_generator:
             df = self.performances_generator.generate(df)
 
@@ -85,7 +91,8 @@ class PipelineTransformer:
             df = lag_generator.generate_historical(
                 df=df, column_names=self.column_names
             )
-
+        if original_is_polars:
+            df = pl.DataFrame(df)
         return df
 
     def transform(self, df: DataFrameType) -> DataFrameType:
@@ -93,6 +100,12 @@ class PipelineTransformer:
         Transform the pipeline on future data
         :param df: Either polars or Pandas dataframe
         """
+
+        original_is_polars = False
+        if isinstance(df, pl.DataFrame):
+            original_is_polars = True
+            df = df.to_pandas()
+
         if self.performances_generator:
             df = self.performances_generator.generate(df)
 
@@ -117,4 +130,8 @@ class PipelineTransformer:
 
         for transformer in self.post_lag_transformers:
             df = transformer.transform(df)
+
+        if original_is_polars:
+            df = pl.DataFrame(df)
+
         return df

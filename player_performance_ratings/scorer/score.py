@@ -128,6 +128,95 @@ class SklearnScorer(BaseScorer):
         )
 
 
+class ProbabilisticMeanBias(BaseScorer):
+
+    def __init__(
+            self,
+            pred_column: str,
+            class_column_name: str = "classes",
+            target: Optional[str] = PredictColumnNames.TARGET,
+            validation_column: Optional[str] = None,
+            granularity: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
+    ):
+
+        self.pred_column_name = pred_column
+        self.class_column_name = class_column_name
+        super().__init__(
+            target=target,
+            pred_column=pred_column,
+            filters=filters,
+            granularity=granularity,
+            validation_column=validation_column,
+        )
+
+    def score(self, df: pd.DataFrame) -> float:
+        df = df.copy()
+        df = apply_filters(df, self.filters)
+        df.reset_index(drop=True, inplace=True)
+
+        distinct_classes_variations = df.drop_duplicates(subset=[self.class_column_name])[
+            self.class_column_name
+        ].tolist()
+
+        sum_lrs = [0 for _ in range(len(distinct_classes_variations))]
+        sum_lr = 0
+        for variation_idx, distinct_class_variation in enumerate(
+                distinct_classes_variations
+        ):
+
+            if not isinstance(distinct_class_variation, list):
+                if math.isnan(distinct_class_variation):
+                    continue
+
+            rows_target_group = df[
+                df[self.class_column_name].apply(lambda x: x == distinct_class_variation)
+            ]
+            probs = rows_target_group[self.pred_column_name]
+            last_column_name = f"prob_under_{distinct_class_variation[0] - 0.5}"
+            rows_target_group[last_column_name] = probs.apply(lambda x: x[0])
+
+            for idx, class_ in enumerate(distinct_class_variation[1:]):
+
+                prob_under = "prob_under_" + str(class_ + 0.5)
+                rows_target_group[prob_under] = (
+                        probs.apply(lambda x: x[idx + 1])
+                        + rows_target_group[last_column_name]
+                )
+
+                count_exact = len(
+                    rows_target_group[rows_target_group["__target"] == class_]
+                )
+                weight_class = count_exact / len(rows_target_group)
+
+                if self.granularity:
+                    grouped = (
+                        rows_target_group.groupby(self.granularity + ["__target"])[prob_under]
+                        .mean()
+                        .reset_index()
+                    )
+                else:
+                    grouped = rows_target_group
+
+                grouped["min"] = 0.0001
+                grouped["max"] = 0.9999
+                grouped[prob_under] = np.minimum(grouped["max"], grouped[prob_under])
+                grouped[prob_under] = np.maximum(grouped["min"], grouped[prob_under])
+
+                grouped.loc[grouped['__target'] <= class_, "__went_under"] = 1
+                grouped.loc[grouped['__target'] > class_, "__went_under"] = 0
+
+                under_prob_mean = grouped[prob_under].mean()
+                under_actual_mean = grouped['__went_under'].mean()
+
+                overbias = under_prob_mean - under_actual_mean
+                sum_lrs[variation_idx] += overbias * weight_class
+
+                last_column_name = prob_under
+            sum_lr += sum_lrs[variation_idx] * len(rows_target_group) / len(df)
+        return sum_lr
+
+
 class OrdinalLossScorer(BaseScorer):
 
     def __init__(
