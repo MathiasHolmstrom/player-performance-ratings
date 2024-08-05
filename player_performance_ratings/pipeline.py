@@ -235,6 +235,9 @@ class Pipeline:
                 break
 
         if create_rating_features and self.rating_generators:
+            if self.rating_generators[0].performance_column not in cross_validated_df.columns.tolist():
+                raise ValueError(
+                    f"Performance column {self.rating_generators[0].performance_column} not found in dataframe")
             cross_validated_df = self._add_rating(
                 matches=matches, df=cross_validated_df
             )
@@ -350,6 +353,9 @@ class Pipeline:
         ori_cols = df.columns.tolist()
         df_with_predict = self._add_performance(df=df_with_predict)
         if self.rating_generators:
+            if self.rating_generators[0].performance_column not in df_with_predict.columns.tolist():
+                raise ValueError(
+                    f"Performance column {self.rating_generators[0].performance_column} not found in dataframe")
             df_with_predict = self._add_rating(
                 matches=matches,
                 df=df_with_predict,

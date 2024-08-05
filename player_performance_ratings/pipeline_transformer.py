@@ -110,6 +110,8 @@ class PipelineTransformer:
             df = self.performances_generator.generate(df)
 
         if self.rating_generators:
+            if self.rating_generators[0].performance_column not in df.columns:
+                raise ValueError(f"Performance column {self.rating_generators[0].performance_column} not found in dataframe")
             matches = convert_df_to_matches(
                 column_names=self.column_names,
                 df=df,

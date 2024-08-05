@@ -15,8 +15,9 @@ def test_ordinal_loss_scorer_multiclass_rename_class_column_name():
         }
     )
     score = OrdinalLossScorer(
-        pred_column="predictions", targets_to_measure=list(range(3))
-    ).score(data, class_column_name="total_points_classes")
+        pred_column="predictions",
+        class_column_name="total_points_classes"
+    ).score(data)
     assert score > 0
     assert score < 0.693
 
@@ -29,7 +30,7 @@ def test_ordinal_loss_scorer_multiclass():
         }
     )
     score = OrdinalLossScorer(
-        pred_column="predictions", targets_to_measure=list(range(3))
+        pred_column="predictions"
     ).score(data)
     assert score > 0
     assert score < 0.693
