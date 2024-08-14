@@ -321,7 +321,7 @@ class Pipeline:
 
     def train_predict(
         self,
-        df: Union[pd.DataFrame | pl.DataFrame],
+        df: Union[pd.DataFrame, pl.DataFrame],
         matches: Optional[Union[list[Match], list[list[Match]]]] = None,
         return_features: bool = False,
         cross_validate_predict: bool = False,
