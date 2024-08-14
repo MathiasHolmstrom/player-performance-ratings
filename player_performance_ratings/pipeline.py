@@ -62,7 +62,7 @@ class Pipeline:
         ] = None,
         pre_lag_transformers: Optional[list[BaseTransformer]] = None,
         lag_generators: Optional[
-            List[BaseLagGenerator | BaseLagGeneratorPolars]
+            List[Union[BaseLagGenerator, BaseLagGeneratorPolars]]
         ] = None,
         post_lag_transformers: Optional[list[BaseTransformer]] = None,
     ):
