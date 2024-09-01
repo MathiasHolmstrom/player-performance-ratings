@@ -124,7 +124,7 @@ class SklearnScorer(BaseScorer):
                 np.asarray(grouped[self.pred_column_name]).tolist(),
             )
         return self.scorer_function(
-            grouped[self.target].astype(int), grouped[self.pred_column_name]
+            grouped[self.target], grouped[self.pred_column_name]
         )
 
 
@@ -231,7 +231,6 @@ class OrdinalLossScorer(BaseScorer):
         """
         :param pred_column: The column name of the predictions
         :param class_column_name: The column name that contains the integer values of the classes.
-        :param scorer_function: SKlearn scorer function, e.g. los_loss
         :param target: The column name of the target
         :param validation_column: The column name of the validation column.
             If set, the scorer will be calculated only once the values of the validation column are equal to 1
