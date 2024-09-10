@@ -92,7 +92,7 @@ class Pipeline:
         self.lag_generators = lag_generators or []
         self.column_names = column_names
 
-        est_feats = []
+        est_feats = predictor.estimator_features
         for r in self.rating_generators:
             if not len(set(r.known_features_return + est_feats)) == len(
                 r.known_features_return + est_feats
@@ -529,7 +529,7 @@ class Pipeline:
         return df
 
     def future_predict(
-        self, df: DataFrameType, return_features: bool = False
+            self, df: DataFrameType, return_features: bool = False, return_rating_features: bool = False
     ) -> DataFrameType:
         """
         Generates predictions on a future dataset from the entire pipeline
@@ -563,15 +563,15 @@ class Pipeline:
             df_with_predict = pre_lag_transformer.transform(df_with_predict)
         for idx, lag_generator in enumerate(self.lag_generators):
             count_remaining_polars = [
-                l for l in self.lag_generators[idx:] if "Polars" in l.__class__.__name__
-            ] + [
-                l
-                for l in self.post_lag_transformers
-                if "Polars" in l.__class__.__name__
-            ]
+                                         l for l in self.lag_generators[idx:] if "Polars" in l.__class__.__name__
+                                     ] + [
+                                         l
+                                         for l in self.post_lag_transformers
+                                         if "Polars" in l.__class__.__name__
+                                     ]
 
             if isinstance(df_with_predict, pd.DataFrame) and len(
-                count_remaining_polars
+                    count_remaining_polars
             ) == len(self.lag_generators[idx:] + self.post_lag_transformers):
                 df_with_predict = convert_pandas_to_polars(df_with_predict)
             df_with_predict = lag_generator.generate_future(df_with_predict)
@@ -583,7 +583,7 @@ class Pipeline:
 
         cn = self.column_names
         for _, row in (
-            df[[cn.match_id, cn.team_id, cn.player_id]].dtypes.reset_index().iterrows()
+                df[[cn.match_id, cn.team_id, cn.player_id]].dtypes.reset_index().iterrows()
         ):
             df_with_predict[row["index"]] = df_with_predict[row["index"]].astype(row[0])
         if return_features:
@@ -593,10 +593,15 @@ class Pipeline:
                 on=[cn.match_id, cn.team_id, cn.player_id],
                 how="left",
             )
+        elif return_rating_features:
+            rating_feats_out = [f for i in range(len(self.rating_generators)) for f in self.rating_generators[i].known_features_return]
+            cols_to_add = self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id] + rating_feats_out
+        else:
+            cols_to_add = self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id]
 
         return df.merge(
             df_with_predict[
-                self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id]
+                cols_to_add
             ],
             on=[cn.match_id, cn.team_id, cn.player_id],
             how="left",

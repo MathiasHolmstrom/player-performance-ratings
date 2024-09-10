@@ -174,7 +174,7 @@ class UpdateRatingGenerator(RatingGenerator):
             historical_features_out or self._historical_features_out
         )
         self._calculated_match_ids = df[self.column_names.match_id].unique().tolist()
-        return df[input_cols + known_features_out + historical_features_out]
+        return df[list(set(input_cols + known_features_out + historical_features_out + self._non_estimator_rating_features_out))]
 
     def _generate_potential_feature_values(self, matches: list[Match]):
         pre_match_player_rating_values = []
@@ -477,7 +477,7 @@ class UpdateRatingGenerator(RatingGenerator):
         historical_features_out = (
             historical_features_out or self._historical_features_out
         )
-        return df[input_cols + known_features_return + historical_features_out]
+        return df[list(set(input_cols + known_features_return + historical_features_out + self._non_estimator_rating_features_out))]
 
     def _get_shared_rating_values(
         self,

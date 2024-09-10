@@ -64,7 +64,9 @@ class BaseScorer(ABC):
         self.target = target
         self.pred_column = pred_column
         self.validation_column = validation_column
-        self.filters = filters or []
+        self.filters = []
+        if validation_column:
+            self.filters.append(Filter(column_name=self.validation_column, value=1, operator=Operator.EQUALS))
         self.granularity = granularity
 
     @abstractmethod
@@ -105,11 +107,7 @@ class SklearnScorer(BaseScorer):
 
     def score(self, df: pd.DataFrame) -> float:
         df = df.copy()
-        if self.validation_column:
-            filters = self.filters or [] + [Filter(self.validation_column, 1, Operator.EQUALS)]
-        else:
-            filters = self.filters or []
-        df = apply_filters(df, filters)
+        df = apply_filters(df, self.filters)
         if self.granularity:
             grouped = (
                 df.groupby(self.granularity)[self.pred_column_name, self.target]
