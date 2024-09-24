@@ -73,22 +73,37 @@ class RatingGenerator(ABC):
 
     @property
     def known_features_out(self) -> list[str]:
+        """
+        Rating features that do not contain leakage. Thus they can be passed into an estimator
+        """
         return self._known_features_out
 
     @property
     def features_out(
         self,
     ) -> list[str]:
+        """
+        Contains both known and historical features
+        """
         return [*self.known_features_out, *self.historical_features_out]
 
     @property
     def historical_features_out(self) -> list[str]:
+        """
+        Rating Features that contain leakge. Thus, they must not be passed into an estimator.
+        They are only inteded to be used for data-analysis
+        """
         if self._historical_features_out:
             return self._historical_features_out
         return []
 
     @property
     def known_features_return(self) -> list[str]:
+        """
+        Rating features that do not contain leakage.
+        Contains both features intended to be passed to the estimator
+         and other features that are not intended to be passed to the estimator
+        """
         if self.non_estimator_known_features_out:
             return list(
                 set(self.non_estimator_known_features_out + self.known_features_out)

@@ -94,17 +94,7 @@ class Pipeline:
 
         est_feats = predictor.estimator_features
         for r in self.rating_generators:
-            if not len(set(r.known_features_return + est_feats)) == len(
-                r.known_features_return + est_feats
-            ):
-                duplicated_feats = set(r.known_features_return + est_feats).intersection(
-                    r.known_features_return + est_feats
-                )
-                raise ValueError(
-                    f"Rating generator {r.__class__.__name__} has duplicated features {duplicated_feats}"
-                )
-
-            est_feats += r.known_features_out
+            est_feats = list(set(est_feats + r.known_features_return))
         for f in self.lag_generators:
             est_feats += f.estimator_features_out
         for idx, post_transformer in enumerate(self.post_lag_transformers):
