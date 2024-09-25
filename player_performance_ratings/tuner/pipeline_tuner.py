@@ -164,8 +164,10 @@ class PipelineTuner:
         df: pd.DataFrame,
         return_df: bool = False,
         return_cross_validated_predictions: bool = False,
+        cross_validator: Optional[CrossValidator] = None,
     ) -> Union[Pipeline, tuple[Pipeline, pd.DataFrame]]:
 
+        self.cross_validator = cross_validator or self.cross_validator
         if self.cross_validator is None:
             self.cross_validator = self.pipeline._create_default_cross_validator(df)
 
