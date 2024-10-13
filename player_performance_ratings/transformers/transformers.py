@@ -12,17 +12,18 @@ from player_performance_ratings.transformers.base_transformer import (
     BaseTransformer,
     BaseLagGenerator,
 )
+import polars as pl
 
 
 class NetOverPredictedPostTransformer(BaseTransformer):
 
     def __init__(
-        self,
-        predictor: BasePredictor,
-        features: list[str] = None,
-        lag_generators: Optional[list[BaseLagGenerator]] = None,
-        prefix: str = "net_over_predicted_",
-        are_estimator_features: bool = False,
+            self,
+            predictor: BasePredictor,
+            features: list[str] = None,
+            lag_generators: Optional[list[BaseLagGenerator]] = None,
+            prefix: str = "net_over_predicted_",
+            are_estimator_features: bool = False,
     ):
         super().__init__(
             features=features,
@@ -56,7 +57,7 @@ class NetOverPredictedPostTransformer(BaseTransformer):
             raise ValueError("Prefix must not be empty")
 
     def fit_transform(
-        self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None
+            self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None
     ) -> pd.DataFrame:
         ori_cols = df.columns.tolist()
         self.column_names = column_names
@@ -69,7 +70,7 @@ class NetOverPredictedPostTransformer(BaseTransformer):
             df = df.assign(
                 **{
                     new_feature_name: df[self.predictor.target]
-                    - df[self.predictor.pred_column]
+                                      - df[self.predictor.pred_column]
                 }
             )
         for lag_generator in self.lag_generators:
@@ -86,7 +87,7 @@ class NetOverPredictedPostTransformer(BaseTransformer):
             df = df.assign(
                 **{
                     new_feature_name: df[self.predictor.target]
-                    - df[self.predictor.pred_column]
+                                      - df[self.predictor.pred_column]
                 }
             )
 
@@ -107,6 +108,7 @@ class NetOverPredictedPostTransformer(BaseTransformer):
 
 class Operation(Enum):
     SUBTRACT = "subtract"
+    MULTIPLY = "multiply"
 
 
 @dataclass
@@ -121,6 +123,64 @@ class ModifyOperation:
             self.new_column_name = f"{self.feature1}_minus_{self.feature2}"
 
 
+class OperatorTransformer(BaseTransformer):
+    """
+    Performs operations on two columns and stores the result in a new column.
+    An operation can be subtraction, addition, multiplication, or division.
+    """
+
+    def __init__(
+            self,
+            feature1: str,
+            operation: Operation,
+
+            feature2: str,
+            new_column_name: Optional[str] = None,
+            features: Optional[list[str]] = None,
+            are_estimator_features: bool = True,
+    ):
+        """
+        """
+        self.feature1 = feature1
+        self.operation = operation
+        self.feature2 = feature2
+        self.new_column_name = new_column_name
+
+        if not self.new_column_name:
+
+            if self.operation == Operation.SUBTRACT:
+                self.new_column_name = f"{self.feature1}_minus_{self.feature2}"
+            elif self.operation == Operation.MULTIPLY:
+                self.new_column_name = f"{self.feature1}_times_{self.feature2}"
+
+        super().__init__(
+            features=features,
+            are_estimator_features=are_estimator_features,
+             features_out=[self.new_column_name],
+        )
+
+    def fit_transform(
+            self, df: pl.DataFrame, column_names: Optional[ColumnNames]
+    ) -> pd.DataFrame:
+        self.column_names = column_names
+        return self.transform(df)
+
+    def transform(self, df: pl.DataFrame) -> pl.DataFrame:
+        if self.operation == Operation.SUBTRACT:
+            df = df.with_columns(
+                pl.col(self.feature1) - pl.col(self.feature2)
+                .alias(self.new_column_name)
+            )
+
+        elif self.operation == Operation.MULTIPLY:
+            df = df.with_columns(
+                pl.col(self.feature1) * pl.col(self.feature2)
+                .alias(self.new_column_name)
+            )
+
+        return df
+
+
 class ModifierTransformer(BaseTransformer):
     """
     Performs operations on two columns and stores the result in a new column.
@@ -128,10 +188,10 @@ class ModifierTransformer(BaseTransformer):
     """
 
     def __init__(
-        self,
-        modify_operations: list[ModifyOperation],
-        features: Optional[list[str]] = None,
-        are_estimator_features: bool = True,
+            self,
+            modify_operations: list[ModifyOperation],
+            features: Optional[list[str]] = None,
+            are_estimator_features: bool = True,
     ):
         """
         :param modify_operations: A list of ModifyOperations to perform
@@ -150,7 +210,7 @@ class ModifierTransformer(BaseTransformer):
         )
 
     def fit_transform(
-        self, df: pd.DataFrame, column_names: Optional[ColumnNames]
+            self, df: pd.DataFrame, column_names: Optional[ColumnNames]
     ) -> pd.DataFrame:
         self.column_names = column_names
         return self.transform(df)
@@ -159,8 +219,8 @@ class ModifierTransformer(BaseTransformer):
         for operation in self.modify_operations:
             if operation.operation == Operation.SUBTRACT:
                 if (
-                    operation.feature1 not in df.columns
-                    or operation.feature2 not in df.columns
+                        operation.feature1 not in df.columns
+                        or operation.feature2 not in df.columns
                 ):
                     df = df.assign(**{operation.new_column_name: np.nan})
 
@@ -168,7 +228,7 @@ class ModifierTransformer(BaseTransformer):
                     df = df.assign(
                         **{
                             operation.new_column_name: df[operation.feature1]
-                            - df[operation.feature2]
+                                                       - df[operation.feature2]
                         }
                     )
 
@@ -192,7 +252,7 @@ class PredictorTransformer(BaseTransformer):
         )
 
     def fit_transform(
-        self, df: pd.DataFrame, column_names: Optional[None] = None
+            self, df: pd.DataFrame, column_names: Optional[None] = None
     ) -> pd.DataFrame:
         self.predictor.train(df=df, estimator_features=self.features)
         return self.transform(df)
@@ -211,12 +271,12 @@ class RatioTeamPredictorTransformer(BaseTransformer):
     """
 
     def __init__(
-        self,
-        features: list[str],
-        predictor: BasePredictor,
-        team_total_prediction_column: Optional[str] = None,
-        lag_generators: Optional[list[BaseLagGenerator]] = None,
-        prefix: str = "_ratio_team",
+            self,
+            features: list[str],
+            predictor: BasePredictor,
+            team_total_prediction_column: Optional[str] = None,
+            lag_generators: Optional[list[BaseLagGenerator]] = None,
+            prefix: str = "_ratio_team",
     ):
         """
         :param features: The features to use for the predictor
@@ -247,7 +307,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
             self._estimator_features_out = self._features_out.copy()
 
     def fit_transform(
-        self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None
+            self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None
     ) -> pd.DataFrame:
         ori_cols = df.columns.tolist()
         self.column_names = column_names
@@ -267,7 +327,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
             [self.column_names.match_id, self.column_names.team_id]
         )[self.predictor.pred_column].transform("sum")
         df[self._features_out[0]] = (
-            df[self.predictor.pred_column] / df[self.predictor.pred_column + "_sum"]
+                df[self.predictor.pred_column] / df[self.predictor.pred_column + "_sum"]
         )
         if self.team_total_prediction_column:
             df = df.assign(
@@ -275,7 +335,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
                     self.predictor.target
                     + self.prefix
                     + "_team_total_multiplied": df[self._features_out[0]]
-                    * df[self.team_total_prediction_column]
+                                                * df[self.team_total_prediction_column]
                 }
             )
 
