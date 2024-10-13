@@ -13,6 +13,8 @@ from player_performance_ratings.transformers.base_transformer import (
     BaseLagGenerator,
 )
 import polars as pl
+import narwhals as nw
+from narwhals.typing import FrameT
 
 
 class NetOverPredictedPostTransformer(BaseTransformer):
@@ -133,13 +135,16 @@ class OperatorTransformer(BaseTransformer):
             self,
             feature1: str,
             operation: Operation,
-
             feature2: str,
             new_column_name: Optional[str] = None,
             features: Optional[list[str]] = None,
             are_estimator_features: bool = True,
     ):
         """
+        :param feature1: The first feature to perform the operation on
+        :param operation: The operation to perform
+        :param feature2: The second feature to perform the operation on
+        :param new_column_name: The name of the new column to store the result in
         """
         self.feature1 = feature1
         self.operation = operation
@@ -160,21 +165,22 @@ class OperatorTransformer(BaseTransformer):
         )
 
     def fit_transform(
-            self, df: pl.DataFrame, column_names: Optional[ColumnNames]
-    ) -> pd.DataFrame:
+            self, df: FrameT, column_names: Optional[ColumnNames]
+    ) -> FrameT:
         self.column_names = column_names
         return self.transform(df)
 
-    def transform(self, df: pl.DataFrame) -> pl.DataFrame:
+    @nw.narwhalify
+    def transform(self, df: FrameT) -> FrameT:
         if self.operation == Operation.SUBTRACT:
             df = df.with_columns(
-                pl.col(self.feature1) - pl.col(self.feature2)
+                nw.col(self.feature1) - nw.col(self.feature2)
                 .alias(self.new_column_name)
             )
 
         elif self.operation == Operation.MULTIPLY:
             df = df.with_columns(
-                pl.col(self.feature1) * pl.col(self.feature2)
+                nw.col(self.feature1) * nw.col(self.feature2)
                 .alias(self.new_column_name)
             )
 
