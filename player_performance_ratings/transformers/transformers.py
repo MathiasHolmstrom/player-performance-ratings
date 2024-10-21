@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -174,15 +175,18 @@ class OperatorTransformer(BaseTransformer):
     def transform(self, df: FrameT) -> FrameT:
         if self.operation == Operation.SUBTRACT:
             df = df.with_columns(
-                nw.col(self.feature1) - nw.col(self.feature2)
+                (nw.col(self.feature1) - nw.col(self.feature2))
                 .alias(self.new_column_name)
             )
 
         elif self.operation == Operation.MULTIPLY:
             df = df.with_columns(
-                nw.col(self.feature1) * nw.col(self.feature2)
+                (nw.col(self.feature1) * nw.col(self.feature2))
                 .alias(self.new_column_name)
             )
+        else:
+            logging.warning(f"Operation {self.operation} not implemented")
+            raise NotImplementedError
 
         return df
 
