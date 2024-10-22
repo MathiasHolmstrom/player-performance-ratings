@@ -46,6 +46,7 @@ class GameTeamPredictor(BasePredictor):
         pred_column: Optional[str] = None,
         pre_transformers: Optional[list[PredictorTransformer]] = None,
         filters: Optional[list[Filter]] = None,
+        multiclass_output_as_struct: bool = False
     ):
         """
         :param game_id_colum - name of game_id column
@@ -74,6 +75,7 @@ class GameTeamPredictor(BasePredictor):
 
         self.multiclassifier = multiclassifier
         super().__init__(
+            multiclass_output_as_struct=multiclass_output_as_struct,
             target=self._target,
             pred_column=pred_column,
             estimator=estimator or LogisticRegression(),
@@ -177,6 +179,9 @@ class GameTeamPredictor(BasePredictor):
                 on=[self.game_id_colum, self.team_id_column],
             )
 
+        if self.multiclass_output_as_struct  and self.multiclassifier:
+            df = self._convert_multiclass_predictions_to_struct(df)
+
         return df
 
     def _create_grouped(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -248,6 +253,7 @@ class Predictor(BasePredictor):
         pred_column: Optional[str] = None,
         column_names: Optional[ColumnNames] = None,
         pre_transformers: Optional[list[PredictorTransformer]] = None,
+        multiclass_output_as_struct: bool = False,
     ):
         """
         :param target - Name of the column that the predictor should predict
@@ -276,6 +282,7 @@ class Predictor(BasePredictor):
 
         super().__init__(
             target=self._target,
+            multiclass_output_as_struct=multiclass_output_as_struct,
             pred_column=pred_column,
             estimator=estimator
             or LGBMClassifier(max_depth=2, n_estimators=100, verbose=-100),
@@ -370,6 +377,10 @@ class Predictor(BasePredictor):
             df[self._pred_column] = self.estimator.predict_proba(
                 df[self._estimator_features]
             )[:, 1]
+
+        if self.multiclass_output_as_struct and self.multiclassifier:
+            df = self._convert_multiclass_predictions_to_struct(df)
+
         return df
 
 
@@ -389,6 +400,7 @@ class GranularityPredictor(BasePredictor):
         pred_column: Optional[str] = None,
         column_names: Optional[ColumnNames] = None,
         pre_transformers: Optional[list[PredictorTransformer]] = None,
+        multiclass_output_as_struct: bool =False,
     ):
         """
         :param target - Name of the column that the predictor should predict
@@ -427,6 +439,7 @@ class GranularityPredictor(BasePredictor):
             pre_transformers=pre_transformers,
             filters=filters,
             estimator_features=estimator_features,
+            multiclass_output_as_struct=multiclass_output_as_struct
         )
 
     def train(self, df: pd.DataFrame, estimator_features: list[str]) -> None:
@@ -539,6 +552,7 @@ class GranularityPredictor(BasePredictor):
             dfs.append(rows)
 
         df = pd.concat(dfs)
+
         return df
 
 

@@ -1,1 +1,1 @@
-from .score import SklearnScorer, OrdinalLossScorer
+from .score import SklearnScorer, OrdinalLossScorer, OrdinalLossScorerPolars

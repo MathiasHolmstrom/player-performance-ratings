@@ -623,6 +623,217 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
     def features_out(self) -> list[str]:
         return self._features_out
 
+class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
+    # IN PROGRESS NOT WORKING
+    def __init__(
+            self,
+            features: list[str],
+            window: int,
+            binary_column: str,
+            granularity: list[str] = None,
+            prob_column: Optional[str] = None,
+            min_periods: int = 1,
+            add_opponent: bool = False,
+            prefix: str = "rolling_mean_binary_",
+    ):
+        super().__init__(
+            features=features,
+            add_opponent=add_opponent,
+            prefix=prefix,
+            iterations=[],
+            granularity=granularity,
+        )
+        self.window = window
+        self.min_periods = min_periods
+        self.binary_column = binary_column
+        self.prob_column = prob_column
+        for feature_name in self.features:
+            feature1 = f"{self.prefix}{self.window}_{feature_name}_1"
+            feature2 = f"{self.prefix}{self.window}_{feature_name}_0"
+            self._features_out.append(feature1)
+            self._features_out.append(feature2)
+            self._entity_features.append(feature1)
+            self._entity_features.append(feature2)
+
+            if self.add_opponent:
+                self._features_out.append(
+                    f"{self.prefix}{self.window}_{feature_name}_1_opponent"
+                )
+                self._features_out.append(
+                    f"{self.prefix}{self.window}_{feature_name}_0_opponent"
+                )
+
+        if self.prob_column:
+            for feature_name in self.features:
+                prob_feature = (
+                    f"{self.prefix}{self.window}_{self.prob_column}_{feature_name}"
+                )
+                self._features_out.append(prob_feature)
+
+        self._estimator_features_out = self._features_out.copy()
+
+    def generate_historical(
+            self, df: pl.DataFrame, column_names: ColumnNames
+    ) -> pl.DataFrame:
+        if df.schema[self.binary_column] in [pl.Float64, pl.Float32]:
+            df = df.with_columns(
+                pl.col(self.binary_column).cast(pl.Int64)
+            )
+
+        df = df.with_columns(pl.lit(0).alias("is_future"))
+        self.column_names = column_names
+        self.granularity = self.granularity or [self.column_names.player_id]
+        validate_sorting(df=df, column_names=self.column_names)
+        additional_cols_to_use = [self.binary_column] + (
+            [self.prob_column] if self.prob_column else []
+        )
+        self._store_df(df, additional_cols_to_use=additional_cols_to_use)
+        concat_df = self._generate_concat_df_with_feats(df)
+        concat_df = self._add_weighted_prob(transformed_df=concat_df)
+        transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
+        if "is_future" in transformed_df.columns:
+            transformed_df = transformed_df.drop("is_future")
+        return self._add_weighted_prob(transformed_df=transformed_df)
+
+    def generate_future(self, df: pl.DataFrame) -> pl.DataFrame:
+        if self._df is None:
+            raise ValueError(
+                "generate_historical needs to be called before generate_future"
+            )
+
+        if self.binary_column in df.columns:
+            if df.schema[self.binary_column] in [pl.Float64, pl.Float32]:
+                df = df.with_columns(
+                    pl.col(self.binary_column).cast(pl.Int64)
+                )
+        df = df.with_columns(pl.lit(1).alias("is_future"))
+        concat_df = self._generate_concat_df_with_feats(df=df)
+        unique_match_ids = df.select(pl.col(self.column_names.match_id).cast(pl.Utf8)).unique()
+        transformed_df = concat_df.filter(
+            pl.col(self.column_names.match_id).is_in(unique_match_ids[self.column_names.match_id])
+        )
+        transformed_future = self._generate_future_feats(
+            transformed_df=transformed_df,
+            ori_df=df,
+            known_future_features=self._get_known_future_features(),
+        )
+        if "is_future" in transformed_future.columns:
+            transformed_future = transformed_future.drop("is_future")
+        return self._add_weighted_prob(transformed_df=transformed_future)
+
+    def _get_known_future_features(self) -> list[str]:
+        known_future_features = []
+        if self.prob_column:
+            for idx, feature_name in enumerate(self.features):
+                weighted_prob_feat_name = (
+                    f"{self.prefix}{self.window}_{self.prob_column}_{feature_name}"
+                )
+                known_future_features.append(weighted_prob_feat_name)
+
+        return known_future_features
+
+    def _add_weighted_prob(self, transformed_df: pl.DataFrame) -> pl.DataFrame:
+
+        if self.prob_column:
+            for idx, feature_name in enumerate(self.features):
+                weighted_prob_feat_name = (
+                    f"{self.prefix}{self.window}_{self.prob_column}_{feature_name}"
+                )
+                transformed_df = transformed_df.with_columns(
+                    (
+                            pl.col(f"{self.prefix}{self.window}_{feature_name}_1")
+                            * pl.col(self.prob_column)
+                            + pl.col(f"{self.prefix}{self.window}_{feature_name}_0")
+                            * (1 - pl.col(self.prob_column))
+                    ).alias(weighted_prob_feat_name)
+                )
+        return transformed_df
+
+    def _generate_concat_df_with_feats(self, df: pl.DataFrame) -> pl.DataFrame:
+        additional_cols_to_use = [self.binary_column] + (
+            [self.prob_column] if self.prob_column else []
+        )
+        concat_df = self._concat_df(df, additional_cols_to_use=additional_cols_to_use)
+
+        # Define groupby columns
+        groupby_cols = [
+            self.column_names.update_match_id,
+            *self.granularity,
+            self.column_names.start_date,
+            "is_future",
+        ]
+
+        # Perform initial aggregation
+        aggregation = {f: pl.mean(f).alias(f) for f in self.features}
+        aggregation[self.binary_column] = pl.first(self.binary_column)
+        grouped = concat_df.group_by(groupby_cols).agg(list(aggregation.values()))
+
+        # Sort the DataFrame
+        grouped = grouped.sort(
+            by=[
+                self.column_names.start_date,
+                "is_future",
+                self.column_names.update_match_id,
+            ]
+        )
+
+        # Initialize a list to keep track of new features added
+        feats_added = []
+
+        for feature in self.features:
+            # Define shifted feature and binary columns
+            shifted_feature = pl.col(feature).shift(1).over(self.granularity)
+            shifted_binary = pl.col(self.binary_column).shift(1).over(self.granularity)
+
+            # Calculate rolling means conditioned on binary outcome
+            rolling_mean_1 = (
+                pl.when(shifted_binary == 1)
+                .then(shifted_feature)
+                .rolling_mean(
+                    window_size=self.window, min_periods=self.min_periods
+                )
+                .over(self.granularity)
+                .alias(f"{self.prefix}{self.window}_{feature}_1")
+            )
+
+            rolling_mean_0 = (
+                pl.when(shifted_binary == 0)
+                .then(shifted_feature)
+                .rolling_mean(
+                    window_size=self.window, min_periods=self.min_periods
+                )
+                .over(self.granularity)
+                .alias(f"{self.prefix}{self.window}_{feature}_0")
+            )
+
+            # Add the new rolling mean columns to the DataFrame
+            grouped = grouped.with_columns([rolling_mean_1, rolling_mean_0])
+
+            # Keep track of the features added
+            feats_added.extend([
+                f"{self.prefix}{self.window}_{feature}_1",
+                f"{self.prefix}{self.window}_{feature}_0",
+            ])
+
+        # Merge the rolling mean features back into concat_df
+        concat_df = concat_df.join(
+            grouped.select(
+                [
+                    self.column_names.update_match_id,
+                    *self.granularity,
+                    *feats_added,
+                ]
+            ),
+            on=[self.column_names.update_match_id, *self.granularity],
+            how="left",
+        )
+
+        # Forward fill missing values within granularity groups
+        concat_df = concat_df.with_columns([
+            pl.col(feats_added).fill_null(strategy="forward").over(self.granularity)
+        ])
+
+        return concat_df
 
 class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 

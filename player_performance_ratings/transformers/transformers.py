@@ -13,7 +13,6 @@ from player_performance_ratings.transformers.base_transformer import (
     BaseTransformer,
     BaseLagGenerator,
 )
-import polars as pl
 import narwhals as nw
 from narwhals.typing import FrameT
 

@@ -966,6 +966,7 @@ def test_binary_granularity_rolling_mean_transformer(column_names, min_periods):
     )
 
 
+@pytest.mark.parametrize("")
 def test_binary_granularity_rolling_mean_fit_transform_transform(column_names):
     historical_df = pd.DataFrame(
         {
