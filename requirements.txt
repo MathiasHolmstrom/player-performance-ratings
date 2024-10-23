@@ -8,3 +8,4 @@ deepdiff>=6.7.1
 lightgbm>=4.0.0
 scikit-base~=0.8.0
 narwhals>=1.9.3
+pytest

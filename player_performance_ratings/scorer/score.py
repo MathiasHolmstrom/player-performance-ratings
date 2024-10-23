@@ -3,7 +3,9 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Optional, Callable, Union, Any
-
+from narwhals.typing import FrameT
+import narwhals as nw
+import narwhals
 import numpy as np
 import pandas as pd
 from polars.polars import col
@@ -74,13 +76,27 @@ def _apply_filters_polars(df: pl.DataFrame, filters: list[Filter]) -> pl.DataFra
 
     return df
 
+@narwhals.narwhalify()
+def apply_filters(df: FrameT, filters: list[Filter]) -> Union[pd.DataFrame, pl.DataFrame]:
+    for filter in filters:
+        if filter.operator == Operator.EQUALS:
+            df = df.filter(nw.col(filter.column_name) == filter.value)
+        elif filter.operator == Operator.NOT_EQUALS:
+            df = df.filter(nw.col(filter.column_name) != filter.value)
+        elif filter.operator == Operator.GREATER_THAN:
+            df = df.filter(nw.col(filter.column_name) > filter.value)
+        elif filter.operator == Operator.LESS_THAN:
+            df = df.filter(nw.col(filter.column_name) < filter.value)
+        elif filter.operator == Operator.GREATER_THAN_OR_EQUALS:
+            df = df.filter(nw.col(filter.column_name) >= filter.value)
+        elif filter.operator == Operator.LESS_THAN_OR_EQUALS:
+            df = df.filter(nw.col(filter.column_name) <= filter.value)
+        elif filter.operator == Operator.IN:
+            df = df.filter(nw.col(filter.column_name).is_in(filter.value))
+        elif filter.operator == Operator.NOT_IN:
+            df = df.filter(~nw.col(filter.column_name).is_in(filter.value))
 
-def apply_filters(df: Union[pd.DataFrame, pl.DataFrame], filters: list[Filter]) -> Union[pd.DataFrame, pl.DataFrame]:
-    if isinstance(df, pd.DataFrame):
-        return _apply_filters_pandas(df=df, filters=filters)
-
-    return _apply_filters_polars(df=df, filters=filters)
-
+    return df.to_native()
 
 class BaseScorer(ABC):
 
@@ -136,24 +152,30 @@ class SklearnScorer(BaseScorer):
             validation_column=validation_column,
         )
 
-    def score(self, df: pd.DataFrame) -> float:
-        df = df.copy()
-        df = apply_filters(df, self.filters)
+    @narwhals.narwhalify
+    def score(self, df: Union[pd.DataFrame, pl.DataFrame]) -> float:
+
+        df = apply_filters(df=df, filters=self.filters)
         if self.granularity:
             grouped = (
-                df.groupby(self.granularity)[self.pred_column_name, self.target]
-                .mean()
-                .reset_index()
+                df.groupby(self.granularity)
+                .agg([
+                    pl.col(self.pred_column_name).mean().alias(self.pred_column_name),
+                    pl.col(self.target).mean().alias(self.target)
+                ])
             )
         else:
             grouped = df
-        if isinstance(df[self.pred_column_name].iloc[0], list):
+
+        if isinstance(grouped[self.pred_column_name].to_list()[0], list):
             return self.scorer_function(
                 grouped[self.target],
-                np.asarray(grouped[self.pred_column_name]).tolist(),
+                [item for item in grouped[self.pred_column_name].to_list()],
             )
+
         return self.scorer_function(
-            grouped[self.target], grouped[self.pred_column_name]
+            grouped[self.target].to_list(),
+            grouped[self.pred_column_name].to_list()
         )
 
 

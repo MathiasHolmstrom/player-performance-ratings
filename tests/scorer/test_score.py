@@ -1,7 +1,9 @@
 import math
 
 import pandas as pd
-from sklearn.metrics import log_loss
+import polars as pl
+import pytest
+from sklearn.metrics import log_loss, mean_absolute_error
 
 from player_performance_ratings.scorer.score import SklearnScorer, OrdinalLossScorerPolars
 
@@ -69,3 +71,11 @@ def test_sklearn_scorer_multiclass_log_loss():
     )
     assert score > 0
     assert score < 0.693
+
+
+@pytest.mark.parametrize("df", [pd.DataFrame({"predictions": [0.1, 0.6, 0.3], "__target": [0, 1, 0]}), pl.DataFrame({"predictions": [0.1, 0.6, 0.3], "__target": [0, 1, 0]})])
+def test_sk_learn_scorer_mean_absolute_error(df):
+    score= SklearnScorer(pred_column="predictions", scorer_function=mean_absolute_error).score(df)
+
+    expected_score = sum([0.1, 0.4, 0.3]) / 3
+    assert score == expected_score
