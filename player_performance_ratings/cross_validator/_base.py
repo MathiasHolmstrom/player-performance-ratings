@@ -14,8 +14,9 @@ from player_performance_ratings.transformers.base_transformer import (
 
 class CrossValidator(ABC):
 
-    def __init__(self, scorer: Optional[BaseScorer]):
+    def __init__(self, scorer: Optional[BaseScorer], min_validation_date:str):
         self.scorer = scorer
+        self.min_validation_date = min_validation_date
 
 
     @property

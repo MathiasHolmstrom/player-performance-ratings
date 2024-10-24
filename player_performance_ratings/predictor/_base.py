@@ -73,7 +73,7 @@ class BasePredictor(ABC):
 
     @property
     def columns_added(self) -> list[str]:
-        if not self.multiclassifier:
+        if not self.multiclassifier or self.multiclass_output_as_struct:
             return [self.pred_column]
         return [self.pred_column, "classes"]
 

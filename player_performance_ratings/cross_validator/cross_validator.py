@@ -35,7 +35,7 @@ class MatchKFoldCrossValidator(CrossValidator):
         :param min_validation_date: The minimum date for which the cross-validation should start
         :param n_splits: The number of splits to perform
         """
-        super().__init__(scorer=scorer)
+        super().__init__(scorer=scorer, min_validation_date=min_validation_date)
         self.match_id_column_name = match_id_column_name
         self.date_column_name = date_column_name
         self.n_splits = n_splits

@@ -293,7 +293,6 @@ class OrdinalLossScorerPolars(BaseScorer):
         df = apply_filters(df, self.filters)
         field_names = [int(field) for field in df[self.pred_column].struct.fields]
         min_field = min(field_names)
-        max_field = max(field_names)
         df = df.with_columns(
             [pl.col(self.pred_column).struct.field(str(field)).alias(f"prob_{field}") for field in field_names])
         prob_col_under = 'sum_prob_under'
