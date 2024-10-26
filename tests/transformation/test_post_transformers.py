@@ -4,7 +4,6 @@ import pytest
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.transformers import (
     LagTransformer,
-    RollingMeanTransformer,
     RollingMeanDaysTransformer,
     BinaryOutcomeRollingMeanTransformer,
 )

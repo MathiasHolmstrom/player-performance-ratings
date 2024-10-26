@@ -97,11 +97,11 @@ class Pipeline:
         for r in self.rating_generators:
             est_feats = list(set(est_feats + r.known_features_return))
         for f in self.lag_generators:
-            est_feats += f.estimator_features_out
+            est_feats = list(set(est_feats +f.estimator_features_out))
         for idx, post_transformer in enumerate(self.post_lag_transformers):
             if hasattr(post_transformer, "predictor") and not post_transformer.features:
                 self.post_lag_transformers[idx].features = est_feats.copy()
-            est_feats += self.post_lag_transformers[idx].estimator_features_out
+            est_feats = list(set(est_feats +  self.post_lag_transformers[idx].estimator_features_out))
 
         for c in [
             *self.lag_generators,

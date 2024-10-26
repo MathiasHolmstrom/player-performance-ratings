@@ -11,6 +11,7 @@ from player_performance_ratings.predictor_transformer import (
     SkLearnTransformerWrapper,
     ConvertDataFrameToCategoricalTransformer,
 )
+from player_performance_ratings.predictor_transformer._simple_transformer import SimpleTransformer
 
 
 class BasePredictor(ABC):
@@ -21,6 +22,7 @@ class BasePredictor(ABC):
         estimator_features: list[str],
         target: str,
         pre_transformers: Optional[list[PredictorTransformer]] = None,
+        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
         pred_column: Optional[str] = None,
         filters: Optional[dict] = None,
         auto_pre_transform: bool = True,
@@ -29,6 +31,7 @@ class BasePredictor(ABC):
         self._estimator_features = estimator_features or []
         self.estimator = estimator
         self._target = target
+        self.post_predict_transformers = post_predict_transformers or []
         self._pred_column = pred_column or f"{self._target}_prediction"
         self.pre_transformers = pre_transformers or []
         self._deepest_estimator = self.estimator
