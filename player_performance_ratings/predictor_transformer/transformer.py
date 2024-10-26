@@ -85,7 +85,7 @@ class SkLearnTransformerWrapper(PredictorTransformer):
         )[self._features_out]
 
 
-
+    @nw.narwhalify
     def transform(self, df: FrameT) -> pd.DataFrame:
         try:
             transformed_values = self.transformer.transform(df.select(self.features)).toarray()
