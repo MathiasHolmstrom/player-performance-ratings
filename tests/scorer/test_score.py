@@ -5,7 +5,7 @@ import polars as pl
 import pytest
 from sklearn.metrics import log_loss, mean_absolute_error
 
-from player_performance_ratings.scorer.score import SklearnScorer, OrdinalLossScorerPolars
+from player_performance_ratings.scorer.score import SklearnScorer, OrdinalLossScorerPolars, MeanBiasScorer
 
 from player_performance_ratings.scorer import OrdinalLossScorer
 
@@ -79,3 +79,16 @@ def test_sk_learn_scorer_mean_absolute_error(df):
 
     expected_score = sum([0.1, 0.4, 0.3]) / 3
     assert score == expected_score
+
+@pytest.mark.parametrize("df", [pd.DataFrame({"predictions": [0.5, 0.6, 0.3], "__target": [0, 1, 0]}),
+                                    pl.DataFrame({"predictions": [0.5, 0.6, 0.3], "__target": [0, 1, 0]})])
+def test_mean_absolute_error(df):
+
+    scorer = MeanBiasScorer(
+        pred_column="predictions"
+    )
+
+    score = scorer.score(df)
+    expected_score = sum([0.5, -0.4, 0.3])/3
+    assert score == expected_score
+

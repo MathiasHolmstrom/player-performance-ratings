@@ -111,7 +111,7 @@ class BaseScorer(ABC):
         self.target = target
         self.pred_column = pred_column
         self.validation_column = validation_column
-        self.filters = []
+        self.filters = filters or []
         if validation_column:
             self.filters.append(Filter(column_name=self.validation_column, value=1, operator=Operator.EQUALS))
         self.granularity = granularity
@@ -119,6 +119,39 @@ class BaseScorer(ABC):
     @abstractmethod
     def score(self, df: Union[pl.DataFrame, pd.DataFrame]) -> float:
         pass
+
+
+class MeanBiasScorer(BaseScorer):
+    def __init__(
+            self,
+            pred_column: str,
+            target: Optional[str] = PredictColumnNames.TARGET,
+            validation_column: Optional[str] = None,
+            granularity: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
+    ):
+        """
+        :param pred_column: The column name of the predictions
+        :param target: The column name of the target
+        :param validation_column: The column name of the validation column.
+            If set, the scorer will be calculated only once the values of the validation column are equal to 1
+        :param granularity: The columns to group by before calculating the score
+        :param filters: The filters to apply before calculating
+        """
+
+        self.pred_column_name = pred_column
+        super().__init__(
+            target=target,
+            pred_column=pred_column,
+            granularity=granularity,
+            filters=filters,
+            validation_column=validation_column,
+        )
+
+    @narwhals.narwhalify
+    def score(self, df: Union[pd.DataFrame, pl.DataFrame]) -> float:
+        return (df[self.pred_column]- df[self.target]).mean()
+
 
 
 class SklearnScorer(BaseScorer):
