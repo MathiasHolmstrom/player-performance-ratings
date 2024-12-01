@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 import narwhals
 import narwhals as nw
@@ -26,7 +26,7 @@ class SklearnEstimatorImputer(BaseTransformer):
 
     @nw.narwhalify
     def fit_transform(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
-        fit_df = df.filter((nw.col(self.target_name).is_finite())&(~nw.col(self.target_name).is_null()))
+        fit_df = df.filter((nw.col(self.target_name).is_finite()) & (~nw.col(self.target_name).is_null()))
         self.estimator.fit(fit_df.select(self.features), fit_df[self.target_name])
         return self.transform(df)
 
@@ -46,8 +46,8 @@ class SklearnEstimatorImputer(BaseTransformer):
             )
             .then(nw.col(f"imputed_col_{self.target_name}"))
             .otherwise(
-                    nw.col(self.target_name)
-                    ).alias(self.target_name)
+                nw.col(self.target_name)
+            ).alias(self.target_name)
 
         )
         return df.drop(f"imputed_col_{self.target_name}").to_native()
@@ -151,9 +151,9 @@ class MinMaxTransformer(BaseTransformer):
         df = df.copy()
         for feature in self.features:
             self._min_values[feature] = \
-            df.select(nw.col(feature).quantile(1 - self.quantile, interpolation='linear')).to_numpy()[0]
+                df.select(nw.col(feature).quantile(1 - self.quantile, interpolation='linear')).to_numpy()[0]
             self._max_values[feature] = \
-            df.select(nw.col(feature).quantile(self.quantile, interpolation='linear')).to_numpy()[0]
+                df.select(nw.col(feature).quantile(self.quantile, interpolation='linear')).to_numpy()[0]
 
             # Check for equal min and max values
             if self._min_values[feature] == self._max_values[feature]:
@@ -246,6 +246,7 @@ class DiminishingValueTransformer(BaseTransformer):
                 self._feature_cutoff_value[feature_name] = self.cutoff_value
 
         return self.transform(df)
+
     @nw.narwhalify
     def transform(self, df: FrameT) -> IntoFrameT:
         for feature_name in self.features:
@@ -306,11 +307,9 @@ class SymmetricDistributionTransformer(BaseTransformer):
     def fit_transform(self, df: FrameT) -> IntoFrameT:
 
         if self.granularity:
-
             df = df.with_columns(
                 nw.concat_str([nw.col(col) for col in self.granularity], separator="_").alias("__concat_granularity")
             )
-
 
         for feature in self.features:
             feature_min = df[feature].min()
@@ -367,13 +366,14 @@ class SymmetricDistributionTransformer(BaseTransformer):
             transformed_rows = self._diminishing_value_transformer[feature][
                 granularity_value
             ].fit_transform(rows)
+            transformed_rows = nw.from_native(transformed_rows)
             new_excessive_multiplier = excessive_multiplier * 0.94
             if new_excessive_multiplier < self.min_excessive_multiplier:
                 break
             excessive_multiplier = new_excessive_multiplier
             next_quantile_cutoff = quantile_cutoff * 0.994
             if (
-                    transformed_rows[feature].quantile(next_quantile_cutoff)
+                    transformed_rows[feature].quantile(next_quantile_cutoff, interpolation='linear')
                     > transformed_rows[feature].min()
             ):
                 quantile_cutoff = next_quantile_cutoff
@@ -381,7 +381,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
             skewness = transformed_rows[feature].skew()
 
     @nw.narwhalify
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, df: FrameT) -> IntoFrameT:
         if self.granularity:
             df = df.with_columns(
                 nw.concat_str([nw.col(col) for col in self.granularity], separator="_").alias(
@@ -408,7 +408,8 @@ class SymmetricDistributionTransformer(BaseTransformer):
                         rows = df.filter(nw.col("__concat_granularity") == unique_value)
 
                         if unique_value in self._diminishing_value_transformer[feature]:
-                            rows = self._diminishing_value_transformer[feature][unique_value].transform(rows)
+                            rows = nw.from_native(
+                                self._diminishing_value_transformer[feature][unique_value].transform(rows))
 
                         updated_rows.append(rows)
 
@@ -417,12 +418,12 @@ class SymmetricDistributionTransformer(BaseTransformer):
                     )
             else:
                 if None in self._diminishing_value_transformer[feature]:
-                    df = self._diminishing_value_transformer[feature][None].transform(df)
+                    df = nw.from_native(self._diminishing_value_transformer[feature][None].transform(df))
 
         if "__concat_granularity" in df.columns:
             df = df.drop(["__concat_granularity"])
 
-        return df
+        return df.to_native()
 
     @property
     def features_out(self) -> list[str]:
@@ -435,32 +436,40 @@ class GroupByTransformer(BaseTransformer):
             self,
             features: list[str],
             granularity: list[str],
-            agg_func: str = "mean",
+            aggregation: Literal['mean', 'sum'] = "mean",
             prefix: str = "mean_",
     ):
-        super().__init__(features=features)
+        super().__init__(features=features, features_out=[prefix + feature for feature in features])
         self.granularity = granularity
-        self.agg_func = agg_func
+        self.aggregation = aggregation
         self.prefix = prefix
         self._features_out = []
         self._grouped = None
-        for feature in self.features:
-            self._features_out.append(self.prefix + feature)
 
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        self._grouped = (
-            df.groupby(self.granularity)[self.features]
-            .agg(self.agg_func)
-            .reset_index()
-            .rename(
-                columns={feature: self.prefix + feature for feature in self.features}
+    @nw.narwhalify
+    def fit_transform(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
+
+        if self.aggregation == "sum":
+            self._grouped = (df
+                .group_by(self.granularity)
+                .agg(nw.col(self.features).sum())
+                .rename({feature: self.prefix + feature for feature in self.features})
+                )
+        elif self.aggregation == "mean":
+            self._grouped = (df
+            .group_by(self.granularity)
+            .agg(nw.col(self.features).mean())
+            .rename({feature: self.prefix + feature for feature in self.features})
             )
-        )
+        else:
+            raise ValueError("aggregation must be either 'mean' or 'sum'")
+
 
         return self.transform(df=df)
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        return df.merge(self._grouped, on=self.granularity, how="left")
+    @nw.narwhalify
+    def transform(self, df: FrameT) -> IntoFrameT:
+        return df.join(self._grouped, on=self.granularity, how="left")
 
     @property
     def features_out(self) -> list[str]:

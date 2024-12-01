@@ -5,6 +5,8 @@ from typing import Optional, Union
 
 import pandas as pd
 from player_performance_ratings.transformers.base_transformer import BaseTransformer
+from player_performance_ratings.transformers.performances_transformers import PartialStandardScaler, MinMaxTransformer, \
+    SymmetricDistributionTransformer
 
 
 @dataclass
