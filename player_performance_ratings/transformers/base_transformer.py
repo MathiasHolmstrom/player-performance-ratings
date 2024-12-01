@@ -7,23 +7,6 @@ import polars as pl
 from player_performance_ratings import ColumnNames
 
 
-class BasePerformancesTransformer(ABC):
-
-    def __init__(self, features: list[str]):
-        self.features = features
-
-    @abstractmethod
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        pass
-
-    @abstractmethod
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        pass
-
-    @property
-    @abstractmethod
-    def features_out(self) -> list[str]:
-        pass
 
 
 class BaseTransformer(ABC):

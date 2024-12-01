@@ -9,7 +9,6 @@ from player_performance_ratings.ratings.performance_generator import (
 from player_performance_ratings.predictor._base import BasePredictor
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.transformers.base_transformer import (
-    BasePerformancesTransformer,
     BaseTransformer,
     BaseLagGenerator,
 )

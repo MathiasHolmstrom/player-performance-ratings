@@ -33,7 +33,7 @@ class RatingGenerator(ABC):
         self.match_rating_generator = match_rating_generator
         self._known_features_out = []
         self._historical_features_out = historical_features_out or []
-        self.non_estimator_known_features_out = non_estimator_known_features_out
+        self.non_estimator_known_features_out = non_estimator_known_features_out or []
         self.prefix = prefix
         self.column_names = None
         self._calculated_match_ids = []

@@ -4,17 +4,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Union
 
 import pandas as pd
-
-from player_performance_ratings.ratings.performance_generator.performances_transformers import (
-    SymmetricDistributionTransformer,
-    MinMaxTransformer,
-    PartialStandardScaler,
-)
-
-
-from player_performance_ratings.transformers.base_transformer import (
-    BasePerformancesTransformer,
-)
+from player_performance_ratings.transformers.base_transformer import BaseTransformer
 
 
 @dataclass
@@ -37,9 +27,9 @@ class Performance:
 
 
 def auto_create_pre_performance_transformations(
-    pre_transformers: list[BasePerformancesTransformer],
+    pre_transformers: list[BaseTransformer],
     performances: list[Performance],
-) -> list[BasePerformancesTransformer]:
+) -> list[BaseTransformer]:
     """
     Creates a list of transformers that ensure the performance column is generated in a way that makes sense for the rating model.
     Ensures columns aren't too skewed, scales them to similar ranges, ensure values are between 0 and 1,
@@ -78,7 +68,7 @@ class PerformancesGenerator:
     def __init__(
         self,
         performances: Union[list[Performance], Performance],
-        transformers: Optional[list[BasePerformancesTransformer]] = None,
+        transformers: Optional[list[BaseTransformer]] = None,
         auto_transform_performance: bool = True,
     ):
 

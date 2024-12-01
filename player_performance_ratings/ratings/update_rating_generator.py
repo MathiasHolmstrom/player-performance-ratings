@@ -317,7 +317,7 @@ class UpdateRatingGenerator(RatingGenerator):
         ] = np.array(pre_match_team_rating_values) - np.array(
             pre_match_opponent_rating_values
         )
-        potential_feature_values[RatingKnownFeatures.PLAYER_RATING] = (
+        potential_feature_values[self.prefix + RatingKnownFeatures.PLAYER_RATING] = (
             pre_match_player_rating_values
         )
         potential_feature_values[
@@ -501,7 +501,7 @@ class UpdateRatingGenerator(RatingGenerator):
                     "match_id": match_ids,
                     "team_id": team_ids,
                     "team_id_opponent": team_id_opponents,
-                    RatingKnownFeatures.PLAYER_RATING: pre_match_player_rating_values,
+                    self.prefix + RatingKnownFeatures.PLAYER_RATING: pre_match_player_rating_values,
                     "projected_participation_weight": projected_participation_weights,
                     "player_id": player_ids,
                 }
@@ -510,7 +510,7 @@ class UpdateRatingGenerator(RatingGenerator):
             game_player = (
                 df.groupby(["match_id", "player_id", "team_id", "team_id_opponent"])[
                     [
-                        RatingKnownFeatures.PLAYER_RATING,
+                        self.prefix + RatingKnownFeatures.PLAYER_RATING,
                         "projected_participation_weight",
                     ]
                 ]
