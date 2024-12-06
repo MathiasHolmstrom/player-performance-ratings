@@ -4,13 +4,13 @@ from deepdiff import DeepDiff
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.ratings.performance_generator import (
     ColumnWeight,
-    MinMaxTransformer,
     PerformancesGenerator,
     auto_create_pre_performance_transformations,
     Performance,
-    SymmetricDistributionTransformer,
-    PartialStandardScaler,
+
 )
+from player_performance_ratings.transformers.performances_transformers import SymmetricDistributionTransformer, \
+    PartialStandardScaler, MinMaxTransformer
 
 
 def test_auto_create_pre_transformers():

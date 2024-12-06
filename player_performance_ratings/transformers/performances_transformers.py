@@ -4,7 +4,6 @@ from typing import Optional, List, Literal
 import narwhals
 import narwhals as nw
 from narwhals.typing import FrameT, IntoFrameT
-import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
 
@@ -69,9 +68,9 @@ class PartialStandardScaler(BaseTransformer):
     ):
         features_out = []
         self.prefix = prefix
+        super().__init__(features=features, features_out=features_out)
         for feature in self.features:
             features_out.append(self.prefix + feature)
-        super().__init__(features=features, features_out=features_out)
         self.ratio = ratio
         self.target_mean = target_mean
         self.max_value = max_value
@@ -83,15 +82,13 @@ class PartialStandardScaler(BaseTransformer):
     @narwhals.narwhalify
     def fit_transform(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
         for feature in self.features:
-            df = df.with_columns(
-                nw.col(feature).filter(nw.col(feature).is_in([float('inf'), float('-inf')]))
-            )
+            rows = df.filter(nw.col(feature).is_finite())
 
             self._features_mean[feature] = (
-                df[feature].mean()
+                rows[feature].mean()
             )
             self._features_std[feature] = (
-                df[feature].std()
+                rows[feature].std()
             )
 
         return self.transform(df)
@@ -100,7 +97,7 @@ class PartialStandardScaler(BaseTransformer):
     def transform(self, df: FrameT) -> IntoFrameT:
         for feature in self.features:
             new_feature = self.prefix + feature
-            df = df.with_column(
+            df = df.with_columns(
                 (
                         (nw.col(feature) - self._features_mean[feature])
                         / self._features_std[feature]
@@ -109,7 +106,7 @@ class PartialStandardScaler(BaseTransformer):
                 ).alias(new_feature)
             )
 
-            df = df.with_column(
+            df = df.with_columns(
                 nw.col(new_feature)
                 .clip(-self.max_value + self.target_mean, self.max_value)
                 .alias(new_feature)
@@ -147,65 +144,63 @@ class MinMaxTransformer(BaseTransformer):
             raise ValueError("quantile must be between 0 and 1")
 
     @nw.narwhalify
-    def fit_transform(self, df: FrameT, column_names: Optional[ColumnNames]) -> FrameT:
-        df = df.copy()
+    def fit_transform(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
+
         for feature in self.features:
             self._min_values[feature] = \
                 df.select(nw.col(feature).quantile(1 - self.quantile, interpolation='linear')).to_numpy()[0]
             self._max_values[feature] = \
                 df.select(nw.col(feature).quantile(self.quantile, interpolation='linear')).to_numpy()[0]
 
-            # Check for equal min and max values
             if self._min_values[feature] == self._max_values[feature]:
                 raise ValueError(
                     f"Feature {feature} has the same min and max value. This can lead to division by zero. "
                     f"This feature is not suited for MinMaxTransformer"
                 )
 
-            # Normalize the feature
             normalized_feature = (
                     (nw.col(feature) - self._min_values[feature])
                     / (self._max_values[feature] - self._min_values[feature])
             ).clip(0, 1)
 
-            # Assign normalized feature to a new column
-            df = df.with_column(normalized_feature.alias(self.prefix + feature))
+            df = df.with_columns(normalized_feature.alias(self.prefix + feature))
 
-            # Calculate the mean of the normalized feature
             self._trained_mean_values[feature] = df.select(nw.col(self.prefix + feature).mean()).to_numpy()[0]
 
-            # Apply alignment adjustments
             if self.multiply_align:
-                df = df.with_column(
+                df = df.with_columns(
                     (nw.col(self.prefix + feature) * 0.5 / self._trained_mean_values[feature]).alias(
                         self.prefix + feature)
                 )
 
             if self.add_align:
-                df = df.with_column(
+                df = df.with_columns(
                     (nw.col(self.prefix + feature) + 0.5 - self._trained_mean_values[feature]).alias(
                         self.prefix + feature)
                 )
 
-        return df
+        return df.to_native()
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy()
+    @nw.narwhalify
+    def transform(self, df: FrameT) -> IntoFrameT:
         for feature in self.features:
-            df[self.prefix + feature] = (df[feature] - self._min_values[feature]) / (
-                    self._max_values[feature] - self._min_values[feature]
-            )
-            df[self.prefix + feature].clip(0, 1, inplace=True)
-            if self.multiply_align:
-                df[self.prefix + feature] = (
-                        df[self.prefix + feature] * 0.5 / self._trained_mean_values[feature]
-                )
-            if self.add_align:
-                df[self.prefix + feature] = (
-                        df[self.prefix + feature] + 0.5 - self._trained_mean_values[feature]
-                )
+            # Compute normalized feature with optional alignment
+            normalized_feature = (
+                    (nw.col(feature) - self._min_values[feature])
+                    / (self._max_values[feature] - self._min_values[feature])
+            ).clip(0, 1)
 
-        return df
+            if self.multiply_align:
+                normalized_feature *= 0.5 / self._trained_mean_values[feature]
+
+            if self.add_align:
+                normalized_feature += 0.5 - self._trained_mean_values[feature]
+
+            # Add the transformed feature to the DataFrame with the prefixed name
+            df = df.with_columns(
+                normalized_feature.alias(self.prefix + feature)
+            )
+        return df.to_native()
 
     @property
     def features_out(self) -> list[str]:
