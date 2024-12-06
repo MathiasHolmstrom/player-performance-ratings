@@ -2,11 +2,8 @@ import pandas as pd
 from player_performance_ratings.predictor_transformer import SkLearnTransformerWrapper
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from player_performance_ratings.ratings.performance_generator import (
-    GroupByTransformer,
-    DiminishingValueTransformer,
-    SymmetricDistributionTransformer,
-)
+from player_performance_ratings.transformers.performances_transformers import DiminishingValueTransformer, \
+    GroupByTransformer, SymmetricDistributionTransformer
 
 
 def test_min_max_transformer():

@@ -3,18 +3,12 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional, Union
 
+from narwhals.typing import FrameT, IntoFrameT
+import narwhals as nw
 import pandas as pd
-
-from player_performance_ratings.ratings.performance_generator.performances_transformers import (
-    SymmetricDistributionTransformer,
-    MinMaxTransformer,
-    PartialStandardScaler,
-)
-
-
-from player_performance_ratings.transformers.base_transformer import (
-    BasePerformancesTransformer,
-)
+from player_performance_ratings.transformers.base_transformer import BaseTransformer
+from player_performance_ratings.transformers.performances_transformers import PartialStandardScaler, MinMaxTransformer, \
+    SymmetricDistributionTransformer
 
 
 @dataclass
@@ -37,9 +31,9 @@ class Performance:
 
 
 def auto_create_pre_performance_transformations(
-    pre_transformers: list[BasePerformancesTransformer],
-    performances: list[Performance],
-) -> list[BasePerformancesTransformer]:
+        pre_transformers: list[BaseTransformer],
+        performances: list[Performance],
+) -> list[BaseTransformer]:
     """
     Creates a list of transformers that ensure the performance column is generated in a way that makes sense for the rating model.
     Ensures columns aren't too skewed, scales them to similar ranges, ensure values are between 0 and 1,
@@ -76,10 +70,10 @@ def auto_create_pre_performance_transformations(
 class PerformancesGenerator:
 
     def __init__(
-        self,
-        performances: Union[list[Performance], Performance],
-        transformers: Optional[list[BasePerformancesTransformer]] = None,
-        auto_transform_performance: bool = True,
+            self,
+            performances: Union[list[Performance], Performance],
+            transformers: Optional[list[BaseTransformer]] = None,
+            auto_transform_performance: bool = True,
     ):
 
         self.performances = (
@@ -95,12 +89,14 @@ class PerformancesGenerator:
                 pre_transformers=self.transformers, performances=self.performances
             )
 
-    def generate(self, df):
-
+    @nw.narwhalify
+    def generate(self, df: FrameT) -> IntoFrameT:
+        input_cols = df.columns
         if self.transformers:
             for transformer in self.transformers:
                 df = transformer.fit_transform(df)
 
+        df = nw.from_native(df)
         for performance in self.performances:
             if self.transformers:
                 max_idx = len(self.transformers) - 1
@@ -111,66 +107,87 @@ class PerformancesGenerator:
             else:
                 column_weighs_mapping = None
 
-            df[performance.name] = self._weight_columns(
+            df = self._weight_columns(
                 df=df,
                 performance_column_name=performance.name,
                 col_weights=performance.weights,
-                column_weighs_mapping=column_weighs_mapping,
+                column_weighs_mapping=column_weighs_mapping
             )
 
-            if df[performance.name].isnull().any():
+            if len(df.filter(nw.col(performance.name).is_null())) > 0 or len(df.filter(
+                    nw.col(performance.name).is_finite())) != len(df):
                 logging.error(
                     f"df[{performance.name}] contains nan values. Make sure all column_names used in column_weights are imputed beforehand"
                 )
                 raise ValueError("performance contains nan values")
 
-        return df
+        return df.select(*input_cols, *self.features_out).to_native()
 
     def _weight_columns(
-        self,
-        df: pd.DataFrame,
-        performance_column_name: str,
-        col_weights: list[ColumnWeight],
-        column_weighs_mapping: dict[str, str],
-    ) -> pd.DataFrame:
-        df = df.copy()
-        df[f"__{performance_column_name}"] = 0
+            self,
+            df: FrameT,
+            performance_column_name: str,
+            col_weights: list[ColumnWeight],
+            column_weighs_mapping: dict[str, str],
+    ) -> FrameT:
+        df = df.with_columns(
+            nw.lit(0).alias(f"__{performance_column_name}")
+        )
 
-        df["sum_cols_weights"] = 0
+        df = df.with_columns(
+            nw.lit(0).alias("sum_cols_weights")
+        )
+
         for column_weight in col_weights:
-            df[f"weight__{column_weight.name}"] = column_weight.weight
-            df.loc[df[column_weight.name].isna(), f"weight__{column_weight.name}"] = 0
-            df.loc[df[column_weight.name].isna(), column_weight.name] = 0
-            df["sum_cols_weights"] = (
-                df["sum_cols_weights"] + df[f"weight__{column_weight.name}"]
+            weight_col = f"weight__{column_weight.name}"
+            feature_col = column_weight.name
+
+            df = df.with_columns(
+                nw.when((nw.col(feature_col).is_null()) & (~nw.col(feature_col).is_finite()))
+                .then(0)
+                .otherwise(column_weight.weight)
+                .alias(weight_col)
             )
 
-        drop_cols = ["sum_cols_weights", f"__{performance_column_name}"]
+            df = df.with_columns(
+                nw.when((nw.col(feature_col).is_null()) & (~nw.col(feature_col).is_finite()))
+                .then(0)
+                .otherwise(nw.col(feature_col))
+                .alias(feature_col)
+            )
+
+            df = df.with_columns(
+                (nw.col("sum_cols_weights") + nw.col(weight_col)).alias("sum_cols_weights")
+            )
+
         for column_weight in col_weights:
-            df[f"weight__{column_weight.name}"] / df["sum_cols_weights"]
-            drop_cols.append(f"weight__{column_weight.name}")
+            df = df.with_columns(
+                (nw.col(f"weight__{column_weight.name}") / nw.col("sum_cols_weights")).alias(
+                    f"weight__{column_weight.name}")
+            )
 
         sum_weight = sum([w.weight for w in col_weights])
 
         for column_weight in col_weights:
-
-            if column_weighs_mapping:
-                feature_name = column_weighs_mapping[column_weight.name]
-            else:
-                feature_name = column_weight.name
+            weight_col = f"weight__{column_weight.name}"
+            feature_col = column_weight.name
+            feature_name = column_weighs_mapping.get(feature_col, feature_col) if column_weighs_mapping else feature_col
 
             if column_weight.lower_is_better:
-                df[f"__{performance_column_name}"] += (
-                    df[f"weight__{column_weight.name}"]
-                    / sum_weight
-                    * (1 - df[feature_name])
+                df = df.with_columns(
+                    nw.col(f"__{performance_column_name}") + (
+                        (nw.col(weight_col) / sum_weight * (1 - nw.col(feature_name))).alias(
+                            f"__{performance_column_name}")
+                    )
                 )
             else:
-                df[f"__{performance_column_name}"] += (
-                    df[f"weight__{column_weight.name}"] / sum_weight * df[feature_name]
-                )
+                df = df.with_columns(nw.col(f"__{performance_column_name}") + (
+                    (nw.col(weight_col) / sum_weight * nw.col(feature_name)).alias(f"__{performance_column_name}")
+                ))
 
-        return df[f"__{performance_column_name}"].clip(0, 1)
+        return df.with_columns(
+            nw.col(f"__{performance_column_name}").clip(0, 1).alias(performance_column_name)
+        )
 
     @property
     def features_out(self) -> list[str]:

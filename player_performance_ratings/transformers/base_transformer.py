@@ -3,27 +3,12 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+from narwhals.typing import FrameT, IntoFrameT
 import polars as pl
+
 from player_performance_ratings import ColumnNames
 
 
-class BasePerformancesTransformer(ABC):
-
-    def __init__(self, features: list[str]):
-        self.features = features
-
-    @abstractmethod
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        pass
-
-    @abstractmethod
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        pass
-
-    @property
-    @abstractmethod
-    def features_out(self) -> list[str]:
-        pass
 
 
 class BaseTransformer(ABC):
@@ -44,12 +29,12 @@ class BaseTransformer(ABC):
 
     @abstractmethod
     def fit_transform(
-        self, df: pd.DataFrame, column_names: ColumnNames
-    ) -> pd.DataFrame:
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
+    ) -> IntoFrameT:
         pass
 
     @abstractmethod
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, df: FrameT) -> IntoFrameT:
         pass
 
     @property
