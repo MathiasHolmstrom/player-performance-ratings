@@ -9,15 +9,13 @@ import polars as pl
 from player_performance_ratings import ColumnNames
 
 
-
-
 class BaseTransformer(ABC):
 
     def __init__(
-        self,
-        features: list[str],
-        features_out: list[str],
-        are_estimator_features: bool = True,
+            self,
+            features: list[str],
+            features_out: list[str],
+            are_estimator_features: bool = True,
     ):
         self._features_out = features_out
         self.features = features
@@ -29,7 +27,7 @@ class BaseTransformer(ABC):
 
     @abstractmethod
     def fit_transform(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+            self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         pass
 
@@ -52,13 +50,13 @@ class BaseTransformer(ABC):
 class BaseLagGenerator:
 
     def __init__(
-        self,
-        granularity: list[str],
-        features: list[str],
-        add_opponent: bool,
-        iterations: list[int],
-        prefix: str,
-        are_estimator_features: bool = True,
+            self,
+            granularity: list[str],
+            features: list[str],
+            add_opponent: bool,
+            iterations: list[int],
+            prefix: str,
+            are_estimator_features: bool = True,
     ):
 
         self.features = features
@@ -84,7 +82,7 @@ class BaseLagGenerator:
 
     @abstractmethod
     def generate_historical(
-        self, df: pd.DataFrame, column_names: ColumnNames
+            self, df: pd.DataFrame, column_names: ColumnNames
     ) -> pd.DataFrame:
         pass
 
@@ -103,7 +101,7 @@ class BaseLagGenerator:
         return self._features_out
 
     def _concat_df(
-        self, df: pd.DataFrame, additional_cols_to_use: Optional[list[str]] = None
+            self, df: pd.DataFrame, additional_cols_to_use: Optional[list[str]] = None
     ) -> pd.DataFrame:
         df = self._string_convert(df=df)
         for feature in self.features:
@@ -158,7 +156,7 @@ class BaseLagGenerator:
         )
 
     def _store_df(
-        self, df: pd.DataFrame, additional_cols_to_use: Optional[list[str]] = None
+            self, df: pd.DataFrame, additional_cols_to_use: Optional[list[str]] = None
     ):
         df = self._string_convert(df)
 
@@ -210,7 +208,7 @@ class BaseLagGenerator:
         return df
 
     def _create_transformed_df(
-        self, df: pd.DataFrame, concat_df: pd.DataFrame
+            self, df: pd.DataFrame, concat_df: pd.DataFrame
     ) -> pd.DataFrame:
 
         cn = self.column_names
@@ -259,7 +257,7 @@ class BaseLagGenerator:
         )
         new_df = new_df[
             new_df[self.column_names.team_id] != new_df["__opponent_team_id"]
-        ].drop(columns=["__opponent_team_id"])
+            ].drop(columns=["__opponent_team_id"])
 
         new_feats = [f"{f}_opponent" for f in self._entity_features]
         return df.merge(
@@ -280,10 +278,10 @@ class BaseLagGenerator:
         )
 
     def _generate_future_feats(
-        self,
-        transformed_df: pd.DataFrame,
-        ori_df: pd.DataFrame,
-        known_future_features: Optional[list[str]] = None,
+            self,
+            transformed_df: pd.DataFrame,
+            ori_df: pd.DataFrame,
+            known_future_features: Optional[list[str]] = None,
     ) -> pd.DataFrame:
         known_future_features = known_future_features or []
         ori_cols = ori_df.columns.tolist()
@@ -329,7 +327,7 @@ class BaseLagGenerator:
         )
         new_df = new_df[
             new_df[self.column_names.team_id] != new_df["__opponent_team_id"]
-        ]
+            ]
         new_df[opponent_feat_names] = new_df[opponent_feat_names].fillna(-999.21345)
         first_grp = (
             new_df.groupby("__opponent_team_id")[opponent_feat_names]
@@ -403,13 +401,13 @@ class BaseLagGenerator:
 class BaseLagGeneratorPolars:
 
     def __init__(
-        self,
-        granularity: list[str],
-        features: list[str],
-        add_opponent: bool,
-        iterations: list[int],
-        prefix: str,
-        are_estimator_features: bool = True,
+            self,
+            granularity: list[str],
+            features: list[str],
+            add_opponent: bool,
+            iterations: list[int],
+            prefix: str,
+            are_estimator_features: bool = True,
     ):
 
         self.features = features
@@ -435,7 +433,7 @@ class BaseLagGeneratorPolars:
 
     @abstractmethod
     def generate_historical(
-        self, df: pl.DataFrame, column_names: ColumnNames
+            self, df: pl.DataFrame, column_names: ColumnNames
     ) -> pl.DataFrame:
         pass
 
@@ -482,7 +480,7 @@ class BaseLagGeneratorPolars:
         )
 
     def _store_df(
-        self, df: pl.DataFrame, additional_cols_to_use: Optional[list[str]] = None
+            self, df: pl.DataFrame, additional_cols_to_use: Optional[list[str]] = None
     ):
         df = df.with_columns(
             [
@@ -547,7 +545,7 @@ class BaseLagGeneratorPolars:
         return df
 
     def _create_transformed_df(
-        self, df: pl.DataFrame, concat_df: pl.DataFrame
+            self, df: pl.DataFrame, concat_df: pl.DataFrame
     ) -> pl.DataFrame:
 
         cn = self.column_names
@@ -607,10 +605,10 @@ class BaseLagGeneratorPolars:
         )
 
     def _generate_future_feats(
-        self,
-        transformed_df: pl.DataFrame,
-        ori_df: pl.DataFrame,
-        known_future_features: Optional[list[str]] = None,
+            self,
+            transformed_df: pl.DataFrame,
+            ori_df: pl.DataFrame,
+            known_future_features: Optional[list[str]] = None,
     ) -> pl.DataFrame:
         known_future_features = known_future_features or []
         ori_cols = ori_df.columns

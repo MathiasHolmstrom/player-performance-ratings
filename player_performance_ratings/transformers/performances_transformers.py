@@ -65,10 +65,11 @@ class PartialStandardScaler(BaseTransformer):
             target_mean: float = 0.5,
             max_value: float = 2,
             prefix: str = "",
+            are_estimator_features:bool=False,
     ):
         features_out = []
         self.prefix = prefix
-        super().__init__(features=features, features_out=features_out)
+        super().__init__(features=features, features_out=features_out, are_estimator_features=are_estimator_features)
         for feature in self.features:
             features_out.append(self.prefix + feature)
         self.ratio = ratio
@@ -127,11 +128,12 @@ class MinMaxTransformer(BaseTransformer):
             multiply_align: bool = False,
             add_align: bool = True,
             prefix: str = "",
+            are_estimator_features:bool=False
     ):
 
         features_out = [prefix + f for f in features]
 
-        super().__init__(features=features, features_out=features_out)
+        super().__init__(features=features, features_out=features_out, are_estimator_features=are_estimator_features)
         self.quantile = quantile
         self.prefix = prefix
         self._trained_mean_values = {}
@@ -216,8 +218,9 @@ class DiminishingValueTransformer(BaseTransformer):
             quantile_cutoff: float = 0.93,
             excessive_multiplier: float = 0.8,
             reverse: bool = False,
+            are_estimator_features:bool=False
     ):
-        super().__init__(features=features, features_out=features)
+        super().__init__(features=features, features_out=features, are_estimator_features=are_estimator_features)
         self.cutoff_value = cutoff_value
         self.excessive_multiplier = excessive_multiplier
         self.quantile_cutoff = quantile_cutoff
@@ -287,8 +290,9 @@ class SymmetricDistributionTransformer(BaseTransformer):
             min_excessive_multiplier: float = 0.04,
             min_rows: int = 10,
             prefix: str = "symmetric_",
+            are_estimator_features:bool=False
     ):
-        super().__init__(features=features, features_out=[prefix + feature for feature in features])
+        super().__init__(features=features, features_out=[prefix + feature for feature in features], are_estimator_features=are_estimator_features)
         self.granularity = granularity
         self.skewness_allowed = skewness_allowed
         self.max_iterations = max_iterations
@@ -433,8 +437,9 @@ class GroupByTransformer(BaseTransformer):
             granularity: list[str],
             aggregation: Literal['mean', 'sum'] = "mean",
             prefix: str = "mean_",
+            are_estimator_features:bool=False
     ):
-        super().__init__(features=features, features_out=[prefix + feature for feature in features])
+        super().__init__(features=features, features_out=[prefix + feature for feature in features], are_estimator_features=are_estimator_features)
         self.granularity = granularity
         self.aggregation = aggregation
         self.prefix = prefix
