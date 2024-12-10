@@ -303,7 +303,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
         self._diminishing_value_transformer = {}
 
     @nw.narwhalify
-    def fit_transform(self, df: FrameT) -> IntoFrameT:
+    def fit_transform(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
 
         if self.granularity:
             df = df.with_columns(
