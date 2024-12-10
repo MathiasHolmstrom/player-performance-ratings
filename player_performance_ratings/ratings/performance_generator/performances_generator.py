@@ -33,6 +33,7 @@ class Performance:
 def auto_create_pre_performance_transformations(
         pre_transformers: list[BaseTransformer],
         performances: list[Performance],
+        auto_generated_features_prefix: str,
 ) -> list[BaseTransformer]:
     """
     Creates a list of transformers that ensure the performance column is generated in a way that makes sense for the rating model.
@@ -47,11 +48,11 @@ def auto_create_pre_performance_transformations(
         not_transformed_features += [
             p.name
             for p in performance.weights
-            if p.name not in not_transformed_features
+            if  p.name not in not_transformed_features
         ]
 
     distribution_transformer = SymmetricDistributionTransformer(
-        features=not_transformed_features, prefix=""
+        features=not_transformed_features, prefix=auto_generated_features_prefix
     )
     pre_transformers.append(distribution_transformer)
 
@@ -59,10 +60,10 @@ def auto_create_pre_performance_transformations(
 
     pre_transformers.append(
         PartialStandardScaler(
-            features=all_features, ratio=1, max_value=9999, target_mean=0, prefix=""
+            features=all_features, ratio=1, max_value=9999, target_mean=0, prefix=auto_generated_features_prefix
         )
     )
-    pre_transformers.append(MinMaxTransformer(features=all_features))
+    pre_transformers.append(MinMaxTransformer(features=all_features, prefix=auto_generated_features_prefix))
 
     return pre_transformers
 
@@ -74,11 +75,21 @@ class PerformancesGenerator:
             performances: Union[list[Performance], Performance],
             transformers: Optional[list[BaseTransformer]] = None,
             auto_transform_performance: bool = True,
+            auto_generated_features_prefix: str = "peformance__",
+            return_auto_generated_features: bool = False,
     ):
+        self.return_auto_generated_features = return_auto_generated_features
+        self.auto_generated_features_prefix = auto_generated_features_prefix
 
         self.performances = (
             performances if isinstance(performances, list) else [performances]
         )
+        for performance in self.performances:
+            for weight in performance.weights:
+                if self.auto_generated_features_prefix and self.auto_generated_features_prefix not in weight.name:
+                    weight.name = f"{self.auto_generated_features_prefix}{weight.name}"
+
+
         self.auto_transform_performance = auto_transform_performance
         self.original_transformers = (
             [copy.deepcopy(p) for p in transformers] if transformers else []
@@ -86,14 +97,25 @@ class PerformancesGenerator:
         self.transformers = transformers or []
         if self.auto_transform_performance:
             self.transformers = auto_create_pre_performance_transformations(
-                pre_transformers=self.transformers, performances=self.performances
+                pre_transformers=self.transformers,
+                performances=self.performances,
+                auto_generated_features_prefix=auto_generated_features_prefix
             )
 
     @nw.narwhalify
     def generate(self, df: FrameT) -> IntoFrameT:
         input_cols = df.columns
+
+
         if self.transformers:
             for transformer in self.transformers:
+                if self.auto_generated_features_prefix:
+                    for feature in transformer.features:
+                        ori_feature_name = feature.removeprefix(self.auto_generated_features_prefix)
+                        if feature not in df.columns:
+                            df = df.with_columns(
+                                nw.col(ori_feature_name).alias(feature)
+                            )
                 df = transformer.fit_transform(df)
 
         df = nw.from_native(df)
@@ -191,4 +213,4 @@ class PerformancesGenerator:
 
     @property
     def features_out(self) -> list[str]:
-        return [c.name for c in self.performances]
+        return list(set([c.name for c in self.performances] + [feature for t in self.transformers for feature in t.features if self.auto_generated_features_prefix]))

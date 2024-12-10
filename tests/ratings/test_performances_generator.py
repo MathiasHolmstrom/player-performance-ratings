@@ -25,7 +25,7 @@ def test_auto_create_pre_transformers():
     ]
 
     pre_transformations = auto_create_pre_performance_transformations(
-        performances=performances, pre_transformers=[]
+        performances=performances, pre_transformers=[], auto_generated_features_prefix=""
     )
 
     expected_pre_transformations = [
@@ -57,7 +57,7 @@ def test_auto_create_pre_transformers_multiple_column_names():
     ]
 
     pre_transformations = auto_create_pre_performance_transformations(
-        performances=performances, pre_transformers=[]
+        performances=performances, pre_transformers=[], auto_generated_features_prefix=""
     )
 
     expected_pre_transformations = [
@@ -125,7 +125,7 @@ def test_performances_generator():
     ]
 
     performances_generator = PerformancesGenerator(
-        performances, transformers=pre_transformers
+        performances, transformers=pre_transformers, auto_generated_features_prefix=""
     )
 
     df_with_performances = performances_generator.generate(df)
