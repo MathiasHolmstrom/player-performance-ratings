@@ -546,6 +546,11 @@ class BaseLagGeneratorPolars:
             self.column_names.update_match_id,
         ]:
             df = df.with_columns(df[column].cast(nw.String))
+
+        if df.schema[self.column_names.start_date] == nw.Datetime("ns"):
+            df = df.with_columns(
+                df[self.column_names.start_date].cast(nw.Datetime('us'))
+            )
         return df
 
     def _create_transformed_df(
@@ -623,7 +628,7 @@ class BaseLagGeneratorPolars:
         )
         transformed_df = transformed_df.sort([cn.start_date, cn.match_id, cn.team_id])
         first_grp = (transformed_df.with_columns(
-            nw.col(self.granularity).cum_count().alias("_row_index")
+            nw.col(self.column_names.match_id).cum_count().over(self.granularity).alias("_row_index")
         )
             .filter(nw.col("_row_index") == 1)
             .drop("_row_index")
@@ -680,7 +685,7 @@ class BaseLagGeneratorPolars:
         )
         new_df = new_df.sort([cn.start_date, cn.match_id, "__opponent_team_id"])
         first_grp = (new_df.with_columns(
-            nw.col("__opponent_team_id").cum_count().alias("_row_index")
+            nw.col(self.column_names.match_id).cum_count().over("__opponent_team_id").alias("_row_index")
         )
          .filter(nw.col("_row_index") == 1)
          .drop("_row_index")
