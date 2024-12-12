@@ -1,6 +1,8 @@
 from typing import Optional, Union
 
 import numpy as np
+import narwhals as nw
+from narwhals.typing import FrameT, IntoFrameT
 import pandas as pd
 import polars as pl
 
@@ -12,35 +14,7 @@ from player_performance_ratings.transformers.base_transformer import (
 from player_performance_ratings.utils import validate_sorting
 
 
-def create_output_column_by_game_group(
-        data: pd.DataFrame,
-        feature_name: str,
-        weight_column: str,
-        game_id: str,
-        granularity: list[str],
-) -> pd.DataFrame:
-    if weight_column:
-        data = data.assign(
-            **{f"weighted_{feature_name}": data[feature_name] * data[weight_column]}
-        )
-        data = data.assign(
-            **{
-                "sum_weighted": data.groupby(granularity + [game_id])[
-                    weight_column
-                ].transform("sum")
-            }
-        )
-        data = data.assign(
-            **{feature_name: data[f"weighted_{feature_name}"] / data["sum_weighted"]}
-        )
-        data = data.groupby(granularity + [game_id])[feature_name].sum().reset_index()
-
-    else:
-        data = data.groupby(granularity + [game_id])[feature_name].mean().reset_index()
-    return data
-
-
-class LagTransformer(BaseLagGenerator):
+class LagTransformer(BaseLagGeneratorPolars):
 
     def __init__(
             self,
@@ -81,11 +55,19 @@ class LagTransformer(BaseLagGenerator):
         self.future_lag = future_lag
         self._df = None
 
+    @nw.narwhalify
     def generate_historical(
-            self, df: pd.DataFrame, column_names: ColumnNames
-    ) -> pd.DataFrame:
+            self, df: FrameT, column_names: ColumnNames
+    ) -> IntoFrameT:
         """ """
-        df = df.assign(is_future=0)
+        native = nw.to_native(df)
+        if isinstance(native, pd.DataFrame):
+            ori_native = "pd"
+            df = nw.from_native(pl.DataFrame(native))
+        else:
+            ori_native = "pl"
+
+        df = df.with_columns(nw.lit(0).alias("is_future"))
         self.column_names = column_names
         self.granularity = self.granularity or [self.column_names.player_id]
         validate_sorting(df=df, column_names=self.column_names)
@@ -93,31 +75,45 @@ class LagTransformer(BaseLagGenerator):
         concat_df = self._generate_concat_df_with_feats(df)
         df = self._create_transformed_df(df=df, concat_df=concat_df)
         if "is_future" in df.columns:
-            df = df.drop(columns="is_future")
+            df = df.drop("is_future")
+        if ori_native == "pd":
+            return df.to_pandas()
         return df
 
-    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = df.assign(is_future=1)
+    @nw.narwhalify
+    def generate_future(self, df: FrameT) -> IntoFrameT:
+        native = nw.to_native(df)
+        if isinstance(native, pd.DataFrame):
+            df = nw.from_native(pl.DataFrame(native))
+            ori_native = "pd"
+        else:
+            ori_native = "pl"
+        df = df.with_columns(nw.lit(1).alias("is_future"))
         concat_df = self._generate_concat_df_with_feats(df=df)
-        transformed_df = concat_df[
-            concat_df[self.column_names.match_id].isin(
-                df[self.column_names.match_id].astype("str").unique().tolist()
+
+        transformed_df = concat_df.filter(
+            nw.col(self.column_names.match_id).is_in(
+                df.select(nw.col(self.column_names.match_id).cast(nw.String)).unique()[self.column_names.match_id].to_list()
             )
-        ]
+        )
+
         transformed_future = self._generate_future_feats(
             transformed_df=transformed_df, ori_df=df
         )
         if "is_future" in transformed_future.columns:
-            transformed_future = transformed_future.drop(columns="is_future")
+            transformed_future = transformed_future.drop("is_future")
+        if ori_native == "pd":
+            return transformed_future.to_pandas()
         return transformed_future
 
-    def _generate_concat_df_with_feats(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _generate_concat_df_with_feats(self, df: FrameT) -> FrameT:
+
 
         if self._df is None:
             raise ValueError("fit_transform needs to be called before transform")
 
         if len(
-                df.drop_duplicates(
+                df.unique(
                     subset=[
                         self.column_names.player_id,
                         self.column_names.team_id,
@@ -133,72 +129,70 @@ class LagTransformer(BaseLagGenerator):
 
         if self.column_names.participation_weight and self.scale_by_participation_weight:
             for feature in self.features:
-                concat_df = concat_df.assign(
-                    **{
-                        feature: concat_df[feature]
-                                 * concat_df[self.column_names.participation_weight]
-                    }
+                concat_df = concat_df.with_columns(
+                    (nw.col(feature) * nw.col(self.column_names.participation_weight)).alias(feature)
                 )
 
         grouped = (
-            concat_df.groupby(
-                self.granularity
-                + [self.column_names.update_match_id, self.column_names.start_date]
-            )[self.features]
-            .mean()
-            .reset_index()
+            concat_df.group_by(self.granularity + [self.column_names.update_match_id, self.column_names.start_date])
+            .agg([nw.col(feature).mean().alias(feature) for feature in self.features])
         )
 
-        grouped = grouped.sort_values(
+        grouped = grouped.sort(
             [self.column_names.start_date, self.column_names.update_match_id]
         )
 
         for days_lag in self.days_between_lags:
             if self.future_lag:
-                grouped["shifted_days"] = grouped.groupby(self.granularity)[
-                    self.column_names.start_date
-                ].shift(-days_lag)
-                grouped[f"{self.prefix}{days_lag}_days_ago"] = (
-                        pd.to_datetime(grouped["shifted_days"])
-                        - pd.to_datetime(grouped[self.column_names.start_date])
-                ).dt.days
+                grouped = grouped.with_columns(
+                    nw.col(self.column_names.start_date)
+                    .shift(-days_lag)
+                    .over(self.granularity)
+                    .alias("shifted_days")
+                )
+                grouped = grouped.with_columns(
+                    ((nw.col("shifted_days").cast(nw.Date) - nw.col(self.column_names.start_date).cast(nw.Date))
+                    .dt.total_minutes()/60/24)
+                    .alias(f"{self.prefix}{days_lag}_days_ago")
+                )
             else:
-                grouped["shifted_days"] = grouped.groupby(self.granularity)[
-                    self.column_names.start_date
-                ].shift(days_lag)
-                grouped[f"{self.prefix}{days_lag}_days_ago"] = (
-                        pd.to_datetime(grouped[self.column_names.start_date])
-                        - pd.to_datetime(grouped["shifted_days"])
-                ).dt.days
-
-            grouped = grouped.drop(columns=["shifted_days"])
+                grouped = grouped.with_columns(
+                    nw.col(self.column_names.start_date)
+                    .shift(days_lag)
+                    .over(self.granularity)
+                    .alias("shifted_days")
+                )
+                grouped = (grouped.with_columns(
+                    (nw.col(self.column_names.start_date).cast(nw.Date) - nw.col("shifted_days").cast(nw.Date))
+                    .dt.total_minutes()/60/24)
+                    .alias(f"{self.prefix}{days_lag}_days_ago")
+                )
+            grouped = grouped.drop("shifted_days")
 
         for feature_name in self.features:
             for lag in range(1, self.lag_length + 1):
                 output_column_name = f"{self.prefix}{lag}_{feature_name}"
                 if output_column_name in concat_df.columns:
                     raise ValueError(
-                        f"Column {output_column_name} already exists. Choose different prefix or ensure no duplication was performed"
+                        f"Column {output_column_name} already exists. Choose a different prefix or ensure no duplication was performed."
                     )
 
         for feature_name in self.features:
             for lag in range(1, self.lag_length + 1):
                 output_column_name = f"{self.prefix}{lag}_{feature_name}"
                 if self.future_lag:
-                    grouped = grouped.assign(
-                        **{
-                            output_column_name: grouped.groupby(self.granularity)[
-                                feature_name
-                            ].shift(-lag)
-                        }
+                    grouped = grouped.with_columns(
+                        nw.col(feature_name)
+                        .shift(-lag)
+                        .over(self.granularity)
+                        .alias(output_column_name)
                     )
                 else:
-                    grouped = grouped.assign(
-                        **{
-                            output_column_name: grouped.groupby(self.granularity)[
-                                feature_name
-                            ].shift(lag)
-                        }
+                    grouped = grouped.with_columns(
+                        nw.col(feature_name)
+                        .shift(lag)
+                        .over(self.granularity)
+                        .alias(output_column_name)
                     )
 
         feats_out = []
@@ -209,18 +203,11 @@ class LagTransformer(BaseLagGenerator):
         for days_lag in self.days_between_lags:
             feats_out.append(f"{self.prefix}{days_lag}_days_ago")
 
-        concat_df = concat_df.merge(
-            grouped[
-                self.granularity
-                + [
-                    self.column_names.update_match_id,
-                    self.column_names.start_date,
-                    *feats_out,
-                ]
-                ],
-            on=self.granularity
-               + [self.column_names.update_match_id, self.column_names.start_date],
-            how="left",
+        concat_df = concat_df.join(
+            grouped.select(
+                self.granularity + [self.column_names.update_match_id, self.column_names.start_date] + feats_out),
+            on=self.granularity + [self.column_names.update_match_id, self.column_names.start_date],
+            how="left"
         )
 
         return concat_df
@@ -673,14 +660,14 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
         self._estimator_features_out = self._features_out.copy()
 
     def generate_historical(
-            self, df: pl.DataFrame, column_names: ColumnNames
-    ) -> pl.DataFrame:
-        if df.schema[self.binary_column] in [pl.Float64, pl.Float32]:
+            self, df: FrameT, column_names: ColumnNames
+    ) -> IntoFrameT:
+        if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
             df = df.with_columns(
-                pl.col(self.binary_column).cast(pl.Int64)
+                nw.col(self.binary_column).cast(nw.Int64)
             )
 
-        df = df.with_columns(pl.lit(0).alias("is_future"))
+        df = df.with_columns(nw.lit(0).alias("is_future"))
         self.column_names = column_names
         self.granularity = self.granularity or [self.column_names.player_id]
         validate_sorting(df=df, column_names=self.column_names)
@@ -695,22 +682,22 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
             transformed_df = transformed_df.drop("is_future")
         return self._add_weighted_prob(transformed_df=transformed_df)
 
-    def generate_future(self, df: pl.DataFrame) -> pl.DataFrame:
+    def generate_future(self, df: FrameT) -> IntoFrameT:
         if self._df is None:
             raise ValueError(
                 "generate_historical needs to be called before generate_future"
             )
 
         if self.binary_column in df.columns:
-            if df.schema[self.binary_column] in [pl.Float64, pl.Float32]:
+            if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
                 df = df.with_columns(
-                    pl.col(self.binary_column).cast(pl.Int64)
+                    nw.col(self.binary_column).cast(nw.Int64)
                 )
-        df = df.with_columns(pl.lit(1).alias("is_future"))
+        df = df.with_columns(nw.lit(1).alias("is_future"))
         concat_df = self._generate_concat_df_with_feats(df=df)
-        unique_match_ids = df.select(pl.col(self.column_names.match_id).cast(pl.Utf8)).unique()
+        unique_match_ids = df.select(nw.col(self.column_names.match_id).cast(nw.String)).unique()
         transformed_df = concat_df.filter(
-            pl.col(self.column_names.match_id).is_in(unique_match_ids[self.column_names.match_id])
+            nw.col(self.column_names.match_id).is_in(unique_match_ids[self.column_names.match_id])
         )
         transformed_future = self._generate_future_feats(
             transformed_df=transformed_df,
@@ -732,7 +719,7 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
 
         return known_future_features
 
-    def _add_weighted_prob(self, transformed_df: pl.DataFrame) -> pl.DataFrame:
+    def _add_weighted_prob(self, transformed_df: FrameT) -> FrameT:
 
         if self.prob_column:
             for idx, feature_name in enumerate(self.features):
@@ -741,19 +728,19 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
                 )
                 transformed_df = transformed_df.with_columns(
                     (
-                            pl.col(f"{self.prefix}{self.window}_{feature_name}_1")
-                            * pl.col(self.prob_column)
-                            + pl.col(f"{self.prefix}{self.window}_{feature_name}_0")
-                            * (1 - pl.col(self.prob_column))
+                            nw.col(f"{self.prefix}{self.window}_{feature_name}_1")
+                            * nw.col(self.prob_column)
+                            + nw.col(f"{self.prefix}{self.window}_{feature_name}_0")
+                            * (1 - nw.col(self.prob_column))
                     ).alias(weighted_prob_feat_name)
                 )
         return transformed_df
 
-    def _generate_concat_df_with_feats(self, df: pl.DataFrame) -> pl.DataFrame:
+    def _generate_concat_df_with_feats(self, df: FrameT) -> FrameT:
         additional_cols_to_use = [self.binary_column] + (
             [self.prob_column] if self.prob_column else []
         )
-        concat_df = self._concat_df(df, additional_cols_to_use=additional_cols_to_use)
+        concat_df = self._concat_df(df)
 
         # Define groupby columns
         groupby_cols = [
@@ -764,8 +751,8 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
         ]
 
         # Perform initial aggregation
-        aggregation = {f: pl.mean(f).alias(f) for f in self.features}
-        aggregation[self.binary_column] = pl.first(self.binary_column)
+        aggregation = {f: nw.mean(f).alias(f) for f in self.features}
+        aggregation[self.binary_column] = nw.first(self.binary_column)
         grouped = concat_df.group_by(groupby_cols).agg(list(aggregation.values()))
 
         # Sort the DataFrame
@@ -781,13 +768,12 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
         feats_added = []
 
         for feature in self.features:
-            # Define shifted feature and binary columns
-            shifted_feature = pl.col(feature).shift(1).over(self.granularity)
-            shifted_binary = pl.col(self.binary_column).shift(1).over(self.granularity)
+            shifted_feature = nw.col(feature).shift(1).over(self.granularity)
+            shifted_binary = nw.col(self.binary_column).shift(1).over(self.granularity)
 
             # Calculate rolling means conditioned on binary outcome
             rolling_mean_1 = (
-                pl.when(shifted_binary == 1)
+                nw.when(shifted_binary == 1)
                 .then(shifted_feature)
                 .rolling_mean(
                     window_size=self.window, min_periods=self.min_periods
@@ -797,7 +783,7 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
             )
 
             rolling_mean_0 = (
-                pl.when(shifted_binary == 0)
+                nw.when(shifted_binary == 0)
                 .then(shifted_feature)
                 .rolling_mean(
                     window_size=self.window, min_periods=self.min_periods
@@ -828,9 +814,8 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
             how="left",
         )
 
-        # Forward fill missing values within granularity groups
         concat_df = concat_df.with_columns([
-            pl.col(feats_added).fill_null(strategy="forward").over(self.granularity)
+            nw.col(feats_added).fill_null(strategy="forward").over(self.granularity)
         ])
 
         return concat_df
@@ -1103,9 +1088,10 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         self.window = window
         self.min_periods = min_periods
 
+    @nw.narwhalify
     def generate_historical(
-            self, df: Union[pd.DataFrame, pl.DataFrame], column_names: ColumnNames
-    ) -> Union[pl.DataFrame, pd.DataFrame]:
+            self, df: FrameT, column_names: ColumnNames
+    ) -> IntoFrameT:
         """
         Generates rolling mean for historical data
         Stored the historical data as instance-variables so it's possible to generate future data afterwards
@@ -1115,11 +1101,7 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         :param df: Historical data
         :param column_names: Column names
         """
-        if isinstance(df, pd.DataFrame):
-            ori_type = "pd"
-            df = pl.DataFrame(df)
-        else:
-            ori_type = "pl"
+
         if (
                 df.unique(
                     subset=[
@@ -1134,7 +1116,7 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
                 f"Duplicated rows in df. Df must be a unique combination of {column_names.player_id} and {column_names.update_match_id}"
             )
 
-        df = df.with_columns(pl.lit(0).alias("is_future"))
+        df = df.with_columns(nw.lit(0).alias("is_future"))
 
         self.column_names = column_names
         self.granularity = self.granularity or [self.column_names.player_id]
@@ -1157,13 +1139,11 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         )
         if "is_future" in df.columns:
             df = df.drop("is_future")
-        if ori_type == "pd":
-            return df.to_pandas()
-        return df
+        return df.to_native()
 
     def generate_future(
-            self, df: Union[pd.DataFrame, pl.DataFrame]
-    ) -> Union[pl.DataFrame, pd.DataFrame]:
+            self, df: FrameT
+    ) -> IntoFrameT:
         """
         Generates rolling mean for future data
         Assumes that .generate_historical() has been called before
@@ -1175,19 +1155,13 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         :param df: Future data
         """
 
-        if isinstance(df, pd.DataFrame):
-            ori_type = "pd"
-            df = pl.DataFrame(df)
-        else:
-            ori_type = "pl"
-
-        df = df.with_columns(pl.lit(1).alias("is_future"))
+        df = df.with_columns(nw.lit(1).alias("is_future"))
         concat_df = self._generate_concat_df_with_feats(df=df)
         unique_match_ids = df.select(
-            pl.col(self.column_names.match_id).cast(pl.Utf8).unique()
+            nw.col(self.column_names.match_id).cast(nw.String).unique()
         ).to_series()
         transformed_df = concat_df.filter(
-            pl.col(self.column_names.match_id).cast(pl.Utf8).is_in(unique_match_ids)
+            nw.col(self.column_names.match_id).cast(nw.String).is_in(unique_match_ids)
         )
         transformed_df = self._generate_future_feats(
             transformed_df=transformed_df, ori_df=df
@@ -1208,11 +1182,10 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         )
         if "is_future" in df.columns:
             df = df.drop("is_future")
-        if ori_type == "pd":
-            return df.to_pandas()
-        return df
 
-    def _generate_concat_df_with_feats(self, df: pl.DataFrame) -> pl.DataFrame:
+        return df.to_native()
+
+    def _generate_concat_df_with_feats(self, df: FrameT) -> FrameT:
 
         if self._df is None:
             raise ValueError("fit_transform needs to be called before transform")
@@ -1230,26 +1203,26 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
             )
 
         agg_dict = [
-            pl.col(feature_name).mean().alias(feature_name)
+            nw.col(feature_name).mean().alias(feature_name)
             for feature_name in self.features
         ]
         agg_dict.append(
-            pl.col(self.column_names.start_date)
-            .first()
+            nw.col(self.column_names.start_date)
+            .head(1)
             .alias(self.column_names.start_date)
         )
 
         grp = concat_df.group_by(
             self.granularity + [self.column_names.update_match_id]
         ).agg(agg_dict)
-        grp = grp.filter(pl.col(self.column_names.start_date).is_not_null())
+        grp = grp.filter(~nw.col(self.column_names.start_date).is_null())
         grp = grp.sort(
             [self.column_names.start_date, self.column_names.update_match_id]
         )
 
         rolling_means = [
-            pl.col(feature_name)
-            .shift()
+            nw.col(feature_name)
+            .shift(n=1)
             .rolling_mean(window_size=self.window, min_periods=self.min_periods)
             .over(self.granularity)
             .alias(f"{self.prefix}{self.window}_{feature_name}")
@@ -1281,7 +1254,7 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
 
         concat_df = concat_df.with_columns(
             [
-                pl.col(f).forward_fill().over(self.granularity).alias(f)
+                nw.col(f).forward_fill().over(self.granularity).alias(f)
                 for f in feats_added
             ]
         )

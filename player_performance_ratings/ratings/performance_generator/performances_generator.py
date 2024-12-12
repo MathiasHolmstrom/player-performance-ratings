@@ -52,7 +52,7 @@ def auto_create_pre_performance_transformations(
         ]
 
     distribution_transformer = SymmetricDistributionTransformer(
-        features=not_transformed_features, prefix=auto_generated_features_prefix
+        features=not_transformed_features
     )
     pre_transformers.append(distribution_transformer)
 
@@ -60,10 +60,10 @@ def auto_create_pre_performance_transformations(
 
     pre_transformers.append(
         PartialStandardScaler(
-            features=all_features, ratio=1, max_value=9999, target_mean=0, prefix=auto_generated_features_prefix
+            features=all_features, ratio=1, max_value=9999, target_mean=0,
         )
     )
-    pre_transformers.append(MinMaxTransformer(features=all_features, prefix=auto_generated_features_prefix))
+    pre_transformers.append(MinMaxTransformer(features=all_features))
 
     return pre_transformers
 
@@ -86,7 +86,7 @@ class PerformancesGenerator:
         )
         for performance in self.performances:
             for weight in performance.weights:
-                if self.auto_generated_features_prefix and self.auto_generated_features_prefix not in weight.name:
+                if self.auto_generated_features_prefix:
                     weight.name = f"{self.auto_generated_features_prefix}{weight.name}"
 
 
