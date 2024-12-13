@@ -93,7 +93,8 @@ class LagTransformer(BaseLagGeneratorPolars):
 
         transformed_df = concat_df.filter(
             nw.col(self.column_names.match_id).is_in(
-                df.select(nw.col(self.column_names.match_id).cast(nw.String)).unique()[self.column_names.match_id].to_list()
+                df.select(nw.col(self.column_names.match_id).cast(nw.String)).unique()[
+                    self.column_names.match_id].to_list()
             )
         )
 
@@ -107,7 +108,6 @@ class LagTransformer(BaseLagGeneratorPolars):
         return transformed_future
 
     def _generate_concat_df_with_feats(self, df: FrameT) -> FrameT:
-
 
         if self._df is None:
             raise ValueError("fit_transform needs to be called before transform")
@@ -152,7 +152,7 @@ class LagTransformer(BaseLagGeneratorPolars):
                 )
                 grouped = grouped.with_columns(
                     ((nw.col("shifted_days").cast(nw.Date) - nw.col(self.column_names.start_date).cast(nw.Date))
-                    .dt.total_minutes()/60/24)
+                     .dt.total_minutes() / 60 / 24)
                     .alias(f"{self.prefix}{days_lag}_days_ago")
                 )
             else:
@@ -164,9 +164,9 @@ class LagTransformer(BaseLagGeneratorPolars):
                 )
                 grouped = (grouped.with_columns(
                     (nw.col(self.column_names.start_date).cast(nw.Date) - nw.col("shifted_days").cast(nw.Date))
-                    .dt.total_minutes()/60/24)
-                    .alias(f"{self.prefix}{days_lag}_days_ago")
-                )
+                    .dt.total_minutes() / 60 / 24)
+                           .alias(f"{self.prefix}{days_lag}_days_ago")
+                           )
             grouped = grouped.drop("shifted_days")
 
         for feature_name in self.features:
@@ -228,15 +228,15 @@ class RollingMeanTransformer(BaseLagGenerator):
     """
 
     def __init__(
-        self,
-        features: list[str],
-        window: int,
-        min_periods: int = 1,
-        granularity: Union[list[str], str] = None,
-        scale_by_participation_weight: bool = False,
-        add_opponent: bool = False,
-        are_estimator_features=True,
-        prefix: str = "rolling_mean_",
+            self,
+            features: list[str],
+            window: int,
+            min_periods: int = 1,
+            granularity: Union[list[str], str] = None,
+            scale_by_participation_weight: bool = False,
+            add_opponent: bool = False,
+            are_estimator_features=True,
+            prefix: str = "rolling_mean_",
     ):
         """
         Calculates the rolling mean for a list of features over a window of matches.
@@ -610,6 +610,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
     def features_out(self) -> list[str]:
         return self._features_out
 
+
 class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
     # IN PROGRESS NOT WORKING
     def __init__(
@@ -819,6 +820,7 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
         ])
 
         return concat_df
+
 
 class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
@@ -1102,6 +1104,12 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         :param column_names: Column names
         """
 
+        if isinstance(nw.to_native(df), pd.DataFrame):
+            ori_type = "pd"
+            df = nw.from_native(pl.DataFrame(nw.to_native(df)))
+        else:
+            ori_type = "pl"
+
         if (
                 df.unique(
                     subset=[
@@ -1128,8 +1136,9 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         for c in [cn.player_id, cn.team_id, cn.match_id]:
             if transformed_df[c].dtype != df[c].dtype:
                 recasts_mapping[c] = df[c].dtype
-        transformed_df = transformed_df.cast(recasts_mapping)
-
+        transformed_df = transformed_df.with_columns(
+            nw.col(c).cast(df[c].dtype) for c in [cn.player_id, cn.team_id, cn.match_id]
+        )
         df = df.join(
             transformed_df.select(
                 cn.player_id, cn.team_id, cn.match_id, *self.features_out
@@ -1139,8 +1148,12 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         )
         if "is_future" in df.columns:
             df = df.drop("is_future")
+
+        if ori_type == "pd":
+            return df.to_pandas()
         return df.to_native()
 
+    @nw.narwhalify
     def generate_future(
             self, df: FrameT
     ) -> IntoFrameT:
@@ -1155,11 +1168,17 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         :param df: Future data
         """
 
+        if isinstance(nw.to_native(df), pd.DataFrame):
+            ori_type = "pd"
+            df = nw.from_native(pl.DataFrame(nw.to_native(df)))
+        else:
+            ori_type = "pl"
+
         df = df.with_columns(nw.lit(1).alias("is_future"))
         concat_df = self._generate_concat_df_with_feats(df=df)
         unique_match_ids = df.select(
             nw.col(self.column_names.match_id).cast(nw.String).unique()
-        ).to_series()
+        )[self.column_names.match_id].to_list()
         transformed_df = concat_df.filter(
             nw.col(self.column_names.match_id).cast(nw.String).is_in(unique_match_ids)
         )
@@ -1171,7 +1190,9 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         for c in [cn.player_id, cn.team_id, cn.match_id]:
             if transformed_df[c].dtype != df[c].dtype:
                 recasts_mapping[c] = df[c].dtype
-        transformed_df = transformed_df.cast(recasts_mapping)
+        transformed_df = transformed_df.with_columns(
+            nw.col(c).cast(df[c].dtype) for c in [cn.player_id, cn.team_id, cn.match_id]
+        )
 
         df = df.join(
             transformed_df.select(
@@ -1182,6 +1203,9 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         )
         if "is_future" in df.columns:
             df = df.drop("is_future")
+
+        if ori_type == "pd":
+            return df.to_pandas()
 
         return df.to_native()
 
@@ -1212,9 +1236,11 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
             .alias(self.column_names.start_date)
         )
 
-        grp = concat_df.group_by(
-            self.granularity + [self.column_names.update_match_id]
-        ).agg(agg_dict)
+        grp = concat_df.unique([*self.granularity, self.column_names.update_match_id]).select(*self.granularity,
+                                                                                              self.column_names.update_match_id,
+                                                                                              self.column_names.start_date,
+                                                                                              *self.features)
+
         grp = grp.filter(~nw.col(self.column_names.start_date).is_null())
         grp = grp.sort(
             [self.column_names.start_date, self.column_names.update_match_id]
@@ -1254,7 +1280,7 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
 
         concat_df = concat_df.with_columns(
             [
-                nw.col(f).forward_fill().over(self.granularity).alias(f)
+                nw.col(f).fill_null(strategy='forward').over(self.granularity).alias(f)
                 for f in feats_added
             ]
         )

@@ -479,9 +479,9 @@ def test_lag_transformer_parent_match_id(df, column_names: ColumnNames):
         ])
         pl.testing.assert_frame_equal(transformed_df, expected_df.select(transformed_df.columns), check_dtype=False)
 
-
-def test_rolling_mean_fit_transform(column_names):
-    df = pd.DataFrame(
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_rolling_mean_fit_transform(df, column_names):
+    data = df(
         {
             "player": ["a", "b", "a", "a"],
             "game": [1, 1, 2, 3],
@@ -495,7 +495,10 @@ def test_rolling_mean_fit_transform(column_names):
             "team": [1, 2, 1, 1],
         }
     )
-    original_df = df.copy()
+    try:
+        original_df = data.copy()
+    except:
+        original_df = data.clone()
 
     rolling_mean_transformation = RollingMeanTransformerPolars(
         features=["points"],
@@ -505,26 +508,31 @@ def test_rolling_mean_fit_transform(column_names):
     )
 
     df_with_rolling_mean = rolling_mean_transformation.generate_historical(
-        df, column_names=column_names
+        data, column_names=column_names
     )
+    if isinstance(data, pd.DataFrame):
+        expected_df = original_df.assign(
+            **{
+                f"{rolling_mean_transformation.prefix}2_points": [
+                    None,
+                    None,
+                    1,
+                    (3 + 1) / 2,
+                ]
+            }
+        )
+        pd.testing.assert_frame_equal(
+            df_with_rolling_mean, expected_df, check_like=True, check_dtype=False
+        )
+    else:
+        expected_df = original_df.with_columns([
+            pl.Series(f"{rolling_mean_transformation.prefix}2_points", [None, None, 1, (3 + 1) / 2], strict=False)
+        ])
+        pl.testing.assert_frame_equal(df_with_rolling_mean, expected_df.select(df_with_rolling_mean.columns), check_dtype=False)
 
-    expected_df = original_df.assign(
-        **{
-            f"{rolling_mean_transformation.prefix}2_points": [
-                None,
-                None,
-                1,
-                (3 + 1) / 2,
-            ]
-        }
-    )
-    pd.testing.assert_frame_equal(
-        df_with_rolling_mean, expected_df, check_like=True, check_dtype=False
-    )
-
-
-def test_rolling_mean_fit_transform_and_transform(column_names):
-    historical_df = pd.DataFrame(
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_rolling_mean_fit_transform_and_transform(df, column_names):
+    historical_df = df(
         {
             "player": ["a", "b", "a", "a"],
             "game": [1, 1, 2, 3],
@@ -552,8 +560,10 @@ def test_rolling_mean_fit_transform_and_transform(column_names):
             "team": [1, 2, 1, 2],
         }
     )
-
-    original_future_df = future_df.copy()
+    try:
+        original_future_df = future_df.copy()
+    except:
+        original_future_df = future_df.clone()
     rolling_mean_transformation = RollingMeanTransformerPolars(
         features=["points"],
         window=2,
@@ -566,18 +576,25 @@ def test_rolling_mean_fit_transform_and_transform(column_names):
         df=historical_df, column_names=column_names
     )
     transformed_future_df = rolling_mean_transformation.generate_future(future_df)
+    if isinstance(future_df, pd.DataFrame):
+        expected_df = original_future_df.assign(
+            **{
+                f"{rolling_mean_transformation.prefix}2_points": [2.5, 2, 2.5, 2],
+                rolling_mean_transformation.features_out[1]: [2, 2.5, 2, 2.5],
+            }
+        )
+        pd.testing.assert_frame_equal(transformed_future_df, expected_df, check_like=True)
+    else:
+        expected_df = original_future_df.with_columns([
+            pl.Series(f"{rolling_mean_transformation.prefix}2_points", [2.5, 2, 2.5, 2]),
+            pl.Series(rolling_mean_transformation.features_out[1], [2, 2.5, 2, 2.5])
+        ])
+        pl.testing.assert_frame_equal(transformed_future_df, expected_df.select(transformed_future_df.columns), check_dtype=False)
 
-    expected_df = original_future_df.assign(
-        **{
-            f"{rolling_mean_transformation.prefix}2_points": [2.5, 2, 2.5, 2],
-            rolling_mean_transformation.features_out[1]: [2, 2.5, 2, 2.5],
-        }
-    )
-    pd.testing.assert_frame_equal(transformed_future_df, expected_df, check_like=True)
 
-
-def test_rolling_mean_transformer_fit_transformer_team_stat(column_names):
-    historical_df = pd.DataFrame(
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_rolling_mean_transformer_fit_transformer_team_stat(df, column_names):
+    historical_df = df(
         {
             "player": ["a", "b", "c", "d", "a", "b", "c", "d"],
             "game": [1, 1, 1, 1, 2, 2, 2, 2],
@@ -595,8 +612,10 @@ def test_rolling_mean_transformer_fit_transformer_team_stat(column_names):
             "team": [1, 1, 2, 2, 1, 1, 2, 2],
         }
     )
-
-    expected_df = historical_df.copy()
+    try:
+        expected_df = historical_df.copy()
+    except:
+        expected_df = historical_df.clone()
 
     rolling_mean_transformation = RollingMeanTransformerPolars(
         features=["score_difference"],
@@ -608,19 +627,25 @@ def test_rolling_mean_transformer_fit_transformer_team_stat(column_names):
     transformed_data = rolling_mean_transformation.generate_historical(
         historical_df, column_names=column_names
     )
-    expected_df[rolling_mean_transformation.prefix + "2_score_difference"] = [
-        None,
-        None,
-        None,
-        None,
-        10,
-        10,
-        -10,
-        -10,
-    ]
-    pd.testing.assert_frame_equal(
-        transformed_data, expected_df, check_like=True, check_dtype=False
-    )
+    if isinstance(historical_df, pd.DataFrame):
+        expected_df[rolling_mean_transformation.prefix + "2_score_difference"] = [
+            None,
+            None,
+            None,
+            None,
+            10,
+            10,
+            -10,
+            -10,
+        ]
+        pd.testing.assert_frame_equal(
+            transformed_data, expected_df, check_like=True, check_dtype=False
+        )
+    else:
+        expected_df = expected_df.with_columns([
+            pl.Series(rolling_mean_transformation.prefix + "2_score_difference", [None, None, None, None, 10, 10, -10, -10])
+        ])
+        pl.testing.assert_frame_equal(transformed_data, expected_df.select(transformed_data.columns), check_dtype=False)
 
 
 def test_rolling_mean_days_fit_transform(column_names):
