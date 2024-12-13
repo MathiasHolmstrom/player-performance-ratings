@@ -5,6 +5,7 @@ import polars as pl
 import narwhals as nw
 from narwhals.typing import FrameT
 
+
 def convert_pandas_to_polars(df: pd.DataFrame) -> pl.DataFrame:
     for column in df.select_dtypes(include=['category']).columns:
         df[column] = df[column].astype(str)
@@ -22,15 +23,21 @@ def validate_sorting(df: FrameT, column_names: ColumnNames) -> None:
             column_names.player_id,
         ]
     )
-    if not df.to_numpy().tolist() == df_sorted.select(df.columns).to_numpy().tolist():
+    if not df.select([column_names.start_date, column_names.match_id, column_names.team_id,
+                      column_names.player_id]).to_numpy().tolist() == df_sorted.select(
+                [column_names.start_date, column_names.match_id, column_names.team_id,
+                 column_names.player_id]).to_numpy().tolist():
         for column in [
             column_names.match_id,
             column_names.team_id,
             column_names.player_id,
         ]:
-            df = df.assign(**{column: df[column].astype("str")})
+            df = df.with_columns(
+                nw.col(column).cast(nw.String)
+            )
+            # df = df.assign(**{column: df[column].astype("str")})
 
-        df_sorted = df.sort_values(
+        df_sorted = df.sort(
             by=[
                 column_names.start_date,
                 column_names.match_id,
@@ -39,7 +46,10 @@ def validate_sorting(df: FrameT, column_names: ColumnNames) -> None:
             ]
         )
 
-        if df.to_numpy().tolist() == df_sorted.select(df.columns).to_numpy().tolist():
+        if df.select([column_names.start_date, column_names.match_id, column_names.team_id,
+                      column_names.player_id]).to_numpy().tolist() == df_sorted.select(
+                [column_names.start_date, column_names.match_id, column_names.team_id,
+                 column_names.player_id]).to_numpy().tolist():
             return
         for column in [
             column_names.match_id,
@@ -47,11 +57,13 @@ def validate_sorting(df: FrameT, column_names: ColumnNames) -> None:
             column_names.player_id,
         ]:
             try:
-                df = df.assign(**{column: df[column].astype("int")})
+                df = df.with_columns(
+                    nw.col(column).cast(nw.Int64)
+                )
             except:
                 pass
 
-        df_sorted = df.sort_values(
+        df_sorted = df.sort(
             by=[
                 column_names.start_date,
                 column_names.match_id,
@@ -60,7 +72,10 @@ def validate_sorting(df: FrameT, column_names: ColumnNames) -> None:
             ]
         )
 
-        if df.to_numpy().tolist() == df_sorted.select(df.columns).to_numpy().tolist():
+        if df.select([column_names.start_date, column_names.match_id, column_names.team_id,
+                      column_names.player_id]).to_numpy().tolist() == df_sorted.select(
+                [column_names.start_date, column_names.match_id, column_names.team_id,
+                 column_names.player_id]).to_numpy().tolist():
             return
 
         raise ValueError(
