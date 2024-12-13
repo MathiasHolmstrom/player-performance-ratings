@@ -2,7 +2,8 @@ import pandas as pd
 
 from player_performance_ratings import ColumnNames
 import polars as pl
-
+import narwhals as nw
+from narwhals.typing import FrameT
 
 def convert_pandas_to_polars(df: pd.DataFrame) -> pl.DataFrame:
     for column in df.select_dtypes(include=['category']).columns:
@@ -11,8 +12,9 @@ def convert_pandas_to_polars(df: pd.DataFrame) -> pl.DataFrame:
     return pl.from_pandas(df)
 
 
-def validate_sorting(df: pd.DataFrame, column_names: ColumnNames) -> None:
-    df_sorted = df.sort_values(
+@nw.narwhalify
+def validate_sorting(df: FrameT, column_names: ColumnNames) -> None:
+    df_sorted = df.sort(
         by=[
             column_names.start_date,
             column_names.match_id,
@@ -20,8 +22,7 @@ def validate_sorting(df: pd.DataFrame, column_names: ColumnNames) -> None:
             column_names.player_id,
         ]
     )
-
-    if not df.equals(df_sorted):
+    if not df.to_numpy().tolist() == df_sorted.select(df.columns).to_numpy().tolist():
         for column in [
             column_names.match_id,
             column_names.team_id,
@@ -38,7 +39,7 @@ def validate_sorting(df: pd.DataFrame, column_names: ColumnNames) -> None:
             ]
         )
 
-        if df.equals(df_sorted):
+        if df.to_numpy().tolist() == df_sorted.select(df.columns).to_numpy().tolist():
             return
         for column in [
             column_names.match_id,
@@ -59,7 +60,7 @@ def validate_sorting(df: pd.DataFrame, column_names: ColumnNames) -> None:
             ]
         )
 
-        if df.equals(df_sorted):
+        if df.to_numpy().tolist() == df_sorted.select(df.columns).to_numpy().tolist():
             return
 
         raise ValueError(

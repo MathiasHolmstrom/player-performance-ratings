@@ -4,7 +4,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 from narwhals.typing import FrameT, IntoFrameT
-import polars as pl
+import narwhals as nw
 
 from player_performance_ratings import ColumnNames
 
@@ -204,6 +204,7 @@ class BaseLagGenerator:
             self.column_names.player_id,
             self.column_names.update_match_id,
         ]:
+            df = df.wi
             df = df.assign(**{column: lambda x: x[column].astype("str")})
         return df
 
@@ -433,12 +434,12 @@ class BaseLagGeneratorPolars:
 
     @abstractmethod
     def generate_historical(
-            self, df: pl.DataFrame, column_names: ColumnNames
-    ) -> pl.DataFrame:
+            self, df: FrameT, column_names: ColumnNames
+    ) -> IntoFrameT:
         pass
 
     @abstractmethod
-    def generate_future(self, df: pl.DataFrame) -> pl.DataFrame:
+    def generate_future(self, df: FrameT) -> IntoFrameT:
         pass
 
     @property
@@ -451,20 +452,23 @@ class BaseLagGeneratorPolars:
     def features_out(self) -> list[str]:
         return self._features_out
 
-    def _concat_df(self, df: pl.DataFrame) -> pl.DataFrame:
+    def _concat_df(self, df: FrameT) -> FrameT:
         df = self._string_convert(df=df)
         df = df.with_columns(
             [
-                pl.col(feature).cast(pl.Float64).alias(feature)
+                nw.col(feature).cast(nw.Float64).alias(feature)
                 for feature in self.features
                 if feature in df.columns
             ]
         )
 
-        df = df[[c for c in df.columns if c not in self.features_out]]
+        df = df.select([c for c in df.columns if c not in self.features_out])
         cols = [c for c in self._df.columns if c in df.columns]
 
-        concat_df = pl.concat([self._df, df.select(cols)], how="diagonal_relaxed")
+        concat_df = nw.concat([self._df, df.select(cols)],
+                              how='diagonal'
+                              # how="diagonal_relaxed"
+                              )
 
         if concat_df[self.column_names.start_date].dtype in ("str", "object"):
             concat_df[self.column_names.start_date] = pd.to_datetime(
@@ -480,11 +484,11 @@ class BaseLagGeneratorPolars:
         )
 
     def _store_df(
-            self, df: pl.DataFrame, additional_cols_to_use: Optional[list[str]] = None
+            self, df: nw.DataFrame, additional_cols_to_use: Optional[list[str]] = None
     ):
         df = df.with_columns(
             [
-                pl.col(feature).cast(pl.Float64).alias(feature)
+                nw.col(feature).cast(nw.Float64).alias(feature)
                 for feature in self.features
                 if feature in df.columns
             ]
@@ -516,7 +520,7 @@ class BaseLagGeneratorPolars:
         if self._df is None:
             self._df = df.select(cols)
         else:
-            self._df = pl.concat([self._df, df.select(cols)])
+            self._df = nw.concat([self._df, df.select(cols)])
 
         self._df = self._df.sort(
             [
@@ -534,19 +538,24 @@ class BaseLagGeneratorPolars:
             #  maintain_order=True
         )
 
-    def _string_convert(self, df: pl.DataFrame) -> pl.DataFrame:
+    def _string_convert(self, df: FrameT) -> FrameT:
         for column in [
             self.column_names.match_id,
             self.column_names.parent_team_id,
             self.column_names.player_id,
             self.column_names.update_match_id,
         ]:
-            df = df.with_columns(df[column].cast(pl.Utf8))
+            df = df.with_columns(df[column].cast(nw.String))
+
+        if df.schema[self.column_names.start_date] == nw.Datetime("ns"):
+            df = df.with_columns(
+                df[self.column_names.start_date].cast(nw.Datetime('us'))
+            )
         return df
 
     def _create_transformed_df(
-            self, df: pl.DataFrame, concat_df: pl.DataFrame
-    ) -> pl.DataFrame:
+            self, df: FrameT, concat_df: FrameT
+    ) -> IntoFrameT:
 
         cn = self.column_names
 
@@ -566,15 +575,15 @@ class BaseLagGeneratorPolars:
         )
         return transformed_df.select(list(set(df.columns + self.features_out)))
 
-    def _add_opponent_features(self, df: pl.DataFrame) -> pl.DataFrame:
+    def _add_opponent_features(self, df: FrameT) -> FrameT:
         team_features = df.group_by(
             [self.column_names.team_id, self.column_names.match_id]
-        ).agg(**{col: pl.mean(col) for col in self._entity_features})
+        ).agg(**{col: nw.mean(col) for col in self._entity_features})
 
         df_opponent_feature = team_features.with_columns(
             [
-                pl.col(self.column_names.team_id).alias("__opponent_team_id"),
-                *[pl.col(f).alias(f"{f}_opponent") for f in self._entity_features],
+                nw.col(self.column_names.team_id).alias("__opponent_team_id"),
+                *[nw.col(f).alias(f"{f}_opponent") for f in self._entity_features],
             ]
         )
 
@@ -583,19 +592,19 @@ class BaseLagGeneratorPolars:
         )
 
         new_df = new_df.filter(
-            pl.col(self.column_names.team_id) != pl.col("__opponent_team_id")
+            nw.col(self.column_names.team_id) != nw.col("__opponent_team_id")
         ).drop(["__opponent_team_id"])
 
         new_feats = [f"{f}_opponent" for f in self._entity_features]
         return df.join(
-            new_df[
+            new_df.select(
                 [
                     self.column_names.match_id,
                     self.column_names.team_id,
                     self.column_names.player_id,
                     *new_feats,
                 ]
-            ],
+            ),
             on=[
                 self.column_names.match_id,
                 self.column_names.team_id,
@@ -606,40 +615,49 @@ class BaseLagGeneratorPolars:
 
     def _generate_future_feats(
             self,
-            transformed_df: pl.DataFrame,
-            ori_df: pl.DataFrame,
+            transformed_df: FrameT,
+            ori_df: FrameT,
             known_future_features: Optional[list[str]] = None,
-    ) -> pl.DataFrame:
+    ) -> FrameT:
         known_future_features = known_future_features or []
         ori_cols = ori_df.columns
         cn = self.column_names
 
-        transformed_df[self._entity_features] = transformed_df[
-            self._entity_features
-        ].fill_nan(-999.21345)
-        first_grp = transformed_df.group_by(self.granularity).agg(
-            [pl.col(f).first().alias(f) for f in self._entity_features]
+        transformed_df = transformed_df.with_columns(
+            [nw.col(f).fill_null(-999.21345).alias(f) for f in self._entity_features]
         )
-        transformed_df = transformed_df[
+        transformed_df = transformed_df.sort([cn.start_date, cn.match_id, cn.team_id])
+        first_grp = (transformed_df.with_columns(
+            nw.col(self.column_names.match_id).cum_count().over(self.granularity).alias("_row_index")
+        )
+            .filter(nw.col("_row_index") == 1)
+            .drop("_row_index")
+        ).select([*self.granularity, *self._entity_features])
+
+        transformed_df = transformed_df.select(
             [c for c in transformed_df.columns if c not in self._entity_features]
-        ].join(first_grp, on=self.granularity, how="left")
+        ).join(first_grp, on=self.granularity, how="left")
 
         transformed_df = transformed_df.sort([cn.start_date, cn.match_id, cn.team_id])
         for f in self._entity_features:
             transformed_df = transformed_df.with_columns(
-                pl.when(pl.col(f) == -999.21345)
-                .then(np.nan)
-                .otherwise(pl.col(f))
+                nw.when(nw.col(f) == -999.21345)
+                .then(nw.lit(None))
+                .otherwise(nw.col(f))
                 .alias(f)
             )
             if transformed_df[f].is_null().sum() == len(transformed_df):
                 transformed_df = transformed_df.with_columns(
-                    pl.col(f).forward_fill().over(self.granularity).alias(f)
+                    nw.col(f)
+                    .fill_null(strategy="forward")
+                    .over(self.granularity)
+                    .alias(f)
+                    for f in self._entity_features
                 )
 
         team_features = transformed_df.group_by(
             [self.column_names.team_id, self.column_names.match_id]
-        ).agg([pl.col(f).mean().alias(f) for f in self._entity_features])
+        ).agg([nw.col(f).mean().alias(f) for f in self._entity_features])
 
         rename_mapping = {
             self.column_names.team_id: "__opponent_team_id",
@@ -648,7 +666,7 @@ class BaseLagGeneratorPolars:
 
         df_opponent_feature = team_features.select(
             [
-                pl.col(name).alias(rename_mapping.get(name, name))
+                nw.col(name).alias(rename_mapping.get(name, name))
                 for name in team_features.columns
             ]
         )
@@ -657,25 +675,30 @@ class BaseLagGeneratorPolars:
             df_opponent_feature, on=[self.column_names.match_id], suffix="_team_sum"
         )
         new_df = new_df.filter(
-            new_df[self.column_names.team_id] != new_df["__opponent_team_id"]
+            nw.col(self.column_names.team_id) !=nw.col("__opponent_team_id")
         )
         new_df = new_df.with_columns(
             [
-                pl.col(column).fill_nan(-999.21345).alias(column)
+                nw.col(column).fill_null(-999.21345).alias(column)
                 for column in opponent_feat_names
             ]
         )
-        first_grp = new_df.group_by("__opponent_team_id").agg(
-            [pl.col(f).first().alias(f) for f in opponent_feat_names]
+        new_df = new_df.sort([cn.start_date, cn.match_id, "__opponent_team_id"])
+        first_grp = (new_df.with_columns(
+            nw.col(self.column_names.match_id).cum_count().over("__opponent_team_id").alias("_row_index")
         )
-        new_df = new_df[
+         .filter(nw.col("_row_index") == 1)
+         .drop("_row_index")
+         ).select(['__opponent_team_id', *opponent_feat_names])
+
+        new_df = new_df.select(
             [c for c in new_df.columns if c not in opponent_feat_names]
-        ].join(first_grp, on="__opponent_team_id", how="left")
+        ).join(first_grp, on="__opponent_team_id", how="left")
         new_df = new_df.with_columns(
             [
-                pl.when(pl.col(f) == -999.21345)
-                .then(np.nan)
-                .otherwise(pl.col(f))
+                nw.when(nw.col(f) == -999.21345)
+                .then(nw.lit(None))
+                .otherwise(nw.col(f))
                 .alias(f)
                 for f in opponent_feat_names
             ]
@@ -684,7 +707,9 @@ class BaseLagGeneratorPolars:
         new_df = new_df.sort([cn.start_date, cn.match_id, "__opponent_team_id"])
         for f in opponent_feat_names:
             new_df = new_df.with_columns(
-                pl.col(f).forward_fill().over("__opponent_team_id").alias(f)
+                nw.col(f)
+                .fill_null(strategy="forward")
+                .over("__opponent_team_id").alias(f)
             )
 
         transformed_df = transformed_df.join(
@@ -706,7 +731,7 @@ class BaseLagGeneratorPolars:
 
         ori_df = ori_df.with_columns(
             [
-                pl.col(col).cast(pl.Utf8).alias(col)
+                nw.col(col).cast(nw.String).alias(col)
                 for col in [cn.match_id, cn.player_id, cn.team_id]
             ]
         )
@@ -719,8 +744,8 @@ class BaseLagGeneratorPolars:
             *[f for f in self.features_out if f not in known_future_features],
         ]
 
-        transformed_df = ori_df[ori_feats_to_use].join(
-            transformed_df[transformed_feats_to_use],
+        transformed_df = ori_df.select(ori_feats_to_use).join(
+            transformed_df.select(transformed_feats_to_use),
             on=[cn.match_id, cn.team_id, cn.player_id],
         )
 
