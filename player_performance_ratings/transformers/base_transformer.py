@@ -464,7 +464,7 @@ class BaseLagGeneratorPolars:
         df = df.select([c for c in df.columns if c not in self.features_out])
         cols = [c for c in self._df.columns if c in df.columns]
 
-        concat_df = nw.concat([self._df, df.select(cols)],
+        concat_df = nw.concat([nw.from_native(self._df), df.select(cols)],
                               how='diagonal'
                               # how="diagonal_relaxed"
                               )
@@ -534,8 +534,8 @@ class BaseLagGeneratorPolars:
                 self.column_names.team_id,
                 self.column_names.player_id,
             ],
-            #  maintain_order=True
-        )
+              maintain_order=True
+        ).to_native()
 
     def _string_convert(self, df: FrameT) -> FrameT:
         for column in [

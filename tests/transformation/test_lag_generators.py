@@ -66,6 +66,7 @@ def test_lag_team_fit_transform(df, column_names):
             pl.col("player").cast(pl.String)
         ]
         )
+        pl.testing.assert_frame_equal(df_with_lags, expected_df.select(df_with_lags.columns), check_dtype=False)
 
 
     elif isinstance(data, pd.DataFrame):
@@ -75,10 +76,10 @@ def test_lag_team_fit_transform(df, column_names):
         expected_df["team"] = expected_df["team"].astype("str")
         expected_df["game"] = expected_df["game"].astype("str")
         expected_df["player"] = expected_df["player"].astype("str")
-    expected_df = pl.DataFrame(expected_df).select(df_with_lags.columns)
-    assert_frame_equal(
-        df_with_lags, expected_df, check_dtypes=False
-    )
+
+        assert_frame_equal(
+            df_with_lags, expected_df[df_with_lags.columns], check_dtypes=False
+        )
 
 
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
@@ -648,6 +649,43 @@ def test_rolling_mean_transformer_fit_transformer_team_stat(df, column_names):
         pl.testing.assert_frame_equal(transformed_data, expected_df.select(transformed_data.columns), check_dtype=False)
 
 
+def test_rolling_mean_transform_parent_match_id(column_names: ColumnNames):
+    column_names = column_names
+    column_names.update_match_id = "series_id"
+    historical_df = pd.DataFrame(
+        {
+            "player": ["a", "a", "a", "a"],
+            "game": [1, 2, 3, 4],
+            "points": [1, 2, 3, 2],
+            "start_date": [
+                pd.to_datetime("2023-01-01"),
+                pd.to_datetime("2023-01-01"),
+                pd.to_datetime("2023-01-02"),
+                pd.to_datetime("2023-01-04"),
+            ],
+            "team": [1, 1, 1, 1],
+            "series_id": [1, 1, 2, 3],
+        }
+    )
+    expected_df = historical_df.copy()
+
+    transformer = RollingMeanTransformerPolars(
+        features=["points"],
+        window=2,
+    )
+
+    transformed_df = transformer.generate_historical(
+        historical_df, column_names=column_names
+    )
+
+    expected_df = expected_df.assign(
+        **{transformer.features_out[0]: [None, None, 1.5, (1.5 + 3) / 2]}
+    )
+    pd.testing.assert_frame_equal(
+        transformed_df, expected_df, check_like=True, check_dtype=False
+    )
+
+
 def test_rolling_mean_days_fit_transform(column_names):
     df = pd.DataFrame(
         {
@@ -828,6 +866,7 @@ def test_rolling_mean_days_fit_transform_opponent(column_names):
     )
 
 
+
 def test_rolling_mean_days_transformer_transform(column_names):
     historical_df = pd.DataFrame(
         {
@@ -975,41 +1014,6 @@ def test_rolling_mean_days_tranformer_transform_first_future_beyond_window(
     )
 
 
-def test_rolling_mean_transform_parent_match_id(column_names: ColumnNames):
-    column_names = column_names
-    column_names.update_match_id = "series_id"
-    historical_df = pd.DataFrame(
-        {
-            "player": ["a", "a", "a", "a"],
-            "game": [1, 2, 3, 4],
-            "points": [1, 2, 3, 2],
-            "start_date": [
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-02"),
-                pd.to_datetime("2023-01-04"),
-            ],
-            "team": [1, 1, 1, 1],
-            "series_id": [1, 1, 2, 3],
-        }
-    )
-    expected_df = historical_df.copy()
-
-    transformer = RollingMeanTransformerPolars(
-        features=["points"],
-        window=2,
-    )
-
-    transformed_df = transformer.generate_historical(
-        historical_df, column_names=column_names
-    )
-
-    expected_df = expected_df.assign(
-        **{transformer.features_out[0]: [None, None, 1.5, (1.5 + 3) / 2]}
-    )
-    pd.testing.assert_frame_equal(
-        transformed_df, expected_df, check_like=True, check_dtype=False
-    )
 
 
 @pytest.mark.parametrize("min_periods", [1, 10])
