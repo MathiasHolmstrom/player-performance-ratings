@@ -77,8 +77,8 @@ def test_lag_team_fit_transform(df, column_names):
         expected_df["game"] = expected_df["game"].astype("str")
         expected_df["player"] = expected_df["player"].astype("str")
 
-        assert_frame_equal(
-            df_with_lags, expected_df[df_with_lags.columns], check_dtypes=False
+        pd.testing.assert_frame_equal(
+            df_with_lags, expected_df[df_with_lags.columns], check_dtype=False
         )
 
 

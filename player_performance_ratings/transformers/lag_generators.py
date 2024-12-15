@@ -1230,16 +1230,12 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
             nw.col(feature_name).mean().alias(feature_name)
             for feature_name in self.features
         ]
-        agg_dict.append(
-            nw.col(self.column_names.start_date)
-            .head(1)
-            .alias(self.column_names.start_date)
-        )
 
-        grp = concat_df.unique([*self.granularity, self.column_names.update_match_id]).select(*self.granularity,
-                                                                                              self.column_names.update_match_id,
-                                                                                              self.column_names.start_date,
-                                                                                              *self.features)
+
+        grp = (
+            concat_df.group_by(self.granularity + [self.column_names.update_match_id, self.column_names.start_date])
+            .agg([nw.col(feature).mean().alias(feature) for feature in self.features])
+        )
 
         grp = grp.filter(~nw.col(self.column_names.start_date).is_null())
         grp = grp.sort(
