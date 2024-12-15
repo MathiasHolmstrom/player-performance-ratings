@@ -23,9 +23,9 @@ def validate_sorting(df: FrameT, column_names: ColumnNames) -> None:
             column_names.player_id,
         ]
     )
-    if not df.select([column_names.start_date, column_names.match_id, column_names.team_id,
+    if not df.select([column_names.match_id, column_names.team_id,
                       column_names.player_id]).to_numpy().tolist() == df_sorted.select(
-                [column_names.start_date, column_names.match_id, column_names.team_id,
+                [column_names.match_id, column_names.team_id,
                  column_names.player_id]).to_numpy().tolist():
         for column in [
             column_names.match_id,
@@ -39,16 +39,15 @@ def validate_sorting(df: FrameT, column_names: ColumnNames) -> None:
 
         df_sorted = df.sort(
             by=[
-                column_names.start_date,
                 column_names.match_id,
                 column_names.team_id,
                 column_names.player_id,
             ]
         )
 
-        if df.select([column_names.start_date, column_names.match_id, column_names.team_id,
+        if df.select([column_names.match_id, column_names.team_id,
                       column_names.player_id]).to_numpy().tolist() == df_sorted.select(
-                [column_names.start_date, column_names.match_id, column_names.team_id,
+                [column_names.match_id, column_names.team_id,
                  column_names.player_id]).to_numpy().tolist():
             return
         for column in [
@@ -72,9 +71,9 @@ def validate_sorting(df: FrameT, column_names: ColumnNames) -> None:
             ]
         )
 
-        if df.select([column_names.start_date, column_names.match_id, column_names.team_id,
+        if df.select([ column_names.match_id, column_names.team_id,
                       column_names.player_id]).to_numpy().tolist() == df_sorted.select(
-                [column_names.start_date, column_names.match_id, column_names.team_id,
+                [ column_names.match_id, column_names.team_id,
                  column_names.player_id]).to_numpy().tolist():
             return
 

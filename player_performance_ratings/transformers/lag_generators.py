@@ -612,7 +612,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
 
 
 class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
-    # IN PROGRESS NOT WORKING
+
     def __init__(
             self,
             features: list[str],
@@ -660,6 +660,7 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
 
         self._estimator_features_out = self._features_out.copy()
 
+    @nw.narwhalify
     def generate_historical(
             self, df: FrameT, column_names: ColumnNames
     ) -> IntoFrameT:
@@ -683,6 +684,7 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
             transformed_df = transformed_df.drop("is_future")
         return self._add_weighted_prob(transformed_df=transformed_df)
 
+    @nw.narwhalify
     def generate_future(self, df: FrameT) -> IntoFrameT:
         if self._df is None:
             raise ValueError(
@@ -743,7 +745,6 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
         )
         concat_df = self._concat_df(df)
 
-        # Define groupby columns
         groupby_cols = [
             self.column_names.update_match_id,
             *self.granularity,
@@ -751,9 +752,8 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
             "is_future",
         ]
 
-        # Perform initial aggregation
         aggregation = {f: nw.mean(f).alias(f) for f in self.features}
-        aggregation[self.binary_column] = nw.first(self.binary_column)
+        aggregation[self.binary_column] = nw.median(self.binary_column)
         grouped = concat_df.group_by(groupby_cols).agg(list(aggregation.values()))
 
         # Sort the DataFrame
@@ -765,38 +765,27 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
             ]
         )
 
-        # Initialize a list to keep track of new features added
         feats_added = []
 
         for feature in self.features:
-            shifted_feature = nw.col(feature).shift(1).over(self.granularity)
-            shifted_binary = nw.col(self.binary_column).shift(1).over(self.granularity)
-
-            # Calculate rolling means conditioned on binary outcome
-            rolling_mean_1 = (
-                nw.when(shifted_binary == 1)
-                .then(shifted_feature)
-                .rolling_mean(
-                    window_size=self.window, min_periods=self.min_periods
-                )
+            grouped = grouped.with_columns([
+                nw.when(nw.col(self.binary_column) == 1).then(nw.col(feature)).alias("value_result_1"),
+                nw.when(nw.col(self.binary_column) == 0).then(nw.col(feature)).alias("value_result_0"),
+            ])
+            grouped = grouped.with_columns([
+                nw.col("value_result_1")
+                .shift(1)
                 .over(self.granularity)
-                .alias(f"{self.prefix}{self.window}_{feature}_1")
-            )
+                .rolling_mean(window_size=self.window, min_periods=1)
+                .alias(f"{self.prefix}{self.window}_{feature}_1"),
 
-            rolling_mean_0 = (
-                nw.when(shifted_binary == 0)
-                .then(shifted_feature)
-                .rolling_mean(
-                    window_size=self.window, min_periods=self.min_periods
-                )
+                nw.col("value_result_0")
+                .shift(1)
                 .over(self.granularity)
-                .alias(f"{self.prefix}{self.window}_{feature}_0")
-            )
+                .rolling_mean(window_size=self.window, min_periods=1)
+                .alias(f"{self.prefix}{self.window}_{feature}_0"),
+            ])
 
-            # Add the new rolling mean columns to the DataFrame
-            grouped = grouped.with_columns([rolling_mean_1, rolling_mean_0])
-
-            # Keep track of the features added
             feats_added.extend([
                 f"{self.prefix}{self.window}_{feature}_1",
                 f"{self.prefix}{self.window}_{feature}_0",
@@ -1230,16 +1219,9 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
             nw.col(feature_name).mean().alias(feature_name)
             for feature_name in self.features
         ]
-        agg_dict.append(
-            nw.col(self.column_names.start_date)
-            .head(1)
-            .alias(self.column_names.start_date)
-        )
 
-        grp = concat_df.unique([*self.granularity, self.column_names.update_match_id]).select(*self.granularity,
-                                                                                              self.column_names.update_match_id,
-                                                                                              self.column_names.start_date,
-                                                                                              *self.features)
+        grp = concat_df.group_by(
+            [*self.granularity, self.column_names.update_match_id, self.column_names.start_date]).agg(agg_dict)
 
         grp = grp.filter(~nw.col(self.column_names.start_date).is_null())
         grp = grp.sort(
