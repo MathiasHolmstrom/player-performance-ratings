@@ -204,7 +204,6 @@ class BaseLagGenerator:
             self.column_names.player_id,
             self.column_names.update_match_id,
         ]:
-            df = df.wi
             df = df.assign(**{column: lambda x: x[column].astype("str")})
         return df
 
