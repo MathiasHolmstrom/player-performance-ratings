@@ -8,7 +8,9 @@ from sklearn import clone
 
 from player_performance_ratings.predictor.sklearn_estimator import OrdinalClassifier
 from player_performance_ratings.predictor_transformer import PredictorTransformer
-from player_performance_ratings.predictor_transformer._simple_transformer import SimpleTransformer
+from player_performance_ratings.predictor_transformer._simple_transformer import (
+    SimpleTransformer,
+)
 from player_performance_ratings.scorer.score import Filter, apply_filters, Operator
 
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
@@ -48,7 +50,7 @@ class GameTeamPredictor(BasePredictor):
         pre_transformers: Optional[list[PredictorTransformer]] = None,
         post_predict_transformers: Optional[list[SimpleTransformer]] = None,
         filters: Optional[list[Filter]] = None,
-        multiclass_output_as_struct: bool = False
+        multiclass_output_as_struct: bool = False,
     ):
         """
         :param game_id_colum - name of game_id column
@@ -84,7 +86,7 @@ class GameTeamPredictor(BasePredictor):
             pre_transformers=pre_transformers,
             estimator_features=estimator_features,
             filters=filters,
-            post_predict_transformers=post_predict_transformers
+            post_predict_transformers=post_predict_transformers,
         )
 
     def train(
@@ -185,7 +187,7 @@ class GameTeamPredictor(BasePredictor):
         for simple_transformer in self.post_predict_transformers:
             df = simple_transformer.transform(df)
 
-        if self.multiclass_output_as_struct  and self.multiclassifier:
+        if self.multiclass_output_as_struct and self.multiclassifier:
             df = self._convert_multiclass_predictions_to_struct(df)
 
         return df
@@ -411,7 +413,7 @@ class GranularityPredictor(BasePredictor):
         pred_column: Optional[str] = None,
         column_names: Optional[ColumnNames] = None,
         pre_transformers: Optional[list[PredictorTransformer]] = None,
-        multiclass_output_as_struct: bool =False,
+        multiclass_output_as_struct: bool = False,
     ):
         """
         :param target - Name of the column that the predictor should predict
@@ -451,7 +453,7 @@ class GranularityPredictor(BasePredictor):
             filters=filters,
             estimator_features=estimator_features,
             multiclass_output_as_struct=multiclass_output_as_struct,
-            post_predict_transformers=[]
+            post_predict_transformers=[],
         )
 
     def train(self, df: pd.DataFrame, estimator_features: list[str]) -> None:

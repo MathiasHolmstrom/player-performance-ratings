@@ -97,11 +97,13 @@ class Pipeline:
         for r in self.rating_generators:
             est_feats = list(set(est_feats + r.known_features_return))
         for f in self.lag_generators:
-            est_feats = list(set(est_feats +f.estimator_features_out))
+            est_feats = list(set(est_feats + f.estimator_features_out))
         for idx, post_transformer in enumerate(self.post_lag_transformers):
             if hasattr(post_transformer, "predictor") and not post_transformer.features:
                 self.post_lag_transformers[idx].features = est_feats.copy()
-            est_feats = list(set(est_feats +  self.post_lag_transformers[idx].estimator_features_out))
+            est_feats = list(
+                set(est_feats + self.post_lag_transformers[idx].estimator_features_out)
+            )
 
         for c in [
             *self.lag_generators,
@@ -227,9 +229,13 @@ class Pipeline:
                 break
 
         if create_rating_features and self.rating_generators:
-            if self.rating_generators[0].performance_column not in cross_validated_df.columns.tolist():
+            if (
+                self.rating_generators[0].performance_column
+                not in cross_validated_df.columns.tolist()
+            ):
                 raise ValueError(
-                    f"Performance column {self.rating_generators[0].performance_column} not found in dataframe")
+                    f"Performance column {self.rating_generators[0].performance_column} not found in dataframe"
+                )
             cross_validated_df = self._add_rating(
                 matches=matches, df=cross_validated_df
             )
@@ -276,7 +282,13 @@ class Pipeline:
 
         return df.merge(
             cross_validated_df[
-                predictor_cols_added + [cn.match_id, cn.team_id, cn.player_id, cross_validator.validation_column_name]
+                predictor_cols_added
+                + [
+                    cn.match_id,
+                    cn.team_id,
+                    cn.player_id,
+                    cross_validator.validation_column_name,
+                ]
             ],
             on=[cn.match_id, cn.team_id, cn.player_id],
             how="left",
@@ -345,9 +357,13 @@ class Pipeline:
         ori_cols = df.columns.tolist()
         df_with_predict = self._add_performance(df=df_with_predict)
         if self.rating_generators:
-            if self.rating_generators[0].performance_column not in df_with_predict.columns.tolist():
+            if (
+                self.rating_generators[0].performance_column
+                not in df_with_predict.columns.tolist()
+            ):
                 raise ValueError(
-                    f"Performance column {self.rating_generators[0].performance_column} not found in dataframe")
+                    f"Performance column {self.rating_generators[0].performance_column} not found in dataframe"
+                )
             df_with_predict = self._add_rating(
                 matches=matches,
                 df=df_with_predict,
@@ -433,7 +449,9 @@ class Pipeline:
 
         return df.merge(
             df_with_predict[
-                predictor_cols_added + [cn.match_id, cn.team_id, cn.player_id] + [c for c in cv_cols_added if c not in predictor_cols_added]
+                predictor_cols_added
+                + [cn.match_id, cn.team_id, cn.player_id]
+                + [c for c in cv_cols_added if c not in predictor_cols_added]
             ],
             on=[cn.match_id, cn.team_id, cn.player_id],
             how="left",
@@ -521,7 +539,10 @@ class Pipeline:
         return df
 
     def future_predict(
-            self, df: DataFrameType, return_features: bool = False, return_rating_features: bool = False
+        self,
+        df: DataFrameType,
+        return_features: bool = False,
+        return_rating_features: bool = False,
     ) -> DataFrameType:
         """
         Generates predictions on a future dataset from the entire pipeline
@@ -555,15 +576,15 @@ class Pipeline:
             df_with_predict = pre_lag_transformer.transform(df_with_predict)
         for idx, lag_generator in enumerate(self.lag_generators):
             count_remaining_polars = [
-                                         l for l in self.lag_generators[idx:] if "Polars" in l.__class__.__name__
-                                     ] + [
-                                         l
-                                         for l in self.post_lag_transformers
-                                         if "Polars" in l.__class__.__name__
-                                     ]
+                l for l in self.lag_generators[idx:] if "Polars" in l.__class__.__name__
+            ] + [
+                l
+                for l in self.post_lag_transformers
+                if "Polars" in l.__class__.__name__
+            ]
 
             if isinstance(df_with_predict, pd.DataFrame) and len(
-                    count_remaining_polars
+                count_remaining_polars
             ) == len(self.lag_generators[idx:] + self.post_lag_transformers):
                 df_with_predict = convert_pandas_to_polars(df_with_predict)
             df_with_predict = lag_generator.generate_future(df_with_predict)
@@ -575,7 +596,7 @@ class Pipeline:
 
         cn = self.column_names
         for _, row in (
-                df[[cn.match_id, cn.team_id, cn.player_id]].dtypes.reset_index().iterrows()
+            df[[cn.match_id, cn.team_id, cn.player_id]].dtypes.reset_index().iterrows()
         ):
             df_with_predict[row["index"]] = df_with_predict[row["index"]].astype(row[0])
         if return_features:
@@ -586,15 +607,25 @@ class Pipeline:
                 how="left",
             )
         elif return_rating_features:
-            rating_feats_out = [f for i in range(len(self.rating_generators)) for f in self.rating_generators[i].known_features_return]
-            cols_to_add = self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id] + rating_feats_out
+            rating_feats_out = [
+                f
+                for i in range(len(self.rating_generators))
+                for f in self.rating_generators[i].known_features_return
+            ]
+            cols_to_add = (
+                self.predictor.columns_added
+                + [cn.match_id, cn.team_id, cn.player_id]
+                + rating_feats_out
+            )
         else:
-            cols_to_add = self.predictor.columns_added + [cn.match_id, cn.team_id, cn.player_id]
+            cols_to_add = self.predictor.columns_added + [
+                cn.match_id,
+                cn.team_id,
+                cn.player_id,
+            ]
 
         return df.merge(
-            df_with_predict[
-                cols_to_add
-            ],
+            df_with_predict[cols_to_add],
             on=[cn.match_id, cn.team_id, cn.player_id],
             how="left",
         )

@@ -78,18 +78,26 @@ historical_predictions = pipeline.train_predict(
 )
 
 
-historical_grouped_predictions = historical_predictions.groupby(column_names.match_id).first()[
-    [
-        column_names.start_date,
-        column_names.team_id,
-        "team_id_opponent",
-        predictor.pred_column,
-        predictor.target,
-        "is_validation"
+historical_grouped_predictions = (
+    historical_predictions.groupby(column_names.match_id)
+    .first()[
+        [
+            column_names.start_date,
+            column_names.team_id,
+            "team_id_opponent",
+            predictor.pred_column,
+            predictor.target,
+            "is_validation",
+        ]
     ]
-].reset_index()
-scorer = SklearnScorer(pred_column=predictor.pred_column, target=predictor.target, scorer_function=log_loss,
-                       validation_column="is_validation")
+    .reset_index()
+)
+scorer = SklearnScorer(
+    pred_column=predictor.pred_column,
+    target=predictor.target,
+    scorer_function=log_loss,
+    validation_column="is_validation",
+)
 
 score = scorer.score(df=historical_grouped_predictions)
 print(f"Logloss Score on historical data: {score}")
@@ -105,7 +113,6 @@ team_grouped_predictions = future_predictions.groupby(column_names.match_id).fir
         column_names.team_id,
         "team_id_opponent",
         predictor.pred_column,
-
     ]
 ]
 

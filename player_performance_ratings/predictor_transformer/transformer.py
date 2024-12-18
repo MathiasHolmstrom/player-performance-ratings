@@ -70,12 +70,13 @@ class SkLearnTransformerWrapper(PredictorTransformer):
                 df.select(self.features).to_pandas()
             ).toarray()
         except AttributeError:
-            transformed_values = self.transformer.fit_transform(df.select(self.features))
+            transformed_values = self.transformer.fit_transform(
+                df.select(self.features)
+            )
             if isinstance(transformed_values, pd.DataFrame):
                 transformed_values = transformed_values.to_numpy()
 
         self._features_out = self.transformer.get_feature_names_out().tolist()
-
 
         return df.to_pandas().assign(
             **{
@@ -84,16 +85,16 @@ class SkLearnTransformerWrapper(PredictorTransformer):
             }
         )[self._features_out]
 
-
     @nw.narwhalify
     def transform(self, df: FrameT) -> pd.DataFrame:
         try:
-            transformed_values = self.transformer.transform(df.select(self.features)).toarray()
+            transformed_values = self.transformer.transform(
+                df.select(self.features)
+            ).toarray()
         except AttributeError:
             transformed_values = self.transformer.transform(df.select(self.features))
             if isinstance(transformed_values, pd.DataFrame):
                 transformed_values = transformed_values.to_numpy()
-
 
         return df.to_pandas().assign(
             **{

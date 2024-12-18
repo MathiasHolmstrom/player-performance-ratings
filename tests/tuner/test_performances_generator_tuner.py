@@ -39,7 +39,8 @@ def test_transformer_tuner():
 
     pipeline_factory = PipelineFactory(
         performances_generator=PerformancesGenerator(
-            performances=Performance(name="performance", weights=[]), auto_generated_features_prefix=""
+            performances=Performance(name="performance", weights=[]),
+            auto_generated_features_prefix="",
         ),
         column_names=column_names,
         rating_generators=rating_generator1,
@@ -139,7 +140,7 @@ def test_transformer_tuner_2_performances(estimator):
         ),
         column_names=column_names1,
         performances_generator=PerformancesGenerator(
-         auto_generated_features_prefix="",
+            auto_generated_features_prefix="",
             performances=[
                 Performance(
                     name="performance1",

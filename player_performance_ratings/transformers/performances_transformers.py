@@ -14,18 +14,23 @@ from player_performance_ratings.transformers.base_transformer import BaseTransfo
 class SklearnEstimatorImputer(BaseTransformer):
 
     def __init__(
-            self,
-            features: list[str],
-            target_name: str,
-            estimator: Optional = None,
+        self,
+        features: list[str],
+        target_name: str,
+        estimator: Optional = None,
     ):
         self.target_name = target_name
         super().__init__(features=features, features_out=features)
         self.estimator = estimator or LGBMRegressor()
 
     @nw.narwhalify
-    def fit_transform(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
-        fit_df = df.filter((nw.col(self.target_name).is_finite()) & (~nw.col(self.target_name).is_null()))
+    def fit_transform(
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
+    ) -> IntoFrameT:
+        fit_df = df.filter(
+            (nw.col(self.target_name).is_finite())
+            & (~nw.col(self.target_name).is_null())
+        )
         self.estimator.fit(fit_df.select(self.features), fit_df[self.target_name])
         return self.transform(df)
 
@@ -44,10 +49,8 @@ class SklearnEstimatorImputer(BaseTransformer):
                 | ~(nw.col(self.target_name).is_finite())
             )
             .then(nw.col(f"imputed_col_{self.target_name}"))
-            .otherwise(
-                nw.col(self.target_name)
-            ).alias(self.target_name)
-
+            .otherwise(nw.col(self.target_name))
+            .alias(self.target_name)
         )
         return df.drop(f"imputed_col_{self.target_name}").to_native()
 
@@ -59,17 +62,21 @@ class SklearnEstimatorImputer(BaseTransformer):
 class PartialStandardScaler(BaseTransformer):
 
     def __init__(
-            self,
-            features: list[str],
-            ratio: float = 0.55,
-            target_mean: float = 0.5,
-            max_value: float = 2,
-            prefix: str = "",
-            are_estimator_features:bool=False,
+        self,
+        features: list[str],
+        ratio: float = 0.55,
+        target_mean: float = 0.5,
+        max_value: float = 2,
+        prefix: str = "",
+        are_estimator_features: bool = False,
     ):
         features_out = []
         self.prefix = prefix
-        super().__init__(features=features, features_out=features_out, are_estimator_features=are_estimator_features)
+        super().__init__(
+            features=features,
+            features_out=features_out,
+            are_estimator_features=are_estimator_features,
+        )
         for feature in self.features:
             features_out.append(self.prefix + feature)
         self.ratio = ratio
@@ -81,16 +88,14 @@ class PartialStandardScaler(BaseTransformer):
         self._features_out = []
 
     @narwhals.narwhalify
-    def fit_transform(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
+    def fit_transform(
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
+    ) -> IntoFrameT:
         for feature in self.features:
             rows = df.filter(nw.col(feature).is_finite())
 
-            self._features_mean[feature] = (
-                rows[feature].mean()
-            )
-            self._features_std[feature] = (
-                rows[feature].std()
-            )
+            self._features_mean[feature] = rows[feature].mean()
+            self._features_std[feature] = rows[feature].std()
 
         return self.transform(df)
 
@@ -100,10 +105,10 @@ class PartialStandardScaler(BaseTransformer):
             new_feature = self.prefix + feature
             df = df.with_columns(
                 (
-                        (nw.col(feature) - self._features_mean[feature])
-                        / self._features_std[feature]
-                        * self.ratio
-                        + self.target_mean
+                    (nw.col(feature) - self._features_mean[feature])
+                    / self._features_std[feature]
+                    * self.ratio
+                    + self.target_mean
                 ).alias(new_feature)
             )
 
@@ -122,18 +127,22 @@ class PartialStandardScaler(BaseTransformer):
 class MinMaxTransformer(BaseTransformer):
 
     def __init__(
-            self,
-            features: list[str],
-            quantile: float = 0.98,
-            multiply_align: bool = False,
-            add_align: bool = True,
-            prefix: str = "",
-            are_estimator_features:bool=False
+        self,
+        features: list[str],
+        quantile: float = 0.98,
+        multiply_align: bool = False,
+        add_align: bool = True,
+        prefix: str = "",
+        are_estimator_features: bool = False,
     ):
 
         features_out = [prefix + f for f in features]
 
-        super().__init__(features=features, features_out=features_out, are_estimator_features=are_estimator_features)
+        super().__init__(
+            features=features,
+            features_out=features_out,
+            are_estimator_features=are_estimator_features,
+        )
         self.quantile = quantile
         self.prefix = prefix
         self._trained_mean_values = {}
@@ -146,13 +155,17 @@ class MinMaxTransformer(BaseTransformer):
             raise ValueError("quantile must be between 0 and 1")
 
     @nw.narwhalify
-    def fit_transform(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
+    def fit_transform(
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
+    ) -> IntoFrameT:
 
         for feature in self.features:
-            self._min_values[feature] = \
-                df.select(nw.col(feature).quantile(1 - self.quantile, interpolation='linear')).to_numpy()[0]
-            self._max_values[feature] = \
-                df.select(nw.col(feature).quantile(self.quantile, interpolation='linear')).to_numpy()[0]
+            self._min_values[feature] = df.select(
+                nw.col(feature).quantile(1 - self.quantile, interpolation="linear")
+            ).to_numpy()[0]
+            self._max_values[feature] = df.select(
+                nw.col(feature).quantile(self.quantile, interpolation="linear")
+            ).to_numpy()[0]
 
             if self._min_values[feature] == self._max_values[feature]:
                 raise ValueError(
@@ -161,24 +174,32 @@ class MinMaxTransformer(BaseTransformer):
                 )
 
             normalized_feature = (
-                    (nw.col(feature) - self._min_values[feature])
-                    / (self._max_values[feature] - self._min_values[feature])
+                (nw.col(feature) - self._min_values[feature])
+                / (self._max_values[feature] - self._min_values[feature])
             ).clip(0, 1)
 
             df = df.with_columns(normalized_feature.alias(self.prefix + feature))
 
-            self._trained_mean_values[feature] = df.select(nw.col(self.prefix + feature).mean()).to_numpy()[0]
+            self._trained_mean_values[feature] = df.select(
+                nw.col(self.prefix + feature).mean()
+            ).to_numpy()[0]
 
             if self.multiply_align:
                 df = df.with_columns(
-                    (nw.col(self.prefix + feature) * 0.5 / self._trained_mean_values[feature]).alias(
-                        self.prefix + feature)
+                    (
+                        nw.col(self.prefix + feature)
+                        * 0.5
+                        / self._trained_mean_values[feature]
+                    ).alias(self.prefix + feature)
                 )
 
             if self.add_align:
                 df = df.with_columns(
-                    (nw.col(self.prefix + feature) + 0.5 - self._trained_mean_values[feature]).alias(
-                        self.prefix + feature)
+                    (
+                        nw.col(self.prefix + feature)
+                        + 0.5
+                        - self._trained_mean_values[feature]
+                    ).alias(self.prefix + feature)
                 )
 
         return df.to_native()
@@ -188,8 +209,8 @@ class MinMaxTransformer(BaseTransformer):
         for feature in self.features:
             # Compute normalized feature with optional alignment
             normalized_feature = (
-                    (nw.col(feature) - self._min_values[feature])
-                    / (self._max_values[feature] - self._min_values[feature])
+                (nw.col(feature) - self._min_values[feature])
+                / (self._max_values[feature] - self._min_values[feature])
             ).clip(0, 1)
 
             if self.multiply_align:
@@ -199,9 +220,7 @@ class MinMaxTransformer(BaseTransformer):
                 normalized_feature += 0.5 - self._trained_mean_values[feature]
 
             # Add the transformed feature to the DataFrame with the prefixed name
-            df = df.with_columns(
-                normalized_feature.alias(self.prefix + feature)
-            )
+            df = df.with_columns(normalized_feature.alias(self.prefix + feature))
         return df.to_native()
 
     @property
@@ -212,15 +231,19 @@ class MinMaxTransformer(BaseTransformer):
 class DiminishingValueTransformer(BaseTransformer):
 
     def __init__(
-            self,
-            features: List[str],
-            cutoff_value: Optional[float] = None,
-            quantile_cutoff: float = 0.93,
-            excessive_multiplier: float = 0.8,
-            reverse: bool = False,
-            are_estimator_features:bool=False
+        self,
+        features: List[str],
+        cutoff_value: Optional[float] = None,
+        quantile_cutoff: float = 0.93,
+        excessive_multiplier: float = 0.8,
+        reverse: bool = False,
+        are_estimator_features: bool = False,
     ):
-        super().__init__(features=features, features_out=features, are_estimator_features=are_estimator_features)
+        super().__init__(
+            features=features,
+            features_out=features,
+            are_estimator_features=are_estimator_features,
+        )
         self.cutoff_value = cutoff_value
         self.excessive_multiplier = excessive_multiplier
         self.quantile_cutoff = quantile_cutoff
@@ -228,18 +251,20 @@ class DiminishingValueTransformer(BaseTransformer):
         self._feature_cutoff_value = {}
 
     @nw.narwhalify
-    def fit_transform(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
+    def fit_transform(
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
+    ) -> IntoFrameT:
 
         for feature_name in self.features:
             if self.cutoff_value is None:
                 if self.reverse:
                     self._feature_cutoff_value[feature_name] = df[
                         feature_name
-                    ].quantile(1 - self.quantile_cutoff, interpolation='linear')
+                    ].quantile(1 - self.quantile_cutoff, interpolation="linear")
                 else:
                     self._feature_cutoff_value[feature_name] = df[
                         feature_name
-                    ].quantile(self.quantile_cutoff, interpolation='linear')
+                    ].quantile(self.quantile_cutoff, interpolation="linear")
             else:
                 self._feature_cutoff_value[feature_name] = self.cutoff_value
 
@@ -254,7 +279,9 @@ class DiminishingValueTransformer(BaseTransformer):
                 df = df.with_columns(
                     nw.when(nw.col(feature_name) <= cutoff_value)
                     .then(
-                        -(cutoff_value - nw.col(feature_name)) * self.excessive_multiplier + cutoff_value
+                        -(cutoff_value - nw.col(feature_name))
+                        * self.excessive_multiplier
+                        + cutoff_value
                     )
                     .otherwise(nw.col(feature_name))
                     .alias(feature_name)
@@ -263,8 +290,7 @@ class DiminishingValueTransformer(BaseTransformer):
                 df = df.with_columns(
                     nw.when(nw.col(feature_name) >= cutoff_value)
                     .then(
-                        (nw.col(feature_name) - cutoff_value)
-                        .clip(lower_bound=0)
+                        (nw.col(feature_name) - cutoff_value).clip(lower_bound=0)
                         * self.excessive_multiplier
                         + cutoff_value
                     )
@@ -282,17 +308,21 @@ class DiminishingValueTransformer(BaseTransformer):
 class SymmetricDistributionTransformer(BaseTransformer):
 
     def __init__(
-            self,
-            features: List[str],
-            granularity: Optional[list[str]] = None,
-            skewness_allowed: float = 0.15,
-            max_iterations: int = 50,
-            min_excessive_multiplier: float = 0.04,
-            min_rows: int = 10,
-            prefix: str = "symmetric_",
-            are_estimator_features:bool=False
+        self,
+        features: List[str],
+        granularity: Optional[list[str]] = None,
+        skewness_allowed: float = 0.15,
+        max_iterations: int = 50,
+        min_excessive_multiplier: float = 0.04,
+        min_rows: int = 10,
+        prefix: str = "symmetric_",
+        are_estimator_features: bool = False,
     ):
-        super().__init__(features=features, features_out=[prefix + feature for feature in features], are_estimator_features=are_estimator_features)
+        super().__init__(
+            features=features,
+            features_out=[prefix + feature for feature in features],
+            are_estimator_features=are_estimator_features,
+        )
         self.granularity = granularity
         self.skewness_allowed = skewness_allowed
         self.max_iterations = max_iterations
@@ -303,11 +333,15 @@ class SymmetricDistributionTransformer(BaseTransformer):
         self._diminishing_value_transformer = {}
 
     @nw.narwhalify
-    def fit_transform(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
+    def fit_transform(
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
+    ) -> IntoFrameT:
 
         if self.granularity:
             df = df.with_columns(
-                nw.concat_str([nw.col(col) for col in self.granularity], separator="_").alias("__concat_granularity")
+                nw.concat_str(
+                    [nw.col(col) for col in self.granularity], separator="_"
+                ).alias("__concat_granularity")
             )
 
         for feature in self.features:
@@ -335,7 +369,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
         return self.transform(df)
 
     def _fit(
-            self, rows: FrameT, feature: str, granularity_value: Optional[str]
+        self, rows: FrameT, feature: str, granularity_value: Optional[str]
     ) -> None:
 
         skewness = rows[feature].skew()
@@ -344,9 +378,9 @@ class SymmetricDistributionTransformer(BaseTransformer):
 
         iteration = 0
         while (
-                abs(skewness) > self.skewness_allowed
-                and len(rows) > self.min_rows
-                and iteration < self.max_iterations
+            abs(skewness) > self.skewness_allowed
+            and len(rows) > self.min_rows
+            and iteration < self.max_iterations
         ):
 
             if skewness < 0:
@@ -372,8 +406,10 @@ class SymmetricDistributionTransformer(BaseTransformer):
             excessive_multiplier = new_excessive_multiplier
             next_quantile_cutoff = quantile_cutoff * 0.994
             if (
-                    transformed_rows[feature].quantile(next_quantile_cutoff, interpolation='linear')
-                    > transformed_rows[feature].min()
+                transformed_rows[feature].quantile(
+                    next_quantile_cutoff, interpolation="linear"
+                )
+                > transformed_rows[feature].min()
             ):
                 quantile_cutoff = next_quantile_cutoff
             iteration += 1
@@ -383,8 +419,9 @@ class SymmetricDistributionTransformer(BaseTransformer):
     def transform(self, df: FrameT) -> IntoFrameT:
         if self.granularity:
             df = df.with_columns(
-                nw.concat_str([nw.col(col) for col in self.granularity], separator="_").alias(
-                    "__concat_granularity")
+                nw.concat_str(
+                    [nw.col(col) for col in self.granularity], separator="_"
+                ).alias("__concat_granularity")
             )
 
         for feature in self.features:
@@ -408,7 +445,10 @@ class SymmetricDistributionTransformer(BaseTransformer):
 
                         if unique_value in self._diminishing_value_transformer[feature]:
                             rows = nw.from_native(
-                                self._diminishing_value_transformer[feature][unique_value].transform(rows))
+                                self._diminishing_value_transformer[feature][
+                                    unique_value
+                                ].transform(rows)
+                            )
 
                         updated_rows.append(rows)
 
@@ -417,7 +457,9 @@ class SymmetricDistributionTransformer(BaseTransformer):
                     )
             else:
                 if None in self._diminishing_value_transformer[feature]:
-                    df = nw.from_native(self._diminishing_value_transformer[feature][None].transform(df))
+                    df = nw.from_native(
+                        self._diminishing_value_transformer[feature][None].transform(df)
+                    )
 
         if "__concat_granularity" in df.columns:
             df = df.drop(["__concat_granularity"])
@@ -432,14 +474,18 @@ class SymmetricDistributionTransformer(BaseTransformer):
 class GroupByTransformer(BaseTransformer):
 
     def __init__(
-            self,
-            features: list[str],
-            granularity: list[str],
-            aggregation: Literal['mean', 'sum'] = "mean",
-            prefix: str = "mean_",
-            are_estimator_features:bool=False
+        self,
+        features: list[str],
+        granularity: list[str],
+        aggregation: Literal["mean", "sum"] = "mean",
+        prefix: str = "mean_",
+        are_estimator_features: bool = False,
     ):
-        super().__init__(features=features, features_out=[prefix + feature for feature in features], are_estimator_features=are_estimator_features)
+        super().__init__(
+            features=features,
+            features_out=[prefix + feature for feature in features],
+            are_estimator_features=are_estimator_features,
+        )
         self.granularity = granularity
         self.aggregation = aggregation
         self.prefix = prefix
@@ -447,23 +493,24 @@ class GroupByTransformer(BaseTransformer):
         self._grouped = None
 
     @nw.narwhalify
-    def fit_transform(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
+    def fit_transform(
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
+    ) -> IntoFrameT:
 
         if self.aggregation == "sum":
-            self._grouped = (df
-                .group_by(self.granularity)
+            self._grouped = (
+                df.group_by(self.granularity)
                 .agg(nw.col(self.features).sum())
                 .rename({feature: self.prefix + feature for feature in self.features})
-                )
+            )
         elif self.aggregation == "mean":
-            self._grouped = (df
-            .group_by(self.granularity)
-            .agg(nw.col(self.features).mean())
-            .rename({feature: self.prefix + feature for feature in self.features})
+            self._grouped = (
+                df.group_by(self.granularity)
+                .agg(nw.col(self.features).mean())
+                .rename({feature: self.prefix + feature for feature in self.features})
             )
         else:
             raise ValueError("aggregation must be either 'mean' or 'sum'")
-
 
         return self.transform(df=df)
 

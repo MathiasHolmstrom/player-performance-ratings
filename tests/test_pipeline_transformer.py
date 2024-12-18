@@ -65,7 +65,6 @@ def test_pipeline_transformer(to_polars):
         column_names=column_names,
     )
 
-
     historical_df = df[df[column_names.start_date] < pd.to_datetime("2023-01-04")]
     future_df = df[df[column_names.start_date] >= pd.to_datetime("2023-01-04")]
 
