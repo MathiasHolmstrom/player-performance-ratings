@@ -266,7 +266,7 @@ def test_match_predictor_multiple_rating_generators_same_performance():
     predictor_mock.target = "__target"
     predictor_mock.add_prediction.return_value = expected_df
     predictor_mock.columns_added = ["prediction"]
-    predictor_mock._estimator_features = [
+    predictor_mock.estimator_features = [
         RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED
     ]
 
@@ -339,7 +339,7 @@ def test_match_predictor_0_rating_generators():
     predictor_mock.target = "__target"
     predictor_mock.columns_added = ["prediction"]
     predictor_mock.add_prediction.return_value = expected_df
-    predictor_mock._estimator_features = [
+    predictor_mock.estimator_features = [
         RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED
     ]
 
@@ -438,7 +438,7 @@ def test_match_predictor_generate_and_predict():
         historical_df_mock_return_with_prediction,
         expected_future_df,
     ]
-    predictor_mock._estimator_features = [
+    predictor_mock.estimator_features = [
         RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED
     ]
 
