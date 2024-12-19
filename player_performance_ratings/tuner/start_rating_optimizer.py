@@ -30,14 +30,14 @@ class LeagueH2H:
 class StartLeagueRatingOptimizer:
 
     def __init__(
-            self,
-            pipeline_factory: PipelineFactory,
-            cross_validator: CrossValidator,
-            max_iterations: int = 10,
-            learning_step: int = 20,
-            weight_div: int = 500,
-            indirect_weight: float = 1.5,
-            verbose: int = 1,
+        self,
+        pipeline_factory: PipelineFactory,
+        cross_validator: CrossValidator,
+        max_iterations: int = 10,
+        learning_step: int = 20,
+        weight_div: int = 500,
+        indirect_weight: float = 1.5,
+        verbose: int = 1,
     ):
         self.pipeline_factory = pipeline_factory
         self.max_iterations = max_iterations
@@ -50,12 +50,12 @@ class StartLeagueRatingOptimizer:
         self._league_ratings_iterations = []
 
     def optimize(
-            self,
-            df: pd.DataFrame,
-            rating_model_idx: int,
-            rating_generator: UpdateRatingGenerator,
-            matches: list[Match],
-            column_names: ColumnNames,
+        self,
+        df: pd.DataFrame,
+        rating_model_idx: int,
+        rating_generator: UpdateRatingGenerator,
+        matches: list[Match],
+        column_names: ColumnNames,
     ) -> dict[str, float]:
 
         start_rating_generator = (
@@ -171,7 +171,7 @@ class StartLeagueRatingOptimizer:
                     league_rating_changes[
                         league_rating_changes[RatingKnownFeatures.PLAYER_LEAGUE]
                         == league
-                        ][RatingKnownFeatures.OPPONENT_LEAGUE]
+                    ][RatingKnownFeatures.OPPONENT_LEAGUE]
                     .unique()
                     .tolist()
                 )
@@ -183,14 +183,14 @@ class StartLeagueRatingOptimizer:
 
                     rows = league_rating_changes[
                         (
-                                league_rating_changes[RatingKnownFeatures.PLAYER_LEAGUE]
-                                == league
+                            league_rating_changes[RatingKnownFeatures.PLAYER_LEAGUE]
+                            == league
                         )
                         & (
-                                league_rating_changes[RatingKnownFeatures.OPPONENT_LEAGUE]
-                                == opp_league
+                            league_rating_changes[RatingKnownFeatures.OPPONENT_LEAGUE]
+                            == opp_league
                         )
-                        ]
+                    ]
                     if len(rows) == 0:
                         weight = 0
                         mean_rating_change = 0
@@ -237,25 +237,25 @@ class StartLeagueRatingOptimizer:
                             ]
 
                             sum_rating_change = (
-                                    league_vs_shared_h2h.mean_rating_change
-                                    - opp_vs_shared_h2h.mean_rating_change
+                                league_vs_shared_h2h.mean_rating_change
+                                - opp_vs_shared_h2h.mean_rating_change
                             )
 
                             relative_shared_weighted_mean += (
-                                    min(
-                                        opp_vs_shared_h2h.weight,
-                                        league_vs_shared_h2h.weight,
-                                    )
-                                    * sum_rating_change
+                                min(
+                                    opp_vs_shared_h2h.weight,
+                                    league_vs_shared_h2h.weight,
+                                )
+                                * sum_rating_change
                             )
                             shared_weight += min(
                                 opp_vs_shared_h2h.weight, league_vs_shared_h2h.weight
                             )
 
                     weighted_mean = (
-                            h2h.mean_rating_change * h2h.weight
-                            + min(1, shared_weight * self.indirect_weight)
-                            * relative_shared_weighted_mean
+                        h2h.mean_rating_change * h2h.weight
+                        + min(1, shared_weight * self.indirect_weight)
+                        * relative_shared_weighted_mean
                     )
                     final_weight = min(1, h2h.weight + shared_weight)
                     final_league_h2h = LeagueH2H(
@@ -276,10 +276,10 @@ class StartLeagueRatingOptimizer:
                 for opp_league, final_h2h in final_opp_league_h2h.items():
                     if league_sum_final_weights[league] > 0:
                         start_rating_rating_change += (
-                                final_h2h.weight
-                                / league_sum_final_weights[league]
-                                * final_h2h.mean_rating_change
-                                * self.learning_step
+                            final_h2h.weight
+                            / league_sum_final_weights[league]
+                            * final_h2h.mean_rating_change
+                            * self.learning_step
                         )
 
                 league_ratings[league] += start_rating_rating_change

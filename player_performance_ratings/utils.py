@@ -7,7 +7,7 @@ from narwhals.typing import FrameT
 
 
 def convert_pandas_to_polars(df: pd.DataFrame) -> pl.DataFrame:
-    for column in df.select_dtypes(include=['category']).columns:
+    for column in df.select_dtypes(include=["category"]).columns:
         df[column] = df[column].astype(str)
 
     return pl.from_pandas(df)
@@ -23,11 +23,23 @@ def validate_sorting(df: FrameT, column_names: ColumnNames) -> None:
             column_names.player_id,
         ]
     )
-    if not df.select(column_names.match_id, column_names.team_id, column_names.player_id).to_numpy().tolist() == df_sorted.select(column_names.match_id, column_names.team_id, column_names.player_id).to_numpy().tolist():
+    if (
+        not df.select(
+            column_names.match_id, column_names.team_id, column_names.player_id
+        )
+        .to_numpy()
+        .tolist()
+        == df_sorted.select(
+            column_names.match_id, column_names.team_id, column_names.player_id
+        )
+        .to_numpy()
+        .tolist()
+    ):
         for column in [
             column_names.match_id,
             column_names.team_id,
-            column_names.player_id]:
+            column_names.player_id,
+        ]:
             df = df.with_columns(nw.col(column).cast(nw.String))
 
         df_sorted = df.sort(
@@ -39,7 +51,18 @@ def validate_sorting(df: FrameT, column_names: ColumnNames) -> None:
             ]
         )
 
-        if df.select(column_names.match_id, column_names.team_id, column_names.player_id).to_numpy().tolist() == df_sorted.select(column_names.match_id, column_names.team_id, column_names.player_id).to_numpy().tolist():
+        if (
+            df.select(
+                column_names.match_id, column_names.team_id, column_names.player_id
+            )
+            .to_numpy()
+            .tolist()
+            == df_sorted.select(
+                column_names.match_id, column_names.team_id, column_names.player_id
+            )
+            .to_numpy()
+            .tolist()
+        ):
             return
         for column in [
             column_names.match_id,
@@ -61,7 +84,18 @@ def validate_sorting(df: FrameT, column_names: ColumnNames) -> None:
             ]
         )
 
-        if df.select(column_names.match_id, column_names.team_id, column_names.player_id).to_numpy().tolist() == df_sorted.select(column_names.match_id, column_names.team_id, column_names.player_id).to_numpy().tolist():
+        if (
+            df.select(
+                column_names.match_id, column_names.team_id, column_names.player_id
+            )
+            .to_numpy()
+            .tolist()
+            == df_sorted.select(
+                column_names.match_id, column_names.team_id, column_names.player_id
+            )
+            .to_numpy()
+            .tolist()
+        ):
             return
 
         raise ValueError(

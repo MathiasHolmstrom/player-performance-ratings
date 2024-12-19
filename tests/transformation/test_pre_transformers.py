@@ -1,19 +1,26 @@
 import pandas as pd
+import polars as pl
+from polars.testing import assert_frame_equal
+import pytest
 from player_performance_ratings.predictor_transformer import SkLearnTransformerWrapper
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from player_performance_ratings.transformers.performances_transformers import DiminishingValueTransformer, \
-    GroupByTransformer, SymmetricDistributionTransformer
+from player_performance_ratings.transformers.performances_transformers import (
+    DiminishingValueTransformer,
+    GroupByTransformer,
+    SymmetricDistributionTransformer,
+)
 
 
 def test_min_max_transformer():
     pass
 
 
-def test_sklearn_transformer_wrapper_one_hot_encoder():
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_sklearn_transformer_wrapper_one_hot_encoder(df):
     sklearn_transformer = OneHotEncoder(handle_unknown="ignore")
 
-    df = pd.DataFrame(
+    data = df(
         {
             "game_id": [1, 1, 1],
             "position": ["a", "b", "a"],
@@ -24,11 +31,11 @@ def test_sklearn_transformer_wrapper_one_hot_encoder():
         transformer=sklearn_transformer, features=["position"]
     )
 
-    transformed_df = transformer.fit_transform(df)
+    transformed_df = transformer.fit_transform(data)
 
     assert transformed_df.shape[1] == 2
 
-    df_future = pd.DataFrame(
+    df_future = df(
         {
             "game_id": [1, 2],
             "position": ["a", "c"],
@@ -40,16 +47,20 @@ def test_sklearn_transformer_wrapper_one_hot_encoder():
     expected_future_transformed_df = pd.DataFrame(
         {"position_a": [1, 0], "position_b": [0, 0]}
     )
+    if isinstance(df_future, pl.DataFrame):
+        expected_future_transformed_df = pl.DataFrame(expected_future_transformed_df)
+        assert_frame_equal(expected_future_transformed_df, future_transformed_df, check_dtype=False)
+    else:
 
-    pd.testing.assert_frame_equal(
-        expected_future_transformed_df, future_transformed_df, check_dtype=False
-    )
+        pd.testing.assert_frame_equal(
+            expected_future_transformed_df, future_transformed_df, check_dtype=False
+        )
 
-
-def test_sklearn_transformer_wrapper_standard_scaler():
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_sklearn_transformer_wrapper_standard_scaler(df):
     sklearn_transformer = StandardScaler()
 
-    df = pd.DataFrame(
+    data = df(
         {"game_id": [1, 1, 1], "position": ["a", "b", "a"], "value": [1.2, 0.4, 2.3]}
     )
 
@@ -57,16 +68,18 @@ def test_sklearn_transformer_wrapper_standard_scaler():
         transformer=sklearn_transformer, features=["value"]
     )
 
-    transformed_df = transformer.fit_transform(df)
+    transformed_df = transformer.fit_transform(data)
 
     assert transformed_df.shape[1] == 1
+    assert 'value' in transformed_df.columns
 
-    df_future = pd.DataFrame(
+    df_future = df(
         {"game_id": [1, 2], "position": ["a", "c"], "value": [1.2, 0.4]}
     )
 
     future_transformed_df = transformer.transform(df_future)
     assert future_transformed_df["value"].min() < 0
+
 
 
 def test_groupby_transformer_fit_transform():
@@ -106,8 +119,9 @@ def test_diminshing_value_transformer():
     assert transformed_df["performance"].iloc[0] == ori_df["performance"].iloc[0]
 
 
-def test_reverse_diminshing_value_transformer():
-    df = pd.DataFrame(
+@pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
+def test_reverse_diminshing_value_transformer(df):
+    data = df(
         {
             "performance": [0.1, 0.8, 0.8, 0.8, 0.8],
             "player_id": [1, 2, 3, 1, 2],
@@ -115,16 +129,22 @@ def test_reverse_diminshing_value_transformer():
     )
 
     transformer = DiminishingValueTransformer(features=["performance"], reverse=True)
+    try:
+        ori_df = data.copy()
+    except:
+        ori_df = data.clone()
+    transformed_df = transformer.fit_transform(data)
 
-    ori_df = df.copy()
-    transformed_df = transformer.fit_transform(df)
+    if isinstance(ori_df, pd.DataFrame):
+        assert transformed_df["performance"].iloc[0] > ori_df["performance"].iloc[0]
+        assert transformed_df["performance"].iloc[3] == ori_df["performance"].iloc[3]
+    else:
+        assert transformed_df.row(0, named=True)["performance"] > ori_df.row(0, named=True)["performance"]
+        assert transformed_df.row(3, named=True) ["performance"]== ori_df.row(3,named=True)["performance"]
 
-    assert transformed_df["performance"].iloc[0] > ori_df["performance"].iloc[0]
-    assert transformed_df["performance"].iloc[3] == ori_df["performance"].iloc[3]
-
-
-def test_symmetric_distribution_transformery_fit_transform():
-    df = pd.DataFrame(
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_symmetric_distribution_transformery_fit_transform(df):
+    data = df(
         {
             "performance": [
                 0.1,
@@ -165,8 +185,10 @@ def test_symmetric_distribution_transformery_fit_transform():
     transformer = SymmetricDistributionTransformer(
         features=["performance"], max_iterations=40
     )
-    transformed_df = transformer.fit_transform(df)
-    assert abs(df["performance"].skew()) > transformer.skewness_allowed
+    transformed_df = transformer.fit_transform(data)
+    if isinstance(transformed_df, pd.DataFrame):
+        transformed_df = pl.DataFrame(transformed_df)
+    assert abs(data["performance"].skew()) > transformer.skewness_allowed
 
     assert abs(transformed_df["performance"].skew()) < transformer.skewness_allowed
 

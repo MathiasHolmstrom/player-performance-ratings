@@ -86,7 +86,9 @@ class MatchKFoldCrossValidator(CrossValidator):
             median_number = len(unique_dates) // 2
             self.min_validation_date = unique_dates[median_number]
 
-        df["__cv_match_number"] = (df[self.match_id_column_name] != df[self.match_id_column_name].shift(1)).cumsum()
+        df["__cv_match_number"] = (
+            df[self.match_id_column_name] != df[self.match_id_column_name].shift(1)
+        ).cumsum()
         min_validation_match_number = df[
             df[self.date_column_name] >= self.min_validation_date
         ]["__cv_match_number"].min()
@@ -189,10 +191,11 @@ class MatchKFoldCrossValidator(CrossValidator):
             columns=["__cv_match_number"]
         )
         if not return_features:
-            concat_validation_df = concat_validation_df[[
-                *ori_cols, *predictor.columns_added, self.validation_column_name
-            ]]
+            concat_validation_df = concat_validation_df[
+                [*ori_cols, *predictor.columns_added, self.validation_column_name]
+            ]
 
         return concat_validation_df.drop_duplicates(
-            [column_names.match_id, column_names.team_id, column_names.player_id], keep='first'
+            [column_names.match_id, column_names.team_id, column_names.player_id],
+            keep="first",
         )

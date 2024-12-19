@@ -129,7 +129,13 @@ class UpdateRatingGenerator(RatingGenerator):
         )
         return {
             f: potential_feature_values[f]
-            for f in list(set(known_features_out + historical_features_out + self._non_estimator_rating_features_out))
+            for f in list(
+                set(
+                    known_features_out
+                    + historical_features_out
+                    + self._non_estimator_rating_features_out
+                )
+            )
         }
 
     def generate_historical(
@@ -174,7 +180,16 @@ class UpdateRatingGenerator(RatingGenerator):
             historical_features_out or self._historical_features_out
         )
         self._calculated_match_ids = df[self.column_names.match_id].unique().tolist()
-        return df[list(set(input_cols + known_features_out + historical_features_out + self._non_estimator_rating_features_out))]
+        return df[
+            list(
+                set(
+                    input_cols
+                    + known_features_out
+                    + historical_features_out
+                    + self._non_estimator_rating_features_out
+                )
+            )
+        ]
 
     def _generate_potential_feature_values(self, matches: list[Match]):
         pre_match_player_rating_values = []
@@ -477,7 +492,16 @@ class UpdateRatingGenerator(RatingGenerator):
         historical_features_out = (
             historical_features_out or self._historical_features_out
         )
-        return df[list(set(input_cols + known_features_return + historical_features_out + self._non_estimator_rating_features_out))]
+        return df[
+            list(
+                set(
+                    input_cols
+                    + known_features_return
+                    + historical_features_out
+                    + self._non_estimator_rating_features_out
+                )
+            )
+        ]
 
     def _get_shared_rating_values(
         self,
@@ -501,7 +525,8 @@ class UpdateRatingGenerator(RatingGenerator):
                     "match_id": match_ids,
                     "team_id": team_ids,
                     "team_id_opponent": team_id_opponents,
-                    self.prefix + RatingKnownFeatures.PLAYER_RATING: pre_match_player_rating_values,
+                    self.prefix
+                    + RatingKnownFeatures.PLAYER_RATING: pre_match_player_rating_values,
                     "projected_participation_weight": projected_participation_weights,
                     "player_id": player_ids,
                 }

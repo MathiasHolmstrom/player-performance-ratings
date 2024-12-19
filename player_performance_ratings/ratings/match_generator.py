@@ -112,14 +112,19 @@ def convert_df_to_matches(
                 " Will use participation_weight as projected_participation_weight"
             )
 
-    if col_names.team_players_playing_time and col_names.team_players_playing_time in df.columns:
-
+    if (
+        col_names.team_players_playing_time
+        and col_names.team_players_playing_time in df.columns
+    ):
 
         is_team_players_playing_time = True
     else:
         is_team_players_playing_time = False
 
-    if col_names.opponent_players_playing_time and col_names.opponent_players_playing_time in df.columns:
+    if (
+        col_names.opponent_players_playing_time
+        and col_names.opponent_players_playing_time in df.columns
+    ):
 
         is_opponent_players_playing_time = True
     else:

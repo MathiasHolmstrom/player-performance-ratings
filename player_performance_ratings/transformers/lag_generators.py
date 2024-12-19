@@ -17,15 +17,15 @@ from player_performance_ratings.utils import validate_sorting
 class LagTransformer(BaseLagGeneratorPolars):
 
     def __init__(
-            self,
-            features: list[str],
-            lag_length: int,
-            granularity: Optional[list[str]] = None,
-            days_between_lags: Optional[list[int]] = None,
-            scale_by_participation_weight: bool = False,
-            future_lag: bool = False,
-            prefix: str = "lag_",
-            add_opponent: bool = False,
+        self,
+        features: list[str],
+        lag_length: int,
+        granularity: Optional[list[str]] = None,
+        days_between_lags: Optional[list[int]] = None,
+        scale_by_participation_weight: bool = False,
+        future_lag: bool = False,
+        prefix: str = "lag_",
+        add_opponent: bool = False,
     ):
         """
         :param features. List of features to create lags for
@@ -56,9 +56,7 @@ class LagTransformer(BaseLagGeneratorPolars):
         self._df = None
 
     @nw.narwhalify
-    def generate_historical(
-            self, df: FrameT, column_names: ColumnNames
-    ) -> IntoFrameT:
+    def generate_historical(self, df: FrameT, column_names: ColumnNames) -> IntoFrameT:
         """ """
         native = nw.to_native(df)
         if isinstance(native, pd.DataFrame):
@@ -93,8 +91,9 @@ class LagTransformer(BaseLagGeneratorPolars):
 
         transformed_df = concat_df.filter(
             nw.col(self.column_names.match_id).is_in(
-                df.select(nw.col(self.column_names.match_id).cast(nw.String)).unique()[
-                    self.column_names.match_id].to_list()
+                df.select(nw.col(self.column_names.match_id).cast(nw.String))
+                .unique()[self.column_names.match_id]
+                .to_list()
             )
         )
 
@@ -113,13 +112,13 @@ class LagTransformer(BaseLagGeneratorPolars):
             raise ValueError("fit_transform needs to be called before transform")
 
         if len(
-                df.unique(
-                    subset=[
-                        self.column_names.player_id,
-                        self.column_names.team_id,
-                        self.column_names.match_id,
-                    ]
-                )
+            df.unique(
+                subset=[
+                    self.column_names.player_id,
+                    self.column_names.team_id,
+                    self.column_names.match_id,
+                ]
+            )
         ) != len(df):
             raise ValueError(
                 f"Duplicated rows in df. Df must be a unique combination of {self.column_names.player_id} and {self.column_names.update_match_id}"
@@ -127,16 +126,21 @@ class LagTransformer(BaseLagGeneratorPolars):
 
         concat_df = self._concat_df(df=df)
 
-        if self.column_names.participation_weight and self.scale_by_participation_weight:
+        if (
+            self.column_names.participation_weight
+            and self.scale_by_participation_weight
+        ):
             for feature in self.features:
                 concat_df = concat_df.with_columns(
-                    (nw.col(feature) * nw.col(self.column_names.participation_weight)).alias(feature)
+                    (
+                        nw.col(feature) * nw.col(self.column_names.participation_weight)
+                    ).alias(feature)
                 )
 
-        grouped = (
-            concat_df.group_by(self.granularity + [self.column_names.update_match_id, self.column_names.start_date])
-            .agg([nw.col(feature).mean().alias(feature) for feature in self.features])
-        )
+        grouped = concat_df.group_by(
+            self.granularity
+            + [self.column_names.update_match_id, self.column_names.start_date]
+        ).agg([nw.col(feature).mean().alias(feature) for feature in self.features])
 
         grouped = grouped.sort(
             [self.column_names.start_date, self.column_names.update_match_id]
@@ -151,9 +155,14 @@ class LagTransformer(BaseLagGeneratorPolars):
                     .alias("shifted_days")
                 )
                 grouped = grouped.with_columns(
-                    ((nw.col("shifted_days").cast(nw.Date) - nw.col(self.column_names.start_date).cast(nw.Date))
-                     .dt.total_minutes() / 60 / 24)
-                    .alias(f"{self.prefix}{days_lag}_days_ago")
+                    (
+                        (
+                            nw.col("shifted_days").cast(nw.Date)
+                            - nw.col(self.column_names.start_date).cast(nw.Date)
+                        ).dt.total_minutes()
+                        / 60
+                        / 24
+                    ).alias(f"{self.prefix}{days_lag}_days_ago")
                 )
             else:
                 grouped = grouped.with_columns(
@@ -162,11 +171,14 @@ class LagTransformer(BaseLagGeneratorPolars):
                     .over(self.granularity)
                     .alias("shifted_days")
                 )
-                grouped = (grouped.with_columns(
-                    (nw.col(self.column_names.start_date).cast(nw.Date) - nw.col("shifted_days").cast(nw.Date))
-                    .dt.total_minutes() / 60 / 24)
-                           .alias(f"{self.prefix}{days_lag}_days_ago")
-                           )
+                grouped = grouped.with_columns(
+                    (
+                        nw.col(self.column_names.start_date).cast(nw.Date)
+                        - nw.col("shifted_days").cast(nw.Date)
+                    ).dt.total_minutes()
+                    / 60
+                    / 24
+                ).alias(f"{self.prefix}{days_lag}_days_ago")
             grouped = grouped.drop("shifted_days")
 
         for feature_name in self.features:
@@ -205,9 +217,13 @@ class LagTransformer(BaseLagGeneratorPolars):
 
         concat_df = concat_df.join(
             grouped.select(
-                self.granularity + [self.column_names.update_match_id, self.column_names.start_date] + feats_out),
-            on=self.granularity + [self.column_names.update_match_id, self.column_names.start_date],
-            how="left"
+                self.granularity
+                + [self.column_names.update_match_id, self.column_names.start_date]
+                + feats_out
+            ),
+            on=self.granularity
+            + [self.column_names.update_match_id, self.column_names.start_date],
+            how="left",
         )
 
         return concat_df
@@ -228,15 +244,15 @@ class RollingMeanTransformer(BaseLagGenerator):
     """
 
     def __init__(
-            self,
-            features: list[str],
-            window: int,
-            min_periods: int = 1,
-            granularity: Union[list[str], str] = None,
-            scale_by_participation_weight: bool = False,
-            add_opponent: bool = False,
-            are_estimator_features=True,
-            prefix: str = "rolling_mean_",
+        self,
+        features: list[str],
+        window: int,
+        min_periods: int = 1,
+        granularity: Union[list[str], str] = None,
+        scale_by_participation_weight: bool = False,
+        add_opponent: bool = False,
+        are_estimator_features=True,
+        prefix: str = "rolling_mean_",
     ):
         """
         Calculates the rolling mean for a list of features over a window of matches.
@@ -267,7 +283,7 @@ class RollingMeanTransformer(BaseLagGenerator):
         self.min_periods = min_periods
 
     def generate_historical(
-            self, df: pd.DataFrame, column_names: ColumnNames
+        self, df: pd.DataFrame, column_names: ColumnNames
     ) -> pd.DataFrame:
         """
         Generates rolling mean for historical data
@@ -322,11 +338,14 @@ class RollingMeanTransformer(BaseLagGenerator):
 
         for feature_name in self.features:
 
-            if self.column_names.participation_weight and self.scale_by_participation_weight:
+            if (
+                self.column_names.participation_weight
+                and self.scale_by_participation_weight
+            ):
                 concat_df = concat_df.assign(
                     **{
                         feature_name: concat_df[feature_name]
-                                      * concat_df[self.column_names.participation_weight]
+                        * concat_df[self.column_names.participation_weight]
                     }
                 )
 
@@ -365,7 +384,7 @@ class RollingMeanTransformer(BaseLagGenerator):
                 grp[
                     self.granularity
                     + [self.column_names.update_match_id, output_column_name]
-                    ],
+                ],
                 on=self.granularity + [self.column_names.update_match_id],
                 how="left",
             )
@@ -393,14 +412,14 @@ class RollingMeanTransformer(BaseLagGenerator):
 class RollingMeanDaysTransformer(BaseLagGenerator):
 
     def __init__(
-            self,
-            features: list[str],
-            days: Union[int, list[int]],
-            granularity: Union[list[str], str] = None,
-            scale_by_participation_weight: bool = False,
-            add_count: bool = False,
-            add_opponent: bool = False,
-            prefix: str = "rolling_mean_days_",
+        self,
+        features: list[str],
+        days: Union[int, list[int]],
+        granularity: Union[list[str], str] = None,
+        scale_by_participation_weight: bool = False,
+        add_count: bool = False,
+        add_opponent: bool = False,
+        prefix: str = "rolling_mean_days_",
     ):
         self.days = days
         self.scale_by_participation_weight = scale_by_participation_weight
@@ -427,7 +446,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                     self._features_out.append(f"{self.prefix}{day}_count_opponent")
 
     def generate_historical(
-            self, df: pd.DataFrame, column_names: ColumnNames
+        self, df: pd.DataFrame, column_names: ColumnNames
     ) -> pd.DataFrame:
         ori_types = {c: df[c].dtype for c in df.columns}
         df = df.assign(is_future=0)
@@ -492,11 +511,14 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
 
         for feature_name in self.features:
 
-            if self.column_names.participation_weight and self.scale_by_participation_weight:
+            if (
+                self.column_names.participation_weight
+                and self.scale_by_participation_weight
+            ):
                 concat_df = concat_df.assign(
                     **{
                         feature_name: concat_df[feature_name]
-                                      * concat_df[self.column_names.participation_weight]
+                        * concat_df[self.column_names.participation_weight]
                     }
                 )
 
@@ -542,7 +564,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         return concat_df.drop(columns="__date_day")
 
     def _add_rolling_feature(
-            self, concat_df: pd.DataFrame, day: int, granularity: list[str], prefix_day: str
+        self, concat_df: pd.DataFrame, day: int, granularity: list[str], prefix_day: str
     ):
 
         if len(granularity) > 1:
@@ -574,11 +596,11 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         df1.columns = feats + ["is_nan_sum", "is_nan_count"]
         for feature_name in self.features:
             df1[f"{prefix_day}_{feature_name}_count"] = (
-                    df1[f"{prefix_day}_{feature_name}_count"] - df1["is_nan_sum"]
+                df1[f"{prefix_day}_{feature_name}_count"] - df1["is_nan_sum"]
             )
             df1[f"{prefix_day}_{feature_name}"] = df1[
-                                                      f"{prefix_day}_{feature_name}_sum"
-                                                  ] / (df1[f"{prefix_day}_{feature_name}_count"])
+                f"{prefix_day}_{feature_name}_sum"
+            ] / (df1[f"{prefix_day}_{feature_name}_count"])
 
             df1.loc[
                 df1[f"{prefix_day}_{feature_name}_count"] == 0,
@@ -612,17 +634,17 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
 
 
 class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
-    # IN PROGRESS NOT WORKING
+
     def __init__(
-            self,
-            features: list[str],
-            window: int,
-            binary_column: str,
-            granularity: list[str] = None,
-            prob_column: Optional[str] = None,
-            min_periods: int = 1,
-            add_opponent: bool = False,
-            prefix: str = "rolling_mean_binary_",
+        self,
+        features: list[str],
+        window: int,
+        binary_column: str,
+        granularity: list[str] = None,
+        prob_column: Optional[str] = None,
+        min_periods: int = 1,
+        add_opponent: bool = False,
+        prefix: str = "rolling_mean_binary_",
     ):
         super().__init__(
             features=features,
@@ -660,13 +682,18 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
 
         self._estimator_features_out = self._features_out.copy()
 
-    def generate_historical(
-            self, df: FrameT, column_names: ColumnNames
-    ) -> IntoFrameT:
+    @nw.narwhalify
+    def generate_historical(self, df: FrameT, column_names: ColumnNames) -> IntoFrameT:
+
+        native = nw.to_native(df)
+        if isinstance(native, pd.DataFrame):
+            df = nw.from_native(pl.DataFrame(native))
+            ori_native = "pd"
+        else:
+            ori_native = "pl"
+
         if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
-            df = df.with_columns(
-                nw.col(self.binary_column).cast(nw.Int64)
-            )
+            df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
 
         df = df.with_columns(nw.lit(0).alias("is_future"))
         self.column_names = column_names
@@ -681,9 +708,21 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
         transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
         if "is_future" in transformed_df.columns:
             transformed_df = transformed_df.drop("is_future")
-        return self._add_weighted_prob(transformed_df=transformed_df)
+        transformed_df = self._add_weighted_prob(transformed_df=transformed_df)
+        if ori_native == "pd":
+            return transformed_df.to_pandas()
+        return transformed_df
 
+    @nw.narwhalify
     def generate_future(self, df: FrameT) -> IntoFrameT:
+
+        native = nw.to_native(df)
+        if isinstance(native, pd.DataFrame):
+            df = nw.from_native(pl.DataFrame(native))
+            ori_native = "pd"
+        else:
+            ori_native = "pl"
+
         if self._df is None:
             raise ValueError(
                 "generate_historical needs to be called before generate_future"
@@ -691,14 +730,16 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
 
         if self.binary_column in df.columns:
             if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
-                df = df.with_columns(
-                    nw.col(self.binary_column).cast(nw.Int64)
-                )
+                df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
         df = df.with_columns(nw.lit(1).alias("is_future"))
         concat_df = self._generate_concat_df_with_feats(df=df)
-        unique_match_ids = df.select(nw.col(self.column_names.match_id).cast(nw.String)).unique()
+        unique_match_ids = (
+            df.select(nw.col(self.column_names.match_id).cast(nw.String))
+            .unique()[self.column_names.match_id]
+            .to_list()
+        )
         transformed_df = concat_df.filter(
-            nw.col(self.column_names.match_id).is_in(unique_match_ids[self.column_names.match_id])
+            nw.col(self.column_names.match_id).is_in(unique_match_ids)
         )
         transformed_future = self._generate_future_feats(
             transformed_df=transformed_df,
@@ -707,7 +748,10 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
         )
         if "is_future" in transformed_future.columns:
             transformed_future = transformed_future.drop("is_future")
-        return self._add_weighted_prob(transformed_df=transformed_future)
+        transformed_future = self._add_weighted_prob(transformed_df=transformed_future)
+        if ori_native == "pd":
+            return transformed_future.to_pandas()
+        return transformed_future
 
     def _get_known_future_features(self) -> list[str]:
         known_future_features = []
@@ -729,10 +773,10 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
                 )
                 transformed_df = transformed_df.with_columns(
                     (
-                            nw.col(f"{self.prefix}{self.window}_{feature_name}_1")
-                            * nw.col(self.prob_column)
-                            + nw.col(f"{self.prefix}{self.window}_{feature_name}_0")
-                            * (1 - nw.col(self.prob_column))
+                        nw.col(f"{self.prefix}{self.window}_{feature_name}_1")
+                        * nw.col(self.prob_column)
+                        + nw.col(f"{self.prefix}{self.window}_{feature_name}_0")
+                        * (1 - nw.col(self.prob_column))
                     ).alias(weighted_prob_feat_name)
                 )
         return transformed_df
@@ -743,7 +787,6 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
         )
         concat_df = self._concat_df(df)
 
-        # Define groupby columns
         groupby_cols = [
             self.column_names.update_match_id,
             *self.granularity,
@@ -751,9 +794,8 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
             "is_future",
         ]
 
-        # Perform initial aggregation
         aggregation = {f: nw.mean(f).alias(f) for f in self.features}
-        aggregation[self.binary_column] = nw.first(self.binary_column)
+        aggregation[self.binary_column] = nw.median(self.binary_column)
         grouped = concat_df.group_by(groupby_cols).agg(list(aggregation.values()))
 
         # Sort the DataFrame
@@ -765,44 +807,51 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
             ]
         )
 
-        # Initialize a list to keep track of new features added
         feats_added = []
 
         for feature in self.features:
-            shifted_feature = nw.col(feature).shift(1).over(self.granularity)
-            shifted_binary = nw.col(self.binary_column).shift(1).over(self.granularity)
-
-            # Calculate rolling means conditioned on binary outcome
-            rolling_mean_1 = (
-                nw.when(shifted_binary == 1)
-                .then(shifted_feature)
-                .rolling_mean(
-                    window_size=self.window, min_periods=self.min_periods
-                )
-                .over(self.granularity)
-                .alias(f"{self.prefix}{self.window}_{feature}_1")
+            grouped = grouped.with_columns(
+                [
+                    nw.when(nw.col(self.binary_column) == 1)
+                    .then(nw.col(feature))
+                    .alias("value_result_1"),
+                    nw.when(nw.col(self.binary_column) == 0)
+                    .then(nw.col(feature))
+                    .alias("value_result_0"),
+                ]
             )
 
-            rolling_mean_0 = (
-                nw.when(shifted_binary == 0)
-                .then(shifted_feature)
-                .rolling_mean(
-                    window_size=self.window, min_periods=self.min_periods
-                )
-                .over(self.granularity)
-                .alias(f"{self.prefix}{self.window}_{feature}_0")
+            grouped = grouped.with_columns(
+                [
+                    nw.col("value_result_0")
+                    .shift(1)
+                    .over(self.granularity)
+                    .alias("value_result_0_shifted"),
+                    nw.col("value_result_1")
+                    .shift(1)
+                    .over(self.granularity)
+                    .alias("value_result_1_shifted"),
+                ]
+            ).with_columns(
+                [
+                    nw.col("value_result_1_shifted")
+                    .rolling_mean(window_size=self.window, min_periods=self.min_periods)
+                    .over(self.granularity)
+                    .alias(f"{self.prefix}{self.window}_{feature}_1"),
+                    nw.col("value_result_0_shifted")
+                    .rolling_mean(window_size=self.window, min_periods=self.min_periods)
+                    .over(self.granularity)
+                    .alias(f"{self.prefix}{self.window}_{feature}_0"),
+                ]
             )
 
-            # Add the new rolling mean columns to the DataFrame
-            grouped = grouped.with_columns([rolling_mean_1, rolling_mean_0])
+            feats_added.extend(
+                [
+                    f"{self.prefix}{self.window}_{feature}_1",
+                    f"{self.prefix}{self.window}_{feature}_0",
+                ]
+            )
 
-            # Keep track of the features added
-            feats_added.extend([
-                f"{self.prefix}{self.window}_{feature}_1",
-                f"{self.prefix}{self.window}_{feature}_0",
-            ])
-
-        # Merge the rolling mean features back into concat_df
         concat_df = concat_df.join(
             grouped.select(
                 [
@@ -815,9 +864,9 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
             how="left",
         )
 
-        concat_df = concat_df.with_columns([
-            nw.col(feats_added).fill_null(strategy="forward").over(self.granularity)
-        ])
+        concat_df = concat_df.with_columns(
+            [nw.col(feats_added).fill_null(strategy="forward").over(self.granularity)]
+        )
 
         return concat_df
 
@@ -825,15 +874,15 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
 class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
     def __init__(
-            self,
-            features: list[str],
-            window: int,
-            binary_column: str,
-            granularity: list[str] = None,
-            prob_column: Optional[str] = None,
-            min_periods: int = 1,
-            add_opponent: bool = False,
-            prefix: str = "rolling_mean_binary_",
+        self,
+        features: list[str],
+        window: int,
+        binary_column: str,
+        granularity: list[str] = None,
+        prob_column: Optional[str] = None,
+        min_periods: int = 1,
+        add_opponent: bool = False,
+        prefix: str = "rolling_mean_binary_",
     ):
         super().__init__(
             features=features,
@@ -872,7 +921,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         self._estimator_features_out = self._features_out.copy()
 
     def generate_historical(
-            self, df: pd.DataFrame, column_names: ColumnNames
+        self, df: pd.DataFrame, column_names: ColumnNames
     ) -> pd.DataFrame:
         if df[self.binary_column].dtype in ("float64", "float32", "float16", "float"):
             df = df.assign(**{self.binary_column: df[self.binary_column].astype(int)})
@@ -900,10 +949,10 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
         if self.binary_column in df.columns:
             if df[self.binary_column].dtype in (
-                    "float64",
-                    "float32",
-                    "float16",
-                    "float",
+                "float64",
+                "float32",
+                "float16",
+                "float",
             ):
                 df = df.assign(
                     **{self.binary_column: df[self.binary_column].astype(int)}
@@ -943,12 +992,12 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
                     f"{self.prefix}{self.window}_{self.prob_column}_{feature_name}"
                 )
                 transformed_df[weighted_prob_feat_name] = transformed_df[
-                                                              f"{self.prefix}{self.window}_{feature_name}_1"
-                                                          ] * transformed_df[self.prob_column] + transformed_df[
-                                                              f"{self.prefix}{self.window}_{feature_name}_0"
-                                                          ] * (
-                                                                  1 - transformed_df[self.prob_column]
-                                                          )
+                    f"{self.prefix}{self.window}_{feature_name}_1"
+                ] * transformed_df[self.prob_column] + transformed_df[
+                    f"{self.prefix}{self.window}_{feature_name}_0"
+                ] * (
+                    1 - transformed_df[self.prob_column]
+                )
         return transformed_df
 
     def _generate_concat_df_with_feats(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -1005,16 +1054,16 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
             feats_added.append(f"{self.prefix}{self.window}_{feature}_0")
 
         grouped["count_result_1"] = (
-                grouped[grouped[self.binary_column] == 1]
-                .groupby([*self.granularity])
-                .cumcount()
-                + 1
+            grouped[grouped[self.binary_column] == 1]
+            .groupby([*self.granularity])
+            .cumcount()
+            + 1
         )
         grouped["count_result_0"] = (
-                grouped[grouped[self.binary_column] == 0]
-                .groupby([*self.granularity])
-                .cumcount()
-                + 1
+            grouped[grouped[self.binary_column] == 0]
+            .groupby([*self.granularity])
+            .cumcount()
+            + 1
         )
         grouped[["count_result_0", "count_result_1"]] = grouped.groupby(
             self.granularity
@@ -1054,15 +1103,15 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
     """
 
     def __init__(
-            self,
-            features: list[str],
-            window: int,
-            granularity: Union[list[str], str] = None,
-            add_opponent: bool = False,
-            scale_by_participation_weight: bool = False,
-            min_periods: int = 1,
-            are_estimator_features=True,
-            prefix: str = "rolling_mean_",
+        self,
+        features: list[str],
+        window: int,
+        granularity: Union[list[str], str] = None,
+        add_opponent: bool = False,
+        scale_by_participation_weight: bool = False,
+        min_periods: int = 1,
+        are_estimator_features=True,
+        prefix: str = "rolling_mean_",
     ):
         """
         :param features:   Features to create rolling mean for
@@ -1091,9 +1140,7 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         self.min_periods = min_periods
 
     @nw.narwhalify
-    def generate_historical(
-            self, df: FrameT, column_names: ColumnNames
-    ) -> IntoFrameT:
+    def generate_historical(self, df: FrameT, column_names: ColumnNames) -> IntoFrameT:
         """
         Generates rolling mean for historical data
         Stored the historical data as instance-variables so it's possible to generate future data afterwards
@@ -1111,14 +1158,14 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
             ori_type = "pl"
 
         if (
-                df.unique(
-                    subset=[
-                        column_names.player_id,
-                        column_names.team_id,
-                        column_names.match_id,
-                    ]
-                ).shape[0]
-                != df.shape[0]
+            df.unique(
+                subset=[
+                    column_names.player_id,
+                    column_names.team_id,
+                    column_names.match_id,
+                ]
+            ).shape[0]
+            != df.shape[0]
         ):
             raise ValueError(
                 f"Duplicated rows in df. Df must be a unique combination of {column_names.player_id} and {column_names.update_match_id}"
@@ -1154,9 +1201,7 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         return df.to_native()
 
     @nw.narwhalify
-    def generate_future(
-            self, df: FrameT
-    ) -> IntoFrameT:
+    def generate_future(self, df: FrameT) -> IntoFrameT:
         """
         Generates rolling mean for future data
         Assumes that .generate_historical() has been called before
@@ -1215,12 +1260,15 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
             raise ValueError("fit_transform needs to be called before transform")
 
         concat_df = self._concat_df(df)
-        if self.column_names.participation_weight and self.scale_by_participation_weight:
+        if (
+            self.column_names.participation_weight
+            and self.scale_by_participation_weight
+        ):
             concat_df = concat_df.with_columns(
                 [
                     (
-                            concat_df[feature_name]
-                            * concat_df[self.column_names.participation_weight]
+                        concat_df[feature_name]
+                        * concat_df[self.column_names.participation_weight]
                     ).alias(feature_name)
                     for feature_name in self.features
                 ]
@@ -1231,11 +1279,10 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
             for feature_name in self.features
         ]
 
-
-        grp = (
-            concat_df.group_by(self.granularity + [self.column_names.update_match_id, self.column_names.start_date])
-            .agg([nw.col(feature).mean().alias(feature) for feature in self.features])
-        )
+        grp = concat_df.group_by(
+            self.granularity
+            + [self.column_names.update_match_id, self.column_names.start_date]
+        ).agg([nw.col(feature).mean().alias(feature) for feature in self.features])
 
         grp = grp.filter(~nw.col(self.column_names.start_date).is_null())
         grp = grp.sort(
@@ -1253,9 +1300,9 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         grp = grp.with_columns(rolling_means)
 
         selection_columns = (
-                self.granularity
-                + [self.column_names.update_match_id]
-                + [f"{self.prefix}{self.window}_{feature}" for feature in self.features]
+            self.granularity
+            + [self.column_names.update_match_id]
+            + [f"{self.prefix}{self.window}_{feature}" for feature in self.features]
         )
         concat_df = concat_df.join(
             grp.select(selection_columns),
@@ -1276,7 +1323,7 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
 
         concat_df = concat_df.with_columns(
             [
-                nw.col(f).fill_null(strategy='forward').over(self.granularity).alias(f)
+                nw.col(f).fill_null(strategy="forward").over(self.granularity).alias(f)
                 for f in feats_added
             ]
         )

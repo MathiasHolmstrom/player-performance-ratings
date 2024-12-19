@@ -11,7 +11,9 @@ from player_performance_ratings.predictor_transformer import (
     SkLearnTransformerWrapper,
     ConvertDataFrameToCategoricalTransformer,
 )
-from player_performance_ratings.predictor_transformer._simple_transformer import SimpleTransformer
+from player_performance_ratings.predictor_transformer._simple_transformer import (
+    SimpleTransformer,
+)
 
 
 class BasePredictor(ABC):
@@ -26,7 +28,7 @@ class BasePredictor(ABC):
         pred_column: Optional[str] = None,
         filters: Optional[dict] = None,
         auto_pre_transform: bool = True,
-            multiclass_output_as_struct: bool = False
+        multiclass_output_as_struct: bool = False,
     ):
         self._estimator_features = estimator_features or []
         self.estimator = estimator
@@ -39,7 +41,7 @@ class BasePredictor(ABC):
         self.multiclassifier = False
         self._classes_ = None
         self.auto_pre_transform = auto_pre_transform
-        self.multiclass_output_as_struct= multiclass_output_as_struct
+        self.multiclass_output_as_struct = multiclass_output_as_struct
 
         iterations = 0
         while hasattr(self._deepest_estimator, "estimator"):
@@ -88,14 +90,17 @@ class BasePredictor(ABC):
             return None
         return self.estimator.classes_
 
-    def _convert_multiclass_predictions_to_struct(self, df: pd.DataFrame) -> pd.DataFrame:
-        df[f'{self._target}_struct'] = df.apply(
-            lambda row: dict(zip(row['classes'], row[self.pred_column])), axis=1)
-        df[f'{self._target}_struct'] = df[f'{self._target}_struct'].apply(
-            lambda d: {str(k): v for k, v in d.items()})
-        df = df.drop(columns=[self.pred_column, 'classes'])
-        return df.rename(columns={f'{self._target}_struct': self.pred_column})
-
+    def _convert_multiclass_predictions_to_struct(
+        self, df: pd.DataFrame
+    ) -> pd.DataFrame:
+        df[f"{self._target}_struct"] = df.apply(
+            lambda row: dict(zip(row["classes"], row[self.pred_column])), axis=1
+        )
+        df[f"{self._target}_struct"] = df[f"{self._target}_struct"].apply(
+            lambda d: {str(k): v for k, v in d.items()}
+        )
+        df = df.drop(columns=[self.pred_column, "classes"])
+        return df.rename(columns={f"{self._target}_struct": self.pred_column})
 
     def set_target(self, new_target_name: str):
         self._target = new_target_name

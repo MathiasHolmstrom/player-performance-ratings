@@ -6,10 +6,10 @@ from player_performance_ratings import ColumnNames
 from player_performance_ratings.transformers import (
     LagTransformer,
     RollingMeanDaysTransformer,
-    BinaryOutcomeRollingMeanTransformer,
 )
 from player_performance_ratings.transformers.lag_generators import (
     RollingMeanTransformerPolars,
+    BinaryOutcomeRollingMeanTransformerPolars,
 )
 
 
@@ -57,17 +57,21 @@ def test_lag_team_fit_transform(df, column_names):
         granularity=["team"],
     )
 
-    df_with_lags = lag_transformation.generate_historical(data, column_names=column_names)
+    df_with_lags = lag_transformation.generate_historical(
+        data, column_names=column_names
+    )
     if isinstance(data, pl.DataFrame):
-        expected_df = original_df.with_columns([
-            pl.Series("lag_1_points", [None, None, None, None, 1.5, 1.5, 2.5, 2.5]),
-            pl.col("team").cast(pl.String),
-            pl.col("game").cast(pl.String),
-            pl.col("player").cast(pl.String)
-        ]
+        expected_df = original_df.with_columns(
+            [
+                pl.Series("lag_1_points", [None, None, None, None, 1.5, 1.5, 2.5, 2.5]),
+                pl.col("team").cast(pl.String),
+                pl.col("game").cast(pl.String),
+                pl.col("player").cast(pl.String),
+            ]
         )
-        pl.testing.assert_frame_equal(df_with_lags, expected_df.select(df_with_lags.columns), check_dtype=False)
-
+        pl.testing.assert_frame_equal(
+            df_with_lags, expected_df.select(df_with_lags.columns), check_dtype=False
+        )
 
     elif isinstance(data, pd.DataFrame):
         expected_df = original_df.assign(
@@ -109,7 +113,9 @@ def test_lag_fit_transform_2_features(df, column_names):
         granularity=["player"],
     )
 
-    df_with_lags = lag_transformation.generate_historical(data, column_names=column_names)
+    df_with_lags = lag_transformation.generate_historical(
+        data, column_names=column_names
+    )
     if isinstance(data, pd.DataFrame):
         expected_df = original_df.assign(
             **{
@@ -125,13 +131,15 @@ def test_lag_fit_transform_2_features(df, column_names):
         )
 
     else:
-        expected_df = original_df.with_columns([
-            pl.Series("lag_1_points", [None, None, 1]),
-            pl.Series("lag_1_points_per_minute", [None, None, 0.5]),
-            pl.col("team").cast(pl.String),
-            pl.col("game").cast(pl.String),
-            pl.col("player").cast(pl.String)
-        ])
+        expected_df = original_df.with_columns(
+            [
+                pl.Series("lag_1_points", [None, None, 1]),
+                pl.Series("lag_1_points_per_minute", [None, None, 0.5]),
+                pl.col("team").cast(pl.String),
+                pl.col("game").cast(pl.String),
+                pl.col("player").cast(pl.String),
+            ]
+        )
         expected_df = pl.DataFrame(expected_df).select(df_with_lags.columns)
         pl.testing.assert_frame_equal(df_with_lags, expected_df, check_dtype=False)
 
@@ -163,11 +171,16 @@ def test_lag_fit_transform_lag_length_2(df, column_names):
         granularity=["player"],
     )
 
-    df_with_lags = lag_transformation.generate_historical(data, column_names=column_names)
+    df_with_lags = lag_transformation.generate_historical(
+        data, column_names=column_names
+    )
 
     if isinstance(data, pd.DataFrame):
         expected_df = original_df.assign(
-            **{"lag_1_points": [None, None, 1, 3], "lag_2_points": [None, None, None, 1]}
+            **{
+                "lag_1_points": [None, None, 1, 3],
+                "lag_2_points": [None, None, None, 1],
+            }
         )
         expected_df["team"] = expected_df["team"].astype("str")
         expected_df["game"] = expected_df["game"].astype("str")
@@ -177,13 +190,15 @@ def test_lag_fit_transform_lag_length_2(df, column_names):
         )
 
     else:
-        expected_df = original_df.with_columns([
-            pl.Series("lag_1_points", [None, None, 1, 3]),
-            pl.Series("lag_2_points", [None, None, None, 1]),
-            pl.col("team").cast(pl.String),
-            pl.col("game").cast(pl.String),
-            pl.col("player").cast(pl.String)
-        ])
+        expected_df = original_df.with_columns(
+            [
+                pl.Series("lag_1_points", [None, None, 1, 3]),
+                pl.Series("lag_2_points", [None, None, None, 1]),
+                pl.col("team").cast(pl.String),
+                pl.col("game").cast(pl.String),
+                pl.col("player").cast(pl.String),
+            ]
+        )
 
         pl.testing.assert_frame_equal(
             df_with_lags, expected_df.select(df_with_lags.columns), check_dtype=False
@@ -243,14 +258,19 @@ def test_lag_fit_transform_and_transform(df, column_names):
             future_transformed_df, expected_df, check_like=True, check_dtype=False
         )
     else:
-        expected_df = future_df_copy.with_columns([
-            pl.Series(lag_transformation.prefix + "1_points", [3, 2, 3]),
-            pl.col("team").cast(pl.String),
-            pl.col("game").cast(pl.String),
-            pl.col("player").cast(pl.String)
-        ])
-        pl.testing.assert_frame_equal(future_transformed_df, expected_df.select(future_transformed_df.columns),
-                                      check_dtype=False)
+        expected_df = future_df_copy.with_columns(
+            [
+                pl.Series(lag_transformation.prefix + "1_points", [3, 2, 3]),
+                pl.col("team").cast(pl.String),
+                pl.col("game").cast(pl.String),
+                pl.col("player").cast(pl.String),
+            ]
+        )
+        pl.testing.assert_frame_equal(
+            future_transformed_df,
+            expected_df.select(future_transformed_df.columns),
+            check_dtype=False,
+        )
 
 
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
@@ -309,15 +329,20 @@ def test_lag_transformation_transform_2_lags(df, column_names):
             future_transformed_df, expected_df, check_like=True, check_dtype=False
         )
     else:
-        expected_df = future_df_copy.with_columns([
-            pl.Series(lag_transformation.prefix + "1_points", [3, 2, 3]),
-            pl.Series(lag_transformation.prefix + "2_points", [1, None, 1]),
-            pl.col("team").cast(pl.String),
-            pl.col("game").cast(pl.String),
-            pl.col("player").cast(pl.String)
-        ])
-        pl.testing.assert_frame_equal(future_transformed_df, expected_df.select(future_transformed_df.columns),
-                                      check_dtype=False)
+        expected_df = future_df_copy.with_columns(
+            [
+                pl.Series(lag_transformation.prefix + "1_points", [3, 2, 3]),
+                pl.Series(lag_transformation.prefix + "2_points", [1, None, 1]),
+                pl.col("team").cast(pl.String),
+                pl.col("game").cast(pl.String),
+                pl.col("player").cast(pl.String),
+            ]
+        )
+        pl.testing.assert_frame_equal(
+            future_transformed_df,
+            expected_df.select(future_transformed_df.columns),
+            check_dtype=False,
+        )
 
 
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
@@ -345,7 +370,9 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
         features=["points"], lag_length=2, granularity=["player"], add_opponent=True
     )
 
-    df_with_lags = lag_transformation.generate_historical(data, column_names=column_names)
+    df_with_lags = lag_transformation.generate_historical(
+        data, column_names=column_names
+    )
 
     if isinstance(data, pd.DataFrame):
         expected_df = original_df.assign(
@@ -363,15 +390,17 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
             df_with_lags, expected_df, check_like=True, check_dtype=False
         )
     else:
-        expected_df = original_df.with_columns([
-            pl.Series(lag_transformation.features_out[0], [None, None, 1, None]),
-            pl.Series(lag_transformation.features_out[1], [None, None, None, 1]),
-            pl.Series(lag_transformation.features_out[2], [None, None, None, None]),
-            pl.Series(lag_transformation.features_out[3], [None, None, None, None]),
-            pl.col("team").cast(pl.String),
-            pl.col("game").cast(pl.String),
-            pl.col("player").cast(pl.String)
-        ])
+        expected_df = original_df.with_columns(
+            [
+                pl.Series(lag_transformation.features_out[0], [None, None, 1, None]),
+                pl.Series(lag_transformation.features_out[1], [None, None, None, 1]),
+                pl.Series(lag_transformation.features_out[2], [None, None, None, None]),
+                pl.Series(lag_transformation.features_out[3], [None, None, None, None]),
+                pl.col("team").cast(pl.String),
+                pl.col("game").cast(pl.String),
+                pl.col("player").cast(pl.String),
+            ]
+        )
 
     future_df = pd.DataFrame(
         {
@@ -409,16 +438,20 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
             future_df, expected_future_df, check_like=True, check_dtype=False
         )
     else:
-        expected_future_df = expected_future_df.with_columns([
-            pl.Series(lag_transformation.features_out[0], [3, 2, 2, 5]),
-            pl.Series(lag_transformation.features_out[1], [2, 3, 5, 2]),
-            pl.Series(lag_transformation.features_out[2], [1, None, None, None]),
-            pl.Series(lag_transformation.features_out[3], [None, 1, None, None]),
-            pl.col("team").cast(pl.String),
-            pl.col("game").cast(pl.String),
-            pl.col("player").cast(pl.String)
-        ])
-        pl.testing.assert_frame_equal(future_df, expected_future_df.select(future_df.columns), check_dtype=False)
+        expected_future_df = expected_future_df.with_columns(
+            [
+                pl.Series(lag_transformation.features_out[0], [3, 2, 2, 5]),
+                pl.Series(lag_transformation.features_out[1], [2, 3, 5, 2]),
+                pl.Series(lag_transformation.features_out[2], [1, None, None, None]),
+                pl.Series(lag_transformation.features_out[3], [None, 1, None, None]),
+                pl.col("team").cast(pl.String),
+                pl.col("game").cast(pl.String),
+                pl.col("player").cast(pl.String),
+            ]
+        )
+        pl.testing.assert_frame_equal(
+            future_df, expected_future_df.select(future_df.columns), check_dtype=False
+        )
 
 
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
@@ -470,15 +503,22 @@ def test_lag_transformer_parent_match_id(df, column_names: ColumnNames):
             transformed_df, expected_df, check_like=True, check_dtype=False
         )
     else:
-        expected_df = expected_df.with_columns([
-            pl.Series(lag_transformation.features_out[0], [None, None, 1.5, 3]),
-            pl.Series(lag_transformation.features_out[1], [None, None, None, 1.5]),
-            pl.col("team").cast(pl.String),
-            pl.col("game").cast(pl.String),
-            pl.col("player").cast(pl.String),
-            pl.col("series_id").cast(pl.String)
-        ])
-        pl.testing.assert_frame_equal(transformed_df, expected_df.select(transformed_df.columns), check_dtype=False)
+        expected_df = expected_df.with_columns(
+            [
+                pl.Series(lag_transformation.features_out[0], [None, None, 1.5, 3]),
+                pl.Series(lag_transformation.features_out[1], [None, None, None, 1.5]),
+                pl.col("team").cast(pl.String),
+                pl.col("game").cast(pl.String),
+                pl.col("player").cast(pl.String),
+                pl.col("series_id").cast(pl.String),
+            ]
+        )
+        pl.testing.assert_frame_equal(
+            transformed_df,
+            expected_df.select(transformed_df.columns),
+            check_dtype=False,
+        )
+
 
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_rolling_mean_fit_transform(df, column_names):
@@ -526,10 +566,21 @@ def test_rolling_mean_fit_transform(df, column_names):
             df_with_rolling_mean, expected_df, check_like=True, check_dtype=False
         )
     else:
-        expected_df = original_df.with_columns([
-            pl.Series(f"{rolling_mean_transformation.prefix}2_points", [None, None, 1, (3 + 1) / 2], strict=False)
-        ])
-        pl.testing.assert_frame_equal(df_with_rolling_mean, expected_df.select(df_with_rolling_mean.columns), check_dtype=False)
+        expected_df = original_df.with_columns(
+            [
+                pl.Series(
+                    f"{rolling_mean_transformation.prefix}2_points",
+                    [None, None, 1, (3 + 1) / 2],
+                    strict=False,
+                )
+            ]
+        )
+        pl.testing.assert_frame_equal(
+            df_with_rolling_mean,
+            expected_df.select(df_with_rolling_mean.columns),
+            check_dtype=False,
+        )
+
 
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_rolling_mean_fit_transform_and_transform(df, column_names):
@@ -584,13 +635,25 @@ def test_rolling_mean_fit_transform_and_transform(df, column_names):
                 rolling_mean_transformation.features_out[1]: [2, 2.5, 2, 2.5],
             }
         )
-        pd.testing.assert_frame_equal(transformed_future_df, expected_df, check_like=True)
+        pd.testing.assert_frame_equal(
+            transformed_future_df, expected_df, check_like=True
+        )
     else:
-        expected_df = original_future_df.with_columns([
-            pl.Series(f"{rolling_mean_transformation.prefix}2_points", [2.5, 2, 2.5, 2]),
-            pl.Series(rolling_mean_transformation.features_out[1], [2, 2.5, 2, 2.5])
-        ])
-        pl.testing.assert_frame_equal(transformed_future_df, expected_df.select(transformed_future_df.columns), check_dtype=False)
+        expected_df = original_future_df.with_columns(
+            [
+                pl.Series(
+                    f"{rolling_mean_transformation.prefix}2_points", [2.5, 2, 2.5, 2]
+                ),
+                pl.Series(
+                    rolling_mean_transformation.features_out[1], [2, 2.5, 2, 2.5]
+                ),
+            ]
+        )
+        pl.testing.assert_frame_equal(
+            transformed_future_df,
+            expected_df.select(transformed_future_df.columns),
+            check_dtype=False,
+        )
 
 
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
@@ -643,10 +706,19 @@ def test_rolling_mean_transformer_fit_transformer_team_stat(df, column_names):
             transformed_data, expected_df, check_like=True, check_dtype=False
         )
     else:
-        expected_df = expected_df.with_columns([
-            pl.Series(rolling_mean_transformation.prefix + "2_score_difference", [None, None, None, None, 10, 10, -10, -10])
-        ])
-        pl.testing.assert_frame_equal(transformed_data, expected_df.select(transformed_data.columns), check_dtype=False)
+        expected_df = expected_df.with_columns(
+            [
+                pl.Series(
+                    rolling_mean_transformation.prefix + "2_score_difference",
+                    [None, None, None, None, 10, 10, -10, -10],
+                )
+            ]
+        )
+        pl.testing.assert_frame_equal(
+            transformed_data,
+            expected_df.select(transformed_data.columns),
+            check_dtype=False,
+        )
 
 
 def test_rolling_mean_transform_parent_match_id(column_names: ColumnNames):
@@ -866,7 +938,6 @@ def test_rolling_mean_days_fit_transform_opponent(column_names):
     )
 
 
-
 def test_rolling_mean_days_transformer_transform(column_names):
     historical_df = pd.DataFrame(
         {
@@ -940,7 +1011,7 @@ def test_rolling_mean_days_transformer_transform(column_names):
 
 
 def test_rolling_mean_days_tranformer_transform_first_future_beyond_window(
-        column_names,
+    column_names,
 ):
     historical_df = pd.DataFrame(
         {
@@ -1014,14 +1085,13 @@ def test_rolling_mean_days_tranformer_transform_first_future_beyond_window(
     )
 
 
-
-
-@pytest.mark.parametrize("min_periods", [1, 10])
-def test_binary_granularity_rolling_mean_transformer(column_names, min_periods):
-    historical_df = pd.DataFrame(
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+@pytest.mark.parametrize("min_periods", [10, 1])
+def test_binary_granularity_rolling_mean_transformer(df, column_names, min_periods):
+    historical_df = df(
         {
             "player": ["a", "b", "c", "d", "a", "b", "c", "d", "c", "d"],
-            "game": [1, 1, 1, 1, 2, 2, 2, 3, 4, 4],
+            "game": ["1", "1", "1", "1", "2", "2", "2", "3", "4", "4"],
             "score_difference": [10, 10, -10, -10, 15, 15, -15, -20, 2, 2],
             "won": [1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
             "start_date": [
@@ -1036,18 +1106,17 @@ def test_binary_granularity_rolling_mean_transformer(column_names, min_periods):
                 pd.to_datetime("2023-01-02"),
                 pd.to_datetime("2023-01-02"),
             ],
-            "team": [1, 1, 2, 2, 1, 1, 2, 2, 2, 2],
+            "team": ["1", "1", "2", "2", "1", "1", "2", "2", "2", "2"],
             "prob": [0.5, 0.5, 0.5, 0.5, 0.6, 0.6, 0.3, 0.3, 0.2, 0.2],
         }
     )
 
-    historical_df["team"] = historical_df["team"].astype("str")
-    historical_df["game"] = historical_df["game"].astype("str")
-    historical_df["player"] = historical_df["player"].astype("str")
+    try:
+        expected_df = historical_df.copy()
+    except:
+        expected_df = historical_df.clone()
 
-    expected_df = historical_df.copy()
-
-    transformer = BinaryOutcomeRollingMeanTransformer(
+    transformer = BinaryOutcomeRollingMeanTransformerPolars(
         features=["score_difference"],
         binary_column="won",
         window=10,
@@ -1059,47 +1128,33 @@ def test_binary_granularity_rolling_mean_transformer(column_names, min_periods):
     transformed_data = transformer.generate_historical(
         df=historical_df, column_names=column_names
     )
-
-    if min_periods == 1:
-        expected_df[transformer.features_out[0]] = [
-            None,
-            None,
-            None,
-            None,
-            10,
-            10,
-            None,
-            None,
-            None,
-            None,
-        ]
-        expected_df[transformer.features_out[1]] = [
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            -10,
-            -10,
-            -12.5,
-            -15,
-        ]
-        expected_df[transformer.features_out[2]] = [
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ]
-    else:
-        for i in range(3):
-            expected_df[transformer.features_out[i]] = [
+    if isinstance(historical_df, pd.DataFrame):
+        if min_periods == 1:
+            expected_df[transformer.features_out[0]] = [
+                None,
+                None,
+                None,
+                None,
+                10,
+                10,
+                None,
+                None,
+                None,
+                None,
+            ]
+            expected_df[transformer.features_out[1]] = [
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                -10,
+                -10,
+                -12.5,
+                -15,
+            ]
+            expected_df[transformer.features_out[2]] = [
                 None,
                 None,
                 None,
@@ -1111,17 +1166,91 @@ def test_binary_granularity_rolling_mean_transformer(column_names, min_periods):
                 None,
                 None,
             ]
+        else:
+            for i in range(3):
+                expected_df[transformer.features_out[i]] = [
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ]
 
-    pd.testing.assert_frame_equal(
-        transformed_data, expected_df, check_like=True, check_dtype=False
-    )
+        pd.testing.assert_frame_equal(
+            transformed_data, expected_df, check_like=True, check_dtype=False
+        )
+    else:
+        if min_periods == 1:
+            expected_df = expected_df.with_columns(
+                [
+                    pl.Series(
+                        transformer.features_out[0],
+                        [None, None, None, None, 10.0, 10.0, None, None, None, None],
+                    ),
+                    pl.Series(
+                        transformer.features_out[1],
+                        [
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            -10.0,
+                            -10.0,
+                            -12.5,
+                            -15.0,
+                        ],
+                    ),
+                    pl.Series(
+                        transformer.features_out[2],
+                        [None, None, None, None, None, None, None, None, None, None],
+                    ),
+                ]
+            )
+
+        else:
+            for i in range(3):
+                expected_df = expected_df.with_columns(
+                    [
+                        pl.Series(
+                            transformer.features_out[i],
+                            [
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                            ],
+                        )
+                    ]
+                )
+        pl.testing.assert_frame_equal(
+            transformed_data,
+            expected_df.select(transformed_data.columns),
+            check_dtype=False,
+        )
 
 
-def test_binary_granularity_rolling_mean_fit_transform_transform(column_names):
-    historical_df = pd.DataFrame(
+@pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
+@pytest.mark.parametrize("min_periods", [10, 1])
+def test_binary_granularity_rolling_mean_fit_transform_transform(
+    df, column_names, min_periods
+):
+    historical_df = df(
         {
             "player": ["a", "b", "c", "d", "a", "b", "c", "d", "a", "b", "c", "d"],
-            "game": [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3],
+            "game": ["1", "1", "1", "1", "2", "2", "2", "2", "3", "3", "3", "3"],
             "score_difference": [10, 10, -10, -10, 15, 15, -15, -20, -2, -2, 2, 2],
             "won": [1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1],
             "start_date": [
@@ -1138,17 +1267,17 @@ def test_binary_granularity_rolling_mean_fit_transform_transform(column_names):
                 pd.to_datetime("2023-01-02"),
                 pd.to_datetime("2023-01-02"),
             ],
-            "team": [1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2],
+            "team": ["1", "1", "2", "2", "1", "1", "2", "2", "1", "1", "2", "2"],
             "prob": [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
         }
     )
 
-    historical_df["team"] = historical_df["team"].astype("str")
-    historical_df["game"] = historical_df["game"].astype("str")
-    historical_df["player"] = historical_df["player"].astype("str")
-    expected_historical_df = historical_df.copy()
+    try:
+        expected_historical_df = historical_df.copy()
+    except:
+        expected_historical_df = historical_df.to_pandas()
 
-    transformer = BinaryOutcomeRollingMeanTransformer(
+    transformer = BinaryOutcomeRollingMeanTransformerPolars(
         features=["score_difference"],
         binary_column="won",
         window=3,
@@ -1221,28 +1350,34 @@ def test_binary_granularity_rolling_mean_fit_transform_transform(column_names):
     ]
 
     expected_historical_df[transformer.features_out[4]] = [
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
+        float("nan"),
+        float("nan"),
+        float("nan"),
+        float("nan"),
+        float("nan"),
+        float("nan"),
+        float("nan"),
+        float("nan"),
+        float("nan"),
+        float("nan"),
+        float("nan"),
+        float("nan"),
     ]
-
-    pd.testing.assert_frame_equal(
-        historical_df, expected_historical_df, check_like=True, check_dtype=False
-    )
+    if isinstance(historical_df, pd.DataFrame):
+        pd.testing.assert_frame_equal(
+            historical_df, expected_historical_df, check_like=True, check_dtype=False
+        )
+    else:
+        pl.testing.assert_frame_equal(
+            historical_df,
+            pl.DataFrame(expected_historical_df).select(historical_df.columns),
+            check_dtype=False,
+        )
 
     future_df = pd.DataFrame(
         {
             "player": ["a", "d", "a", "d"],
-            "game": [5, 5, 6, 6],
+            "game": ["5", "5", "6", "6"],
             "score_difference": [None, None, None, None],
             "won": [None, None, None, None],
             "start_date": [
@@ -1251,16 +1386,14 @@ def test_binary_granularity_rolling_mean_fit_transform_transform(column_names):
                 pd.to_datetime("2023-01-04"),
                 pd.to_datetime("2023-01-04"),
             ],
-            "team": [1, 2, 1, 2],
+            "team": ["1", "2", "1", "2"],
             "prob": [0.6, 0.4, 0.7, 0.3],
         }
     )
-
-    future_df["team"] = future_df["team"].astype("str")
-    future_df["game"] = future_df["game"].astype("str")
-    future_df["player"] = future_df["player"].astype("str")
-
-    expected_future_df = future_df.copy()
+    try:
+        expected_future_df = future_df.copy()
+    except:
+        expected_future_df = future_df.to_pandas()
 
     future_df = transformer.generate_future(future_df)
     expected_future_df[transformer.features_out[0]] = [12.5, 2, 12.5, 2]
@@ -1273,17 +1406,24 @@ def test_binary_granularity_rolling_mean_fit_transform_transform(column_names):
         12.5 * 0.7 - 2 * 0.3,
         2 * 0.3 - 15 * 0.7,
     ]
+    if isinstance(future_df, pd.DataFrame):
+        pd.testing.assert_frame_equal(
+            future_df, expected_future_df, check_like=True, check_dtype=False
+        )
+    else:
+        pl.testing.assert_frame_equal(
+            future_df,
+            pl.DataFrame(expected_future_df).select(future_df.columns),
+            check_dtype=False,
+        )
 
-    pd.testing.assert_frame_equal(
-        future_df, expected_future_df, check_like=True, check_dtype=False
-    )
 
-
-def test_binary_granularity_rolling_mean_fit_transform_opponent(column_names):
-    df = pd.DataFrame(
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_binary_granularity_rolling_mean_fit_transform_opponent(df, column_names):
+    df = df(
         {
             "player": ["a", "b", "a", "b", "a", "b"],
-            "game": [1, 1, 2, 2, 3, 3],
+            "game": ["1", "1", "2", "2", "3", "3"],
             "score_difference": [10, -10, 5, -5, 3, 3],
             "won": [1, 0, 0, 1, 1, 0],
             "start_date": [
@@ -1294,17 +1434,17 @@ def test_binary_granularity_rolling_mean_fit_transform_opponent(column_names):
                 pd.to_datetime("2023-01-01"),
                 pd.to_datetime("2023-01-01"),
             ],
-            "team": [1, 2, 1, 2, 1, 2],
+            "team": ["1", "2", "1", "2", "1", "2"],
             "prob": [0.6, 0.4, 0.6, 0.4, 0.6, 0.4],
         }
     )
 
-    df["team"] = df["team"].astype("str")
-    df["game"] = df["game"].astype("str")
-    df["player"] = df["player"].astype("str")
-    expected_historical_df = df.copy()
+    try:
+        expected_historical_df = df.copy()
+    except:
+        expected_historical_df = df.to_pandas()
 
-    rolling_mean_transformation = BinaryOutcomeRollingMeanTransformer(
+    rolling_mean_transformation = BinaryOutcomeRollingMeanTransformerPolars(
         features=["score_difference"],
         binary_column="won",
         window=2,
@@ -1357,7 +1497,13 @@ def test_binary_granularity_rolling_mean_fit_transform_opponent(column_names):
         10 * 0.6 + 0.4 * 5,
         -10 * 0.6 + 0.4 * -5,
     ]
-
-    pd.testing.assert_frame_equal(
-        df, expected_historical_df, check_like=True, check_dtype=False
-    )
+    if isinstance(df, pd.DataFrame):
+        pd.testing.assert_frame_equal(
+            df, expected_historical_df, check_like=True, check_dtype=False
+        )
+    else:
+        pl.testing.assert_frame_equal(
+            df,
+            pl.DataFrame(expected_historical_df).select(df.columns),
+            check_dtype=False,
+        )

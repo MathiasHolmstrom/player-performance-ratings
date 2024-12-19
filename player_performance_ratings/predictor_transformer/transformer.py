@@ -1,11 +1,8 @@
 from abc import abstractmethod, ABC
-from narwhals.typing import FrameT
+from narwhals.typing import FrameT, IntoFrameT
 
-import pandas as pd
 import narwhals as nw
-import warnings
-
-warnings.simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
+import numpy as np
 
 
 class PredictorTransformer(ABC):
@@ -14,11 +11,11 @@ class PredictorTransformer(ABC):
         self.features = features
 
     @abstractmethod
-    def fit_transform(self, df: FrameT) -> pd.DataFrame:
+    def fit_transform(self, df: FrameT) -> IntoFrameT:
         pass
 
     @abstractmethod
-    def transform(self, df: FrameT) -> pd.DataFrame:
+    def transform(self, df: FrameT) -> IntoFrameT:
         pass
 
     @property
@@ -36,16 +33,16 @@ class ConvertDataFrameToCategoricalTransformer(PredictorTransformer):
         super().__init__(features=features)
 
     @nw.narwhalify
-    def fit_transform(self, df: FrameT) -> pd.DataFrame:
+    def fit_transform(self, df: FrameT) -> IntoFrameT:
         self._features_out = self.features
-        return self.transform(df.to_pandas())[self._features_out]
+        return self.transform(df).select(self._features_out)
 
     @nw.narwhalify
-    def transform(self, df: FrameT) -> pd.DataFrame:
+    def transform(self, df: FrameT) -> IntoFrameT:
         df = df.with_columns(
             nw.col(feature).cast(nw.Categorical) for feature in self.features
         )
-        return df.select(self._features_out).to_pandas()
+        return df.select(self._features_out)
 
     @property
     def features_out(self) -> list[str]:
@@ -63,44 +60,39 @@ class SkLearnTransformerWrapper(PredictorTransformer):
         self._features_out = []
 
     @nw.narwhalify
-    def fit_transform(self, df: FrameT) -> pd.DataFrame:
+    def fit_transform(self, df: FrameT) -> IntoFrameT:
 
         try:
             transformed_values = self.transformer.fit_transform(
-                df.select(self.features).to_pandas()
+                df.select(self.features).to_native()
             ).toarray()
         except AttributeError:
-            transformed_values = self.transformer.fit_transform(df.select(self.features))
-            if isinstance(transformed_values, pd.DataFrame):
+            transformed_values = self.transformer.fit_transform(
+                df.select(self.features).to_native()
+            )
+            if not isinstance(transformed_values, np.ndarray):
                 transformed_values = transformed_values.to_numpy()
 
         self._features_out = self.transformer.get_feature_names_out().tolist()
 
-
-        return df.to_pandas().assign(
-            **{
-                self._features_out[idx]: transformed_values[:, idx]
-                for idx in range(len(self._features_out))
-            }
-        )[self._features_out]
-
+        return  df.with_columns(
+            nw.new_series(self._features_out[idx],transformed_values[:, idx],native_namespace=nw.get_native_namespace(df)) for idx in range(len(self._features_out))
+        ).select(self._features_out)
 
     @nw.narwhalify
-    def transform(self, df: FrameT) -> pd.DataFrame:
+    def transform(self, df: FrameT) -> IntoFrameT:
         try:
-            transformed_values = self.transformer.transform(df.select(self.features)).toarray()
+            transformed_values = self.transformer.transform(
+                df.select(self.features).to_native()
+            ).toarray()
         except AttributeError:
-            transformed_values = self.transformer.transform(df.select(self.features))
-            if isinstance(transformed_values, pd.DataFrame):
+            transformed_values = self.transformer.transform(df.select(self.features).to_native())
+            if not isinstance(transformed_values, np.ndarray):
                 transformed_values = transformed_values.to_numpy()
 
-
-        return df.to_pandas().assign(
-            **{
-                self._features_out[idx]: transformed_values[:, idx]
-                for idx in range(len(self._features_out))
-            }
-        )[self._features_out]
+        return df.with_columns(
+            nw.new_series(self._features_out[idx],transformed_values[:, idx],native_namespace=nw.get_native_namespace(df)) for idx in range(len(self._features_out))
+        ).select(self._features_out)
 
     @property
     def features_out(self) -> list[str]:

@@ -137,10 +137,16 @@ def test_predictor_regressor():
     df = predictor.add_prediction(df)
     assert predictor.pred_column in df.columns
 
-def test_predictor_output_struct():
-    predictor = Predictor(estimator=OrdinalClassifier(estimator=LogisticRegression()), multiclass_output_as_struct=True)
 
-    df = pd.DataFrame({"feature1": [0.1, 0.5, 0.1, 0.5, 1,2], "__target": [1, 1, 2, 2, 3,3]})
+def test_predictor_output_struct():
+    predictor = Predictor(
+        estimator=OrdinalClassifier(estimator=LogisticRegression()),
+        multiclass_output_as_struct=True,
+    )
+
+    df = pd.DataFrame(
+        {"feature1": [0.1, 0.5, 0.1, 0.5, 1, 2], "__target": [1, 1, 2, 2, 3, 3]}
+    )
 
     predictor.train(df, estimator_features=["feature1"])
     df = predictor.add_prediction(df)

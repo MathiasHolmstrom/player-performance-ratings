@@ -7,10 +7,12 @@ from player_performance_ratings.ratings.performance_generator import (
     PerformancesGenerator,
     auto_create_pre_performance_transformations,
     Performance,
-
 )
-from player_performance_ratings.transformers.performances_transformers import SymmetricDistributionTransformer, \
-    PartialStandardScaler, MinMaxTransformer
+from player_performance_ratings.transformers.performances_transformers import (
+    SymmetricDistributionTransformer,
+    PartialStandardScaler,
+    MinMaxTransformer,
+)
 
 
 def test_auto_create_pre_transformers():
@@ -25,11 +27,13 @@ def test_auto_create_pre_transformers():
     ]
 
     pre_transformations = auto_create_pre_performance_transformations(
-        performances=performances, pre_transformers=[], auto_generated_features_prefix=""
+        performances=performances,
+        pre_transformers=[],
+        auto_generated_features_prefix="",
     )
 
     expected_pre_transformations = [
-        SymmetricDistributionTransformer(features=["kills", "deaths"], prefix=""),
+        SymmetricDistributionTransformer(features=["kills", "deaths"], prefix="symmetric_"),
         PartialStandardScaler(
             features=["kills", "deaths"],
             ratio=1,
@@ -57,11 +61,13 @@ def test_auto_create_pre_transformers_multiple_column_names():
     ]
 
     pre_transformations = auto_create_pre_performance_transformations(
-        performances=performances, pre_transformers=[], auto_generated_features_prefix=""
+        performances=performances,
+        pre_transformers=[],
+        auto_generated_features_prefix="",
     )
 
     expected_pre_transformations = [
-        SymmetricDistributionTransformer(features=["kills", "deaths"], prefix=""),
+        SymmetricDistributionTransformer(features=["kills", "deaths"], prefix="symmetric_"),
         PartialStandardScaler(
             features=["kills", "deaths"],
             ratio=1,
