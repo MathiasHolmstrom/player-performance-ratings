@@ -190,9 +190,10 @@ def test_match_predictor_auto_pre_transformers():
     predictor_mock = mock.Mock()
     predictor_mock.target = "__target"
     predictor_mock.columns_added = ["prediction"]
-    predictor_mock._estimator_features = [
+    predictor_mock.estimator_features = [
         RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED
     ]
+
 
     predictor_mock.add_prediction.return_value = expected_df
     rating_generators = UpdateRatingGenerator(

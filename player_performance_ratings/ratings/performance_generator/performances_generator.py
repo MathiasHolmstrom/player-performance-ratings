@@ -150,7 +150,7 @@ class PerformancesGenerator:
                 )
                 raise ValueError("performance contains nan values")
 
-        return df.select(*input_cols, *self.features_out).to_native()
+        return df.select(list(set([*input_cols, *self.features_out]))).to_native()
 
     def _weight_columns(
         self,

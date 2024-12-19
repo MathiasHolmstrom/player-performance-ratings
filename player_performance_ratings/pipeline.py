@@ -79,7 +79,7 @@ class Pipeline:
             This makes it possble to transform the lagged features before they are used by the predictor.
         """
 
-        self._estimator_features = predictor._estimator_features
+        self._estimator_features = predictor.estimator_features
         self.rating_generators: list[RatingGenerator] = (
             rating_generators
             if isinstance(rating_generators, list)

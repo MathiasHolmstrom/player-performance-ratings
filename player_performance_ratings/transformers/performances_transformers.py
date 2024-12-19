@@ -71,14 +71,15 @@ class PartialStandardScaler(BaseTransformer):
         are_estimator_features: bool = False,
     ):
         features_out = []
+        for feature in features:
+            features_out.append(prefix + feature)
         self.prefix = prefix
         super().__init__(
             features=features,
             features_out=features_out,
             are_estimator_features=are_estimator_features,
         )
-        for feature in self.features:
-            features_out.append(self.prefix + feature)
+
         self.ratio = ratio
         self.target_mean = target_mean
         self.max_value = max_value
@@ -276,11 +277,13 @@ class DiminishingValueTransformer(BaseTransformer):
             cutoff_value = self._feature_cutoff_value[feature_name]
 
             if self.reverse:
+
+
                 df = df.with_columns(
                     nw.when(nw.col(feature_name) <= cutoff_value)
                     .then(
-                        -(cutoff_value - nw.col(feature_name))
-                        * self.excessive_multiplier
+                        (cutoff_value - nw.col(feature_name))
+                        * -self.excessive_multiplier
                         + cutoff_value
                     )
                     .otherwise(nw.col(feature_name))
@@ -311,7 +314,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
         self,
         features: List[str],
         granularity: Optional[list[str]] = None,
-        skewness_allowed: float = 0.15,
+        skewness_allowed: float = 0.14,
         max_iterations: int = 50,
         min_excessive_multiplier: float = 0.04,
         min_rows: int = 10,

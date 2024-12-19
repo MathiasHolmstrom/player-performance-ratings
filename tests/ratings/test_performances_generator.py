@@ -33,7 +33,7 @@ def test_auto_create_pre_transformers():
     )
 
     expected_pre_transformations = [
-        SymmetricDistributionTransformer(features=["kills", "deaths"], prefix=""),
+        SymmetricDistributionTransformer(features=["kills", "deaths"], prefix="symmetric_"),
         PartialStandardScaler(
             features=["kills", "deaths"],
             ratio=1,
@@ -67,7 +67,7 @@ def test_auto_create_pre_transformers_multiple_column_names():
     )
 
     expected_pre_transformations = [
-        SymmetricDistributionTransformer(features=["kills", "deaths"], prefix=""),
+        SymmetricDistributionTransformer(features=["kills", "deaths"], prefix="symmetric_"),
         PartialStandardScaler(
             features=["kills", "deaths"],
             ratio=1,

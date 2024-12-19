@@ -1242,7 +1242,7 @@ def test_binary_granularity_rolling_mean_transformer(df, column_names, min_perio
         )
 
 
-@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+@pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
 @pytest.mark.parametrize("min_periods", [10, 1])
 def test_binary_granularity_rolling_mean_fit_transform_transform(
     df, column_names, min_periods
