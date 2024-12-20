@@ -8,8 +8,10 @@ from player_performance_ratings.utils import validate_sorting
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-from typing import Optional
+from typing import Optional, Any
+from narwhals.typing import FrameT
 import pandas as pd
+import narwhals as nw
 
 from player_performance_ratings.data_structures import (
     MatchTeam,
@@ -22,9 +24,9 @@ from player_performance_ratings.ratings.league_identifier import LeagueIdentifie
 
 HOUR_NUMBER_COLUMN_NAME = "hour_number"
 
-
+@nw.narwhalify
 def convert_df_to_matches(
-    df: pd.DataFrame,
+    df: FrameT,
     column_names: ColumnNames,
     performance_column_name: str,
     separate_player_by_position: bool = False,
@@ -50,8 +52,6 @@ def convert_df_to_matches(
     If not the  league of the match will be equal to the league of the current match
     """
 
-    df = df.copy()
-
     if (
         column_names.participation_weight is None
         and column_names.projected_participation_weight is not None
@@ -73,7 +73,7 @@ def convert_df_to_matches(
                 f"mean performance is {mean_performance} which is far from 0.5. It is recommended to do further pre_transformations of the performance column"
             )
 
-        if df[performance_column_name].isnull().any():
+        if df[performance_column_name].is_null().any():
             logging.error(
                 f"df[{performance_column_name}] contains nan values. Make sure all column_names used in column_weights are imputed beforehand"
             )
@@ -137,17 +137,17 @@ def convert_df_to_matches(
         logging.warning(
             f"Dataframe column count {len(df.columns)} is high. Consider removing unneeded columns to speed up processing itme"
         )
-    data_dict = df.to_dict("records")
+
 
     matches = []
 
     prev_team_id = None
-    prev_row: Optional[None, pd.Series] = None
+    prev_row: Optional[None, dict[str, Any]] = None
     match_teams = []
     match_team_players = []
     team_league_counts = {}
 
-    for row in data_dict:
+    for row in df.iter_rows(named=True):
         match_id = row[col_names.match_id]
         team_id = row[col_names.team_id]
         update_team_id = row[col_names.parent_team_id]
@@ -294,7 +294,7 @@ def convert_df_to_matches(
 
 def _create_match(
     league_in_df,
-    row: pd.Series,
+    row: dict[str, Any],
     match_teams: list[MatchTeam],
     column_names: ColumnNames,
 ) -> Match:

@@ -393,7 +393,7 @@ def test_opponent_adjusted_rating_generator_with_projected_performance():
                 pd.to_datetime("2021-01-02"),
             ],
             rating_generator.performance_column: [
-                1,
+                1.0,
                 0.5,
                 0.25,
                 0.25,
@@ -402,8 +402,8 @@ def test_opponent_adjusted_rating_generator_with_projected_performance():
                 0.5,
                 0.5,
             ],
-            column_names.projected_participation_weight: [1, 1, 1, 1, 0.2, 1, 0.6, 0.6],
-            column_names.participation_weight: [1, 1, 1, 1, 1, 1, 1, 1],
+            column_names.projected_participation_weight: [1.0, 1.0, 1.0, 1.0, 0.2, 1, 0.6, 0.6],
+            column_names.participation_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
         }
     )
 
