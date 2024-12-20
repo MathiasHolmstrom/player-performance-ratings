@@ -1,7 +1,8 @@
 import logging
 from abc import abstractmethod, ABC
-from typing import Optional
+from typing import Optional, TypeVar
 
+import polars as pl
 import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -14,7 +15,7 @@ from player_performance_ratings.predictor_transformer import (
 from player_performance_ratings.predictor_transformer._simple_transformer import (
     SimpleTransformer,
 )
-
+DataFrameType = TypeVar("DataFrameType", pd.DataFrame, pl.DataFrame)
 
 class BasePredictor(ABC):
 
@@ -61,11 +62,11 @@ class BasePredictor(ABC):
         return self._deepest_estimator
 
     @abstractmethod
-    def train(self, df: pd.DataFrame, estimator_features: list[str]) -> None:
+    def train(self, df: DataFrameType, estimator_features: list[str]) -> None:
         pass
 
     @abstractmethod
-    def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
+    def add_prediction(self, df: DataFrameType) -> DataFrameType:
         pass
 
     @property
@@ -91,21 +92,29 @@ class BasePredictor(ABC):
         return self.estimator.classes_
 
     def _convert_multiclass_predictions_to_struct(
-        self, df: pd.DataFrame
-    ) -> pd.DataFrame:
-        df[f"{self._target}_struct"] = df.apply(
-            lambda row: dict(zip(row["classes"], row[self.pred_column])), axis=1
+        self, df: pl.DataFrame
+    ) -> pl.DataFrame:
+
+        input_cols = df.columns
+        df = df.with_row_index("id")
+        df_exploded = df.explode(["outcome", "probs"])
+
+        df_pivoted = df_exploded.pivot(
+            values="probs",
+            index="id",
+            columns="outcome"
         )
-        df[f"{self._target}_struct"] = df[f"{self._target}_struct"].apply(
-            lambda d: {str(k): v for k, v in d.items()}
-        )
-        df = df.drop(columns=[self.pred_column, "classes"])
-        return df.rename(columns={f"{self._target}_struct": self.pred_column})
+
+        class_columns = [c for c in df_pivoted.columns if c not in ["id"]]
+        return df_pivoted.with_columns(
+            pl.struct(class_columns).alias(self.pred_column)
+        ).select(*input_cols)
+
 
     def set_target(self, new_target_name: str):
         self._target = new_target_name
 
-    def _create_pre_transformers(self, df: pd.DataFrame) -> list[PredictorTransformer]:
+    def _create_pre_transformers(self, df: pl.DataFrame) -> list[PredictorTransformer]:
         pre_transformers = []
         cat_feats_to_transform = []
         all_feats_in_pre_transformers = [
@@ -120,7 +129,7 @@ class BasePredictor(ABC):
                 )
                 continue
 
-            if not pd.api.types.is_numeric_dtype(df[estimator_feature]):
+            if not df[estimator_feature].dtype.is_numeric():
                 if estimator_feature not in all_feats_in_pre_transformers:
                     cat_feats_to_transform.append(estimator_feature)
 
@@ -197,14 +206,17 @@ class BasePredictor(ABC):
                 )
         return pre_transformers
 
-    def fit_transform_pre_transformers(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _fit_transform_pre_transformers(self, df: pl.DataFrame) -> pl.DataFrame:
         if self.auto_pre_transform:
             self.pre_transformers += self._create_pre_transformers(df)
 
         for pre_transformer in self.pre_transformers:
             values = pre_transformer.fit_transform(df)
             features_out = pre_transformer.features_out
-            df[features_out] = values
+            df = df.with_columns(
+                pl.col(v).alias(features_out[idx]) for idx, v in enumerate(values)
+            )
+
             feats_to_remove = [
                 f for f in pre_transformer.features if f in self._estimator_features
             ]
@@ -217,10 +229,10 @@ class BasePredictor(ABC):
 
         return df
 
-    def transform_pre_transformers(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _transform_pre_transformers(self, df: pl.DataFrame) -> pl.DataFrame:
         for pre_transformer in self.pre_transformers:
             values = pre_transformer.transform(df)
-            df = df.assign(**{col: values[col] for col in values.columns})
+            df = df.with_columns(**{col: values[col] for col in values.columns})
         return df
 
     @property

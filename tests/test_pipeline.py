@@ -1,6 +1,9 @@
 from unittest import mock
 
 import pandas as pd
+import polars as pl
+from polars.testing import assert_frame_equal
+import pytest
 from player_performance_ratings.cross_validator import MatchKFoldCrossValidator
 
 from player_performance_ratings.predictor import Predictor
@@ -158,9 +161,9 @@ def test_pipeline_constructor():
         ][0].sort()
     )
 
-
-def test_match_predictor_auto_pre_transformers():
-    df = pd.DataFrame(
+@pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
+def test_match_predictor_auto_pre_transformers(df):
+    data = df(
         {
             "game_id": [1, 1, 2, 2, 3, 3],
             "player_id": [1, 2, 3, 1, 2, 3],
@@ -184,7 +187,10 @@ def test_match_predictor_auto_pre_transformers():
         ColumnWeight(name="deaths", weight=0.4, lower_is_better=True),
     ]
 
-    expected_df = df.copy()
+    try:
+        expected_df = data.copy()
+    except:
+        expected_df = data.to_pandas()
     expected_df["prediction"] = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
 
     predictor_mock = mock.Mock()
@@ -217,9 +223,12 @@ def test_match_predictor_auto_pre_transformers():
         ),
     )
 
-    new_df = pipeline.train_predict(df=df)
-
-    pd.testing.assert_frame_equal(new_df, expected_df, check_like=True)
+    new_df = pipeline.train_predict(df=data)
+    if isinstance(df, pl.DataFrame):
+        expected_df = expected_df.to_pandas()
+        assert_frame_equal(new_df, expected_df, check_dtype=False)
+    else:
+        pd.testing.assert_frame_equal(new_df, expected_df, check_like=True)
 
     assert len(pipeline.performances_generator.transformers) > 0
 

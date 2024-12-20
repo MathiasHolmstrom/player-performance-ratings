@@ -1,9 +1,9 @@
-import copy
 import logging
 import warnings
-import pandas as pd
 from lightgbm import LGBMClassifier, LGBMRegressor
 from pandas.errors import SettingWithCopyWarning
+import polars as pl
+import pandas as pd
 from sklearn import clone
 
 from player_performance_ratings.predictor.sklearn_estimator import OrdinalClassifier
@@ -22,7 +22,7 @@ from sklearn.linear_model import LogisticRegression
 from player_performance_ratings.consts import PredictColumnNames
 
 from player_performance_ratings.data_structures import ColumnNames
-from player_performance_ratings.predictor._base import BasePredictor
+from player_performance_ratings.predictor._base import BasePredictor, DataFrameType
 
 
 class GameTeamPredictor(BasePredictor):
@@ -39,18 +39,18 @@ class GameTeamPredictor(BasePredictor):
     """
 
     def __init__(
-        self,
-        game_id_colum: str,
-        team_id_column: str,
-        target: Optional[str] = PredictColumnNames.TARGET,
-        estimator: Optional = None,
-        estimator_features: Optional[list[str]] = None,
-        multiclassifier: bool = False,
-        pred_column: Optional[str] = None,
-        pre_transformers: Optional[list[PredictorTransformer]] = None,
-        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-        filters: Optional[list[Filter]] = None,
-        multiclass_output_as_struct: bool = False,
+            self,
+            game_id_colum: str,
+            team_id_column: str,
+            target: Optional[str] = PredictColumnNames.TARGET,
+            estimator: Optional = None,
+            estimator_features: Optional[list[str]] = None,
+            multiclassifier: bool = False,
+            pred_column: Optional[str] = None,
+            pre_transformers: Optional[list[PredictorTransformer]] = None,
+            post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+            filters: Optional[list[Filter]] = None,
+            multiclass_output_as_struct: bool = False,
     ):
         """
         :param game_id_colum - name of game_id column
@@ -90,7 +90,7 @@ class GameTeamPredictor(BasePredictor):
         )
 
     def train(
-        self, df: pd.DataFrame, estimator_features: list[Optional[str]] = None
+            self, df: DataFrameType, estimator_features: list[Optional[str]] = None
     ) -> None:
         """
         Performs pre_transformations and trains an Sklearn-like estimator.
@@ -98,6 +98,11 @@ class GameTeamPredictor(BasePredictor):
         :param df - Dataframe containing the estimator_features and target.
         :param estimator_features - If Estimator features are passed they will the estimator_features created by the constructor
         """
+
+        if isinstance(df, pd.DataFrame):
+            df = pl.DataFrame(df)
+
+        df = df.with_row_index(name="__row_index")
 
         if len(df) == 0:
             raise ValueError("df is empty")
@@ -110,9 +115,9 @@ class GameTeamPredictor(BasePredictor):
         self._estimator_features = estimator_features or self._estimator_features
         self._estimator_features = self._estimator_features.copy()
         df = apply_filters(df=df, filters=self.filters)
-        df = self.fit_transform_pre_transformers(df=df)
+        df = self._fit_transform_pre_transformers(df=df)
         if len(df[self._target].unique()) > 2 and hasattr(
-            self.estimator, "predict_proba"
+                self.estimator, "predict_proba"
         ):
             self.multiclassifier = True
             if self.estimator.__class__.__name__ == "LogisticRegression":
@@ -120,7 +125,7 @@ class GameTeamPredictor(BasePredictor):
 
         if hasattr(self.estimator, "predict_proba"):
             try:
-                df = df.assign(**{self._target: df[self._target].astype("int")})
+                df = df.with_columns(pl.col(self._target).cast(pl.Int64))
             except Exception:
                 pass
 
@@ -130,7 +135,7 @@ class GameTeamPredictor(BasePredictor):
         grouped = self._create_grouped(df)
         self.estimator.fit(grouped[self._estimator_features], grouped[self._target])
 
-    def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
+    def add_prediction(self, df: DataFrameType) -> DataFrameType:
         """
         Adds prediction to df
 
@@ -138,51 +143,74 @@ class GameTeamPredictor(BasePredictor):
         :return: Input df with prediction column
         """
 
+        if isinstance(df, pd.DataFrame):
+            df = pl.DataFrame(df)
+            ori_type = "pd"
+        else:
+            ori_type = "pl"
+
+        df = df.with_row_index(name="__row_index")
+
         if hasattr(self.estimator, "predict_proba"):
             try:
-                df = df.assign(**{self._target: df[self._target].astype("int")})
+                df = df.with_columns(pl.col(self._target).cast(pl.Int64))
             except Exception:
                 pass
         if not self._estimator_features:
             raise ValueError("estimator_features not set. Please train first")
-        df = self.transform_pre_transformers(df=df)
+        df = self._transform_pre_transformers(df=df)
         grouped = self._create_grouped(df)
 
         if self.multiclassifier:
-            grouped[self._pred_column] = self.estimator.predict_proba(
-                grouped[self._estimator_features]
-            ).tolist()
-            grouped["classes"] = [
-                list(self.estimator.classes_) for _ in range(len(grouped))
-            ]
-        elif not hasattr(self.estimator, "predict_proba"):
-            grouped[self._pred_column] = self.estimator.predict(
-                grouped[self._estimator_features]
+            grouped = grouped.with_columns(
+                pl.Series(
+                    name=self._pred_column,
+                    values=self.estimator.predict_proba(
+                        grouped[self._estimator_features]).tolist())
             )
+
+            grouped = grouped.with_columns(
+                pl.lit(list(self.estimator.classes_) for _ in range(len(grouped)))
+            )
+
+        elif not hasattr(self.estimator, "predict_proba"):
+            grouped = grouped.with_columns(
+                pl.Series(
+                    name=self._pred_column,
+                    values=self.estimator.predict(
+                        grouped[self._estimator_features]
+                    )
+                )
+            )
+
         else:
-            grouped[self._pred_column] = self.estimator.predict_proba(
-                grouped[self._estimator_features]
-            )[:, 1]
+            grouped = grouped.with_columns(
+                pl.Series(
+                    name=self._pred_column,
+                    values=self.estimator.predict_proba(
+                        grouped[self._estimator_features]
+                    )[:, 1].tolist())
+            )
 
         if self.pred_column in df.columns:
-            df = df.drop(columns=[self.pred_column])
+            df = df.drop([self.pred_column])
 
         if "classes" in grouped.columns:
-            df = df.merge(
-                grouped[
+            df = df.join(
+                grouped.select(
                     [self.game_id_colum, self.team_id_column]
                     + [self._pred_column, "classes"]
-                ],
+                ),
                 on=[self.game_id_colum, self.team_id_column],
-            )
+            ).sort(by='__row_index')
 
         else:
-            df = df.merge(
-                grouped[
+            df = df.join(
+                grouped.select(
                     [self.game_id_colum, self.team_id_column] + [self._pred_column]
-                ],
+                ),
                 on=[self.game_id_colum, self.team_id_column],
-            )
+            ).sort(by='__row_index')
 
         for simple_transformer in self.post_predict_transformers:
             df = simple_transformer.transform(df)
@@ -190,14 +218,17 @@ class GameTeamPredictor(BasePredictor):
         if self.multiclass_output_as_struct and self.multiclassifier:
             df = self._convert_multiclass_predictions_to_struct(df)
 
+        df = df.drop('__row_index')
+        if ori_type == "pd":
+            return df.to_pandas()
         return df
 
-    def _create_grouped(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _create_grouped(self, df: pl.DataFrame) -> pl.DataFrame:
 
         numeric_features = [
             feature
             for feature in self._estimator_features
-            if df[feature].dtype in ["int", "float"]
+            if df[feature].dtype.is_numeric()
         ]
         cat_feats = [
             feature
@@ -206,39 +237,34 @@ class GameTeamPredictor(BasePredictor):
         ]
 
         if self._target in df.columns:
-            if df[self._target].dtype == "object":
-                df.loc[:, self._target] = df[self._target].astype("int")
+            #    if df[self._target].dtype == "object":
+            #     df = df.with_columns(pl.col(self._target).cast(pl.Int64))
 
             grouped = (
-                df.groupby([self.game_id_colum, self.team_id_column])
+                df.group_by([self.game_id_colum, self.team_id_column, '__row_index'])
                 .agg(
-                    {
-                        **{feature: "mean" for feature in numeric_features},
-                        self._target: "mean",
-                    }
+                    pl.col(feature).mean() for feature in [*numeric_features, self.target]
                 )
-                .reset_index()
             )
 
         else:
             grouped = (
-                df.groupby([self.game_id_colum, self.team_id_column])
-                .agg({**{feature: "mean" for feature in numeric_features}})
-                .reset_index()
+                df.group_by([self.game_id_colum, self.team_id_column])
+                .agg(pl.col(feature).mean() for feature in numeric_features)
             )
 
         if self._target in df.columns and hasattr(
-            self._deepest_estimator, "predict_proba"
+                self._deepest_estimator, "predict_proba"
         ):
-            grouped[self._target] = grouped[self._target].astype("int")
+            grouped = grouped.with_columns(pl.col(self._target).cast(pl.Int64))
 
-        grouped = grouped.merge(
-            df[[self.game_id_colum, self.team_id_column, *cat_feats]].drop_duplicates(
+        grouped = grouped.join(
+            df.select([self.game_id_colum, self.team_id_column, *cat_feats]).unique(
                 subset=[self.game_id_colum, self.team_id_column]
             ),
             on=[self.game_id_colum, self.team_id_column],
             how="inner",
-        )
+        ).sort('__row_index')
 
         return grouped
 
@@ -252,17 +278,17 @@ class Predictor(BasePredictor):
     """
 
     def __init__(
-        self,
-        target: Optional[str] = PredictColumnNames.TARGET,
-        estimator: Optional = None,
-        estimator_features: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
-        multiclassifier: bool = False,
-        pred_column: Optional[str] = None,
-        column_names: Optional[ColumnNames] = None,
-        pre_transformers: Optional[list[PredictorTransformer]] = None,
-        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-        multiclass_output_as_struct: bool = False,
+            self,
+            target: Optional[str] = PredictColumnNames.TARGET,
+            estimator: Optional = None,
+            estimator_features: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
+            multiclassifier: bool = False,
+            pred_column: Optional[str] = None,
+            column_names: Optional[ColumnNames] = None,
+            pre_transformers: Optional[list[PredictorTransformer]] = None,
+            post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+            multiclass_output_as_struct: bool = False,
     ):
         """
         :param target - Name of the column that the predictor should predict
@@ -294,7 +320,7 @@ class Predictor(BasePredictor):
             multiclass_output_as_struct=multiclass_output_as_struct,
             pred_column=pred_column,
             estimator=estimator
-            or LGBMClassifier(max_depth=2, n_estimators=100, verbose=-100),
+                      or LGBMClassifier(max_depth=2, n_estimators=100, verbose=-100),
             pre_transformers=pre_transformers,
             post_predict_transformers=post_predict_transformers,
             filters=filters,
@@ -302,7 +328,7 @@ class Predictor(BasePredictor):
         )
 
     def train(
-        self, df: pd.DataFrame, estimator_features: Optional[list[str]] = None
+            self, df: pd.DataFrame, estimator_features: Optional[list[str]] = None
     ) -> None:
         """
         Performs pre_transformations and trains an Sklearn-like estimator.
@@ -328,12 +354,12 @@ class Predictor(BasePredictor):
             except Exception:
                 pass
 
-        filtered_df = self.fit_transform_pre_transformers(df=filtered_df)
+        filtered_df = self._fit_transform_pre_transformers(df=filtered_df)
 
         if (
-            not self.multiclassifier
-            and len(filtered_df[self._target].unique()) > 2
-            and hasattr(self._deepest_estimator, "predict_proba")
+                not self.multiclassifier
+                and len(filtered_df[self._target].unique()) > 2
+                and hasattr(self._deepest_estimator, "predict_proba")
         ):
             self.multiclassifier = True
             if self.estimator.__class__.__name__ == "LogisticRegression":
@@ -353,7 +379,7 @@ class Predictor(BasePredictor):
             filtered_df[self._estimator_features], filtered_df[self._target]
         )
 
-    def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
+    def add_prediction(self, df: DataFrameType) -> DataFrameType:
         """
         Adds prediction to df
 
@@ -370,7 +396,7 @@ class Predictor(BasePredictor):
             except Exception:
                 pass
 
-        df = self.transform_pre_transformers(df=df)
+        df = self._transform_pre_transformers(df=df)
         if self.multiclassifier:
             df[self._pred_column] = self.estimator.predict_proba(
                 df[self._estimator_features]
@@ -403,17 +429,17 @@ class GranularityPredictor(BasePredictor):
     """
 
     def __init__(
-        self,
-        granularity_column_name: str,
-        target: Optional[str] = PredictColumnNames.TARGET,
-        estimator: Optional = None,
-        estimator_features: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
-        multiclassifier: bool = False,
-        pred_column: Optional[str] = None,
-        column_names: Optional[ColumnNames] = None,
-        pre_transformers: Optional[list[PredictorTransformer]] = None,
-        multiclass_output_as_struct: bool = False,
+            self,
+            granularity_column_name: str,
+            target: Optional[str] = PredictColumnNames.TARGET,
+            estimator: Optional = None,
+            estimator_features: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
+            multiclassifier: bool = False,
+            pred_column: Optional[str] = None,
+            column_names: Optional[ColumnNames] = None,
+            pre_transformers: Optional[list[PredictorTransformer]] = None,
+            multiclass_output_as_struct: bool = False,
     ):
         """
         :param target - Name of the column that the predictor should predict
@@ -448,7 +474,7 @@ class GranularityPredictor(BasePredictor):
             target=self._target,
             pred_column=pred_column,
             estimator=estimator
-            or LGBMClassifier(max_depth=2, n_estimators=100, verbose=-100),
+                      or LGBMClassifier(max_depth=2, n_estimators=100, verbose=-100),
             pre_transformers=pre_transformers,
             filters=filters,
             estimator_features=estimator_features,
@@ -481,7 +507,7 @@ class GranularityPredictor(BasePredictor):
             except Exception:
                 pass
 
-        filtered_df = self.fit_transform_pre_transformers(df=filtered_df)
+        filtered_df = self._fit_transform_pre_transformers(df=filtered_df)
 
         if hasattr(self._deepest_estimator, "predict_proba"):
             filtered_df = filtered_df.assign(
@@ -489,9 +515,9 @@ class GranularityPredictor(BasePredictor):
             )
 
         if (
-            not self.multiclassifier
-            and len(filtered_df[self._target].unique()) > 2
-            and hasattr(self._deepest_estimator, "predict_proba")
+                not self.multiclassifier
+                and len(filtered_df[self._target].unique()) > 2
+                and hasattr(self._deepest_estimator, "predict_proba")
         ):
             self.multiclassifier = True
             if self.estimator.__class__.__name__ == "LogisticRegression":
@@ -527,7 +553,7 @@ class GranularityPredictor(BasePredictor):
             except Exception:
                 pass
 
-        df = self.transform_pre_transformers(df=df)
+        df = self._transform_pre_transformers(df=df)
         dfs = []
         for granularity, estimator in self._granularity_estimators.items():
             rows = df[df[self.granularity_column_name] == granularity]
@@ -579,17 +605,17 @@ class SeriesWinLosePredictor(BasePredictor):
     """
 
     def __init__(
-        self,
-        format_column_name: str,
-        game_win_prob_column_name: str,
-        target: Optional[str] = PredictColumnNames.TARGET,
-        estimator: Optional = None,
-        estimator_features: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
-        multiclassifier: bool = False,
-        pred_column: Optional[str] = None,
-        column_names: Optional[ColumnNames] = None,
-        pre_transformers: Optional[list[PredictorTransformer]] = None,
+            self,
+            format_column_name: str,
+            game_win_prob_column_name: str,
+            target: Optional[str] = PredictColumnNames.TARGET,
+            estimator: Optional = None,
+            estimator_features: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
+            multiclassifier: bool = False,
+            pred_column: Optional[str] = None,
+            column_names: Optional[ColumnNames] = None,
+            pre_transformers: Optional[list[PredictorTransformer]] = None,
     ):
         self._target = target
         self.format_column_name = format_column_name
@@ -643,7 +669,7 @@ class SeriesWinLosePredictor(BasePredictor):
             target=self._target,
             pred_column=pred_column,
             estimator=estimator
-            or LGBMClassifier(max_depth=2, n_estimators=100, verbose=-100),
+                      or LGBMClassifier(max_depth=2, n_estimators=100, verbose=-100),
             pre_transformers=pre_transformers,
             filters=filters,
             estimator_features=estimator_features,
@@ -673,16 +699,16 @@ class SeriesWinLosePredictor(BasePredictor):
 class PointToClassificationPredictor(BasePredictor):
 
     def __init__(
-        self,
-        target: Optional[str] = PredictColumnNames.TARGET,
-        estimator: Optional = None,
-        point_estimate_column: Optional[str] = None,
-        estimator_features: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
-        multiclassifier: bool = False,
-        pred_column: Optional[str] = None,
-        column_names: Optional[ColumnNames] = None,
-        pre_transformers: Optional[list[PredictorTransformer]] = None,
+            self,
+            target: Optional[str] = PredictColumnNames.TARGET,
+            estimator: Optional = None,
+            point_estimate_column: Optional[str] = None,
+            estimator_features: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
+            multiclassifier: bool = False,
+            pred_column: Optional[str] = None,
+            column_names: Optional[ColumnNames] = None,
+            pre_transformers: Optional[list[PredictorTransformer]] = None,
     ):
         self._target = target
         self.multiclassifier = multiclassifier
@@ -693,7 +719,7 @@ class PointToClassificationPredictor(BasePredictor):
             target=self._target,
             pred_column=pred_column,
             estimator=estimator
-            or LGBMRegressor(
+                      or LGBMRegressor(
                 max_depth=2, n_estimators=100, learning_rate=0.05, verbose=-100
             ),
             pre_transformers=pre_transformers,

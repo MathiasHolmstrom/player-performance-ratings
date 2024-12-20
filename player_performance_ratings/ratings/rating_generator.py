@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Union
 
-import pandas as pd
+import narwhals as nw
+from narwhals.typing import FrameT, IntoFrameT
 
 from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
 from player_performance_ratings.ratings.enums import (
@@ -54,21 +55,21 @@ class RatingGenerator(ABC):
     @abstractmethod
     def generate_historical(
         self,
-        df: pd.DataFrame,
+        df: FrameT,
         column_names: ColumnNames,
         historical_features_out: Optional[list[RatingHistoricalFeatures]] = None,
         known_features_out: Optional[list[RatingKnownFeatures]] = None,
-    ) -> pd.DataFrame:
+    ) -> IntoFrameT:
         pass
 
     @abstractmethod
     def generate_future(
         self,
-        df: Optional[pd.DataFrame],
+        df: Optional[FrameT],
         matches: Optional[list[Match]] = None,
         historical_features_out: Optional[list[RatingHistoricalFeatures]] = None,
         known_features_out: Optional[list[RatingKnownFeatures]] = None,
-    ) -> pd.DataFrame:
+    ) -> IntoFrameT:
         pass
 
     @property

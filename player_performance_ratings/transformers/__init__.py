@@ -8,7 +8,6 @@ from .transformers import (
     RatioTeamPredictorTransformer,
     PredictorTransformer,
     NetOverPredictedPostTransformer,
-    ModifierTransformer,
     ModifyOperation,
     Operation,
 )

@@ -14,7 +14,7 @@ from player_performance_ratings.transformers.base_transformer import (
     BaseLagGenerator,
 )
 import narwhals as nw
-from narwhals.typing import FrameT
+from narwhals.typing import FrameT, IntoFrameT
 
 
 class NetOverPredictedPostTransformer(BaseTransformer):
@@ -164,7 +164,7 @@ class OperatorTransformer(BaseTransformer):
             features_out=[self.new_column_name],
         )
 
-    def fit_transform(self, df: FrameT, column_names: Optional[ColumnNames]) -> FrameT:
+    def fit_transform(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
         self.column_names = column_names
         return self.transform(df)
 
@@ -189,61 +189,6 @@ class OperatorTransformer(BaseTransformer):
 
         return df
 
-
-class ModifierTransformer(BaseTransformer):
-    """
-    Performs operations on two columns and stores the result in a new column.
-    An operation can be subtraction, addition, multiplication, or division.
-    """
-
-    def __init__(
-        self,
-        modify_operations: list[ModifyOperation],
-        features: Optional[list[str]] = None,
-        are_estimator_features: bool = True,
-    ):
-        """
-        :param modify_operations: A list of ModifyOperations to perform
-        :param features: Features need to be passed due to BaseTransformer requring them, although has no effect on the transformer
-            Thus keep it as default None.
-        :param are_estimator_features: Whether the new created columns should be used as estimator features
-        """
-        self.modify_operations = modify_operations
-        _features_out = [
-            operation.new_column_name for operation in self.modify_operations
-        ]
-        super().__init__(
-            features=features,
-            are_estimator_features=are_estimator_features,
-            features_out=_features_out,
-        )
-
-    def fit_transform(
-        self, df: pd.DataFrame, column_names: Optional[ColumnNames]
-    ) -> pd.DataFrame:
-        self.column_names = column_names
-        return self.transform(df)
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        for operation in self.modify_operations:
-            if operation.operation == Operation.SUBTRACT:
-                if (
-                    operation.feature1 not in df.columns
-                    or operation.feature2 not in df.columns
-                ):
-                    df = df.assign(**{operation.new_column_name: np.nan})
-
-                else:
-                    df = df.assign(
-                        **{
-                            operation.new_column_name: df[operation.feature1]
-                            - df[operation.feature2]
-                        }
-                    )
-
-        return df
-
-
 class PredictorTransformer(BaseTransformer):
     """
     Transformer that uses a predictor to generate predictions on the dataset
@@ -260,12 +205,14 @@ class PredictorTransformer(BaseTransformer):
             features=features, features_out=[f"{self.predictor.pred_column}"]
         )
 
+    @nw.narwhalify
     def fit_transform(
-        self, df: pd.DataFrame, column_names: Optional[None] = None
-    ) -> pd.DataFrame:
+        self, df: FrameT, column_names: Optional[None] = None
+    ) -> IntoFrameT:
         self.predictor.train(df=df, estimator_features=self.features)
         return self.transform(df)
 
+    @nw.narwhalify
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self.predictor.add_prediction(df=df)
         return df

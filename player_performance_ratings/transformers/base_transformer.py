@@ -27,7 +27,7 @@ class BaseTransformer(ABC):
 
     @abstractmethod
     def fit_transform(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: FrameT, column_names: Optional[ColumnNames]
     ) -> IntoFrameT:
         pass
 
