@@ -92,23 +92,16 @@ class BasePredictor(ABC):
         return self.estimator.classes_
 
     def _convert_multiclass_predictions_to_struct(
-        self, df: pl.DataFrame
+        self, df: pl.DataFrame, classes: Optional[list[str]] = None
     ) -> pl.DataFrame:
+        if classes is None:
+            classes = self.estimator.classes_
 
-        input_cols = df.columns
-        df = df.with_row_index("id")
-        df_exploded = df.explode(["outcome", "probs"])
-
-        df_pivoted = df_exploded.pivot(
-            values="probs",
-            index="id",
-            columns="outcome"
+        return df.with_columns(
+            pl.struct(
+                *[pl.col(self.pred_column).list.get(i).alias(str(cls)) for i, cls in enumerate(classes)]
+            ).alias(self.pred_column)
         )
-
-        class_columns = [c for c in df_pivoted.columns if c not in ["id"]]
-        return df_pivoted.with_columns(
-            pl.struct(class_columns).alias(self.pred_column)
-        ).select(*input_cols)
 
 
     def set_target(self, new_target_name: str):
@@ -214,7 +207,10 @@ class BasePredictor(ABC):
             values = pre_transformer.fit_transform(df)
             features_out = pre_transformer.features_out
             df = df.with_columns(
-                pl.col(v).alias(features_out[idx]) for idx, v in enumerate(values)
+                pl.Series(
+                    values=v,
+                    name=features_out[idx],
+                ) for idx, v in enumerate(values)
             )
 
             feats_to_remove = [
