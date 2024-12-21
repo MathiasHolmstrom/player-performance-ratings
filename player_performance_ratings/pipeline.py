@@ -141,7 +141,7 @@ class Pipeline:
 
         for col in self.predictor.columns_added:
             if col in df.columns:
-                df = df.drop(columns=[col])
+                df = df.drop([col])
 
         if cross_validator is None:
             cross_validator = self._create_default_cross_validator(df=df)
@@ -204,6 +204,9 @@ class Pipeline:
         :param add_train_prediction: If True, the predictions on the training dataset will be added to the output dataframe.
         """
 
+        if '__row_index' not in df.columns:
+            df = df.with_row_index(name='__row_index')
+
         cross_validated_df = df
         if cross_validator is None:
             cross_validator = self._create_default_cross_validator(
@@ -238,7 +241,7 @@ class Pipeline:
                 matches=matches, df=cross_validated_df
             )
 
-        cross_validated_df = cross_validator.generate_validation_df(
+        cross_validated_df = nw.from_native(cross_validator.generate_validation_df(
             df=cross_validated_df,
             predictor=self.predictor,
             column_names=self.column_names,
@@ -248,27 +251,24 @@ class Pipeline:
             estimator_features=self._estimator_features,
             return_features=return_features,
             add_train_prediction=add_train_prediction,
-        )
+        ))
 
         cn = self.column_names
-        for _, row in (
-                df[[cn.match_id, cn.team_id, cn.player_id]].dtypes.reset_index().iterrows()
-        ):
-            cross_validated_df[row["index"]] = cross_validated_df[row["index"]].astype(
-                row[0]
-            )
+
         if return_features:
             cols_to_drop = []
             for c in list(set(self._estimator_features + self.predictor.columns_added)):
                 if c in cross_validated_df.columns and c in df.columns:
                     cols_to_drop.append(c)
-            df = df.drop(columns=cols_to_drop)
+            df = df.drop(cols_to_drop)
             new_feats = [f for f in cross_validated_df.columns if f not in df.columns]
-            return df.merge(
-                cross_validated_df[new_feats + [cn.match_id, cn.team_id, cn.player_id]],
+
+
+            return df.join(
+                cross_validated_df.select(new_feats + [cn.match_id, cn.team_id, cn.player_id]),
                 on=[cn.match_id, cn.team_id, cn.player_id],
                 how="left",
-            )
+            ).sort('__row_index')
 
         predictor_cols_added = self.predictor.columns_added
         if (
@@ -278,8 +278,16 @@ class Pipeline:
         ):
             predictor_cols_added.append("classes")
 
-        return df.merge(
-            cross_validated_df[
+    #    recasts_mapping = {}
+     #   for c in [cn.player_id, cn.team_id, cn.match_id]:
+     #       if cross_validated_df[c].dtype != df[c].dtype:
+      #          recasts_mapping[c] = df[c].dtype
+     #   cross_validated_df = cross_validated_df.with_columns(
+      #      nw.col(c).cast(df[c].dtype) for c in [cn.player_id, cn.team_id, cn.match_id]
+      #  )
+
+        return df.join(
+            cross_validated_df.select(
                 predictor_cols_added
                 + [
                     cn.match_id,
@@ -287,10 +295,10 @@ class Pipeline:
                     cn.player_id,
                     cross_validator.validation_column_name,
                 ]
-                ],
+            ),
             on=[cn.match_id, cn.team_id, cn.player_id],
             how="left",
-        )
+        ).sort('__row_index').drop('__row_index')
 
     def _create_default_cross_validator(self, df: FrameT) -> CrossValidator:
 
@@ -367,35 +375,35 @@ class Pipeline:
 
         if cross_validate_predict:
             cols = df_with_predict.columns
-            df_cv_predict = self.cross_validate_predict(
+            df_cv_predict = nw.from_native(self.cross_validate_predict(
                 df=df_with_predict,
                 return_features=return_features,
                 create_rating_features=False,
                 create_performance=False,
                 add_train_prediction=True,
                 cross_validator=cross_validator,
-            )
+            ))
             cv_cols_added = [c for c in df_cv_predict.columns if c not in cols]
         else:
             cv_cols_added = []
 
         for idx in range(len(self.pre_lag_transformers)):
             self.pre_lag_transformers[idx].reset()
-            df_with_predict = self.pre_lag_transformers[idx].fit_transform(
+            df_with_predict = nw.from_native(self.pre_lag_transformers[idx].fit_transform(
                 df_with_predict, column_names=self.column_names
-            )
+            ))
 
         for idx in range(len(self.lag_generators)):
             self.lag_generators[idx].reset()
 
-            df_with_predict = self.lag_generators[idx].generate_historical(
+            df_with_predict = nw.from_native(self.lag_generators[idx].generate_historical(
                 df_with_predict, column_names=self.column_names
-            )
+            ))
         for idx in range(len(self.post_lag_transformers)):
             self.post_lag_transformers[idx].reset()
-            df_with_predict = self.post_lag_transformers[idx].fit_transform(
+            df_with_predict = nw.from_native(self.post_lag_transformers[idx].fit_transform(
                 df_with_predict, column_names=self.column_names
-            )
+            ))
 
         self.predictor.train(
             df=df_with_predict, estimator_features=self._estimator_features
@@ -422,6 +430,7 @@ class Pipeline:
                 and "classes" not in df.columns
         ):
             predictor_cols_added.append("classes")
+
 
         return df.join(
             df_with_predict.select(

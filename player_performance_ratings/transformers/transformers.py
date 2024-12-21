@@ -262,43 +262,45 @@ class RatioTeamPredictorTransformer(BaseTransformer):
         if self._are_estimator_features:
             self._estimator_features_out = self._features_out.copy()
 
+    @nw.narwhalify
     def fit_transform(
-        self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None
-    ) -> pd.DataFrame:
-        ori_cols = df.columns.tolist()
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
+    ) -> IntoFrameT:
+        ori_cols = df.columns
         self.column_names = column_names
         self.predictor.train(df=df, estimator_features=self.features)
-        transformed_df = self.transform(df)
+        transformed_df = nw.from_native(self.transform(df))
         for lag_generator in self.lag_generators:
-            transformed_df = lag_generator.generate_historical(
+            transformed_df = nw.from_native(lag_generator.generate_historical(
                 transformed_df, column_names=self.column_names
-            )
+            ))
 
-        return transformed_df[list(set(ori_cols + self.features_out))]
+        return transformed_df.select(list(set(ori_cols + self.features_out)))
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = self.predictor.add_prediction(df=df)
+    def transform(self, df: FrameT) -> IntoFrameT:
+        df = nw.from_native(self.predictor.add_prediction(df=df))
 
-        df[self.predictor.pred_column + "_sum"] = df.groupby(
-            [self.column_names.match_id, self.column_names.team_id]
-        )[self.predictor.pred_column].transform("sum")
-        df[self._features_out[0]] = (
-            df[self.predictor.pred_column] / df[self.predictor.pred_column + "_sum"]
-        )
+        df = df.with_columns([
+            nw.col(self.predictor.pred_column)
+            .sum()
+            .over([self.column_names.match_id, self.column_names.team_id])
+            .alias(f"{self.predictor.pred_column}_sum")
+        ])
+
+        df = df.with_columns([
+            (nw.col(self.predictor.pred_column) / nw.col(f"{self.predictor.pred_column}_sum"))
+            .alias(self._features_out[0])
+        ])
+
         if self.team_total_prediction_column:
-            df = df.assign(
-                **{
-                    self.predictor.target
-                    + self.prefix
-                    + "_team_total_multiplied": df[self._features_out[0]]
-                    * df[self.team_total_prediction_column]
-                }
-            )
-
+            df = df.with_columns([
+                (nw.col(self._features_out[0]) * nw.col(self.team_total_prediction_column))
+                .alias(f"{self.predictor.target}{self.prefix}_team_total_multiplied")
+            ])
         for lag_transformer in self.lag_generators:
             df = lag_transformer.generate_historical(df, column_names=self.column_names)
 
-        return df.drop(columns=[self.predictor.pred_column + "_sum"])
+        return df.drop([self.predictor.pred_column + "_sum"])
 
     @property
     def features_out(self) -> list[str]:

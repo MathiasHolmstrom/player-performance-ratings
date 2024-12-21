@@ -296,14 +296,14 @@ def test_match_predictor_0_rating_generators():
 
     pd.testing.assert_frame_equal(new_df, expected_df, check_like=True)
 
-    col_names_predictor_train = predictor_mock.train.call_args[1]["df"].columns.tolist()
+    col_names_predictor_train = predictor_mock.train.call_args[1]["df"].columns
     assert any(
         lag_transformer.prefix in element for element in col_names_predictor_train
     )
 
     col_names_predictor_add = predictor_mock.add_prediction.call_args[1][
         "df"
-    ].columns.tolist()
+    ].columns
     assert any(lag_transformer.prefix in element for element in col_names_predictor_add)
 
 
@@ -488,9 +488,9 @@ def test_cross_validate_is_equal_to_predict_future(df):
                 pd.to_datetime("2023-01-04"),
                 pd.to_datetime("2023-01-04"),
             ],
-            "deaths": [0.5, 1, 0.7, 2, 0.5, 0.7, 0.2, 2.1, 0.8, 1],
+            "deaths": [0.5, 1.0, 0.7, 2, 0.5, 0.7, 0.2, 2.1, 0.8, 1.0],
             "kills": [0.2, 0.3, 0.2, 0.3, 0.2, 0.3, 0.2, 0.3, 0.2, 0.3],
-            "__target": [1, 0, 0.6, 0.3, 0.8, 0.2, 0.4, 0.1, 1, 0],
+            "__target": [1.0, 0.0, 0.6, 0.3, 0.8, 0.2, 0.4, 0.1, 1.0, 0.0],
         }
     )
 
@@ -530,28 +530,44 @@ def test_cross_validate_is_equal_to_predict_future(df):
     cross_validated_df = pipeline.cross_validate_predict(
         df=data, cross_validator=cross_validator, add_train_prediction=True
     )
+    if isinstance(data, pd.DataFrame):
+        historical_df = data[data[column_names.start_date] < pd.to_datetime("2023-01-04")]
+        future_df = data[data[column_names.start_date] >= pd.to_datetime("2023-01-04")]
+    else:
+        historical_df = data.filter(data[column_names.start_date] < pd.to_datetime("2023-01-04"))
+        future_df = data.filter(data[column_names.start_date] >= pd.to_datetime("2023-01-04"))
 
-    historical_df = df[df[column_names.start_date] < pd.to_datetime("2023-01-04")]
-    future_df = df[df[column_names.start_date] >= pd.to_datetime("2023-01-04")]
     historical_df_predictions = pipeline.train_predict(df=historical_df)
-    future_predict = pipeline.future_predict(df=future_df).reset_index(drop=True)
-
-    future_cv_df = cross_validated_df[
+    future_predict = pipeline.future_predict(df=future_df)
+    if isinstance(data, pd.DataFrame):
+        future_cv_df = cross_validated_df[
         cross_validated_df[column_names.start_date] >= pd.to_datetime("2023-01-04")
         ].reset_index(drop=True)
-    future_cv_df.drop(columns="is_validation", inplace=True)
-    past_cv_df = cross_validated_df[
-        cross_validated_df[column_names.start_date] < pd.to_datetime("2023-01-04")
-        ].reset_index(drop=True)
-    pd.testing.assert_frame_equal(
-        future_cv_df, future_predict, check_like=True, check_dtype=False
-    )
-    pd.testing.assert_frame_equal(
-        past_cv_df.drop(columns=["is_validation"]),
-        historical_df_predictions,
-        check_like=True,
-        check_dtype=False,
-    )
+        future_cv_df.drop(columns="is_validation", inplace=True)
+        past_cv_df = cross_validated_df[
+            cross_validated_df[column_names.start_date] < pd.to_datetime("2023-01-04")
+            ].reset_index(drop=True)
+        pd.testing.assert_frame_equal(
+            future_cv_df, future_predict.reset_index(drop=True), check_like=True, check_dtype=False
+        )
+        pd.testing.assert_frame_equal(
+            past_cv_df.drop(columns=["is_validation"]),
+            historical_df_predictions,
+            check_like=True,
+            check_dtype=False,
+        )
+    else:
+        future_cv_df = cross_validated_df.filter(
+            cross_validated_df[column_names.start_date] >= pd.to_datetime("2023-01-04")
+        )
+        future_cv_df = future_cv_df.drop("is_validation")
+        past_cv_df = cross_validated_df.filter(
+            cross_validated_df[column_names.start_date] < pd.to_datetime("2023-01-04")
+        )
+        assert_frame_equal(future_cv_df, future_predict, check_dtype=False)
+        assert_frame_equal(
+            past_cv_df.drop("is_validation"), historical_df_predictions, check_dtype=False
+        )
 
 
 def test_train_predict_cross_validate_is_equal_to_predict_future():

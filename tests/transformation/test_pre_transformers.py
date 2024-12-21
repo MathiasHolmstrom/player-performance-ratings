@@ -5,6 +5,7 @@ import pytest
 from player_performance_ratings.predictor_transformer import SkLearnTransformerWrapper
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+from player_performance_ratings.transformers import RatioTeamPredictorTransformer
 from player_performance_ratings.transformers.performances_transformers import (
     DiminishingValueTransformer,
     GroupByTransformer,
@@ -313,3 +314,6 @@ def test_symmetric_distribution_transformer_with_granularity_fit_transform():
         abs(transformed_df.loc[lambda x: x.position == "SG"]["performance"].skew())
         < transformer.skewness_allowed
     )
+
+def test_ratio_team_predictor():
+    RatioTeamPredictorTransformer()
