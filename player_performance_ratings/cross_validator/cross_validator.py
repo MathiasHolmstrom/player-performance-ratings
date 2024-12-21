@@ -1,7 +1,8 @@
 import copy
 from typing import Optional
-import polars as pl
-import pandas as pd
+
+import narwhals as nw
+from narwhals.typing import FrameT, IntoFrameT
 from player_performance_ratings import ColumnNames
 
 from player_performance_ratings.scorer.score import BaseScorer
@@ -21,12 +22,12 @@ class MatchKFoldCrossValidator(CrossValidator):
     """
 
     def __init__(
-        self,
-        match_id_column_name: str,
-        date_column_name: str,
-        scorer: Optional[BaseScorer] = None,
-        min_validation_date: Optional[str] = None,
-        n_splits: int = 3,
+            self,
+            match_id_column_name: str,
+            date_column_name: str,
+            scorer: Optional[BaseScorer] = None,
+            min_validation_date: Optional[str] = None,
+            n_splits: int = 3,
     ):
         """
         :param match_id_column_name: The column name of the match_id
@@ -41,18 +42,19 @@ class MatchKFoldCrossValidator(CrossValidator):
         self.n_splits = n_splits
         self.min_validation_date = min_validation_date
 
+    @nw.narwhalify
     def generate_validation_df(
-        self,
-        df: pd.DataFrame,
-        predictor: BasePredictor,
-        column_names: ColumnNames,
-        estimator_features: Optional[list[str]] = None,
-        pre_lag_transformers: Optional[list[BaseTransformer]] = None,
-        lag_generators: Optional[list[BaseLagGenerator]] = None,
-        post_lag_transformers: Optional[list[BaseTransformer]] = None,
-        return_features: bool = False,
-        add_train_prediction: bool = False,
-    ) -> pd.DataFrame:
+            self,
+            df: FrameT,
+            predictor: BasePredictor,
+            column_names: ColumnNames,
+            estimator_features: Optional[list[str]] = None,
+            pre_lag_transformers: Optional[list[BaseTransformer]] = None,
+            lag_generators: Optional[list[BaseLagGenerator]] = None,
+            post_lag_transformers: Optional[list[BaseTransformer]] = None,
+            return_features: bool = False,
+            add_train_prediction: bool = False,
+    ) -> IntoFrameT:
         """
         Generate predictions on validation dataset.
         Training is performed N times on previous match_ids and predictions are made on match_ids that take place in the future.
@@ -74,7 +76,7 @@ class MatchKFoldCrossValidator(CrossValidator):
 
         predictor = copy.deepcopy(predictor)
         validation_dfs = []
-        ori_cols = df.columns.tolist()
+        ori_cols = df.columns
 
         estimator_features = estimator_features or []
         pre_lag_transformers = pre_lag_transformers or []
@@ -86,116 +88,106 @@ class MatchKFoldCrossValidator(CrossValidator):
             median_number = len(unique_dates) // 2
             self.min_validation_date = unique_dates[median_number]
 
-        df["__cv_match_number"] = (
-            df[self.match_id_column_name] != df[self.match_id_column_name].shift(1)
-        ).cumsum()
-        min_validation_match_number = df[
-            df[self.date_column_name] >= self.min_validation_date
-        ]["__cv_match_number"].min()
+        df = df.with_columns(
+            (nw.col(self.match_id_column_name) != nw.col(self.match_id_column_name).shift(1))
+            .cum_sum()
+            .fill_null(0)
+            .alias("__cv_match_number")
+        )
+        if df['__cv_match_number'].min() == 0:
+            df = df.with_columns(
+                nw.col("__cv_match_number") + 1
+            )
+
+
+        min_validation_match_number = (
+            df.filter(
+                nw.col(self.date_column_name) >= nw.lit(self.min_validation_date).str.to_datetime(format="%Y-%m-%d"))
+            .select(nw.col("__cv_match_number").min())
+            .head(1)
+            .item()
+        )
+
         if not pre_lag_transformers:
             for lag_transformer in lag_generators:
                 lag_transformer.reset()
                 df = lag_transformer.generate_historical(df, column_names=column_names)
 
-        max_match_number = df["__cv_match_number"].max()
+        max_match_number = df.select(nw.col("__cv_match_number").max()).to_numpy()[0][0]
         train_cut_off_match_number = min_validation_match_number
         step_matches = (max_match_number - min_validation_match_number) / self.n_splits
-        train_df = df[(df["__cv_match_number"] < train_cut_off_match_number)]
-        if len(train_df) < 0:
+
+        train_df = df.filter(nw.col("__cv_match_number") < train_cut_off_match_number)
+        if len(train_df) == 0:
             raise ValueError(
                 f"train_df is empty. train_cut_off_day_number: {train_cut_off_match_number}. Select a lower validation_match value."
             )
-        validation_df = df[
-            (df["__cv_match_number"] >= train_cut_off_match_number)
-            & (df["__cv_match_number"] <= train_cut_off_match_number + step_matches)
-        ]
 
+        validation_df = df.filter(
+            (nw.col("__cv_match_number") >= train_cut_off_match_number) &
+            (nw.col("__cv_match_number") <= train_cut_off_match_number + step_matches)
+        )
+
+        # Step 6: Iterate over each split
         for idx in range(self.n_splits):
             if pre_lag_transformers:
                 for pre_lag_transformer in pre_lag_transformers:
                     pre_lag_transformer.reset()
-                    train_df = pre_lag_transformer.fit_transform(
-                        train_df, column_names=column_names
-                    )
+                    train_df = pre_lag_transformer.fit_transform(train_df, column_names=column_names)
                     validation_df = pre_lag_transformer.transform(validation_df)
-                for lag_idx, lag_transformer in enumerate(lag_generators):
-                    count_remaining_polars = [
-                        l
-                        for l in lag_generators[lag_idx:]
-                        if "Polars" in l.__class__.__name__
-                    ] + [
-                        l
-                        for l in post_lag_transformers
-                        if "Polars" in l.__class__.__name__
-                    ]
 
-                    if isinstance(train_df, pd.DataFrame) and len(
-                        count_remaining_polars
-                    ) == len(lag_generators[lag_idx:]) + len(post_lag_transformers):
-                        train_df = convert_pandas_to_polars(train_df)
-                        validation_df = convert_pandas_to_polars(validation_df)
-
+                for lag_transformer in lag_generators:
                     lag_transformer.reset()
-                    train_df = lag_transformer.generate_historical(
-                        train_df, column_names=column_names
-                    )
-                    validation_df = lag_transformer.generate_historical(
-                        validation_df, column_names=column_names
-                    )
+                    train_df = lag_transformer.generate_historical(train_df, column_names=column_names)
+                    validation_df = lag_transformer.generate_historical(validation_df, column_names=column_names)
 
             for post_lag_transformer in post_lag_transformers:
                 post_lag_transformer.reset()
-                train_df = post_lag_transformer.fit_transform(
-                    train_df, column_names=column_names
-                )
+                train_df = post_lag_transformer.fit_transform(train_df, column_names=column_names)
                 validation_df = post_lag_transformer.transform(validation_df)
 
-            if isinstance(train_df, pl.DataFrame):
-                train_df = train_df.to_pandas()
-            if isinstance(validation_df, pl.DataFrame):
-                validation_df = validation_df.to_pandas()
             predictor.train(train_df, estimator_features=estimator_features)
 
             if idx == 0 and add_train_prediction:
-                train_df = train_df[
-                    [c for c in train_df.columns if c not in predictor.columns_added]
-                ]
-                train_df = predictor.add_prediction(train_df)
-                train_df = train_df.assign(**{self.validation_column_name: 0})
+                columns_to_keep = [c for c in train_df.columns if c not in predictor.columns_added]
+                train_df = train_df.select(columns_to_keep)
+                train_df = nw.from_native(predictor.add_prediction(train_df))
+                train_df = train_df.with_columns(
+                    nw.lit(0).alias(self.validation_column_name)
+                )
                 validation_dfs.append(train_df)
 
-            validation_df = validation_df[
-                [c for c in validation_df.columns if c not in predictor.columns_added]
-            ]
-            validation_df = predictor.add_prediction(validation_df)
-            validation_df = validation_df.assign(**{self.validation_column_name: 1})
+            # Step 9: Add predictions to the validation DataFrame
+            columns_to_keep = [c for c in validation_df.columns if c not in predictor.columns_added]
+            validation_df = validation_df.select(columns_to_keep)
+            validation_df = nw.from_native(predictor.add_prediction(validation_df))
+            validation_df = validation_df.with_columns(
+                nw.lit(1).alias(self.validation_column_name)
+            )
             validation_dfs.append(validation_df)
 
-            train_cut_off_match_number = train_cut_off_match_number + step_matches
-            train_df = df[(df["__cv_match_number"] < train_cut_off_match_number)]
+            # Step 10: Update the training cutoff and define the next validation set
+            train_cut_off_match_number += step_matches
+            train_df = df.filter(nw.col("__cv_match_number") < train_cut_off_match_number)
 
             if idx == self.n_splits - 2:
-                validation_df = df[
-                    (df["__cv_match_number"] >= train_cut_off_match_number)
-                ]
+                validation_df = df.filter(nw.col("__cv_match_number") >= train_cut_off_match_number)
             else:
-                validation_df = df[
-                    (df["__cv_match_number"] >= train_cut_off_match_number)
-                    & (
-                        df["__cv_match_number"]
-                        < train_cut_off_match_number + step_matches
-                    )
-                ]
+                validation_df = df.filter(
+                    (nw.col("__cv_match_number") >= train_cut_off_match_number) &
+                    (nw.col("__cv_match_number") < train_cut_off_match_number + step_matches)
+                )
 
-        concat_validation_df = pd.concat(validation_dfs).drop(
-            columns=["__cv_match_number"]
-        )
+        concat_validation_df = nw.concat(validation_dfs).drop("__cv_match_number")
+
         if not return_features:
-            concat_validation_df = concat_validation_df[
+            concat_validation_df = concat_validation_df.select(
                 [*ori_cols, *predictor.columns_added, self.validation_column_name]
-            ]
+            )
 
-        return concat_validation_df.drop_duplicates(
-            [column_names.match_id, column_names.team_id, column_names.player_id],
-            keep="first",
+        concat_validation_df = concat_validation_df.unique(
+            subset=[column_names.match_id, column_names.team_id, column_names.player_id],
+            keep="first"
         )
+
+        return concat_validation_df

@@ -625,8 +625,8 @@ class GranularityPredictor(BasePredictor):
                     )
                 )
             dfs.append(rows)
-
-        dfs = self.unify_struct_fields(dfs, self._pred_column)
+        if self.multiclassifier and self.multiclass_output_as_struct:
+            dfs = self.unify_struct_fields(dfs, self._pred_column)
         df = pl.concat(dfs)
         for simple_transformer in self.post_predict_transformers:
             df = simple_transformer.transform(df)

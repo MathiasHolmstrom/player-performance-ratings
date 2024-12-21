@@ -22,7 +22,6 @@ class RatingKnownFeatures:
     TEAM_LEAGUE = "team_league"
     PLAYER_LEAGUE = "player_league"
     OPPONENT_LEAGUE = "opponent_league"
-    MATCH_ID = "match_id"
     RATING_DIFFERENCE_POSITION = "rating_difference_position"
 
 

@@ -1,6 +1,6 @@
 from .lag_generators import (
     LagTransformer,
-    RollingMeanTransformer,
+    RollingMeanTransformerPolars,
     RollingMeanDaysTransformer,
     BinaryOutcomeRollingMeanTransformer,
 )

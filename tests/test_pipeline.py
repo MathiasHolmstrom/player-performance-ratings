@@ -25,97 +25,15 @@ from player_performance_ratings.transformers import (
     LagTransformer,
     RatioTeamPredictorTransformer,
     PredictorTransformer,
-    RollingMeanTransformer,
 )
 
 from player_performance_ratings import ColumnNames, Pipeline
-from player_performance_ratings.transformers.lag_generators import (
-    RollingMeanTransformerPolars,
-)
-
-
-def test_pipline_mix_pandas_polars_lags():
-    df = pd.DataFrame(
-        {
-            "game_id": [1, 1, 2, 2, 3, 3, 4, 4],
-            "player_id": [1, 2, 1, 2, 1, 2, 1, 2],
-            "team_id": [1, 2, 1, 2, 1, 2, 1, 2],
-            "start_date": [
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-02"),
-                pd.to_datetime("2023-01-02"),
-                pd.to_datetime("2023-01-03"),
-                pd.to_datetime("2023-01-03"),
-                pd.to_datetime("2023-01-04"),
-                pd.to_datetime("2023-01-05"),
-            ],
-            "deaths": [1, 1, 1, 2, 2, 2, 3, 2],
-            "kills": [0.2, 0.3, 0.4, 0.5, 2, 0.2, 2, 1],
-            "__target": [1, 0, 1, 0, 1, 0, 1, 0],
-        }
-    )
-    lag_generators = [
-        RollingMeanTransformer(
-            features=["kills", "deaths"],
-            window=1,
-            granularity=["player_id"],
-            prefix="rolling_mean_",
-        ),
-        RollingMeanTransformerPolars(
-            features=["kills", "deaths"],
-            window=2,
-            granularity=["player_id"],
-            prefix="rolling_mean_polars_",
-        ),
-        RollingMeanTransformer(
-            features=["kills", "deaths"],
-            window=3,
-            granularity=["player_id"],
-            prefix="rolling_mean_",
-        ),
-    ]
-
-    rating_generator = UpdateRatingGenerator(
-        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
-        historical_features_out=[RatingHistoricalFeatures.TEAM_RATING],
-        performance_column="kills",
-    )
-
-    pipeline = Pipeline(
-        column_names=ColumnNames(
-            match_id="game_id",
-            team_id="team_id",
-            player_id="player_id",
-            start_date="start_date",
-        ),
-        lag_generators=lag_generators,
-        performances_generator=PerformancesGenerator(
-            performances=Performance(name="kills")
-        ),
-        predictor=Predictor(estimator=LinearRegression()),
-        rating_generators=rating_generator,
-    )
-
-    df_with_predict_and_features = pipeline.train_predict(df=df, return_features=True)
-    pipeline.cross_validate_predict(
-        df=df,
-        cross_validator=MatchKFoldCrossValidator(
-            match_id_column_name="game_id", n_splits=1, date_column_name="start_date"
-        ),
-    )
-    df_with_future = pipeline.future_predict(df=df, return_features=True)
-    assert df_with_predict_and_features.shape[0] == df_with_future.shape[0]
-    assert (
-        RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED
-        in df_with_predict_and_features.columns
-    )
-    assert RatingHistoricalFeatures.TEAM_RATING in df_with_predict_and_features.columns
+from player_performance_ratings.transformers.lag_generators import RollingMeanTransformerPolars
 
 
 def test_pipeline_constructor():
     lag_generators = [
-        RollingMeanTransformer(
+        RollingMeanTransformerPolars(
             features=["kills", "deaths"],
             window=1,
             granularity=["player_id"],

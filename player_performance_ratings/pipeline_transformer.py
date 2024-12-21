@@ -4,7 +4,8 @@ import pandas as pd
 import polars as pl
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.pipeline import DataFrameType
+from player_performance_ratings.predictor._base import DataFrameType
+
 from player_performance_ratings.ratings import convert_df_to_matches, LeagueIdentifier
 from player_performance_ratings.ratings.performance_generator import (
     PerformancesGenerator,
