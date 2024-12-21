@@ -1,7 +1,11 @@
 import pandas as pd
 import polars as pl
+from sklearn.linear_model import LinearRegression
 from polars.testing import assert_frame_equal
 import pytest
+
+from player_performance_ratings import ColumnNames
+from player_performance_ratings.predictor import Predictor
 from player_performance_ratings.predictor_transformer import SkLearnTransformerWrapper
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -314,6 +318,32 @@ def test_symmetric_distribution_transformer_with_granularity_fit_transform():
         abs(transformed_df.loc[lambda x: x.position == "SG"]["performance"].skew())
         < transformer.skewness_allowed
     )
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_ratio_team_predictor(df):
+    column_names = ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="start_date",
+    )
+    data = df(
+        {
+            "performance": [0.1, 0.8, 0.8, 0.8, 0.8],
+            "target": [1, 0, 1, 0, 1],
+            "team_id": [1, 2, 1, 2, 1],
+            "game_id": [1, 1, 2, 2, 1],
+        }
+    )
+    transformer = RatioTeamPredictorTransformer(
+        features=['performance'],
+        predictor=Predictor(
+            target='target',
+            estimator=LinearRegression()
+        )
+    )
 
-def test_ratio_team_predictor():
-    RatioTeamPredictorTransformer()
+    fit_transformed_data = transformer.fit_transform(data, column_names=column_names)
+    assert transformer.predictor.pred_column in fit_transformed_data.columns
+    assert len(transformer.features_out) == 2
+    for col in transformer.features_out:
+        assert col in fit_transformed_data.columns

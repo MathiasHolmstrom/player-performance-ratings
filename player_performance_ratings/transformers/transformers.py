@@ -264,7 +264,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
 
     @nw.narwhalify
     def fit_transform(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: FrameT, column_names: Optional[ColumnNames]
     ) -> IntoFrameT:
         ori_cols = df.columns
         self.column_names = column_names
