@@ -62,22 +62,23 @@ def test_pipeline_constructor():
     )
 
     expected_estimator_features = (
-        ["kills"]
-        + [l.features_out for l in lag_generators][0]
-        + [p.predictor.pred_column for p in post_lag_transformers]
-        + rating_generator.features_out
+            ["kills"]
+            + [l.features_out for l in lag_generators][0]
+            + [p.predictor.pred_column for p in post_lag_transformers]
+            + rating_generator.features_out
     )
     assert pipeline._estimator_features.sort() == expected_estimator_features.sort()
 
     # asserts estimator_features gets added to the post_transformer that contains a predictor
     assert (
-        post_lag_transformers[0].features.sort()
-        == [
-            ["kills"]
-            + [l.features_out for l in lag_generators][0]
-            + rating_generator.features_out
-        ][0].sort()
+            post_lag_transformers[0].features.sort()
+            == [
+                ["kills"]
+                + [l.features_out for l in lag_generators][0]
+                + rating_generator.features_out
+            ][0].sort()
     )
+
 
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
 def test_match_predictor_auto_pre_transformers(df):
@@ -105,11 +106,13 @@ def test_match_predictor_auto_pre_transformers(df):
         ColumnWeight(name="deaths", weight=0.4, lower_is_better=True),
     ]
 
-    try:
+    if isinstance(data, pd.DataFrame):
         expected_df = data.copy()
-    except:
-        expected_df = data.to_pandas()
-    expected_df["prediction"] = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+        expected_df["prediction"] = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+    else:
+        expected_df = data.with_columns(
+            pl.lit(0.5).alias("prediction")
+        )
 
     predictor_mock = mock.Mock()
     predictor_mock.target = "__target"
@@ -117,7 +120,6 @@ def test_match_predictor_auto_pre_transformers(df):
     predictor_mock.estimator_features = [
         RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED
     ]
-
 
     predictor_mock.add_prediction.return_value = expected_df
     rating_generators = UpdateRatingGenerator(
@@ -142,8 +144,7 @@ def test_match_predictor_auto_pre_transformers(df):
     )
 
     new_df = pipeline.train_predict(df=data)
-    if isinstance(df, pl.DataFrame):
-        expected_df = expected_df.to_pandas()
+    if isinstance(data, pl.DataFrame):
         assert_frame_equal(new_df, expected_df, check_dtype=False)
     else:
         pd.testing.assert_frame_equal(new_df, expected_df, check_like=True)
@@ -219,26 +220,26 @@ def test_match_predictor_multiple_rating_generators_same_performance():
     new_df = match_predictor.train_predict(df=df)
     pd.testing.assert_frame_equal(new_df, expected_df, check_like=True)
 
-    col_names_predictor_train = predictor_mock.train.call_args[1]["df"].columns.tolist()
+    col_names_predictor_train = predictor_mock.train.call_args[1]["df"].columns
 
     col_names_predictor_add = predictor_mock.add_prediction.call_args[1][
         "df"
-    ].columns.tolist()
+    ].columns
 
     assert (
-        match_predictor.rating_generators[0].features_out[0] in col_names_predictor_add
+            match_predictor.rating_generators[0].features_out[0] in col_names_predictor_add
     )
     assert (
-        match_predictor.rating_generators[0].features_out[0]
-        in col_names_predictor_train
+            match_predictor.rating_generators[0].features_out[0]
+            in col_names_predictor_train
     )
 
     assert (
-        match_predictor.rating_generators[1].features_out[0] in col_names_predictor_add
+            match_predictor.rating_generators[1].features_out[0] in col_names_predictor_add
     )
     assert (
-        match_predictor.rating_generators[1].features_out[0]
-        in col_names_predictor_train
+            match_predictor.rating_generators[1].features_out[0]
+            in col_names_predictor_train
     )
 
 
@@ -306,8 +307,9 @@ def test_match_predictor_0_rating_generators():
     assert any(lag_transformer.prefix in element for element in col_names_predictor_add)
 
 
-def test_match_predictor_generate_and_predict():
-    historical_df = pd.DataFrame(
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_match_predictor_generate_and_predict(df):
+    historical_df = df(
         {
             "game_id": [1, 1, 2, 2, 3, 3],
             "player_id": [1, 2, 3, 1, 2, 3],
@@ -326,7 +328,7 @@ def test_match_predictor_generate_and_predict():
         }
     )
 
-    future_df = pd.DataFrame(
+    future_df = df(
         {
             "game_id": [4, 4, 5, 5],
             "player_id": [1, 2, 1, 3],
@@ -340,27 +342,37 @@ def test_match_predictor_generate_and_predict():
         }
     )
 
-    expected_future_df = future_df.copy()
-    expected_future_df["prediction"] = [0.5, 0.5, 0.5, 0.5]
 
     column_weights = [
         ColumnWeight(name="kills", weight=0.6),
         ColumnWeight(name="deaths", weight=0.4, lower_is_better=True),
     ]
-
-    historical_df_mock_return_with_prediction = historical_df.copy()
-    historical_df_mock_return_with_prediction["prediction"] = [
-        0.5,
-        0.5,
-        0.5,
-        0.5,
-        0.5,
-        0.5,
-    ]
+    if isinstance(historical_df, pd.DataFrame):
+        historical_df_mock_return_with_prediction = historical_df.copy()
+        historical_df_mock_return_with_prediction["prediction"] = [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+        ]
+    else:
+        historical_df_mock_return_with_prediction = historical_df.with_columns(
+            pl.lit(0.5).alias("prediction"))
 
     predictor_mock = mock.Mock()
     predictor_mock.target = "__target"
     predictor_mock.columns_added = ["prediction"]
+
+    if isinstance(historical_df, pd.DataFrame):
+        expected_future_df = future_df.copy()
+        expected_future_df["prediction"] = [0.5, 0.5, 0.5, 0.5]
+    else:
+        expected_future_df = future_df.with_columns(
+            pl.lit(0.5).alias("prediction")
+        )
+
     predictor_mock.add_prediction.side_effect = [
         historical_df_mock_return_with_prediction,
         expected_future_df,
@@ -390,8 +402,10 @@ def test_match_predictor_generate_and_predict():
 
     _ = pipeline.train_predict(df=historical_df)
     new_df = pipeline.future_predict(future_df)
-
-    pd.testing.assert_frame_equal(new_df, expected_future_df, check_like=True)
+    if isinstance(historical_df, pl.DataFrame):
+        assert_frame_equal(new_df, expected_future_df, check_dtype=False)
+    else:
+        pd.testing.assert_frame_equal(new_df, expected_future_df, check_like=True)
 
     assert len(pipeline.performances_generator.transformers) > 0
 
@@ -455,9 +469,9 @@ def test_train_predict_cross_validate():
     )
     assert sum(cross_validated_df["is_validation"]) > 0
 
-
-def test_cross_validate_is_equal_to_predict_future():
-    df = pd.DataFrame(
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_cross_validate_is_equal_to_predict_future(df):
+    data = df(
         {
             "game_id": [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
             "player_id": [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
@@ -514,7 +528,7 @@ def test_cross_validate_is_equal_to_predict_future():
         date_column_name=column_names.start_date,
     )
     cross_validated_df = pipeline.cross_validate_predict(
-        df=df, cross_validator=cross_validator, add_train_prediction=True
+        df=data, cross_validator=cross_validator, add_train_prediction=True
     )
 
     historical_df = df[df[column_names.start_date] < pd.to_datetime("2023-01-04")]
@@ -524,11 +538,11 @@ def test_cross_validate_is_equal_to_predict_future():
 
     future_cv_df = cross_validated_df[
         cross_validated_df[column_names.start_date] >= pd.to_datetime("2023-01-04")
-    ].reset_index(drop=True)
+        ].reset_index(drop=True)
     future_cv_df.drop(columns="is_validation", inplace=True)
     past_cv_df = cross_validated_df[
         cross_validated_df[column_names.start_date] < pd.to_datetime("2023-01-04")
-    ].reset_index(drop=True)
+        ].reset_index(drop=True)
     pd.testing.assert_frame_equal(
         future_cv_df, future_predict, check_like=True, check_dtype=False
     )
@@ -607,10 +621,10 @@ def test_train_predict_cross_validate_is_equal_to_predict_future():
     future_predict = pipeline.future_predict(df=future_df).reset_index(drop=True)
     future_cv_df = cross_validated_df[
         cross_validated_df[column_names.start_date] >= pd.to_datetime("2023-01-04")
-    ].reset_index(drop=True)
+        ].reset_index(drop=True)
     past_cv_df = cross_validated_df[
         cross_validated_df[column_names.start_date] < pd.to_datetime("2023-01-04")
-    ].reset_index(drop=True)
+        ].reset_index(drop=True)
     pd.testing.assert_frame_equal(
         future_cv_df.drop(columns=["is_validation"]),
         future_predict,

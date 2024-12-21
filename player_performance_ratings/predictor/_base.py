@@ -4,6 +4,8 @@ from typing import Optional, TypeVar
 
 import polars as pl
 import pandas as pd
+from narwhals.typing import FrameT, IntoFrameT
+import narwhals as nw
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -62,11 +64,11 @@ class BasePredictor(ABC):
         return self._deepest_estimator
 
     @abstractmethod
-    def train(self, df: DataFrameType, estimator_features: list[str]) -> None:
+    def train(self, df: FrameT, estimator_features: list[str]) -> None:
         pass
 
     @abstractmethod
-    def add_prediction(self, df: DataFrameType) -> DataFrameType:
+    def add_prediction(self, df: FrameT) -> IntoFrameT:
         pass
 
     @property
@@ -92,16 +94,18 @@ class BasePredictor(ABC):
         return self.estimator.classes_
 
     def _convert_multiclass_predictions_to_struct(
-        self, df: pl.DataFrame, classes: Optional[list[str]] = None
-    ) -> pl.DataFrame:
+        self, df: FrameT, classes: Optional[list[str]] = None
+    ) -> FrameT:
+        df = df.to_native()
+        assert isinstance(df, pl.DataFrame)
         if classes is None:
             classes = self.estimator.classes_
 
-        return df.with_columns(
+        return nw.from_native(df.with_columns(
             pl.struct(
                 *[pl.col(self.pred_column).list.get(i).alias(str(cls)) for i, cls in enumerate(classes)]
             ).alias(self.pred_column)
-        )
+        ))
 
 
     def set_target(self, new_target_name: str):
@@ -199,18 +203,21 @@ class BasePredictor(ABC):
                 )
         return pre_transformers
 
-    def _fit_transform_pre_transformers(self, df: pl.DataFrame) -> pl.DataFrame:
+    def _fit_transform_pre_transformers(self, df: FrameT) -> FrameT:
         if self.auto_pre_transform:
             self.pre_transformers += self._create_pre_transformers(df)
 
+        native_namespace = nw.get_native_namespace(df)
+
         for pre_transformer in self.pre_transformers:
-            values = pre_transformer.fit_transform(df)
+            values = nw.from_native(pre_transformer.fit_transform(df))
             features_out = pre_transformer.features_out
             df = df.with_columns(
-                pl.Series(
-                    values=v,
+                nw.new_series(
+                    values=values[col],
                     name=features_out[idx],
-                ) for idx, v in enumerate(values)
+                    native_namespace=native_namespace
+                ) for idx, col in enumerate(values.columns)
             )
 
             feats_to_remove = [
@@ -225,10 +232,12 @@ class BasePredictor(ABC):
 
         return df
 
-    def _transform_pre_transformers(self, df: pl.DataFrame) -> pl.DataFrame:
+    def _transform_pre_transformers(self, df: nw.DataFrame) -> IntoFrameT:
         for pre_transformer in self.pre_transformers:
-            values = pre_transformer.transform(df)
-            df = df.with_columns(**{col: values[col] for col in values.columns})
+            values = nw.from_native(pre_transformer.transform(df))
+            df = df.with_columns(
+                nw.new_series(name=col,values=values[col], native_namespace=nw.get_native_namespace(df)) for col in values.columns
+            )
         return df
 
     @property

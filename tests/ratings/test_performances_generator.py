@@ -1,4 +1,6 @@
 import pandas as pd
+import polars as pl
+import pytest
 from deepdiff import DeepDiff
 
 from player_performance_ratings import ColumnNames
@@ -82,7 +84,8 @@ def test_auto_create_pre_transformers_multiple_column_names():
     assert diff == {}
 
 
-def test_performances_generator():
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_performances_generator(df):
     column_names = [
         ColumnNames(
             match_id="game_id",
@@ -102,7 +105,7 @@ def test_performances_generator():
         MinMaxTransformer(features=["points_difference", "won"], quantile=1)
     ]
 
-    df = pd.DataFrame(
+    data = df(
         {
             column_names[0].match_id: [1, 1, 2, 2],
             column_names[0].team_id: [1, 2, 1, 2],
@@ -117,7 +120,6 @@ def test_performances_generator():
             "won": [1, 0, 1, 0],
         }
     )
-    expected_df_with_performances = df.copy()
 
     performances = [
         Performance(
@@ -134,16 +136,24 @@ def test_performances_generator():
         performances, transformers=pre_transformers, auto_generated_features_prefix=""
     )
 
-    df_with_performances = performances_generator.generate(df)
+    df_with_performances = performances_generator.generate(data)
+    if isinstance(data, pd.DataFrame):
+        expected_df_with_performances = data.copy()
+    else:
+        expected_df_with_performances = data.to_pandas()
+        df_with_performances = df_with_performances.to_pandas()
 
-    expected_df_with_performances[performances_generator.features_out[0]] = [
+
+    expected_df_with_performances['weighted_performance'] = [
         1,
         0,
         0.75,
         0.25,
     ]
-    expected_df_with_performances[performances_generator.features_out[1]] = [1, 0, 1, 0]
+    expected_df_with_performances['performance'] = [1, 0, 1, 0]
     expected_df_with_performances["points_difference"] = [1, 0, 0.5, 0.5]
+
+
     pd.testing.assert_frame_equal(
         df_with_performances,
         expected_df_with_performances,

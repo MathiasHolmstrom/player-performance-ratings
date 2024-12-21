@@ -159,7 +159,8 @@ class UpdateRatingGenerator(RatingGenerator):
         :return: A dataframe with the original columns + estimator_features_out, historical_features_out and non_estimator_rating_features_out
         """
         input_cols = df.columns
-        df = df.with_row_index(name='__row_index')
+        if '__row_index' not in df.columns:
+            df = df.with_row_index(name='__row_index')
 
         self.column_names = column_names
         if (
@@ -386,7 +387,8 @@ class UpdateRatingGenerator(RatingGenerator):
             historical_features_out: Optional[list[RatingHistoricalFeatures]] = None,
             known_features_out: Optional[list[RatingKnownFeatures]] = None,
     ) -> IntoFrameT:
-        df = df.with_row_index(name='__row_index')
+        if '__row_index' not in df.columns:
+            df = df.with_row_index(name='__row_index')
         input_cols = df.columns
 
         if (

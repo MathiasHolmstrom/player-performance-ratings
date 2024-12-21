@@ -17,8 +17,8 @@ from player_performance_ratings.predictor import (
 )
 from player_performance_ratings.predictor.predictor import GranularityPredictor
 
-
-def test_game_team_predictor_add_prediction():
+@pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
+def test_game_team_predictor_add_predictiondf(df):
     mock_model = Mock()
     mock_model.predict_proba.return_value = np.array(
         [[0.2, 0.8], [0.6, 0.4], [0.3, 0.7]]
@@ -29,7 +29,7 @@ def test_game_team_predictor_add_prediction():
         game_id_colum="game_id", team_id_column="team_id", estimator=mock_model
     )
     predictor._estimator_features = ["feature1", "feature2"]
-    df = pd.DataFrame(
+    data = df(
         {
             "game_id": [1, 1, 2],
             "team_id": [1, 2, 1],
@@ -39,14 +39,20 @@ def test_game_team_predictor_add_prediction():
         }
     )
 
-    result = predictor.add_prediction(df)
+    result = predictor.add_prediction(data)
+    if isinstance(data, pd.DataFrame):
+        expected_df = data.copy()
+        expected_df[predictor.pred_column] = [0.8, 0.4, 0.7]
 
-    expected_df = df.copy()
-    expected_df[predictor.pred_column] = [0.8, 0.4, 0.7]
+        pd.testing.assert_frame_equal(
+            result, expected_df, check_like=True, check_dtype=False
+        )
 
-    pd.testing.assert_frame_equal(
-        result, expected_df, check_like=True, check_dtype=False
-    )
+    else:
+        expected_df = data.with_columns(
+            pl.Series(predictor.pred_column, [0.8, 0.4, 0.7])
+        )
+        assert_frame_equal(result, expected_df, check_dtype=False)
 
 
 @pytest.mark.parametrize("predictor", [
@@ -113,13 +119,23 @@ def test_game_team_predictor_game_player(df):
     feature_team1 = (0.1 * 0.5 + 0.5 * 0.5) / (0.5 + 0.5)
     feature_team2 = (0.3 * 0.5 + 0.4 * 0.5) / (0.5 + 0.5)
 
-    expected_features = pl.DataFrame(
-        {
-            "feature1": [feature_team1, feature_team2],
-        }
-    )
+    if isinstance(data, pd.DataFrame):
+        expected_features = pd.DataFrame(
+            {
+                "feature1": [feature_team1, feature_team2],
+            }
+        )
+        pd.testing.assert_frame_equal(mock_model.fit.call_args[0][0].to_native(), expected_features, check_dtype=False)
+    else:
+        expected_features = pl.DataFrame(
+            {
+                "feature1": [feature_team1, feature_team2],
+            },
+
+        )
+        assert_frame_equal(mock_model.fit.call_args[0][0].to_native(), expected_features, check_dtype=False)
+
     assert mock_model.fit.call_args[0][1].to_list() == [1, 0]
-    assert_frame_equal(mock_model.fit.call_args[0][0], expected_features, check_dtype=False)
 
 
 @pytest.mark.parametrize("target_values", [[1, 0, 1, 0], [0.3, 0.2, 24, 0.5]])

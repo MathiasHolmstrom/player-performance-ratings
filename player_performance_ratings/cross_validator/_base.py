@@ -10,7 +10,7 @@ from player_performance_ratings.transformers.base_transformer import (
     BaseLagGenerator,
     BaseTransformer,
 )
-
+from narwhals.typing import FrameT, IntoFrameT
 
 class CrossValidator(ABC):
 
@@ -25,7 +25,7 @@ class CrossValidator(ABC):
     @abstractmethod
     def generate_validation_df(
         self,
-        df: pd.DataFrame,
+        df: FrameT,
         column_names: ColumnNames,
         predictor: BasePredictor,
         estimator_features: list[str],
@@ -34,11 +34,11 @@ class CrossValidator(ABC):
         lag_generators: Optional[list[BaseLagGenerator]] = None,
         post_lag_transformers: Optional[list[BaseTransformer]] = None,
         add_train_prediction: bool = False,
-    ) -> pd.DataFrame:
+    ) -> IntoFrameT:
         pass
 
     def cross_validation_score(
-        self, validation_df: pd.DataFrame, scorer: Optional[BaseScorer] = None
+        self, validation_df: FrameT, scorer: Optional[BaseScorer] = None
     ) -> float:
         if not scorer and not self.scorer:
             raise ValueError(

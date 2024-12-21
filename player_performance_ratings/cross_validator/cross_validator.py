@@ -111,7 +111,7 @@ class MatchKFoldCrossValidator(CrossValidator):
         if not pre_lag_transformers:
             for lag_transformer in lag_generators:
                 lag_transformer.reset()
-                df = lag_transformer.generate_historical(df, column_names=column_names)
+                df = nw.from_native(lag_transformer.generate_historical(df, column_names=column_names))
 
         max_match_number = df.select(nw.col("__cv_match_number").max()).to_numpy()[0][0]
         train_cut_off_match_number = min_validation_match_number
@@ -128,23 +128,22 @@ class MatchKFoldCrossValidator(CrossValidator):
             (nw.col("__cv_match_number") <= train_cut_off_match_number + step_matches)
         )
 
-        # Step 6: Iterate over each split
         for idx in range(self.n_splits):
             if pre_lag_transformers:
                 for pre_lag_transformer in pre_lag_transformers:
                     pre_lag_transformer.reset()
-                    train_df = pre_lag_transformer.fit_transform(train_df, column_names=column_names)
-                    validation_df = pre_lag_transformer.transform(validation_df)
+                    train_df = nw.from_native(pre_lag_transformer.fit_transform(train_df, column_names=column_names))
+                    validation_df = nw.from_native(pre_lag_transformer.transform(validation_df))
 
                 for lag_transformer in lag_generators:
                     lag_transformer.reset()
-                    train_df = lag_transformer.generate_historical(train_df, column_names=column_names)
-                    validation_df = lag_transformer.generate_historical(validation_df, column_names=column_names)
+                    train_df = nw.from_native(lag_transformer.generate_historical(train_df, column_names=column_names))
+                    validation_df = nw.from_native(lag_transformer.generate_historical(validation_df, column_names=column_names))
 
             for post_lag_transformer in post_lag_transformers:
                 post_lag_transformer.reset()
-                train_df = post_lag_transformer.fit_transform(train_df, column_names=column_names)
-                validation_df = post_lag_transformer.transform(validation_df)
+                train_df = nw.from_native(post_lag_transformer.fit_transform(train_df, column_names=column_names))
+                validation_df = nw.from_native(post_lag_transformer.transform(validation_df))
 
             predictor.train(train_df, estimator_features=estimator_features)
 
