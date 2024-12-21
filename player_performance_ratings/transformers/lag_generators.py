@@ -1008,13 +1008,7 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         concat_df = self._generate_concat_df_with_feats(df)
         transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
         cn = self.column_names
-      #  recasts_mapping = {}
-      #  for c in [cn.player_id, cn.team_id, cn.match_id]:
-       #     if transformed_df[c].dtype != df[c].dtype:
-       #         recasts_mapping[c] = df[c].dtype
-    #    transformed_df = transformed_df.with_columns(
-    #        nw.col(c).cast(df[c].dtype) for c in [cn.player_id, cn.team_id, cn.match_id]
-    #    )
+
         df = df.join(
             transformed_df.select(
                 cn.player_id, cn.team_id, cn.match_id, *self.features_out
