@@ -13,7 +13,7 @@ from player_performance_ratings.transformers.base_transformer import (
 
 from player_performance_ratings.cross_validator._base import CrossValidator
 from player_performance_ratings.predictor._base import BasePredictor
-from player_performance_ratings.utils import convert_pandas_to_polars
+from player_performance_ratings.utils import convert_pandas_to_polars, validate_sorting
 
 
 class MatchKFoldCrossValidator(CrossValidator):
@@ -73,6 +73,9 @@ class MatchKFoldCrossValidator(CrossValidator):
 
             If set to false it will only return the predictions for the validation dataset
         """
+
+        if '__row_index' in df.columns:
+            df = df.drop('__row_index')
 
         predictor = copy.deepcopy(predictor)
         validation_dfs = []
@@ -188,5 +191,5 @@ class MatchKFoldCrossValidator(CrossValidator):
             subset=[column_names.match_id, column_names.team_id, column_names.player_id],
             keep="first"
         )
-
+        validate_sorting(df=concat_validation_df, column_names=column_names)
         return concat_validation_df

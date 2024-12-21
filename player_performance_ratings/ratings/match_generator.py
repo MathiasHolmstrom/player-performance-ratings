@@ -97,10 +97,17 @@ def convert_df_to_matches(
         )
 
     else:
-        df = df.with_columns(
-            nw.col(col_names.start_date).str.to_datetime(format="%Y-%m-%d %H:%M:%S").dt.convert_time_zone('UTC').alias(
-                col_names.start_date)
-        )
+        try:
+            df = df.with_columns(
+                nw.col(col_names.start_date).str.to_datetime(format="%Y-%m-%d %H:%M:%S").dt.convert_time_zone('UTC').alias(
+                    col_names.start_date)
+            )
+        except:
+            df = df.with_columns(
+                nw.col(col_names.start_date).str.to_datetime(format="%Y-%m-%d").dt.convert_time_zone(
+                    'UTC').alias(
+                    col_names.start_date)
+            )
 
     df = df.with_columns([
         (

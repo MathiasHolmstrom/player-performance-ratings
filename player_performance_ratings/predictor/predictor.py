@@ -101,7 +101,8 @@ class GameTeamPredictor(BasePredictor):
         :param df - Dataframe containing the estimator_features and target.
         :param estimator_features - If Estimator features are passed they will the estimator_features created by the constructor
         """
-        df = df.with_row_index(name="__row_index")
+        if '__row_index' not in df.columns:
+            df = df.with_row_index(name="__row_index")
 
         if len(df) == 0:
             raise ValueError("df is empty")
@@ -149,7 +150,8 @@ class GameTeamPredictor(BasePredictor):
         else:
             ori_type = "pl"
 
-        df = df.with_row_index(name="__row_index")
+        if '__row_index' not in df.columns:
+            df = df.with_row_index(name="__row_index")
 
         if hasattr(self.estimator, "predict_proba"):
             try:
