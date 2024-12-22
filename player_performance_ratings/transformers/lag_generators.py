@@ -9,12 +9,11 @@ import polars as pl
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.transformers.base_transformer import (
     BaseLagGenerator,
-    BaseLagGeneratorPolars,
 )
 from player_performance_ratings.utils import validate_sorting
 
 
-class LagTransformer(BaseLagGeneratorPolars):
+class LagTransformer(BaseLagGenerator):
 
     def __init__(
         self,
@@ -462,18 +461,20 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         return self._features_out
 
 
-class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
+
+
+class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
     def __init__(
-        self,
-        features: list[str],
-        window: int,
-        binary_column: str,
-        granularity: list[str] = None,
-        prob_column: Optional[str] = None,
-        min_periods: int = 1,
-        add_opponent: bool = False,
-        prefix: str = "rolling_mean_binary_",
+            self,
+            features: list[str],
+            window: int,
+            binary_column: str,
+            granularity: list[str] = None,
+            prob_column: Optional[str] = None,
+            min_periods: int = 1,
+            add_opponent: bool = False,
+            prefix: str = "rolling_mean_binary_",
     ):
         super().__init__(
             features=features,
@@ -605,10 +606,10 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
                 )
                 transformed_df = transformed_df.with_columns(
                     (
-                        nw.col(f"{self.prefix}{self.window}_{feature_name}_1")
-                        * nw.col(self.prob_column)
-                        + nw.col(f"{self.prefix}{self.window}_{feature_name}_0")
-                        * (1 - nw.col(self.prob_column))
+                            nw.col(f"{self.prefix}{self.window}_{feature_name}_1")
+                            * nw.col(self.prob_column)
+                            + nw.col(f"{self.prefix}{self.window}_{feature_name}_0")
+                            * (1 - nw.col(self.prob_column))
                     ).alias(weighted_prob_feat_name)
                 )
         return transformed_df
@@ -702,229 +703,7 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
 
         return concat_df
 
-
-class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
-
-    def __init__(
-        self,
-        features: list[str],
-        window: int,
-        binary_column: str,
-        granularity: list[str] = None,
-        prob_column: Optional[str] = None,
-        min_periods: int = 1,
-        add_opponent: bool = False,
-        prefix: str = "rolling_mean_binary_",
-    ):
-        super().__init__(
-            features=features,
-            add_opponent=add_opponent,
-            prefix=prefix,
-            iterations=[],
-            granularity=granularity,
-        )
-        self.window = window
-        self.min_periods = min_periods
-        self.binary_column = binary_column
-        self.prob_column = prob_column
-        for feature_name in self.features:
-            feature1 = f"{self.prefix}{self.window}_{feature_name}_1"
-            feature2 = f"{self.prefix}{self.window}_{feature_name}_0"
-            self._features_out.append(f"{self.prefix}{self.window}_{feature_name}_1")
-            self._features_out.append(f"{self.prefix}{self.window}_{feature_name}_0")
-            self._entity_features.append(feature1)
-            self._entity_features.append(feature2)
-
-            if self.add_opponent:
-                self._features_out.append(
-                    f"{self.prefix}{self.window}_{feature_name}_1_opponent"
-                )
-                self._features_out.append(
-                    f"{self.prefix}{self.window}_{feature_name}_0_opponent"
-                )
-
-        if self.prob_column:
-            for feature_name in self.features:
-                prob_feature = (
-                    f"{self.prefix}{self.window}_{self.prob_column}_{feature_name}"
-                )
-                self._features_out.append(prob_feature)
-
-        self._estimator_features_out = self._features_out.copy()
-
-    def generate_historical(
-        self, df: pd.DataFrame, column_names: ColumnNames
-    ) -> pd.DataFrame:
-        if df[self.binary_column].dtype in ("float64", "float32", "float16", "float"):
-            df = df.assign(**{self.binary_column: df[self.binary_column].astype(int)})
-
-        df = df.assign(is_future=0)
-        self.column_names = column_names
-        self.granularity = self.granularity or [self.column_names.player_id]
-        validate_sorting(df=df, column_names=self.column_names)
-        additional_cols_to_use = [self.binary_column] + (
-            [self.prob_column] if self.prob_column else []
-        )
-        self._store_df(df, additional_cols_to_use=additional_cols_to_use)
-        concat_df = self._generate_concat_df_with_feats(df)
-        concat_df = self._add_weighted_prob(transformed_df=concat_df)
-        transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
-        if "is_future" in transformed_df.columns:
-            transformed_df = transformed_df.drop(columns="is_future")
-        return self._add_weighted_prob(transformed_df=transformed_df)
-
-    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self._df is None:
-            raise ValueError(
-                "generate_historical needs to be called before generate_future"
-            )
-
-        if self.binary_column in df.columns:
-            if df[self.binary_column].dtype in (
-                "float64",
-                "float32",
-                "float16",
-                "float",
-            ):
-                df = df.assign(
-                    **{self.binary_column: df[self.binary_column].astype(int)}
-                )
-        df = df.assign(is_future=1)
-        concat_df = self._generate_concat_df_with_feats(df=df)
-        transformed_df = concat_df[
-            concat_df[self.column_names.match_id].isin(
-                df[self.column_names.match_id].astype("str").unique().tolist()
-            )
-        ]
-        transformed_future = self._generate_future_feats(
-            transformed_df=transformed_df,
-            ori_df=df,
-            known_future_features=self._get_known_future_features(),
-        )
-        if "is_future" in transformed_future.columns:
-            transformed_future = transformed_future.drop(columns="is_future")
-        return self._add_weighted_prob(transformed_df=transformed_future)
-
-    def _get_known_future_features(self) -> list[str]:
-        known_future_features = []
-        if self.prob_column:
-            for idx, feature_name in enumerate(self.features):
-                weighted_prob_feat_name = (
-                    f"{self.prefix}{self.window}_{self.prob_column}_{feature_name}"
-                )
-                known_future_features.append(weighted_prob_feat_name)
-
-        return known_future_features
-
-    def _add_weighted_prob(self, transformed_df: pd.DataFrame) -> pd.DataFrame:
-
-        if self.prob_column:
-            for idx, feature_name in enumerate(self.features):
-                weighted_prob_feat_name = (
-                    f"{self.prefix}{self.window}_{self.prob_column}_{feature_name}"
-                )
-                transformed_df[weighted_prob_feat_name] = transformed_df[
-                    f"{self.prefix}{self.window}_{feature_name}_1"
-                ] * transformed_df[self.prob_column] + transformed_df[
-                    f"{self.prefix}{self.window}_{feature_name}_0"
-                ] * (
-                    1 - transformed_df[self.prob_column]
-                )
-        return transformed_df
-
-    def _generate_concat_df_with_feats(self, df: pd.DataFrame) -> pd.DataFrame:
-
-        additional_cols_to_use = [self.binary_column] + (
-            [self.prob_column] if self.prob_column else []
-        )
-        concat_df = self._concat_df(df, additional_cols_to_use=additional_cols_to_use)
-        aggregation = {
-            **{f: "mean" for f in self.features},
-            **{self.binary_column: "first"},
-        }
-        grouped = (
-            concat_df.groupby(
-                [
-                    self.column_names.update_match_id,
-                    *self.granularity,
-                    self.column_names.start_date,
-                    "is_future",
-                ]
-            )
-            .agg(aggregation)
-            .reset_index()
-        )
-
-        grouped = grouped.sort_values(
-            by=[
-                self.column_names.start_date,
-                "is_future",
-                self.column_names.update_match_id,
-            ]
-        )
-
-        feats_added = []
-        for feature in self.features:
-            mask_result_1 = grouped[self.binary_column] == 1
-            mask_result_0 = grouped[self.binary_column] == 0
-
-            grouped["value_result_1"] = grouped[feature].where(mask_result_1)
-            grouped["value_result_0"] = grouped[feature].where(mask_result_0)
-
-            grouped[f"{self.prefix}{self.window}_{feature}_1"] = grouped.groupby(
-                self.granularity
-            )["value_result_1"].transform(
-                lambda x: x.shift().rolling(window=self.window, min_periods=1).mean()
-            )
-            grouped[f"{self.prefix}{self.window}_{feature}_0"] = grouped.groupby(
-                self.granularity
-            )["value_result_0"].transform(
-                lambda x: x.shift().rolling(window=self.window, min_periods=1).mean()
-            )
-
-            feats_added.append(f"{self.prefix}{self.window}_{feature}_1")
-            feats_added.append(f"{self.prefix}{self.window}_{feature}_0")
-
-        grouped["count_result_1"] = (
-            grouped[grouped[self.binary_column] == 1]
-            .groupby([*self.granularity])
-            .cumcount()
-            + 1
-        )
-        grouped["count_result_0"] = (
-            grouped[grouped[self.binary_column] == 0]
-            .groupby([*self.granularity])
-            .cumcount()
-            + 1
-        )
-        grouped[["count_result_0", "count_result_1"]] = grouped.groupby(
-            self.granularity
-        )[["count_result_0", "count_result_1"]].fillna(method="ffill")
-        for feature in self.features:
-            grouped.loc[
-                grouped["count_result_1"] < self.min_periods,
-                f"{self.prefix}{self.window}_{feature}_1",
-            ] = np.nan
-            grouped.loc[
-                grouped["count_result_0"] < self.min_periods,
-                f"{self.prefix}{self.window}_{feature}_0",
-            ] = np.nan
-
-        concat_df = concat_df.merge(
-            grouped[
-                [self.column_names.update_match_id, *self.granularity, *feats_added]
-            ],
-            on=[self.column_names.update_match_id, *self.granularity],
-            how="left",
-        )
-
-        concat_df[feats_added] = concat_df.groupby(self.granularity)[
-            feats_added
-        ].fillna(method="ffill")
-        return concat_df
-
-
-class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
+class RollingMeanTransformer(BaseLagGenerator):
     """
     Calculates the rolling mean for a list of features over a window of matches.
     Rolling Mean Values are also shifted by one match to avoid data leakage.
@@ -1057,13 +836,6 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
             transformed_df=transformed_df, ori_df=df
         )
         cn = self.column_names
-        #  recasts_mapping = {}
-        #   for c in [cn.player_id, cn.team_id, cn.match_id]:
-        #       if transformed_df[c].dtype != df[c].dtype:
-        #          recasts_mapping[c] = df[c].dtype
-        #  transformed_df = transformed_df.with_columns(
-        #       nw.col(c).cast(df[c].dtype) for c in [cn.player_id, cn.team_id, cn.match_id]
-        #  )
 
         df = df.join(
             transformed_df.select(

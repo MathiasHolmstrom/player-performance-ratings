@@ -29,13 +29,13 @@ from player_performance_ratings.transformers import (
 
 from player_performance_ratings import ColumnNames, Pipeline
 from player_performance_ratings.transformers.lag_generators import (
-    RollingMeanTransformerPolars,
+    RollingMeanTransformer,
 )
 
 
 def test_pipeline_constructor():
     lag_generators = [
-        RollingMeanTransformerPolars(
+        RollingMeanTransformer(
             features=["kills", "deaths"],
             window=1,
             granularity=["player_id"],

@@ -7,10 +7,8 @@ from player_performance_ratings.transformers import (
     LagTransformer,
     RollingMeanDaysTransformer,
 )
-from player_performance_ratings.transformers.lag_generators import (
-    RollingMeanTransformerPolars,
-    BinaryOutcomeRollingMeanTransformerPolars,
-)
+from player_performance_ratings.transformers.lag_generators import RollingMeanTransformer, \
+    BinaryOutcomeRollingMeanTransformer
 
 
 @pytest.fixture
@@ -541,7 +539,7 @@ def test_rolling_mean_fit_transform(df, column_names):
     except:
         original_df = data.clone()
 
-    rolling_mean_transformation = RollingMeanTransformerPolars(
+    rolling_mean_transformation = RollingMeanTransformer(
         features=["points"],
         window=2,
         min_periods=1,
@@ -616,7 +614,7 @@ def test_rolling_mean_fit_transform_and_transform(df, column_names):
         original_future_df = future_df.copy()
     except:
         original_future_df = future_df.clone()
-    rolling_mean_transformation = RollingMeanTransformerPolars(
+    rolling_mean_transformation = RollingMeanTransformer(
         features=["points"],
         window=2,
         min_periods=1,
@@ -681,7 +679,7 @@ def test_rolling_mean_transformer_fit_transformer_team_stat(df, column_names):
     except:
         expected_df = historical_df.clone()
 
-    rolling_mean_transformation = RollingMeanTransformerPolars(
+    rolling_mean_transformation = RollingMeanTransformer(
         features=["score_difference"],
         window=2,
         min_periods=1,
@@ -741,7 +739,7 @@ def test_rolling_mean_transform_parent_match_id(column_names: ColumnNames):
     )
     expected_df = historical_df.copy()
 
-    transformer = RollingMeanTransformerPolars(
+    transformer = RollingMeanTransformer(
         features=["points"],
         window=2,
     )
@@ -1116,7 +1114,7 @@ def test_binary_granularity_rolling_mean_transformer(df, column_names, min_perio
     except:
         expected_df = historical_df.clone()
 
-    transformer = BinaryOutcomeRollingMeanTransformerPolars(
+    transformer = BinaryOutcomeRollingMeanTransformer(
         features=["score_difference"],
         binary_column="won",
         window=10,
@@ -1277,7 +1275,7 @@ def test_binary_granularity_rolling_mean_fit_transform_transform(
     except:
         expected_historical_df = historical_df.to_pandas()
 
-    transformer = BinaryOutcomeRollingMeanTransformerPolars(
+    transformer = BinaryOutcomeRollingMeanTransformer(
         features=["score_difference"],
         binary_column="won",
         window=3,
@@ -1444,7 +1442,7 @@ def test_binary_granularity_rolling_mean_fit_transform_opponent(df, column_names
     except:
         expected_historical_df = df.to_pandas()
 
-    rolling_mean_transformation = BinaryOutcomeRollingMeanTransformerPolars(
+    rolling_mean_transformation = BinaryOutcomeRollingMeanTransformer(
         features=["score_difference"],
         binary_column="won",
         window=2,

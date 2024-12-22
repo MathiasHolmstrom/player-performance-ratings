@@ -7,9 +7,7 @@ from player_performance_ratings.ratings import (
     RatingKnownFeatures,
 )
 from player_performance_ratings.transformers import LagTransformer
-from player_performance_ratings.transformers.lag_generators import (
-    RollingMeanTransformerPolars,
-)
+from player_performance_ratings.transformers.lag_generators import RollingMeanTransformer
 
 column_names = ColumnNames(
     team_id="teamname",
@@ -52,7 +50,7 @@ lag_generators = [
     LagTransformer(
         features=["kills", "deaths", "result"], lag_length=3, granularity=["playername"]
     ),
-    RollingMeanTransformerPolars(
+    RollingMeanTransformer(
         features=["kills", "deaths", "result"],
         window=20,
         min_periods=1,

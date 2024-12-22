@@ -14,7 +14,7 @@ from player_performance_ratings.ratings.performance_generator import (
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.transformers.base_transformer import (
     BaseLagGenerator,
-    BaseLagGeneratorPolars,
+    BaseLagGenerator,
     BaseTransformer,
 )
 
@@ -35,7 +35,7 @@ class PipelineTransformer:
         ] = None,
         pre_lag_transformers: Optional[list[BaseTransformer]] = None,
         lag_generators: Optional[
-            List[Union[BaseLagGenerator, BaseLagGeneratorPolars]]
+            List[Union[BaseLagGenerator, BaseLagGenerator]]
         ] = None,
         post_lag_transformers: Optional[list[BaseTransformer]] = None,
     ):

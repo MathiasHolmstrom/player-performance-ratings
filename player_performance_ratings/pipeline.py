@@ -26,7 +26,7 @@ from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.transformers.base_transformer import (
     BaseTransformer,
     BaseLagGenerator,
-    BaseLagGeneratorPolars,
+    BaseLagGenerator,
 )
 from player_performance_ratings.utils import convert_pandas_to_polars
 
@@ -60,7 +60,7 @@ class Pipeline:
         ] = None,
         pre_lag_transformers: Optional[list[BaseTransformer]] = None,
         lag_generators: Optional[
-            List[Union[BaseLagGenerator, BaseLagGeneratorPolars]]
+            List[Union[BaseLagGenerator, BaseLagGenerator]]
         ] = None,
         post_lag_transformers: Optional[list[BaseTransformer]] = None,
     ):
