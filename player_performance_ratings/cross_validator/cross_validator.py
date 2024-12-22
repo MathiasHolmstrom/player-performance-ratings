@@ -200,9 +200,11 @@ class MatchKFoldCrossValidator(CrossValidator):
             validation_df = validation_df.with_columns(
                 nw.lit(1).alias(self.validation_column_name)
             )
-            validation_dfs.append(validation_df)
+            if validation_dfs:
+                validation_dfs.append(validation_df.select(validation_dfs[0].columns))
+            else:
+                validation_dfs.append(validation_df)
 
-            # Step 10: Update the training cutoff and define the next validation set
             train_cut_off_match_number += step_matches
             train_df = df.filter(
                 nw.col("__cv_match_number") < train_cut_off_match_number

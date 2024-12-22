@@ -254,7 +254,7 @@ def convert_df_to_matches(
 
         if (
             col_names.projected_participation_weight
-            and col_names.participation_weight in row
+            and col_names.projected_participation_weight in row
         ):
             projected_participation_weight = row[
                 col_names.projected_participation_weight
