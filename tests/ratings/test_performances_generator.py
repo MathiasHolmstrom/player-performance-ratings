@@ -35,7 +35,9 @@ def test_auto_create_pre_transformers():
     )
 
     expected_pre_transformations = [
-        SymmetricDistributionTransformer(features=["kills", "deaths"], prefix="symmetric_"),
+        SymmetricDistributionTransformer(
+            features=["kills", "deaths"], prefix="symmetric_"
+        ),
         PartialStandardScaler(
             features=["kills", "deaths"],
             ratio=1,
@@ -69,7 +71,9 @@ def test_auto_create_pre_transformers_multiple_column_names():
     )
 
     expected_pre_transformations = [
-        SymmetricDistributionTransformer(features=["kills", "deaths"], prefix="symmetric_"),
+        SymmetricDistributionTransformer(
+            features=["kills", "deaths"], prefix="symmetric_"
+        ),
         PartialStandardScaler(
             features=["kills", "deaths"],
             ratio=1,
@@ -143,16 +147,14 @@ def test_performances_generator(df):
         expected_df_with_performances = data.to_pandas()
         df_with_performances = df_with_performances.to_pandas()
 
-
-    expected_df_with_performances['weighted_performance'] = [
+    expected_df_with_performances["weighted_performance"] = [
         1,
         0,
         0.75,
         0.25,
     ]
-    expected_df_with_performances['performance'] = [1, 0, 1, 0]
+    expected_df_with_performances["performance"] = [1, 0, 1, 0]
     expected_df_with_performances["points_difference"] = [1, 0, 0.5, 0.5]
-
 
     pd.testing.assert_frame_equal(
         df_with_performances,

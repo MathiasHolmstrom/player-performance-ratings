@@ -278,7 +278,6 @@ class DiminishingValueTransformer(BaseTransformer):
 
             if self.reverse:
 
-
                 df = df.with_columns(
                     nw.when(nw.col(feature_name) <= cutoff_value)
                     .then(

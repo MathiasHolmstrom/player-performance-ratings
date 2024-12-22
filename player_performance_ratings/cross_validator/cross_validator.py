@@ -22,12 +22,12 @@ class MatchKFoldCrossValidator(CrossValidator):
     """
 
     def __init__(
-            self,
-            match_id_column_name: str,
-            date_column_name: str,
-            scorer: Optional[BaseScorer] = None,
-            min_validation_date: Optional[str] = None,
-            n_splits: int = 3,
+        self,
+        match_id_column_name: str,
+        date_column_name: str,
+        scorer: Optional[BaseScorer] = None,
+        min_validation_date: Optional[str] = None,
+        n_splits: int = 3,
     ):
         """
         :param match_id_column_name: The column name of the match_id
@@ -44,16 +44,16 @@ class MatchKFoldCrossValidator(CrossValidator):
 
     @nw.narwhalify
     def generate_validation_df(
-            self,
-            df: FrameT,
-            predictor: BasePredictor,
-            column_names: ColumnNames,
-            estimator_features: Optional[list[str]] = None,
-            pre_lag_transformers: Optional[list[BaseTransformer]] = None,
-            lag_generators: Optional[list[BaseLagGenerator]] = None,
-            post_lag_transformers: Optional[list[BaseTransformer]] = None,
-            return_features: bool = False,
-            add_train_prediction: bool = False,
+        self,
+        df: FrameT,
+        predictor: BasePredictor,
+        column_names: ColumnNames,
+        estimator_features: Optional[list[str]] = None,
+        pre_lag_transformers: Optional[list[BaseTransformer]] = None,
+        lag_generators: Optional[list[BaseLagGenerator]] = None,
+        post_lag_transformers: Optional[list[BaseTransformer]] = None,
+        return_features: bool = False,
+        add_train_prediction: bool = False,
     ) -> IntoFrameT:
         """
         Generate predictions on validation dataset.
@@ -74,8 +74,8 @@ class MatchKFoldCrossValidator(CrossValidator):
             If set to false it will only return the predictions for the validation dataset
         """
 
-        if '__row_index' in df.columns:
-            df = df.drop('__row_index')
+        if "__row_index" in df.columns:
+            df = df.drop("__row_index")
 
         predictor = copy.deepcopy(predictor)
         validation_dfs = []
@@ -92,20 +92,22 @@ class MatchKFoldCrossValidator(CrossValidator):
             self.min_validation_date = unique_dates[median_number]
 
         df = df.with_columns(
-            (nw.col(self.match_id_column_name) != nw.col(self.match_id_column_name).shift(1))
+            (
+                nw.col(self.match_id_column_name)
+                != nw.col(self.match_id_column_name).shift(1)
+            )
             .cum_sum()
             .fill_null(0)
             .alias("__cv_match_number")
         )
-        if df['__cv_match_number'].min() == 0:
-            df = df.with_columns(
-                nw.col("__cv_match_number") + 1
-            )
-
+        if df["__cv_match_number"].min() == 0:
+            df = df.with_columns(nw.col("__cv_match_number") + 1)
 
         min_validation_match_number = (
             df.filter(
-                nw.col(self.date_column_name) >= nw.lit(self.min_validation_date).str.to_datetime(format="%Y-%m-%d"))
+                nw.col(self.date_column_name)
+                >= nw.lit(self.min_validation_date).str.to_datetime(format="%Y-%m-%d")
+            )
             .select(nw.col("__cv_match_number").min())
             .head(1)
             .item()
@@ -114,7 +116,9 @@ class MatchKFoldCrossValidator(CrossValidator):
         if not pre_lag_transformers:
             for lag_transformer in lag_generators:
                 lag_transformer.reset()
-                df = nw.from_native(lag_transformer.generate_historical(df, column_names=column_names))
+                df = nw.from_native(
+                    lag_transformer.generate_historical(df, column_names=column_names)
+                )
 
         max_match_number = df.select(nw.col("__cv_match_number").max()).to_numpy()[0][0]
         train_cut_off_match_number = min_validation_match_number
@@ -127,31 +131,53 @@ class MatchKFoldCrossValidator(CrossValidator):
             )
 
         validation_df = df.filter(
-            (nw.col("__cv_match_number") >= train_cut_off_match_number) &
-            (nw.col("__cv_match_number") <= train_cut_off_match_number + step_matches)
+            (nw.col("__cv_match_number") >= train_cut_off_match_number)
+            & (nw.col("__cv_match_number") <= train_cut_off_match_number + step_matches)
         )
 
         for idx in range(self.n_splits):
             if pre_lag_transformers:
                 for pre_lag_transformer in pre_lag_transformers:
                     pre_lag_transformer.reset()
-                    train_df = nw.from_native(pre_lag_transformer.fit_transform(train_df, column_names=column_names))
-                    validation_df = nw.from_native(pre_lag_transformer.transform(validation_df))
+                    train_df = nw.from_native(
+                        pre_lag_transformer.fit_transform(
+                            train_df, column_names=column_names
+                        )
+                    )
+                    validation_df = nw.from_native(
+                        pre_lag_transformer.transform(validation_df)
+                    )
 
                 for lag_transformer in lag_generators:
                     lag_transformer.reset()
-                    train_df = nw.from_native(lag_transformer.generate_historical(train_df, column_names=column_names))
-                    validation_df = nw.from_native(lag_transformer.generate_historical(validation_df, column_names=column_names))
+                    train_df = nw.from_native(
+                        lag_transformer.generate_historical(
+                            train_df, column_names=column_names
+                        )
+                    )
+                    validation_df = nw.from_native(
+                        lag_transformer.generate_historical(
+                            validation_df, column_names=column_names
+                        )
+                    )
 
             for post_lag_transformer in post_lag_transformers:
                 post_lag_transformer.reset()
-                train_df = nw.from_native(post_lag_transformer.fit_transform(train_df, column_names=column_names))
-                validation_df = nw.from_native(post_lag_transformer.transform(validation_df))
+                train_df = nw.from_native(
+                    post_lag_transformer.fit_transform(
+                        train_df, column_names=column_names
+                    )
+                )
+                validation_df = nw.from_native(
+                    post_lag_transformer.transform(validation_df)
+                )
 
             predictor.train(train_df, estimator_features=estimator_features)
 
             if idx == 0 and add_train_prediction:
-                columns_to_keep = [c for c in train_df.columns if c not in predictor.columns_added]
+                columns_to_keep = [
+                    c for c in train_df.columns if c not in predictor.columns_added
+                ]
                 train_df = train_df.select(columns_to_keep)
                 train_df = nw.from_native(predictor.add_prediction(train_df))
                 train_df = train_df.with_columns(
@@ -160,7 +186,9 @@ class MatchKFoldCrossValidator(CrossValidator):
                 validation_dfs.append(train_df)
 
             # Step 9: Add predictions to the validation DataFrame
-            columns_to_keep = [c for c in validation_df.columns if c not in predictor.columns_added]
+            columns_to_keep = [
+                c for c in validation_df.columns if c not in predictor.columns_added
+            ]
             validation_df = validation_df.select(columns_to_keep)
             validation_df = nw.from_native(predictor.add_prediction(validation_df))
             validation_df = validation_df.with_columns(
@@ -170,14 +198,21 @@ class MatchKFoldCrossValidator(CrossValidator):
 
             # Step 10: Update the training cutoff and define the next validation set
             train_cut_off_match_number += step_matches
-            train_df = df.filter(nw.col("__cv_match_number") < train_cut_off_match_number)
+            train_df = df.filter(
+                nw.col("__cv_match_number") < train_cut_off_match_number
+            )
 
             if idx == self.n_splits - 2:
-                validation_df = df.filter(nw.col("__cv_match_number") >= train_cut_off_match_number)
+                validation_df = df.filter(
+                    nw.col("__cv_match_number") >= train_cut_off_match_number
+                )
             else:
                 validation_df = df.filter(
-                    (nw.col("__cv_match_number") >= train_cut_off_match_number) &
-                    (nw.col("__cv_match_number") < train_cut_off_match_number + step_matches)
+                    (nw.col("__cv_match_number") >= train_cut_off_match_number)
+                    & (
+                        nw.col("__cv_match_number")
+                        < train_cut_off_match_number + step_matches
+                    )
                 )
 
         concat_validation_df = nw.concat(validation_dfs).drop("__cv_match_number")
@@ -188,8 +223,12 @@ class MatchKFoldCrossValidator(CrossValidator):
             )
 
         concat_validation_df = concat_validation_df.unique(
-            subset=[column_names.match_id, column_names.team_id, column_names.player_id],
-            keep="first"
+            subset=[
+                column_names.match_id,
+                column_names.team_id,
+                column_names.player_id,
+            ],
+            keep="first",
         )
         validate_sorting(df=concat_validation_df, column_names=column_names)
         return concat_validation_df

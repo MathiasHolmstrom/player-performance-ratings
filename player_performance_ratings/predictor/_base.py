@@ -17,7 +17,9 @@ from player_performance_ratings.predictor_transformer import (
 from player_performance_ratings.predictor_transformer._simple_transformer import (
     SimpleTransformer,
 )
+
 DataFrameType = TypeVar("DataFrameType", pd.DataFrame, pl.DataFrame)
+
 
 class BasePredictor(ABC):
 
@@ -101,12 +103,16 @@ class BasePredictor(ABC):
         if classes is None:
             classes = self.estimator.classes_
 
-        return nw.from_native(df.with_columns(
-            pl.struct(
-                *[pl.col(self.pred_column).list.get(i).alias(str(cls)) for i, cls in enumerate(classes)]
-            ).alias(self.pred_column)
-        ))
-
+        return nw.from_native(
+            df.with_columns(
+                pl.struct(
+                    *[
+                        pl.col(self.pred_column).list.get(i).alias(str(cls))
+                        for i, cls in enumerate(classes)
+                    ]
+                ).alias(self.pred_column)
+            )
+        )
 
     def set_target(self, new_target_name: str):
         self._target = new_target_name
@@ -214,10 +220,11 @@ class BasePredictor(ABC):
             features_out = pre_transformer.features_out
             df = df.with_columns(
                 nw.new_series(
-                    values=values[col],
+                    values=values[col].to_native(),
                     name=features_out[idx],
-                    native_namespace=native_namespace
-                ) for idx, col in enumerate(values.columns)
+                    native_namespace=native_namespace,
+                )
+                for idx, col in enumerate(values.columns)
             )
 
             feats_to_remove = [
@@ -236,7 +243,12 @@ class BasePredictor(ABC):
         for pre_transformer in self.pre_transformers:
             values = nw.from_native(pre_transformer.transform(df))
             df = df.with_columns(
-                nw.new_series(name=col,values=values[col], native_namespace=nw.get_native_namespace(df)) for col in values.columns
+                nw.new_series(
+                    name=col,
+                    values=values[col].to_native(),
+                    native_namespace=nw.get_native_namespace(df),
+                )
+                for col in values.columns
             )
         return df
 

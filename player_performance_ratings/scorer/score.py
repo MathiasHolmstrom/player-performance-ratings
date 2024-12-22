@@ -77,9 +77,7 @@ def _apply_filters_polars(df: pl.DataFrame, filters: list[Filter]) -> pl.DataFra
     return df
 
 
-def apply_filters(
-    df: FrameT, filters: list[Filter]
-) -> FrameT:
+def apply_filters(df: FrameT, filters: list[Filter]) -> FrameT:
     for filter in filters:
         if filter.operator == Operator.EQUALS:
             df = df.filter(nw.col(filter.column_name) == filter.value)
@@ -99,6 +97,7 @@ def apply_filters(
             df = df.filter(~nw.col(filter.column_name).is_in(filter.value))
 
     return df
+
 
 class BaseScorer(ABC):
 

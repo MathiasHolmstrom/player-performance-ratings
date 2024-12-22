@@ -12,6 +12,7 @@ from player_performance_ratings.transformers.base_transformer import (
 )
 from narwhals.typing import FrameT, IntoFrameT
 
+
 class CrossValidator(ABC):
 
     def __init__(self, scorer: Optional[BaseScorer], min_validation_date: str):

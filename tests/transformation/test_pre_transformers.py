@@ -54,12 +54,15 @@ def test_sklearn_transformer_wrapper_one_hot_encoder(df):
     )
     if isinstance(df_future, pl.DataFrame):
         expected_future_transformed_df = pl.DataFrame(expected_future_transformed_df)
-        assert_frame_equal(expected_future_transformed_df, future_transformed_df, check_dtype=False)
+        assert_frame_equal(
+            expected_future_transformed_df, future_transformed_df, check_dtype=False
+        )
     else:
 
         pd.testing.assert_frame_equal(
             expected_future_transformed_df, future_transformed_df, check_dtype=False
         )
+
 
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_sklearn_transformer_wrapper_standard_scaler(df):
@@ -76,15 +79,12 @@ def test_sklearn_transformer_wrapper_standard_scaler(df):
     transformed_df = transformer.fit_transform(data)
 
     assert transformed_df.shape[1] == 1
-    assert 'value' in transformed_df.columns
+    assert "value" in transformed_df.columns
 
-    df_future = df(
-        {"game_id": [1, 2], "position": ["a", "c"], "value": [1.2, 0.4]}
-    )
+    df_future = df({"game_id": [1, 2], "position": ["a", "c"], "value": [1.2, 0.4]})
 
     future_transformed_df = transformer.transform(df_future)
     assert future_transformed_df["value"].min() < 0
-
 
 
 def test_groupby_transformer_fit_transform():
@@ -144,8 +144,15 @@ def test_reverse_diminshing_value_transformer(df):
         assert transformed_df["performance"].iloc[0] > ori_df["performance"].iloc[0]
         assert transformed_df["performance"].iloc[3] == ori_df["performance"].iloc[3]
     else:
-        assert transformed_df.row(0, named=True)["performance"] > ori_df.row(0, named=True)["performance"]
-        assert transformed_df.row(3, named=True) ["performance"]== ori_df.row(3,named=True)["performance"]
+        assert (
+            transformed_df.row(0, named=True)["performance"]
+            > ori_df.row(0, named=True)["performance"]
+        )
+        assert (
+            transformed_df.row(3, named=True)["performance"]
+            == ori_df.row(3, named=True)["performance"]
+        )
+
 
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_symmetric_distribution_transformery_fit_transform(df):
@@ -318,6 +325,8 @@ def test_symmetric_distribution_transformer_with_granularity_fit_transform():
         abs(transformed_df.loc[lambda x: x.position == "SG"]["performance"].skew())
         < transformer.skewness_allowed
     )
+
+
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_ratio_team_predictor(df):
     column_names = ColumnNames(
@@ -335,11 +344,8 @@ def test_ratio_team_predictor(df):
         }
     )
     transformer = RatioTeamPredictorTransformer(
-        features=['performance'],
-        predictor=Predictor(
-            target='target',
-            estimator=LinearRegression()
-        )
+        features=["performance"],
+        predictor=Predictor(target="target", estimator=LinearRegression()),
     )
 
     fit_transformed_data = transformer.fit_transform(data, column_names=column_names)

@@ -41,18 +41,18 @@ class GameTeamPredictor(BasePredictor):
     """
 
     def __init__(
-            self,
-            game_id_colum: str,
-            team_id_column: str,
-            target: Optional[str] = PredictColumnNames.TARGET,
-            estimator: Optional = None,
-            estimator_features: Optional[list[str]] = None,
-            multiclassifier: bool = False,
-            pred_column: Optional[str] = None,
-            pre_transformers: Optional[list[PredictorTransformer]] = None,
-            post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-            filters: Optional[list[Filter]] = None,
-            multiclass_output_as_struct: bool = True,
+        self,
+        game_id_colum: str,
+        team_id_column: str,
+        target: Optional[str] = PredictColumnNames.TARGET,
+        estimator: Optional = None,
+        estimator_features: Optional[list[str]] = None,
+        multiclassifier: bool = False,
+        pred_column: Optional[str] = None,
+        pre_transformers: Optional[list[PredictorTransformer]] = None,
+        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+        filters: Optional[list[Filter]] = None,
+        multiclass_output_as_struct: bool = True,
     ):
         """
         :param game_id_colum - name of game_id column
@@ -92,16 +92,14 @@ class GameTeamPredictor(BasePredictor):
         )
 
     @nw.narwhalify
-    def train(
-            self, df: FrameT, estimator_features: list[Optional[str]] = None
-    ) -> None:
+    def train(self, df: FrameT, estimator_features: list[Optional[str]] = None) -> None:
         """
         Performs pre_transformations and trains an Sklearn-like estimator.
 
         :param df - Dataframe containing the estimator_features and target.
         :param estimator_features - If Estimator features are passed they will the estimator_features created by the constructor
         """
-        if '__row_index' not in df.columns:
+        if "__row_index" not in df.columns:
             df = df.with_row_index(name="__row_index")
 
         if len(df) == 0:
@@ -117,7 +115,7 @@ class GameTeamPredictor(BasePredictor):
         df = apply_filters(df=df, filters=self.filters)
         df = self._fit_transform_pre_transformers(df=df)
         if len(df[self._target].unique()) > 2 and hasattr(
-                self.estimator, "predict_proba"
+            self.estimator, "predict_proba"
         ):
             self.multiclassifier = True
             if self.estimator.__class__.__name__ == "LogisticRegression":
@@ -133,7 +131,10 @@ class GameTeamPredictor(BasePredictor):
             raise ValueError(f"target {self._target} not in df")
 
         grouped = self._create_grouped(df)
-        self.estimator.fit(grouped[self._estimator_features], grouped[self._target])
+        self.estimator.fit(
+            grouped.select(self._estimator_features).to_pandas(),
+            grouped[self._target].to_numpy(),
+        )
 
     @nw.narwhalify
     def add_prediction(self, df: FrameT) -> IntoFrameT:
@@ -150,7 +151,7 @@ class GameTeamPredictor(BasePredictor):
         else:
             ori_type = "pl"
 
-        if '__row_index' not in df.columns:
+        if "__row_index" not in df.columns:
             df = df.with_row_index(name="__row_index")
 
         if hasattr(self.estimator, "predict_proba"):
@@ -168,20 +169,20 @@ class GameTeamPredictor(BasePredictor):
                 nw.new_series(
                     name=self._pred_column,
                     values=self.estimator.predict_proba(
-                        grouped[self._estimator_features]).tolist(),
-                    native_namespace=nw.get_native_namespace(grouped)
+                        grouped.select(self._estimator_features).to_pandas()
+                    ).tolist(),
+                    native_namespace=nw.get_native_namespace(grouped),
                 )
             )
-
 
         elif not hasattr(self.estimator, "predict_proba"):
             grouped = grouped.with_columns(
                 nw.new_series(
                     name=self._pred_column,
                     values=self.estimator.predict(
-                        grouped[self._estimator_features]
+                        grouped.select(self._estimator_features).to_pandas()
                     ),
-                    native_namespace=nw.get_native_namespace(grouped)
+                    native_namespace=nw.get_native_namespace(grouped),
                 )
             )
 
@@ -190,8 +191,10 @@ class GameTeamPredictor(BasePredictor):
                 nw.new_series(
                     name=self._pred_column,
                     values=self.estimator.predict_proba(
-                        grouped[self._estimator_features]
-                    )[:, 1].tolist(), native_namespace=nw.get_native_namespace(grouped))
+                        grouped.select(self._estimator_features).to_pandas()
+                    )[:, 1].tolist(),
+                    native_namespace=nw.get_native_namespace(grouped),
+                )
             )
 
         if self.pred_column in df.columns:
@@ -204,7 +207,7 @@ class GameTeamPredictor(BasePredictor):
                     + [self._pred_column, "classes"]
                 ),
                 on=[self.game_id_colum, self.team_id_column],
-            ).sort(by='__row_index')
+            ).sort(by="__row_index")
 
         else:
             df = df.join(
@@ -212,7 +215,7 @@ class GameTeamPredictor(BasePredictor):
                     [self.game_id_colum, self.team_id_column] + [self._pred_column]
                 ),
                 on=[self.game_id_colum, self.team_id_column],
-            ).sort(by='__row_index')
+            ).sort(by="__row_index")
 
         for simple_transformer in self.post_predict_transformers:
             df = simple_transformer.transform(df)
@@ -220,7 +223,7 @@ class GameTeamPredictor(BasePredictor):
         if self.multiclass_output_as_struct and self.multiclassifier:
             df = self._convert_multiclass_predictions_to_struct(df)
 
-        df = df.drop('__row_index')
+        df = df.drop("__row_index")
         if ori_type == "pd":
             return df.to_pandas()
         return df
@@ -242,31 +245,27 @@ class GameTeamPredictor(BasePredictor):
             #    if df[self._target].dtype == "object":
             #     df = df.with_columns(pl.col(self._target).cast(pl.Int64))
 
-            grouped = (
-                df.group_by([self.game_id_colum, self.team_id_column])
-                .agg(
-                    nw.col(feature).mean() for feature in [*numeric_features, self.target]
-                )
+            grouped = df.group_by([self.game_id_colum, self.team_id_column]).agg(
+                [nw.col(feature).mean() for feature in numeric_features]
+                + [nw.col(self._target).median().alias(self._target)]
             )
-
         else:
-            grouped = (
-                df.group_by([self.game_id_colum, self.team_id_column])
-                .agg(nw.col(feature).mean() for feature in numeric_features)
+            grouped = df.group_by([self.game_id_colum, self.team_id_column]).agg(
+                nw.col(feature).mean() for feature in numeric_features
             )
 
         if self._target in df.columns and hasattr(
-                self._deepest_estimator, "predict_proba"
+            self._deepest_estimator, "predict_proba"
         ):
             grouped = grouped.with_columns(nw.col(self._target).cast(nw.Int64))
 
         grouped = grouped.join(
-            df.select([self.game_id_colum, self.team_id_column, *cat_feats, '__row_index']).unique(
-                subset=[self.game_id_colum, self.team_id_column]
-            ),
+            df.select(
+                [self.game_id_colum, self.team_id_column, *cat_feats, "__row_index"]
+            ).unique(subset=[self.game_id_colum, self.team_id_column]),
             on=[self.game_id_colum, self.team_id_column],
             how="inner",
-        ).sort('__row_index')
+        ).sort("__row_index")
 
         return grouped
 
@@ -280,17 +279,17 @@ class Predictor(BasePredictor):
     """
 
     def __init__(
-            self,
-            target: Optional[str] = PredictColumnNames.TARGET,
-            estimator: Optional = None,
-            estimator_features: Optional[list[str]] = None,
-            filters: Optional[list[Filter]] = None,
-            multiclassifier: bool = False,
-            pred_column: Optional[str] = None,
-            column_names: Optional[ColumnNames] = None,
-            pre_transformers: Optional[list[PredictorTransformer]] = None,
-            post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-            multiclass_output_as_struct: bool = True,
+        self,
+        target: Optional[str] = PredictColumnNames.TARGET,
+        estimator: Optional = None,
+        estimator_features: Optional[list[str]] = None,
+        filters: Optional[list[Filter]] = None,
+        multiclassifier: bool = False,
+        pred_column: Optional[str] = None,
+        column_names: Optional[ColumnNames] = None,
+        pre_transformers: Optional[list[PredictorTransformer]] = None,
+        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+        multiclass_output_as_struct: bool = True,
     ):
         """
         :param target - Name of the column that the predictor should predict
@@ -322,7 +321,7 @@ class Predictor(BasePredictor):
             multiclass_output_as_struct=multiclass_output_as_struct,
             pred_column=pred_column,
             estimator=estimator
-                      or LGBMClassifier(max_depth=2, n_estimators=100, verbose=-100),
+            or LGBMClassifier(max_depth=2, n_estimators=100, verbose=-100),
             pre_transformers=pre_transformers,
             post_predict_transformers=post_predict_transformers,
             filters=filters,
@@ -330,9 +329,7 @@ class Predictor(BasePredictor):
         )
 
     @nw.narwhalify
-    def train(
-            self, df: FrameT, estimator_features: Optional[list[str]] = None
-    ) -> None:
+    def train(self, df: FrameT, estimator_features: Optional[list[str]] = None) -> None:
         """
         Performs pre_transformations and trains an Sklearn-like estimator.
 
@@ -356,16 +353,18 @@ class Predictor(BasePredictor):
         filtered_df = apply_filters(df=df, filters=self.filters)
         if hasattr(self.estimator, "predict_proba"):
             try:
-                filtered_df = filtered_df.with_columns(nw.col(self._target).cast(nw.Int64))
+                filtered_df = filtered_df.with_columns(
+                    nw.col(self._target).cast(nw.Int64)
+                )
             except Exception:
                 pass
 
         filtered_df = self._fit_transform_pre_transformers(df=filtered_df)
 
         if (
-                not self.multiclassifier
-                and len(filtered_df[self._target].unique()) > 2
-                and hasattr(self._deepest_estimator, "predict_proba")
+            not self.multiclassifier
+            and len(filtered_df[self._target].unique()) > 2
+            and hasattr(self._deepest_estimator, "predict_proba")
         ):
             self.multiclassifier = True
             if self.estimator.__class__.__name__ == "LogisticRegression":
@@ -377,12 +376,11 @@ class Predictor(BasePredictor):
                 )
 
         if hasattr(self._deepest_estimator, "predict_proba"):
-            filtered_df = filtered_df.with_columns(
-                nw.col(self._target).cast(nw.Int64)
-            )
+            filtered_df = filtered_df.with_columns(nw.col(self._target).cast(nw.Int64))
 
         self.estimator.fit(
-            filtered_df[self._estimator_features], filtered_df[self._target]
+            filtered_df.select(self._estimator_features).to_pandas(),
+            filtered_df[self._target].to_list(),
         )
 
     @nw.narwhalify
@@ -415,8 +413,9 @@ class Predictor(BasePredictor):
                 nw.new_series(
                     name=self._pred_column,
                     values=self.estimator.predict_proba(
-                        df[self._estimator_features]).tolist(),
-                    native_namespace=nw.get_native_namespace(df)
+                        df.select(self._estimator_features).to_pandas()
+                    ).tolist(),
+                    native_namespace=nw.get_native_namespace(df),
                 )
             )
 
@@ -431,9 +430,9 @@ class Predictor(BasePredictor):
                 nw.new_series(
                     name=self._pred_column,
                     values=self.estimator.predict(
-                        df[self._estimator_features]
+                        df.select(self._estimator_features).to_pandas()
                     ),
-                    native_namespace=nw.get_native_namespace(df)
+                    native_namespace=nw.get_native_namespace(df),
                 )
             )
 
@@ -442,9 +441,9 @@ class Predictor(BasePredictor):
                 nw.new_series(
                     name=self._pred_column,
                     values=self.estimator.predict(
-                        df[self._estimator_features][:, 1].to_list()
+                        df.select(self._estimator_features).to_pandas()[:, 1].to_list()
                     ),
-                    native_namespace=nw.get_native_namespace(df)
+                    native_namespace=nw.get_native_namespace(df),
                 )
             )
 
@@ -459,24 +458,23 @@ class Predictor(BasePredictor):
         return df
 
 
-
 class GranularityPredictor(BasePredictor):
     """
     Samples the dataset into different subsets based on the granularity column and trains a separate estimator for each.
     """
 
     def __init__(
-            self,
-            granularity_column_name: str,
-            target: Optional[str] = PredictColumnNames.TARGET,
-            estimator: Optional = None,
-            estimator_features: Optional[list[str]] = None,
-            filters: Optional[list[Filter]] = None,
-            multiclassifier: bool = False,
-            pred_column: Optional[str] = None,
-            column_names: Optional[ColumnNames] = None,
-            pre_transformers: Optional[list[PredictorTransformer]] = None,
-            multiclass_output_as_struct: bool = True,
+        self,
+        granularity_column_name: str,
+        target: Optional[str] = PredictColumnNames.TARGET,
+        estimator: Optional = None,
+        estimator_features: Optional[list[str]] = None,
+        filters: Optional[list[Filter]] = None,
+        multiclassifier: bool = False,
+        pred_column: Optional[str] = None,
+        column_names: Optional[ColumnNames] = None,
+        pre_transformers: Optional[list[PredictorTransformer]] = None,
+        multiclass_output_as_struct: bool = True,
     ):
         """
         :param target - Name of the column that the predictor should predict
@@ -511,7 +509,7 @@ class GranularityPredictor(BasePredictor):
             target=self._target,
             pred_column=pred_column,
             estimator=estimator
-                      or LGBMClassifier(max_depth=2, n_estimators=100, verbose=-100),
+            or LGBMClassifier(max_depth=2, n_estimators=100, verbose=-100),
             pre_transformers=pre_transformers,
             filters=filters,
             estimator_features=estimator_features,
@@ -543,21 +541,21 @@ class GranularityPredictor(BasePredictor):
         filtered_df = apply_filters(df=df, filters=self.filters)
         if hasattr(self.estimator, "predict_proba"):
             try:
-                filtered_df = filtered_df.with_columns(nw.col(self._target).cast(nw.Int64))
+                filtered_df = filtered_df.with_columns(
+                    nw.col(self._target).cast(nw.Int64)
+                )
             except Exception:
                 pass
 
         filtered_df = self._fit_transform_pre_transformers(df=filtered_df)
 
         if hasattr(self._deepest_estimator, "predict_proba"):
-            filtered_df = filtered_df.with_columns(
-                nw.col(self._target).cast(nw.Int64)
-            )
+            filtered_df = filtered_df.with_columns(nw.col(self._target).cast(nw.Int64))
 
         if (
-                not self.multiclassifier
-                and len(filtered_df[self._target].unique()) > 2
-                and hasattr(self._deepest_estimator, "predict_proba")
+            not self.multiclassifier
+            and len(filtered_df[self._target].unique()) > 2
+            and hasattr(self._deepest_estimator, "predict_proba")
         ):
             self.multiclassifier = True
             if self.estimator.__class__.__name__ == "LogisticRegression":
@@ -572,9 +570,12 @@ class GranularityPredictor(BasePredictor):
 
         for granularity in self._granularities:
             self._granularity_estimators[granularity] = clone(self.estimator)
-            rows = filtered_df.filter(nw.col(self.granularity_column_name) == granularity)
+            rows = filtered_df.filter(
+                nw.col(self.granularity_column_name) == granularity
+            )
             self._granularity_estimators[granularity].fit(
-                rows[self._estimator_features], rows[self._target]
+                rows.select(self._estimator_features).to_pandas(),
+                rows[self._target].to_list(),
             )
 
     @nw.narwhalify
@@ -604,8 +605,9 @@ class GranularityPredictor(BasePredictor):
                     nw.new_series(
                         name=self._pred_column,
                         values=estimator.predict_proba(
-                            rows[self._estimator_features]).tolist(),
-                        native_namespace=nw.get_native_namespace(rows)
+                            rows.select(self._estimator_features).to_pandas()
+                        ).tolist(),
+                        native_namespace=nw.get_native_namespace(rows),
                     )
                 )
                 if len(set(rows[self.pred_column].head(1).item(0))) == 2:
@@ -614,17 +616,18 @@ class GranularityPredictor(BasePredictor):
                     )
 
                 if self.multiclass_output_as_struct and self.multiclassifier:
-                    rows = self._convert_multiclass_predictions_to_struct(df=rows, classes=estimator.classes_)
-
+                    rows = self._convert_multiclass_predictions_to_struct(
+                        df=rows, classes=estimator.classes_
+                    )
 
             elif not hasattr(self._deepest_estimator, "predict_proba"):
                 rows = rows.with_columns(
                     nw.new_series(
                         name=self._pred_column,
                         values=estimator.predict(
-                            rows[self._estimator_features]
+                            rows.select(self._estimator_features).to_pandas()
                         ),
-                        native_namespace=nw.get_native_namespace(rows)
+                        native_namespace=nw.get_native_namespace(rows),
                     )
                 )
             else:
@@ -632,9 +635,9 @@ class GranularityPredictor(BasePredictor):
                     nw.new_series(
                         name=self._pred_column,
                         values=estimator.predict(
-                            rows[self._estimator_features][:, 1]
+                            rows.select(self._estimator_features).to_pandas()[:, 1]
                         ),
-                        native_namespace=nw.get_native_namespace(rows)
+                        native_namespace=nw.get_native_namespace(rows),
                     )
                 )
             dfs.append(rows)
@@ -648,7 +651,9 @@ class GranularityPredictor(BasePredictor):
             return df.to_pandas()
         return df
 
-    def _unify_struct_fields(self, dfs: list[FrameT], struct_col: str) -> list[IntoFrameT]:
+    def _unify_struct_fields(
+        self, dfs: list[FrameT], struct_col: str
+    ) -> list[IntoFrameT]:
         dfs = [df.to_native() for df in dfs]
         all_fields = set()
         for df in dfs:
@@ -686,9 +691,7 @@ class GranularityPredictor(BasePredictor):
                 else:
                     field_exprs.append(pl.lit(0.0).alias(f))
 
-            df = df.with_columns(
-                pl.struct(field_exprs).alias(struct_col)
-            )
+            df = df.with_columns(pl.struct(field_exprs).alias(struct_col))
 
             updated_dfs.append(nw.from_native(df))
 

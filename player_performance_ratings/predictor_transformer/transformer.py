@@ -75,8 +75,13 @@ class SkLearnTransformerWrapper(PredictorTransformer):
 
         self._features_out = self.transformer.get_feature_names_out().tolist()
 
-        return  df.with_columns(
-            nw.new_series(self._features_out[idx],transformed_values[:, idx],native_namespace=nw.get_native_namespace(df)) for idx in range(len(self._features_out))
+        return df.with_columns(
+            nw.new_series(
+                self._features_out[idx],
+                transformed_values[:, idx],
+                native_namespace=nw.get_native_namespace(df),
+            )
+            for idx in range(len(self._features_out))
         ).select(self._features_out)
 
     @nw.narwhalify
@@ -86,12 +91,19 @@ class SkLearnTransformerWrapper(PredictorTransformer):
                 df.select(self.features).to_native()
             ).toarray()
         except AttributeError:
-            transformed_values = self.transformer.transform(df.select(self.features).to_native())
+            transformed_values = self.transformer.transform(
+                df.select(self.features).to_native()
+            )
             if not isinstance(transformed_values, np.ndarray):
                 transformed_values = transformed_values.to_numpy()
 
         return df.with_columns(
-            nw.new_series(self._features_out[idx],transformed_values[:, idx],native_namespace=nw.get_native_namespace(df)) for idx in range(len(self._features_out))
+            nw.new_series(
+                self._features_out[idx],
+                transformed_values[:, idx],
+                native_namespace=nw.get_native_namespace(df),
+            )
+            for idx in range(len(self._features_out))
         ).select(self._features_out)
 
     @property

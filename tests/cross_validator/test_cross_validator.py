@@ -55,7 +55,6 @@ def test_match_k_fold_cross_validator(df, column_names):
         scorer_function=mean_absolute_error,
     )
 
-
     if isinstance(data, pd.DataFrame):
         return_add_prediction1 = data.head(5)
         return_add_prediction1["__target_prediction"] = [1, 1, 1, 1, 1]
@@ -64,20 +63,18 @@ def test_match_k_fold_cross_validator(df, column_names):
         return_add_prediction2["__target_prediction"] = [0, 0, 0, 0, 1]
         return_add_prediction2["__cv_match_number"] = [5, 6, 7, 8, 9]
     else:
-        return_add_prediction1 = (
-            data.head(5)
-            .with_columns([
+        return_add_prediction1 = data.head(5).with_columns(
+            [
                 pl.lit(1.0).alias("__target_prediction"),
-                pl.Series("__cv_match_number", [0, 1, 2, 3, 4])
-            ])
+                pl.Series("__cv_match_number", [0, 1, 2, 3, 4]),
+            ]
         )
 
-        return_add_prediction2 = (
-            data.tail(5)
-            .with_columns([
+        return_add_prediction2 = data.tail(5).with_columns(
+            [
                 pl.Series("__target_prediction", [0.0, 0.0, 0.0, 0.0, 1.0]),
-                pl.Series("__cv_match_number", [5, 6, 7, 8, 9])
-            ])
+                pl.Series("__cv_match_number", [5, 6, 7, 8, 9]),
+            ]
         )
 
     predictor = mock.Mock()

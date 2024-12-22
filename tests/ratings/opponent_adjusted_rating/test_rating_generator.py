@@ -360,6 +360,7 @@ def test_rating_generator_1_match(column_names):
         assert is_close(rating.games_played, expected_rating.games_played)
         assert is_close(rating.confidence_sum, expected_rating.confidence_sum)
 
+
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_opponent_adjusted_rating_generator_with_projected_performance(df):
     column_names = ColumnNames(
@@ -404,7 +405,16 @@ def test_opponent_adjusted_rating_generator_with_projected_performance(df):
                 0.5,
                 0.5,
             ],
-            column_names.projected_participation_weight: [1.0, 1.0, 1.0, 1.0, 0.2, 1, 0.6, 0.6],
+            column_names.projected_participation_weight: [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                0.2,
+                1,
+                0.6,
+                0.6,
+            ],
             column_names.participation_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
         }
     )
@@ -430,6 +440,7 @@ def test_opponent_adjusted_rating_generator_with_projected_performance(df):
         df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[4]
         < df_with_ratings[RatingHistoricalFeatures.TEAM_RATING][4]
     )
+
 
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_update_rating_generator_generate_historical(df):
@@ -480,12 +491,23 @@ def test_update_rating_generator_generate_historical(df):
                 0.5,
                 0.5,
             ],
-            column_names.projected_participation_weight: [1.0, 1.0, 1.0, 1.0, 0.2, 1, 0.6, 0.6],
+            column_names.projected_participation_weight: [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                0.2,
+                1,
+                0.6,
+                0.6,
+            ],
             column_names.participation_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
         }
     )
 
-    ratings_df = rating_generator.generate_historical(df=data, column_names=column_names)
+    ratings_df = rating_generator.generate_historical(
+        df=data, column_names=column_names
+    )
     cols = [
         *data.columns,
         *rating_generator._historical_features_out,
@@ -546,7 +568,16 @@ def test_update_rating_generator_historical_and_future(df):
                 0.5,
                 0.5,
             ],
-            column_names.projected_participation_weight: [1.0, 1.0, 1.0, 1.0, 0.2, 1, 0.6, 0.6],
+            column_names.projected_participation_weight: [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                0.2,
+                1,
+                0.6,
+                0.6,
+            ],
             column_names.participation_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
         }
     )
@@ -616,9 +647,15 @@ def test_update_rating_generator_historical_and_future(df):
     if isinstance(future_df, pl.DataFrame):
         expected_future_df = future_df.hstack(pl.from_dict(expected_future_ratings))
         assert_frame_equal(
-            future_df_with_ratings, expected_future_df.select(future_df_with_ratings.columns), check_dtype=False)
+            future_df_with_ratings,
+            expected_future_df.select(future_df_with_ratings.columns),
+            check_dtype=False,
+        )
     else:
         expected_future_df = future_df.assign(**expected_future_ratings)
         pd.testing.assert_frame_equal(
-            future_df_with_ratings, expected_future_df, check_dtype=False, check_like=True
+            future_df_with_ratings,
+            expected_future_df,
+            check_dtype=False,
+            check_like=True,
         )
