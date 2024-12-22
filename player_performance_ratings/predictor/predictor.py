@@ -440,9 +440,9 @@ class Predictor(BasePredictor):
             df = df.with_columns(
                 nw.new_series(
                     name=self._pred_column,
-                    values=self.estimator.predict(
-                        df.select(self._estimator_features).to_pandas()[:, 1].to_list()
-                    ),
+                    values=self.estimator.predict_proba(
+                        df.select(self._estimator_features).to_pandas())[:, 1].tolist(),
+
                     native_namespace=nw.get_native_namespace(df),
                 )
             )

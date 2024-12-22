@@ -121,30 +121,20 @@ def test_game_team_predictor_game_player(df):
     feature_team1 = (0.1 * 0.5 + 0.5 * 0.5) / (0.5 + 0.5)
     feature_team2 = (0.3 * 0.5 + 0.4 * 0.5) / (0.5 + 0.5)
 
-    if isinstance(data, pd.DataFrame):
-        expected_features = pd.DataFrame(
-            {
-                "feature1": [feature_team1, feature_team2],
-            }
-        )
-        pd.testing.assert_frame_equal(
-            mock_model.fit.call_args[0][0].to_native(),
-            expected_features,
-            check_dtype=False,
-        )
-    else:
-        expected_features = pl.DataFrame(
-            {
-                "feature1": [feature_team1, feature_team2],
-            },
-        )
-        assert_frame_equal(
-            mock_model.fit.call_args[0][0].to_native(),
-            expected_features,
-            check_dtype=False,
-        )
 
-    assert mock_model.fit.call_args[0][1].to_list() == [1, 0]
+    expected_features = pd.DataFrame(
+        {
+            "feature1": [feature_team1, feature_team2],
+        }
+    )
+    pd.testing.assert_frame_equal(
+        mock_model.fit.call_args[0][0],
+        expected_features,
+        check_dtype=False,
+    )
+
+
+    assert mock_model.fit.call_args[0][1].tolist() == [1, 0]
 
 
 @pytest.mark.parametrize("target_values", [[1, 0, 1, 0], [0.3, 0.2, 24, 0.5]])

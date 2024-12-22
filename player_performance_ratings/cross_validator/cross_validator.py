@@ -229,6 +229,7 @@ class MatchKFoldCrossValidator(CrossValidator):
                 column_names.player_id,
             ],
             keep="first",
+            maintain_order=True
         )
         validate_sorting(df=concat_validation_df, column_names=column_names)
         return concat_validation_df
