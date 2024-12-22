@@ -1,4 +1,5 @@
 import copy
+from datetime import datetime
 from typing import Optional
 
 import narwhals as nw
@@ -103,10 +104,15 @@ class MatchKFoldCrossValidator(CrossValidator):
         if df["__cv_match_number"].min() == 0:
             df = df.with_columns(nw.col("__cv_match_number") + 1)
 
+        if isinstance(self.min_validation_date, str):
+            min_validation_date = datetime.strptime(self.min_validation_date, "%Y-%m-%d")
+        else:
+            min_validation_date = self.min_validation_date
+
         min_validation_match_number = (
             df.filter(
                 nw.col(self.date_column_name)
-                >= nw.lit(self.min_validation_date).str.to_datetime(format="%Y-%m-%d")
+                >= nw.lit(min_validation_date)
             )
             .select(nw.col("__cv_match_number").min())
             .head(1)

@@ -557,8 +557,7 @@ class UpdateRatingGenerator(RatingGenerator):
     ) -> dict[Union[RatingKnownFeatures, RatingHistoricalFeatures], Any]:
 
         if self.column_names.projected_participation_weight:
-            df = nw.from_dict(
-                {
+            data = {
                     self.column_names.match_id: match_ids,
                     self.column_names.team_id: team_ids,
                     "team_id_opponent": team_id_opponents,
@@ -566,9 +565,15 @@ class UpdateRatingGenerator(RatingGenerator):
                     + RatingKnownFeatures.PLAYER_RATING: pre_match_player_rating_values,
                     "projected_participation_weight": projected_participation_weights,
                     self.column_names.player_id: player_ids,
-                },
-                native_namespace=nw.get_native_namespace(ori_df),
-            )
+                }
+
+            if len(ori_df) == 0:
+                df = nw.from_native(pl.DataFrame(data))
+            else:
+                df = nw.from_dict(
+                    data,
+                    native_namespace=nw.get_native_namespace(ori_df),
+                )
 
             game_player = df.group_by(
                 [
