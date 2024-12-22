@@ -91,7 +91,10 @@ class LagTransformer(BaseLagGeneratorPolars):
 
         transformed_df = concat_df.filter(
             nw.col(self.column_names.match_id).is_in(
-                df.select(nw.col(self.column_names.match_id).cast(nw.String))
+                df.select(
+                    nw.col(self.column_names.match_id)
+                    #   .cast(nw.String)
+                )
                 .unique()[self.column_names.match_id]
                 .to_list()
             )
@@ -173,12 +176,14 @@ class LagTransformer(BaseLagGeneratorPolars):
                 )
                 grouped = grouped.with_columns(
                     (
-                        nw.col(self.column_names.start_date).cast(nw.Date)
-                        - nw.col("shifted_days").cast(nw.Date)
-                    ).dt.total_minutes()
-                    / 60
-                    / 24
-                ).alias(f"{self.prefix}{days_lag}_days_ago")
+                        (
+                            nw.col(self.column_names.start_date).cast(nw.Date)
+                            - nw.col("shifted_days").cast(nw.Date)
+                        ).dt.total_minutes()
+                        / 60
+                        / 24
+                    ).alias(f"{self.prefix}{days_lag}_days_ago")
+                )
             grouped = grouped.drop("shifted_days")
 
         for feature_name in self.features:
@@ -226,182 +231,6 @@ class LagTransformer(BaseLagGeneratorPolars):
             how="left",
         )
 
-        return concat_df
-
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out
-
-
-class RollingMeanTransformer(BaseLagGenerator):
-    """
-    Calculates the rolling mean for a list of features over a window of matches.
-    Rolling Mean Values are also shifted by one match to avoid data leakage.
-
-    Use .generate_historical() to generate rolling mean for historical data.
-        The historical data is stored as instance-variables after calling .generate_historical()
-    Use .generate_future() to generate rolling mean for future data after having called .generate_historical()
-    """
-
-    def __init__(
-        self,
-        features: list[str],
-        window: int,
-        min_periods: int = 1,
-        granularity: Union[list[str], str] = None,
-        scale_by_participation_weight: bool = False,
-        add_opponent: bool = False,
-        are_estimator_features=True,
-        prefix: str = "rolling_mean_",
-    ):
-        """
-        Calculates the rolling mean for a list of features over a window of matches.
-        Rolling Mean Values are also shifted by one match to avoid data leakage.
-
-        :param features:   Features to create rolling mean for
-        :param window: Window size for rolling mean.
-            If 10 will calculate rolling mean over the prior 10 observations
-        :param min_periods: Minimum number of observations in window required to have a non-null result
-        :param granularity: Columns to group by before rolling mean. E.g. player_id or [player_id, position].
-             In the latter case it will get the rolling mean for each player_id and position combination.
-             Defaults to player_id
-        :param add_opponent: If True, will add new columns containing rolling mean for the opponent team.
-        :param are_estimator_features: If True, the features will be added to the estimator features.
-            If false, it makes it possible for the outer layer (Pipeline) to exclude these features from the estimator.
-        :param prefix: Prefix for the new rolling mean columns
-        """
-        super().__init__(
-            features=features,
-            add_opponent=add_opponent,
-            iterations=[window],
-            prefix=prefix,
-            granularity=granularity,
-            are_estimator_features=are_estimator_features,
-        )
-        self.scale_by_participation_weight = scale_by_participation_weight
-        self.window = window
-        self.min_periods = min_periods
-
-    def generate_historical(
-        self, df: pd.DataFrame, column_names: ColumnNames
-    ) -> pd.DataFrame:
-        """
-        Generates rolling mean for historical data
-        Stored the historical data as instance-variables so it's possible to generate future data afterwards
-        The calculation is done using Polars.
-         However, Pandas Dataframe can be used as input and it will also output a pandas dataframe in that case.
-
-        :param df: Historical data
-        :param column_names: Column names
-        """
-        df = df.assign(is_future=0)
-        self.column_names = column_names
-        self.granularity = self.granularity or [self.column_names.player_id]
-        validate_sorting(df=df, column_names=self.column_names)
-        self._store_df(df)
-        concat_df = self._generate_concat_df_with_feats(df)
-        df = self._create_transformed_df(df=df, concat_df=concat_df)
-        if "is_future" in df.columns:
-            df = df.drop(columns="is_future")
-        return df
-
-    def generate_future(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Generates rolling mean for future data
-        Assumes that .generate_historical() has been called before
-
-        Regardless of the scheduled data of the future match, all future matches are perceived as being played in the same date.
-        That is to ensure that a team's 2nd future match has the same rolling means as the 1st future match.
-        :param df: Future data
-        """
-
-        df = df.assign(is_future=1)
-        concat_df = self._generate_concat_df_with_feats(df=df)
-        transformed_df = concat_df[
-            concat_df[self.column_names.match_id].isin(
-                df[self.column_names.match_id].astype("str").unique().tolist()
-            )
-        ]
-        transformed_future = self._generate_future_feats(
-            transformed_df=transformed_df, ori_df=df
-        )
-        if "is_future" in transformed_future.columns:
-            transformed_future = transformed_future.drop(columns="is_future")
-        return transformed_future
-
-    def _generate_concat_df_with_feats(self, df: pd.DataFrame) -> pd.DataFrame:
-
-        if self._df is None:
-            raise ValueError("fit_transform needs to be called before transform")
-
-        concat_df = self._concat_df(df)
-
-        for feature_name in self.features:
-
-            if (
-                self.column_names.participation_weight
-                and self.scale_by_participation_weight
-            ):
-                concat_df = concat_df.assign(
-                    **{
-                        feature_name: concat_df[feature_name]
-                        * concat_df[self.column_names.participation_weight]
-                    }
-                )
-
-            output_column_name = f"{self.prefix}{self.window}_{feature_name}"
-            if output_column_name in concat_df.columns:
-                raise ValueError(
-                    f"Column {output_column_name} already exists. Choose different prefix or ensure no duplication was performed"
-                )
-
-            agg_dict = {feature_name: "mean", self.column_names.start_date: "first"}
-            grp = (
-                concat_df.groupby(
-                    self.granularity + [self.column_names.update_match_id]
-                )
-                .agg(agg_dict)
-                .reset_index()
-            )
-            grp.sort_values(
-                by=[self.column_names.start_date, self.column_names.update_match_id],
-                inplace=True,
-            )
-
-            grp = grp.assign(
-                **{
-                    output_column_name: grp.groupby(self.granularity)[
-                        feature_name
-                    ].transform(
-                        lambda x: x.shift()
-                        .rolling(self.window, min_periods=self.min_periods)
-                        .mean()
-                    )
-                }
-            )
-
-            concat_df = concat_df.merge(
-                grp[
-                    self.granularity
-                    + [self.column_names.update_match_id, output_column_name]
-                ],
-                on=self.granularity + [self.column_names.update_match_id],
-                how="left",
-            )
-            concat_df = concat_df.sort_values(
-                by=[
-                    self.column_names.start_date,
-                    self.column_names.match_id,
-                    self.column_names.team_id,
-                    self.column_names.player_id,
-                ]
-            )
-
-        feats_added = [f for f in self.features_out if f in concat_df.columns]
-
-        concat_df[feats_added] = concat_df.groupby(self.granularity)[
-            feats_added
-        ].fillna(method="ffill")
         return concat_df
 
     @property
@@ -734,7 +563,10 @@ class BinaryOutcomeRollingMeanTransformerPolars(BaseLagGeneratorPolars):
         df = df.with_columns(nw.lit(1).alias("is_future"))
         concat_df = self._generate_concat_df_with_feats(df=df)
         unique_match_ids = (
-            df.select(nw.col(self.column_names.match_id).cast(nw.String))
+            df.select(
+                nw.col(self.column_names.match_id)
+                # .cast(nw.String)
+            )
             .unique()[self.column_names.match_id]
             .to_list()
         )
@@ -1179,13 +1011,7 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
         concat_df = self._generate_concat_df_with_feats(df)
         transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
         cn = self.column_names
-        recasts_mapping = {}
-        for c in [cn.player_id, cn.team_id, cn.match_id]:
-            if transformed_df[c].dtype != df[c].dtype:
-                recasts_mapping[c] = df[c].dtype
-        transformed_df = transformed_df.with_columns(
-            nw.col(c).cast(df[c].dtype) for c in [cn.player_id, cn.team_id, cn.match_id]
-        )
+
         df = df.join(
             transformed_df.select(
                 cn.player_id, cn.team_id, cn.match_id, *self.features_out
@@ -1221,23 +1047,23 @@ class RollingMeanTransformerPolars(BaseLagGeneratorPolars):
 
         df = df.with_columns(nw.lit(1).alias("is_future"))
         concat_df = self._generate_concat_df_with_feats(df=df)
-        unique_match_ids = df.select(
-            nw.col(self.column_names.match_id).cast(nw.String).unique()
-        )[self.column_names.match_id].to_list()
+        unique_match_ids = df.select(nw.col(self.column_names.match_id).unique())[
+            self.column_names.match_id
+        ].to_list()
         transformed_df = concat_df.filter(
-            nw.col(self.column_names.match_id).cast(nw.String).is_in(unique_match_ids)
+            nw.col(self.column_names.match_id).is_in(unique_match_ids)
         )
         transformed_df = self._generate_future_feats(
             transformed_df=transformed_df, ori_df=df
         )
         cn = self.column_names
-        recasts_mapping = {}
-        for c in [cn.player_id, cn.team_id, cn.match_id]:
-            if transformed_df[c].dtype != df[c].dtype:
-                recasts_mapping[c] = df[c].dtype
-        transformed_df = transformed_df.with_columns(
-            nw.col(c).cast(df[c].dtype) for c in [cn.player_id, cn.team_id, cn.match_id]
-        )
+        #  recasts_mapping = {}
+        #   for c in [cn.player_id, cn.team_id, cn.match_id]:
+        #       if transformed_df[c].dtype != df[c].dtype:
+        #          recasts_mapping[c] = df[c].dtype
+        #  transformed_df = transformed_df.with_columns(
+        #       nw.col(c).cast(df[c].dtype) for c in [cn.player_id, cn.team_id, cn.match_id]
+        #  )
 
         df = df.join(
             transformed_df.select(

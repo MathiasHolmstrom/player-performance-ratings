@@ -14,7 +14,7 @@ from player_performance_ratings.transformers.base_transformer import (
     BaseLagGenerator,
 )
 import narwhals as nw
-from narwhals.typing import FrameT
+from narwhals.typing import FrameT, IntoFrameT
 
 
 class NetOverPredictedPostTransformer(BaseTransformer):
@@ -164,7 +164,9 @@ class OperatorTransformer(BaseTransformer):
             features_out=[self.new_column_name],
         )
 
-    def fit_transform(self, df: FrameT, column_names: Optional[ColumnNames]) -> FrameT:
+    def fit_transform(
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
+    ) -> IntoFrameT:
         self.column_names = column_names
         return self.transform(df)
 
@@ -190,60 +192,6 @@ class OperatorTransformer(BaseTransformer):
         return df
 
 
-class ModifierTransformer(BaseTransformer):
-    """
-    Performs operations on two columns and stores the result in a new column.
-    An operation can be subtraction, addition, multiplication, or division.
-    """
-
-    def __init__(
-        self,
-        modify_operations: list[ModifyOperation],
-        features: Optional[list[str]] = None,
-        are_estimator_features: bool = True,
-    ):
-        """
-        :param modify_operations: A list of ModifyOperations to perform
-        :param features: Features need to be passed due to BaseTransformer requring them, although has no effect on the transformer
-            Thus keep it as default None.
-        :param are_estimator_features: Whether the new created columns should be used as estimator features
-        """
-        self.modify_operations = modify_operations
-        _features_out = [
-            operation.new_column_name for operation in self.modify_operations
-        ]
-        super().__init__(
-            features=features,
-            are_estimator_features=are_estimator_features,
-            features_out=_features_out,
-        )
-
-    def fit_transform(
-        self, df: pd.DataFrame, column_names: Optional[ColumnNames]
-    ) -> pd.DataFrame:
-        self.column_names = column_names
-        return self.transform(df)
-
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        for operation in self.modify_operations:
-            if operation.operation == Operation.SUBTRACT:
-                if (
-                    operation.feature1 not in df.columns
-                    or operation.feature2 not in df.columns
-                ):
-                    df = df.assign(**{operation.new_column_name: np.nan})
-
-                else:
-                    df = df.assign(
-                        **{
-                            operation.new_column_name: df[operation.feature1]
-                            - df[operation.feature2]
-                        }
-                    )
-
-        return df
-
-
 class PredictorTransformer(BaseTransformer):
     """
     Transformer that uses a predictor to generate predictions on the dataset
@@ -260,12 +208,14 @@ class PredictorTransformer(BaseTransformer):
             features=features, features_out=[f"{self.predictor.pred_column}"]
         )
 
+    @nw.narwhalify
     def fit_transform(
-        self, df: pd.DataFrame, column_names: Optional[None] = None
-    ) -> pd.DataFrame:
+        self, df: FrameT, column_names: Optional[None] = None
+    ) -> IntoFrameT:
         self.predictor.train(df=df, estimator_features=self.features)
         return self.transform(df)
 
+    @nw.narwhalify
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self.predictor.add_prediction(df=df)
         return df
@@ -315,43 +265,59 @@ class RatioTeamPredictorTransformer(BaseTransformer):
         if self._are_estimator_features:
             self._estimator_features_out = self._features_out.copy()
 
+    @nw.narwhalify
     def fit_transform(
-        self, df: pd.DataFrame, column_names: Optional[ColumnNames] = None
-    ) -> pd.DataFrame:
-        ori_cols = df.columns.tolist()
+        self, df: FrameT, column_names: Optional[ColumnNames]
+    ) -> IntoFrameT:
+        ori_cols = df.columns
         self.column_names = column_names
         self.predictor.train(df=df, estimator_features=self.features)
-        transformed_df = self.transform(df)
+        transformed_df = nw.from_native(self.transform(df))
         for lag_generator in self.lag_generators:
-            transformed_df = lag_generator.generate_historical(
-                transformed_df, column_names=self.column_names
+            transformed_df = nw.from_native(
+                lag_generator.generate_historical(
+                    transformed_df, column_names=self.column_names
+                )
             )
 
-        return transformed_df[list(set(ori_cols + self.features_out))]
+        return transformed_df.select(list(set(ori_cols + self.features_out)))
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = self.predictor.add_prediction(df=df)
+    def transform(self, df: FrameT) -> IntoFrameT:
+        df = nw.from_native(self.predictor.add_prediction(df=df))
 
-        df[self.predictor.pred_column + "_sum"] = df.groupby(
-            [self.column_names.match_id, self.column_names.team_id]
-        )[self.predictor.pred_column].transform("sum")
-        df[self._features_out[0]] = (
-            df[self.predictor.pred_column] / df[self.predictor.pred_column + "_sum"]
+        df = df.with_columns(
+            [
+                nw.col(self.predictor.pred_column)
+                .sum()
+                .over([self.column_names.match_id, self.column_names.team_id])
+                .alias(f"{self.predictor.pred_column}_sum")
+            ]
         )
-        if self.team_total_prediction_column:
-            df = df.assign(
-                **{
-                    self.predictor.target
-                    + self.prefix
-                    + "_team_total_multiplied": df[self._features_out[0]]
-                    * df[self.team_total_prediction_column]
-                }
-            )
 
+        df = df.with_columns(
+            [
+                (
+                    nw.col(self.predictor.pred_column)
+                    / nw.col(f"{self.predictor.pred_column}_sum")
+                ).alias(self._features_out[0])
+            ]
+        )
+
+        if self.team_total_prediction_column:
+            df = df.with_columns(
+                [
+                    (
+                        nw.col(self._features_out[0])
+                        * nw.col(self.team_total_prediction_column)
+                    ).alias(
+                        f"{self.predictor.target}{self.prefix}_team_total_multiplied"
+                    )
+                ]
+            )
         for lag_transformer in self.lag_generators:
             df = lag_transformer.generate_historical(df, column_names=self.column_names)
 
-        return df.drop(columns=[self.predictor.pred_column + "_sum"])
+        return df.drop([self.predictor.pred_column + "_sum"])
 
     @property
     def features_out(self) -> list[str]:

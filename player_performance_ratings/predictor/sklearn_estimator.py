@@ -47,7 +47,7 @@ class OrdinalClassifier(BaseEstimator, ClassifierMixin):
             raise ValueError("OrdinalClassifier needs at least 3 classes")
 
         for i in range(self.classes_.shape[0] - 1):
-            binary_y = (y > self.classes_[i]).astype(np.uint8)
+            binary_y = y > self.classes_[i]
             clf = clone(self.estimator)
             clf.fit(X, binary_y)
             self.clfs[i] = clf

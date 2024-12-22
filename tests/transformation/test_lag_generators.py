@@ -64,9 +64,9 @@ def test_lag_team_fit_transform(df, column_names):
         expected_df = original_df.with_columns(
             [
                 pl.Series("lag_1_points", [None, None, None, None, 1.5, 1.5, 2.5, 2.5]),
-                pl.col("team").cast(pl.String),
-                pl.col("game").cast(pl.String),
-                pl.col("player").cast(pl.String),
+                pl.col("team"),
+                pl.col("game"),
+                pl.col("player"),
             ]
         )
         pl.testing.assert_frame_equal(
@@ -77,9 +77,9 @@ def test_lag_team_fit_transform(df, column_names):
         expected_df = original_df.assign(
             **{"lag_1_points": [None, None, None, None, 1.5, 1.5, 2.5, 2.5]}
         )
-        expected_df["team"] = expected_df["team"].astype("str")
-        expected_df["game"] = expected_df["game"].astype("str")
-        expected_df["player"] = expected_df["player"].astype("str")
+        expected_df["team"] = expected_df["team"]
+        expected_df["game"] = expected_df["game"]
+        expected_df["player"] = expected_df["player"]
 
         pd.testing.assert_frame_equal(
             df_with_lags, expected_df[df_with_lags.columns], check_dtype=False
@@ -123,9 +123,9 @@ def test_lag_fit_transform_2_features(df, column_names):
                 "lag_1_points_per_minute": [None, None, 0.5],
             }
         )
-        expected_df["team"] = expected_df["team"].astype("str")
-        expected_df["game"] = expected_df["game"].astype("str")
-        expected_df["player"] = expected_df["player"].astype("str")
+        expected_df["team"] = expected_df["team"]
+        expected_df["game"] = expected_df["game"]
+        expected_df["player"] = expected_df["player"]
         pd.testing.assert_frame_equal(
             df_with_lags, expected_df, check_like=True, check_dtype=False
         )
@@ -135,9 +135,9 @@ def test_lag_fit_transform_2_features(df, column_names):
             [
                 pl.Series("lag_1_points", [None, None, 1]),
                 pl.Series("lag_1_points_per_minute", [None, None, 0.5]),
-                pl.col("team").cast(pl.String),
-                pl.col("game").cast(pl.String),
-                pl.col("player").cast(pl.String),
+                pl.col("team"),
+                pl.col("game"),
+                pl.col("player"),
             ]
         )
         expected_df = pl.DataFrame(expected_df).select(df_with_lags.columns)
@@ -182,9 +182,9 @@ def test_lag_fit_transform_lag_length_2(df, column_names):
                 "lag_2_points": [None, None, None, 1],
             }
         )
-        expected_df["team"] = expected_df["team"].astype("str")
-        expected_df["game"] = expected_df["game"].astype("str")
-        expected_df["player"] = expected_df["player"].astype("str")
+        expected_df["team"] = expected_df["team"]
+        expected_df["game"] = expected_df["game"]
+        expected_df["player"] = expected_df["player"]
         pd.testing.assert_frame_equal(
             df_with_lags, expected_df, check_like=True, check_dtype=False
         )
@@ -194,9 +194,9 @@ def test_lag_fit_transform_lag_length_2(df, column_names):
             [
                 pl.Series("lag_1_points", [None, None, 1, 3]),
                 pl.Series("lag_2_points", [None, None, None, 1]),
-                pl.col("team").cast(pl.String),
-                pl.col("game").cast(pl.String),
-                pl.col("player").cast(pl.String),
+                pl.col("team"),
+                pl.col("game"),
+                pl.col("player"),
             ]
         )
 
@@ -251,9 +251,9 @@ def test_lag_fit_transform_and_transform(df, column_names):
         expected_df = future_df_copy.assign(
             **{lag_transformation.prefix + "1_points": [3, 2, 3]}
         )
-        expected_df["team"] = expected_df["team"].astype("str")
-        expected_df["game"] = expected_df["game"].astype("str")
-        expected_df["player"] = expected_df["player"].astype("str")
+        expected_df["team"] = expected_df["team"]
+        expected_df["game"] = expected_df["game"]
+        expected_df["player"] = expected_df["player"]
         pd.testing.assert_frame_equal(
             future_transformed_df, expected_df, check_like=True, check_dtype=False
         )
@@ -261,9 +261,9 @@ def test_lag_fit_transform_and_transform(df, column_names):
         expected_df = future_df_copy.with_columns(
             [
                 pl.Series(lag_transformation.prefix + "1_points", [3, 2, 3]),
-                pl.col("team").cast(pl.String),
-                pl.col("game").cast(pl.String),
-                pl.col("player").cast(pl.String),
+                pl.col("team"),
+                pl.col("game"),
+                pl.col("player"),
             ]
         )
         pl.testing.assert_frame_equal(
@@ -322,9 +322,9 @@ def test_lag_transformation_transform_2_lags(df, column_names):
         expected_df = expected_df.assign(
             **{lag_transformation.prefix + "2_points": [1, None, 1]}
         )
-        expected_df["team"] = expected_df["team"].astype("str")
-        expected_df["game"] = expected_df["game"].astype("str")
-        expected_df["player"] = expected_df["player"].astype("str")
+        expected_df["team"] = expected_df["team"]
+        expected_df["game"] = expected_df["game"]
+        expected_df["player"] = expected_df["player"]
         pd.testing.assert_frame_equal(
             future_transformed_df, expected_df, check_like=True, check_dtype=False
         )
@@ -333,9 +333,9 @@ def test_lag_transformation_transform_2_lags(df, column_names):
             [
                 pl.Series(lag_transformation.prefix + "1_points", [3, 2, 3]),
                 pl.Series(lag_transformation.prefix + "2_points", [1, None, 1]),
-                pl.col("team").cast(pl.String),
-                pl.col("game").cast(pl.String),
-                pl.col("player").cast(pl.String),
+                pl.col("team"),
+                pl.col("game"),
+                pl.col("player"),
             ]
         )
         pl.testing.assert_frame_equal(
@@ -383,9 +383,9 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
                 lag_transformation.features_out[3]: [None, None, None, None],
             }
         )
-        expected_df["team"] = expected_df["team"].astype("str")
-        expected_df["game"] = expected_df["game"].astype("str")
-        expected_df["player"] = expected_df["player"].astype("str")
+        expected_df["team"] = expected_df["team"]
+        expected_df["game"] = expected_df["game"]
+        expected_df["player"] = expected_df["player"]
         pd.testing.assert_frame_equal(
             df_with_lags, expected_df, check_like=True, check_dtype=False
         )
@@ -396,9 +396,9 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
                 pl.Series(lag_transformation.features_out[1], [None, None, None, 1]),
                 pl.Series(lag_transformation.features_out[2], [None, None, None, None]),
                 pl.Series(lag_transformation.features_out[3], [None, None, None, None]),
-                pl.col("team").cast(pl.String),
-                pl.col("game").cast(pl.String),
-                pl.col("player").cast(pl.String),
+                pl.col("team"),
+                pl.col("game"),
+                pl.col("player"),
             ]
         )
 
@@ -431,9 +431,9 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
                 lag_transformation.features_out[3]: [None, 1, None, None],
             }
         )
-        expected_future_df["team"] = expected_future_df["team"].astype("str")
-        expected_future_df["game"] = expected_future_df["game"].astype("str")
-        expected_future_df["player"] = expected_future_df["player"].astype("str")
+        expected_future_df["team"] = expected_future_df["team"]
+        expected_future_df["game"] = expected_future_df["game"]
+        expected_future_df["player"] = expected_future_df["player"]
         pd.testing.assert_frame_equal(
             future_df, expected_future_df, check_like=True, check_dtype=False
         )
@@ -444,9 +444,9 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
                 pl.Series(lag_transformation.features_out[1], [2, 3, 5, 2]),
                 pl.Series(lag_transformation.features_out[2], [1, None, None, None]),
                 pl.Series(lag_transformation.features_out[3], [None, 1, None, None]),
-                pl.col("team").cast(pl.String),
-                pl.col("game").cast(pl.String),
-                pl.col("player").cast(pl.String),
+                pl.col("team"),
+                pl.col("game"),
+                pl.col("player"),
             ]
         )
         pl.testing.assert_frame_equal(
@@ -495,10 +495,10 @@ def test_lag_transformer_parent_match_id(df, column_names: ColumnNames):
         expected_df = expected_df.assign(
             **{lag_transformation.features_out[1]: [None, None, None, 1.5]}
         )
-        expected_df["team"] = expected_df["team"].astype("str")
-        expected_df["game"] = expected_df["game"].astype("str")
-        expected_df["player"] = expected_df["player"].astype("str")
-        expected_df["series_id"] = expected_df["series_id"].astype("str")
+        expected_df["team"] = expected_df["team"]
+        expected_df["game"] = expected_df["game"]
+        expected_df["player"] = expected_df["player"]
+        expected_df["series_id"] = expected_df["series_id"]
         pd.testing.assert_frame_equal(
             transformed_df, expected_df, check_like=True, check_dtype=False
         )
@@ -507,10 +507,10 @@ def test_lag_transformer_parent_match_id(df, column_names: ColumnNames):
             [
                 pl.Series(lag_transformation.features_out[0], [None, None, 1.5, 3]),
                 pl.Series(lag_transformation.features_out[1], [None, None, None, 1.5]),
-                pl.col("team").cast(pl.String),
-                pl.col("game").cast(pl.String),
-                pl.col("player").cast(pl.String),
-                pl.col("series_id").cast(pl.String),
+                pl.col("team"),
+                pl.col("game"),
+                pl.col("player"),
+                pl.col("series_id"),
             ]
         )
         pl.testing.assert_frame_equal(

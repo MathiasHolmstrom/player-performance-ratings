@@ -70,4 +70,4 @@ transformer = PipelineTransformer(
 historical_df = transformer.fit_transform(historical_df)
 
 future_df = transformer.transform(future_df)
-print(future_df.head())
+print(future_df.head(10))

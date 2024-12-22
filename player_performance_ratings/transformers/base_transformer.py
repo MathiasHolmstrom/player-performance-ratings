@@ -545,13 +545,13 @@ class BaseLagGeneratorPolars:
         )
 
     def _string_convert(self, df: FrameT) -> FrameT:
-        for column in [
-            self.column_names.match_id,
-            self.column_names.parent_team_id,
-            self.column_names.player_id,
-            self.column_names.update_match_id,
-        ]:
-            df = df.with_columns(df[column].cast(nw.String))
+        #    for column in [
+        #        self.column_names.match_id,
+        #        self.column_names.parent_team_id,
+        #        self.column_names.player_id,
+        #       self.column_names.update_match_id,
+        #   ]:
+        #     df = df.with_columns(df[column].cast(nw.String))
 
         if df.schema[self.column_names.start_date] == nw.Datetime("ns"):
             df = df.with_columns(
@@ -742,12 +742,12 @@ class BaseLagGeneratorPolars:
             how="left",
         )
 
-        ori_df = ori_df.with_columns(
-            [
-                nw.col(col).cast(nw.String).alias(col)
-                for col in [cn.match_id, cn.player_id, cn.team_id]
-            ]
-        )
+        #        ori_df = ori_df.with_columns(
+        #         [
+        #             nw.col(col).cast(nw.String).alias(col)
+        #               for col in [cn.match_id, cn.player_id, cn.team_id]
+        #         ]
+        #     )
 
         ori_feats_to_use = [f for f in ori_cols if f not in self.features_out]
         transformed_feats_to_use = [

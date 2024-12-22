@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Optional, Callable, Union, Any
-from narwhals.typing import FrameT
+from narwhals.typing import FrameT, IntoFrameT
 import narwhals as nw
 import narwhals
 import numpy as np
@@ -77,10 +77,7 @@ def _apply_filters_polars(df: pl.DataFrame, filters: list[Filter]) -> pl.DataFra
     return df
 
 
-@narwhals.narwhalify()
-def apply_filters(
-    df: FrameT, filters: list[Filter]
-) -> Union[pd.DataFrame, pl.DataFrame]:
+def apply_filters(df: FrameT, filters: list[Filter]) -> FrameT:
     for filter in filters:
         if filter.operator == Operator.EQUALS:
             df = df.filter(nw.col(filter.column_name) == filter.value)
@@ -99,7 +96,7 @@ def apply_filters(
         elif filter.operator == Operator.NOT_IN:
             df = df.filter(~nw.col(filter.column_name).is_in(filter.value))
 
-    return df.to_native()
+    return df
 
 
 class BaseScorer(ABC):

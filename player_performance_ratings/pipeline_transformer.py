@@ -1,10 +1,12 @@
 from typing import Optional, Union, List
 
-import pandas as pd
 import polars as pl
+from narwhals.typing import FrameT, IntoFrameT
+import narwhals as nw
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.pipeline import DataFrameType
+from player_performance_ratings.predictor._base import DataFrameType
+
 from player_performance_ratings.ratings import convert_df_to_matches, LeagueIdentifier
 from player_performance_ratings.ratings.performance_generator import (
     PerformancesGenerator,
@@ -49,19 +51,15 @@ class PipelineTransformer:
         self.lag_generators = lag_generators or []
         self.post_lag_transformers = post_lag_transformers or []
 
-    def fit_transform(self, df: DataFrameType) -> DataFrameType:
+    @nw.narwhalify
+    def fit_transform(self, df: FrameT) -> IntoFrameT:
         """
         Fit and transform the pipeline on historical data
         :param df: Either polars or Pandas dataframe
         """
 
-        original_is_polars = False
-        if isinstance(df, pl.DataFrame):
-            original_is_polars = True
-            df = df.to_pandas()
-
         if self.performances_generator:
-            df = self.performances_generator.generate(df)
+            df = nw.from_native(self.performances_generator.generate(df))
 
         if self.rating_generators:
             matches = convert_df_to_matches(
@@ -82,7 +80,13 @@ class PipelineTransformer:
                 else:
                     rating_feature_str = rating_feature
 
-                df = df.assign(**{rating_feature_str: values})
+                df = df.with_columns(
+                    nw.new_series(
+                        name=rating_feature_str,
+                        values=values,
+                        native_namespace=nw.get_native_namespace(df),
+                    )
+                )
 
         for transformer in self.pre_lag_transformers:
             df = transformer.fit_transform(df=df, column_names=self.column_names)
@@ -91,21 +95,14 @@ class PipelineTransformer:
             df = lag_generator.generate_historical(
                 df=df, column_names=self.column_names
             )
-        if original_is_polars:
-            df = pl.DataFrame(df)
+
         return df
 
-    def transform(self, df: DataFrameType) -> DataFrameType:
+    def transform(self, df: FrameT) -> IntoFrameT:
         """
         Transform the pipeline on future data
         :param df: Either polars or Pandas dataframe
         """
-
-        original_is_polars = False
-        if isinstance(df, pl.DataFrame):
-            original_is_polars = True
-            df = df.to_pandas()
-
         if self.performances_generator:
             df = self.performances_generator.generate(df)
 
@@ -130,8 +127,5 @@ class PipelineTransformer:
 
         for transformer in self.post_lag_transformers:
             df = transformer.transform(df)
-
-        if original_is_polars:
-            df = pl.DataFrame(df)
 
         return df

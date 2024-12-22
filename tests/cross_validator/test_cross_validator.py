@@ -1,6 +1,7 @@
 from unittest import mock
 
 import pandas as pd
+import polars as pl
 import pytest
 
 from player_performance_ratings import ColumnNames
@@ -24,8 +25,9 @@ def column_names():
     return column_names
 
 
-def test_match_k_fold_cross_validator(column_names):
-    df = pd.DataFrame(
+@pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
+def test_match_k_fold_cross_validator(df, column_names):
+    data = df(
         {
             "__target": [1, 1, 1, 1, 0, 0, 0, 0, 0, 1],
             column_names.match_id: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
@@ -53,22 +55,27 @@ def test_match_k_fold_cross_validator(column_names):
         scorer_function=mean_absolute_error,
     )
 
-    expected_predictor_train1 = df.copy().iloc[0:1]
-    expected_predictor_train1["__cv_match_number"] = [0]
-    expected_predictor_train2 = df.copy().iloc[:5]
-    expected_predictor_train2["__cv_match_number"] = [0, 1, 2, 3, 4]
+    if isinstance(data, pd.DataFrame):
+        return_add_prediction1 = data.head(5)
+        return_add_prediction1["__target_prediction"] = [1, 1, 1, 1, 1]
+        return_add_prediction1["__cv_match_number"] = [0, 1, 2, 3, 4]
+        return_add_prediction2 = data.tail(5)
+        return_add_prediction2["__target_prediction"] = [0, 0, 0, 0, 1]
+        return_add_prediction2["__cv_match_number"] = [5, 6, 7, 8, 9]
+    else:
+        return_add_prediction1 = data.head(5).with_columns(
+            [
+                pl.lit(1.0).alias("__target_prediction"),
+                pl.Series("__cv_match_number", [0, 1, 2, 3, 4]),
+            ]
+        )
 
-    expected_predictor_validation1 = df.copy().iloc[1:5]
-    expected_predictor_validation1["__cv_match_number"] = [1, 2, 3, 4]
-    expected_predictor_validation2 = df.copy().iloc[5:10]
-    expected_predictor_validation2["__cv_match_number"] = [5, 6, 7, 8, 9]
-
-    return_add_prediction1 = df.head(5)
-    return_add_prediction1["__target_prediction"] = [1, 1, 1, 1, 1]
-    return_add_prediction1["__cv_match_number"] = [0, 1, 2, 3, 4]
-    return_add_prediction2 = df.tail(5)
-    return_add_prediction2["__target_prediction"] = [0, 0, 0, 0, 1]
-    return_add_prediction2["__cv_match_number"] = [5, 6, 7, 8, 9]
+        return_add_prediction2 = data.tail(5).with_columns(
+            [
+                pl.Series("__target_prediction", [0.0, 0.0, 0.0, 0.0, 1.0]),
+                pl.Series("__cv_match_number", [5, 6, 7, 8, 9]),
+            ]
+        )
 
     predictor = mock.Mock()
     predictor.add_prediction.side_effect = [
@@ -86,8 +93,12 @@ def test_match_k_fold_cross_validator(column_names):
     )
 
     validation_df = cv.generate_validation_df(
-        df=df, predictor=predictor, estimator_features=[], column_names=column_names
+        df=data, predictor=predictor, estimator_features=[], column_names=column_names
     )
+
+    if isinstance(data, pl.DataFrame):
+        data = data.to_pandas()
+
     score = cv.cross_validation_score(validation_df=validation_df)
     assert score == 0.1
 

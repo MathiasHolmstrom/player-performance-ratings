@@ -1,8 +1,11 @@
 import logging
 from abc import abstractmethod, ABC
-from typing import Optional
+from typing import Optional, TypeVar
 
+import polars as pl
 import pandas as pd
+from narwhals.typing import FrameT, IntoFrameT
+import narwhals as nw
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -14,6 +17,8 @@ from player_performance_ratings.predictor_transformer import (
 from player_performance_ratings.predictor_transformer._simple_transformer import (
     SimpleTransformer,
 )
+
+DataFrameType = TypeVar("DataFrameType", pd.DataFrame, pl.DataFrame)
 
 
 class BasePredictor(ABC):
@@ -61,11 +66,11 @@ class BasePredictor(ABC):
         return self._deepest_estimator
 
     @abstractmethod
-    def train(self, df: pd.DataFrame, estimator_features: list[str]) -> None:
+    def train(self, df: FrameT, estimator_features: list[str]) -> None:
         pass
 
     @abstractmethod
-    def add_prediction(self, df: pd.DataFrame) -> pd.DataFrame:
+    def add_prediction(self, df: FrameT) -> IntoFrameT:
         pass
 
     @property
@@ -91,21 +96,28 @@ class BasePredictor(ABC):
         return self.estimator.classes_
 
     def _convert_multiclass_predictions_to_struct(
-        self, df: pd.DataFrame
-    ) -> pd.DataFrame:
-        df[f"{self._target}_struct"] = df.apply(
-            lambda row: dict(zip(row["classes"], row[self.pred_column])), axis=1
+        self, df: FrameT, classes: Optional[list[str]] = None
+    ) -> FrameT:
+        df = df.to_native()
+        assert isinstance(df, pl.DataFrame)
+        if classes is None:
+            classes = self.estimator.classes_
+
+        return nw.from_native(
+            df.with_columns(
+                pl.struct(
+                    *[
+                        pl.col(self.pred_column).list.get(i).alias(str(cls))
+                        for i, cls in enumerate(classes)
+                    ]
+                ).alias(self.pred_column)
+            )
         )
-        df[f"{self._target}_struct"] = df[f"{self._target}_struct"].apply(
-            lambda d: {str(k): v for k, v in d.items()}
-        )
-        df = df.drop(columns=[self.pred_column, "classes"])
-        return df.rename(columns={f"{self._target}_struct": self.pred_column})
 
     def set_target(self, new_target_name: str):
         self._target = new_target_name
 
-    def _create_pre_transformers(self, df: pd.DataFrame) -> list[PredictorTransformer]:
+    def _create_pre_transformers(self, df: pl.DataFrame) -> list[PredictorTransformer]:
         pre_transformers = []
         cat_feats_to_transform = []
         all_feats_in_pre_transformers = [
@@ -120,7 +132,7 @@ class BasePredictor(ABC):
                 )
                 continue
 
-            if not pd.api.types.is_numeric_dtype(df[estimator_feature]):
+            if not df[estimator_feature].dtype.is_numeric():
                 if estimator_feature not in all_feats_in_pre_transformers:
                     cat_feats_to_transform.append(estimator_feature)
 
@@ -197,14 +209,24 @@ class BasePredictor(ABC):
                 )
         return pre_transformers
 
-    def fit_transform_pre_transformers(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _fit_transform_pre_transformers(self, df: FrameT) -> FrameT:
         if self.auto_pre_transform:
             self.pre_transformers += self._create_pre_transformers(df)
 
+        native_namespace = nw.get_native_namespace(df)
+
         for pre_transformer in self.pre_transformers:
-            values = pre_transformer.fit_transform(df)
+            values = nw.from_native(pre_transformer.fit_transform(df))
             features_out = pre_transformer.features_out
-            df[features_out] = values
+            df = df.with_columns(
+                nw.new_series(
+                    values=values[col].to_native(),
+                    name=features_out[idx],
+                    native_namespace=native_namespace,
+                )
+                for idx, col in enumerate(values.columns)
+            )
+
             feats_to_remove = [
                 f for f in pre_transformer.features if f in self._estimator_features
             ]
@@ -217,10 +239,17 @@ class BasePredictor(ABC):
 
         return df
 
-    def transform_pre_transformers(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _transform_pre_transformers(self, df: nw.DataFrame) -> IntoFrameT:
         for pre_transformer in self.pre_transformers:
-            values = pre_transformer.transform(df)
-            df = df.assign(**{col: values[col] for col in values.columns})
+            values = nw.from_native(pre_transformer.transform(df))
+            df = df.with_columns(
+                nw.new_series(
+                    name=col,
+                    values=values[col].to_native(),
+                    native_namespace=nw.get_native_namespace(df),
+                )
+                for col in values.columns
+            )
         return df
 
     @property

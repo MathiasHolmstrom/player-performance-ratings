@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+import polars as pl
+from polars.testing import assert_frame_equal
 import pytest
 
 from player_performance_ratings.data_structures import (
@@ -359,7 +361,8 @@ def test_rating_generator_1_match(column_names):
         assert is_close(rating.confidence_sum, expected_rating.confidence_sum)
 
 
-def test_opponent_adjusted_rating_generator_with_projected_performance():
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_opponent_adjusted_rating_generator_with_projected_performance(df):
     column_names = ColumnNames(
         match_id="game_id",
         team_id="team_id",
@@ -377,7 +380,7 @@ def test_opponent_adjusted_rating_generator_with_projected_performance():
         ),
     )
 
-    df = pd.DataFrame(
+    data = df(
         {
             column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2],
             column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2],
@@ -393,7 +396,7 @@ def test_opponent_adjusted_rating_generator_with_projected_performance():
                 pd.to_datetime("2021-01-02"),
             ],
             rating_generator.performance_column: [
-                1,
+                1.0,
                 0.5,
                 0.25,
                 0.25,
@@ -402,16 +405,28 @@ def test_opponent_adjusted_rating_generator_with_projected_performance():
                 0.5,
                 0.5,
             ],
-            column_names.projected_participation_weight: [1, 1, 1, 1, 0.2, 1, 0.6, 0.6],
-            column_names.participation_weight: [1, 1, 1, 1, 1, 1, 1, 1],
+            column_names.projected_participation_weight: [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                0.2,
+                1,
+                0.6,
+                0.6,
+            ],
+            column_names.participation_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
         }
     )
 
     df_with_ratings = rating_generator.generate_historical(
-        df=df,
+        df=data,
         column_names=column_names,
         historical_features_out=[RatingHistoricalFeatures.TEAM_RATING],
     )
+
+    if isinstance(df_with_ratings, pl.DataFrame):
+        df_with_ratings = df_with_ratings.to_pandas()
 
     assert (
         df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[4]
@@ -427,7 +442,8 @@ def test_opponent_adjusted_rating_generator_with_projected_performance():
     )
 
 
-def test_update_rating_generator_generate_historical():
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_update_rating_generator_generate_historical(df):
     column_names = ColumnNames(
         match_id="game_id",
         team_id="team_id",
@@ -450,7 +466,7 @@ def test_update_rating_generator_generate_historical():
         ),
         historical_features_out=[RatingHistoricalFeatures.PLAYER_RATING_CHANGE],
     )
-    df = pd.DataFrame(
+    data = df(
         {
             column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2],
             column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2],
@@ -466,7 +482,7 @@ def test_update_rating_generator_generate_historical():
                 pd.to_datetime("2021-01-02"),
             ],
             rating_generator.performance_column: [
-                1,
+                1.0,
                 0.5,
                 0.25,
                 0.25,
@@ -475,14 +491,25 @@ def test_update_rating_generator_generate_historical():
                 0.5,
                 0.5,
             ],
-            column_names.projected_participation_weight: [1, 1, 1, 1, 0.2, 1, 0.6, 0.6],
-            column_names.participation_weight: [1, 1, 1, 1, 1, 1, 1, 1],
+            column_names.projected_participation_weight: [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                0.2,
+                1,
+                0.6,
+                0.6,
+            ],
+            column_names.participation_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
         }
     )
 
-    ratings_df = rating_generator.generate_historical(df=df, column_names=column_names)
+    ratings_df = rating_generator.generate_historical(
+        df=data, column_names=column_names
+    )
     cols = [
-        *df.columns.tolist(),
+        *data.columns,
         *rating_generator._historical_features_out,
         *rating_generator.known_features_out,
     ]
@@ -492,7 +519,8 @@ def test_update_rating_generator_generate_historical():
     assert len(ratings_df.columns) == len(cols)
 
 
-def test_update_rating_generator_historical_and_future():
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_update_rating_generator_historical_and_future(df):
     column_names = ColumnNames(
         match_id="game_id",
         team_id="team_id",
@@ -515,7 +543,7 @@ def test_update_rating_generator_historical_and_future():
             start_rating_generator=StartRatingGenerator(harcoded_start_rating=1000),
         ),
     )
-    historical_df = pd.DataFrame(
+    historical_df = df(
         {
             column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2],
             column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2],
@@ -531,7 +559,7 @@ def test_update_rating_generator_historical_and_future():
                 pd.to_datetime("2021-01-02"),
             ],
             rating_generator.performance_column: [
-                1,
+                1.0,
                 0.5,
                 0.25,
                 0.25,
@@ -540,12 +568,21 @@ def test_update_rating_generator_historical_and_future():
                 0.5,
                 0.5,
             ],
-            column_names.projected_participation_weight: [1, 1, 1, 1, 0.2, 1, 0.6, 0.6],
-            column_names.participation_weight: [1, 1, 1, 1, 1, 1, 1, 1],
+            column_names.projected_participation_weight: [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                0.2,
+                1,
+                0.6,
+                0.6,
+            ],
+            column_names.participation_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
         }
     )
 
-    future_df = pd.DataFrame(
+    future_df = df(
         {
             column_names.match_id: [3, 3, 3, 3],
             column_names.team_id: [1, 1, 2, 2],
@@ -556,7 +593,7 @@ def test_update_rating_generator_historical_and_future():
                 pd.to_datetime("2022-01-05"),
                 pd.to_datetime("2022-01-05"),
             ],
-            column_names.projected_participation_weight: [1, 1, 1, 1],
+            column_names.projected_participation_weight: [1.0, 1.0, 1.0, 1.0],
         }
     )
 
@@ -607,7 +644,18 @@ def test_update_rating_generator_historical_and_future():
         ],
         RatingHistoricalFeatures.PLAYER_RATING_CHANGE: [np.nan, np.nan, np.nan, np.nan],
     }
-    expected_future_df = future_df.assign(**expected_future_ratings)
-    pd.testing.assert_frame_equal(
-        future_df_with_ratings, expected_future_df, check_dtype=False, check_like=True
-    )
+    if isinstance(future_df, pl.DataFrame):
+        expected_future_df = future_df.hstack(pl.from_dict(expected_future_ratings))
+        assert_frame_equal(
+            future_df_with_ratings,
+            expected_future_df.select(future_df_with_ratings.columns),
+            check_dtype=False,
+        )
+    else:
+        expected_future_df = future_df.assign(**expected_future_ratings)
+        pd.testing.assert_frame_equal(
+            future_df_with_ratings,
+            expected_future_df,
+            check_dtype=False,
+            check_like=True,
+        )
