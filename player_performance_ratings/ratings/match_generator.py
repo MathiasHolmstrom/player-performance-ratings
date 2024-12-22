@@ -277,7 +277,7 @@ def convert_df_to_matches(
             performance = MatchPerformance(
                 performance_value=None,
                 participation_weight=None,
-                projected_participation_weight=participation_weight,
+                projected_participation_weight=projected_participation_weight,
             )
 
         others = {}
