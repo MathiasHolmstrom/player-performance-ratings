@@ -15,9 +15,10 @@ from narwhals.typing import FrameT, IntoFrameT
 
 class CrossValidator(ABC):
 
-    def __init__(self, scorer: Optional[BaseScorer], min_validation_date: str):
+    def __init__(self, scorer: Optional[BaseScorer], min_validation_date: str, predictor: BasePredictor):
         self.scorer = scorer
         self.min_validation_date = min_validation_date
+        self.predictor = predictor
 
     @property
     def validation_column_name(self) -> str:
@@ -28,7 +29,6 @@ class CrossValidator(ABC):
         self,
         df: FrameT,
         column_names: ColumnNames,
-        predictor: BasePredictor,
         estimator_features: list[str],
         return_features: bool,
         pre_lag_transformers: Optional[list[BaseTransformer]] = None,

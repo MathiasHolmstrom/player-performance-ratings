@@ -90,14 +90,12 @@ def test_match_k_fold_cross_validator(df, column_names):
         n_splits=2,
         date_column_name="date",
         min_validation_date="2020-01-02",
+        predictor=predictor,
     )
 
     validation_df = cv.generate_validation_df(
-        df=data, predictor=predictor, estimator_features=[], column_names=column_names
+        df=data,  column_names=column_names
     )
-
-    if isinstance(data, pl.DataFrame):
-        data = data.to_pandas()
 
     score = cv.cross_validation_score(validation_df=validation_df)
     assert score == 0.1
@@ -131,15 +129,6 @@ def test_match_k_fold_cross_validator_add_train_prediction(column_names):
         target="__target",
         scorer_function=mean_absolute_error,
     )
-
-    cv = MatchKFoldCrossValidator(
-        scorer=scorer,
-        match_id_column_name="match_id",
-        n_splits=2,
-        date_column_name="date",
-        min_validation_date="2020-01-02",
-    )
-
     predictor = mock.Mock()
     predictor.columns_added = ["__target_prediction"]
     return_value = df.copy()
@@ -147,8 +136,18 @@ def test_match_k_fold_cross_validator_add_train_prediction(column_names):
     return_value["__cv_match_number"] = list(range(len(df)))
     predictor.add_prediction.return_value = return_value
 
+    cv = MatchKFoldCrossValidator(
+        scorer=scorer,
+        match_id_column_name="match_id",
+        n_splits=2,
+        date_column_name="date",
+        min_validation_date="2020-01-02",
+        predictor=predictor
+    )
+
+
     validation_df = cv.generate_validation_df(
-        df=df, predictor=predictor, add_train_prediction=True, column_names=column_names
+        df=df, add_train_prediction=True, column_names=column_names
     )
 
     assert validation_df["__target_prediction"].unique()[0] == 3.2

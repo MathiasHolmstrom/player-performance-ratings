@@ -64,7 +64,7 @@ class NetOverPredictedPostTransformer(BaseTransformer):
         ori_cols = df.columns.tolist()
         self.column_names = column_names
         self.predictor.train(df, estimator_features=self.features)
-        df = self.predictor.add_prediction(df)
+        df = self.predictor.predict(df)
         new_feature_name = self.prefix + self.predictor.pred_column
         if self.predictor.target not in df.columns:
             df = df.assign(**{new_feature_name: np.nan})
@@ -81,7 +81,7 @@ class NetOverPredictedPostTransformer(BaseTransformer):
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         ori_cols = df.columns.tolist()
-        df = self.predictor.add_prediction(df)
+        df = self.predictor.predict(df)
         new_feature_name = self.prefix + self.predictor.pred_column
         if self.predictor.target not in df.columns:
             df = df.assign(**{new_feature_name: np.nan})
@@ -217,7 +217,7 @@ class PredictorTransformer(BaseTransformer):
 
     @nw.narwhalify
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = self.predictor.add_prediction(df=df)
+        df = self.predictor.predict(df=df)
         return df
 
 
@@ -283,7 +283,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
         return transformed_df.select(list(set(ori_cols + self.features_out)))
 
     def transform(self, df: FrameT) -> IntoFrameT:
-        df = nw.from_native(self.predictor.add_prediction(df=df))
+        df = nw.from_native(self.predictor.predict(df=df))
 
         df = df.with_columns(
             [

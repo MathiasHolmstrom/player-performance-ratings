@@ -104,7 +104,7 @@ print(f"Logloss Score on historical data: {score}")
 
 
 # Future predictions on future results
-future_predictions = pipeline.future_predict(df=future_df)
+future_predictions = pipeline.add_predict(df=future_df)
 
 # Grouping predictions from game-player level to game-level.
 team_grouped_predictions = future_predictions.groupby(column_names.match_id).first()[

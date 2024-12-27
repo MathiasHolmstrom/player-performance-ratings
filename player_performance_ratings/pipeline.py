@@ -1,37 +1,26 @@
 import logging
-from typing import List, Optional, Union, TypeVar
+from typing import List, Optional, Union
 
 import narwhals as nw
 from narwhals.typing import FrameT, IntoFrameT
-from sklearn.metrics import log_loss, mean_absolute_error
 
-from player_performance_ratings.scorer import SklearnScorer, OrdinalLossScorer
-
-from player_performance_ratings.cross_validator.cross_validator import (
-    CrossValidator,
-    MatchKFoldCrossValidator,
-)
 from player_performance_ratings.ratings.performance_generator import (
     PerformancesGenerator,
 )
 
-from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor._base import BasePredictor
 
-from player_performance_ratings.data_structures import Match, ColumnNames
-from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
-from player_performance_ratings.ratings.match_generator import convert_df_to_matches
+from player_performance_ratings.data_structures import ColumnNames
+
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 
 from player_performance_ratings.transformers.base_transformer import (
     BaseTransformer,
     BaseLagGenerator,
-    BaseLagGenerator,
 )
-from player_performance_ratings.utils import convert_pandas_to_polars
 
 
-class Pipeline:
+class Pipeline(BasePredictor):
     """
     Pipeline class for generating predictions on a dataset using a rating generators, lag generators, and transformers that feeds into a Predictor.
     The pipeline ensures the training process and prediction process is consistent across the entire end-to-end feature engineering and prediction process.
@@ -51,18 +40,18 @@ class Pipeline:
     """
 
     def __init__(
-        self,
-        predictor: BasePredictor,
-        column_names: ColumnNames,
-        performances_generator: Optional[PerformancesGenerator] = None,
-        rating_generators: Optional[
-            Union[RatingGenerator, list[RatingGenerator]]
-        ] = None,
-        pre_lag_transformers: Optional[list[BaseTransformer]] = None,
-        lag_generators: Optional[
-            List[Union[BaseLagGenerator, BaseLagGenerator]]
-        ] = None,
-        post_lag_transformers: Optional[list[BaseTransformer]] = None,
+            self,
+            predictor: BasePredictor,
+            column_names: ColumnNames,
+            performances_generator: Optional[PerformancesGenerator] = None,
+            rating_generators: Optional[
+                Union[RatingGenerator, list[RatingGenerator]]
+            ] = None,
+            pre_lag_transformers: Optional[list[BaseTransformer]] = None,
+            lag_generators: Optional[
+                List[Union[BaseLagGenerator, BaseLagGenerator]]
+            ] = None,
+            post_lag_transformers: Optional[list[BaseTransformer]] = None,
     ):
         """
         :param predictor: The predictor to use for generating the predictions
@@ -93,15 +82,24 @@ class Pipeline:
         est_feats = predictor.estimator_features
         for r in self.rating_generators:
             est_feats = list(set(est_feats + r.known_features_return))
+
+        for idx, pre_transformer in enumerate(self.pre_lag_transformers):
+            if hasattr(pre_transformer, "predictor") and not pre_transformer.features:
+                self.pre_lag_transformers[idx].features = est_feats.copy()
+
         for f in self.lag_generators:
             est_feats = list(set(est_feats + f.estimator_features_out))
+
         for idx, post_transformer in enumerate(self.post_lag_transformers):
             if hasattr(post_transformer, "predictor") and not post_transformer.features:
                 self.post_lag_transformers[idx].features = est_feats.copy()
             est_feats = list(
                 set(est_feats + self.post_lag_transformers[idx].estimator_features_out)
             )
-
+        super().__init__(
+            estimator_features=est_feats,
+            target=predictor.target,
+        )
         for c in [
             *self.lag_generators,
             *self.pre_lag_transformers,
@@ -120,343 +118,64 @@ class Pipeline:
         self.predictor = predictor
 
     @nw.narwhalify
-    def cross_validate_score(
-        self,
-        df: FrameT,
-        cross_validator: Optional[CrossValidator] = None,
-        matches: Optional[list[Match]] = None,
-        create_performance: bool = True,
-        create_rating_features: bool = True,
-    ) -> float:
-        """
-        Calculates the cross-validation score for the pipeline.
-        :param df: DataFrame with the data to be used for cross-validation
-        :param cross_validator: CrossValidator object to be used for cross-validation
-        :param matches: If list of matches are provided, these will be used for rating generation.
-        If not provided, the matches will be generated from the df if rating-generation take place during the pipeline.
-        :param create_performance: If True, the performance generator will be used to generate performance values and add it to the dataframe.
-        :param create_rating_features: If True, the rating generator will be used to generate rating values and add it to the dataframe.
-        """
-
-        for col in self.predictor.columns_added:
-            if col in df.columns:
-                df = df.drop([col])
-
-        if cross_validator is None:
-            cross_validator = self._create_default_cross_validator(df=df)
-
-        if create_performance:
-            df = self._add_performance(df=df)
-
-        for rating_generator in self.rating_generators:
-            create_rating_features = any(
-                feature not in df.columns
-                for feature in rating_generator.known_features_return
-            )
-            if create_rating_features:
-                break
-
-        if create_rating_features and self.rating_generators:
-            df = self._add_rating(matches=matches, df=df)
-
-        validation_df = cross_validator.generate_validation_df(
-            df=df,
-            predictor=self.predictor,
-            column_names=self.column_names,
-            post_lag_transformers=self.post_lag_transformers,
-            pre_lag_transformers=self.pre_lag_transformers,
-            lag_generators=self.lag_generators,
-            estimator_features=self._estimator_features,
-            return_features=False,
-        )
-
-        if cross_validator.scorer is None:
-            scorer = self._create_default_scorer(df)
-            return cross_validator.cross_validation_score(
-                validation_df=validation_df, scorer=scorer
-            )
-
-        return cross_validator.cross_validation_score(validation_df=validation_df)
-
-    @nw.narwhalify
-    def cross_validate_predict(
-        self,
-        df: FrameT,
-        cross_validator: Optional[CrossValidator] = None,
-        matches: Optional[list[Match]] = None,
-        create_performance: bool = True,
-        create_rating_features: bool = True,
-        return_features: bool = False,
-        add_train_prediction: bool = False,
-    ) -> IntoFrameT:
-        """
-        Generates predictions on the validation dataset from the entire pipeline
-
-        :param df: DataFrame with the data to be used for cross-validation
-        :param cross_validator: CrossValidator object to be used for cross-validation
-            If not set, a default MatchKFoldCrossValidator will be used
-        :param matches: If list of matches are provided, these will be used for rating generation.
-            If not provided, the matches will be generated from the df if rating-generation take place during the pipeline.
-        :param create_performance: If True, the performance generator will be used to generate performance values and add it to the dataframe.
-        :param create_rating_features: If True, the rating generator will be used to generate rating values and add it to the dataframe.
-        :param return_features: If True, the features generated by the pipeline will be returned in the output dataframe.
-        :param add_train_prediction: If True, the predictions on the training dataset will be added to the output dataframe.
-        """
-
-        if "__row_index" not in df.columns:
-            df = df.with_row_index(name="__row_index")
-
-        cross_validated_df = df
-        if cross_validator is None:
-            cross_validator = self._create_default_cross_validator(
-                df=cross_validated_df
-            )
-
-        if self.predictor.target not in cross_validated_df.columns:
-            raise ValueError(
-                f"Target {self.predictor.target} not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}"
-            )
-
-        if create_performance:
-            cross_validated_df = self._add_performance(df=cross_validated_df)
-
-        for rating_generator in self.rating_generators:
-            create_rating_features = any(
-                feature not in df.columns
-                for feature in rating_generator.known_features_return
-            )
-            if create_rating_features:
-                break
-
-        if create_rating_features and self.rating_generators:
-            if (
-                self.rating_generators[0].performance_column
-                not in cross_validated_df.columns
-            ):
-                raise ValueError(
-                    f"Performance column {self.rating_generators[0].performance_column} not found in dataframe"
-                )
-            cross_validated_df = self._add_rating(
-                matches=matches, df=cross_validated_df
-            )
-
-        cross_validated_df = nw.from_native(
-            cross_validator.generate_validation_df(
-                df=cross_validated_df,
-                predictor=self.predictor,
-                column_names=self.column_names,
-                lag_generators=self.lag_generators,
-                post_lag_transformers=self.post_lag_transformers,
-                pre_lag_transformers=self.pre_lag_transformers,
-                estimator_features=self._estimator_features,
-                return_features=return_features,
-                add_train_prediction=add_train_prediction,
-            )
-        )
-
-        cn = self.column_names
-
-        if return_features:
-            cols_to_drop = []
-            for c in list(set(self._estimator_features + self.predictor.columns_added)):
-                if c in cross_validated_df.columns and c in df.columns:
-                    cols_to_drop.append(c)
-            df = df.drop(cols_to_drop)
-            new_feats = [f for f in cross_validated_df.columns if f not in df.columns]
-
-            return df.join(
-                cross_validated_df.select(
-                    new_feats + [cn.match_id, cn.team_id, cn.player_id]
-                ),
-                on=[cn.match_id, cn.team_id, cn.player_id],
-                how="left",
-            ).sort("__row_index")
-
-        predictor_cols_added = self.predictor.columns_added
-        if (
-            "classes" in cross_validated_df.columns
-            and "classes" not in predictor_cols_added
-            and "classes" not in df.columns
-        ):
-            predictor_cols_added.append("classes")
-
-        #    recasts_mapping = {}
-        #   for c in [cn.player_id, cn.team_id, cn.match_id]:
-        #       if cross_validated_df[c].dtype != df[c].dtype:
-        #          recasts_mapping[c] = df[c].dtype
-        #   cross_validated_df = cross_validated_df.with_columns(
-        #      nw.col(c).cast(df[c].dtype) for c in [cn.player_id, cn.team_id, cn.match_id]
-        #  )
-
-        return (
-            df.join(
-                cross_validated_df.select(
-                    predictor_cols_added
-                    + [
-                        cn.match_id,
-                        cn.team_id,
-                        cn.player_id,
-                        cross_validator.validation_column_name,
-                    ]
-                ),
-                on=[cn.match_id, cn.team_id, cn.player_id],
-                how="left",
-            )
-            .sort("__row_index")
-            .drop("__row_index")
-        )
-
-    def _create_default_cross_validator(self, df: FrameT) -> CrossValidator:
-
-        scorer = self._create_default_scorer(df)
-
-        return MatchKFoldCrossValidator(
-            date_column_name=self.column_names.start_date,
-            match_id_column_name=self.column_names.update_match_id,
-            scorer=scorer,
-        )
-
-    def _create_default_scorer(self, df: FrameT):
-        if self.predictor.estimator_type == "regressor":
-            scorer = SklearnScorer(
-                scorer_function=mean_absolute_error,
-                pred_column=self.predictor.pred_column,
-            )
-            logging.info("Using mean_absolute_error as scorer")
-        else:
-            if len(df[PredictColumnNames.TARGET].unique()) > 2:
-                scorer = OrdinalLossScorer(pred_column=self.predictor.pred_column)
-                logging.info("Using ordinal loss as scorer")
-            else:
-                scorer = SklearnScorer(
-                    scorer_function=log_loss, pred_column=self.predictor.pred_column
-                )
-                logging.info("Using log_loss as scorer")
-
-        return scorer
-
-    @nw.narwhalify
-    def train_predict(
-        self,
-        df: FrameT,
-        matches: Optional[Union[list[Match], list[list[Match]]]] = None,
-        return_features: bool = False,
-        cross_validate_predict: bool = False,
-        cross_validator: Optional[CrossValidator] = None,
-    ) -> IntoFrameT:
+    def train(
+            self,
+            df: FrameT,
+            estimator_features: Optional[list[str]] = None
+    ) -> None:
         """
         Trains the pipeline on the given dataframe and generates and returns predictions.
-
         :param df: DataFrame with the data to be used for training and prediction
-        :param matches: If list of matches are provided, these will be used for rating generation.
-            If not provided, the matches will be generated from the df if rating-generation take place during the pipeline.
-        :param return_features: If True, the features generated by the pipeline will be returned in the output dataframe.
-        :param cross_validate_predict: If True, the predictions will be generated using cross-validation.
-        :param cross_validator: CrossValidator object to be used for cross-validation.
-            If not set and cross_validate_predict is True, a default MatchKFoldCrossValidator will be used.
-            Will have no impact if cross_validate_predict is False.
 
         """
-        self.reset_pipeline()
+        estimator_features = estimator_features or self._estimator_features
 
+        self.reset_pipeline()
         if self.predictor.target not in df.columns:
             raise ValueError(
-                f"Target {self.predictor.target} not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}"
+                f"Target {self.predictor.target} not in df columns. Available columns: {df.columns}"
             )
 
-        ori_cols = df.columns
-        df_with_predict = self._add_performance(df=df)
-        if self.rating_generators:
-            if (
-                self.rating_generators[0].performance_column
-                not in df_with_predict.columns
-            ):
-                raise ValueError(
-                    f"Performance column {self.rating_generators[0].performance_column} not found in dataframe"
-                )
-            df_with_predict = self._add_rating(
-                matches=matches,
-                df=df_with_predict,
-            )
+        if self.performances_generator:
+            df = nw.from_native(self.performances_generator.generate(df))
 
-        if cross_validate_predict:
-            cols = df_with_predict.columns
-            df_cv_predict = nw.from_native(
-                self.cross_validate_predict(
-                    df=df_with_predict,
-                    return_features=return_features,
-                    create_rating_features=False,
-                    create_performance=False,
-                    add_train_prediction=True,
-                    cross_validator=cross_validator,
+        for idx in range(len(self.rating_generators)):
+            self.rating_generators[idx].reset_ratings()
+
+            df = nw.from_native(
+                self.rating_generators[idx].generate_historical(
+                    df, column_names=self.column_names
                 )
             )
-            cv_cols_added = [c for c in df_cv_predict.columns if c not in cols]
-        else:
-            cv_cols_added = []
 
         for idx in range(len(self.pre_lag_transformers)):
             self.pre_lag_transformers[idx].reset()
-            df_with_predict = nw.from_native(
+            df = nw.from_native(
                 self.pre_lag_transformers[idx].fit_transform(
-                    df_with_predict, column_names=self.column_names
+                    df, column_names=self.column_names
                 )
             )
 
         for idx in range(len(self.lag_generators)):
             self.lag_generators[idx].reset()
 
-            df_with_predict = nw.from_native(
+            df = nw.from_native(
                 self.lag_generators[idx].generate_historical(
-                    df_with_predict, column_names=self.column_names
+                    df, column_names=self.column_names
                 )
             )
+
+
         for idx in range(len(self.post_lag_transformers)):
             self.post_lag_transformers[idx].reset()
-            df_with_predict = nw.from_native(
+            df = nw.from_native(
                 self.post_lag_transformers[idx].fit_transform(
-                    df_with_predict, column_names=self.column_names
+                    df, column_names=self.column_names
                 )
             )
 
         self.predictor.train(
-            df=df_with_predict, estimator_features=self._estimator_features
-        )
-
-        if cross_validate_predict:
-            df_with_predict = df_cv_predict
-        else:
-            df_with_predict = nw.from_native(
-                self.predictor.add_prediction(df=df_with_predict)
-            )
-        cn = self.column_names
-
-        if return_features:
-            new_feats = [f for f in df_with_predict.columns if f not in ori_cols]
-            return df.join(
-                df_with_predict.select(
-                    new_feats + [cn.match_id, cn.team_id, cn.player_id]
-                ),
-                on=[cn.match_id, cn.team_id, cn.player_id],
-                how="left",
-            )
-
-        predictor_cols_added = self.predictor.columns_added
-        if (
-            "classes" in df_with_predict.columns
-            and "classes" not in predictor_cols_added
-            and "classes" not in df.columns
-        ):
-            predictor_cols_added.append("classes")
-
-        return df.join(
-            df_with_predict.select(
-                predictor_cols_added
-                + [cn.match_id, cn.team_id, cn.player_id]
-                + [c for c in cv_cols_added if c not in predictor_cols_added]
-            ),
-            on=[cn.match_id, cn.team_id, cn.player_id],
-            how="left",
+            df=df, estimator_features=estimator_features
         )
 
     def reset_pipeline(self):
@@ -470,87 +189,11 @@ class Pipeline:
         ]:
             transformer.reset()
 
-    def _add_performance(self, df: FrameT) -> FrameT:
-
-        if self.predictor.pred_column in df.columns:
-            raise ValueError(
-                f"Predictor column {self.predictor.pred_column} already in df columns. Remove or rename before generating predictions"
-            )
-
-        elif self.performances_generator:
-            df = nw.from_native(self.performances_generator.generate(df))
-
-        if self.predictor.target not in df.columns:
-            raise ValueError(
-                f"Target {self.predictor.target} not in df columns. Target always needs to be set equal to {PredictColumnNames.TARGET}"
-            )
-
-        return df
-
-    def _add_rating(
-        self,
-        matches: Optional[Union[list[Match], Match]],
-        df: FrameT,
-    ) -> FrameT:
-
-        if matches:
-            if isinstance(matches[0], Match):
-                matches = [matches for _ in self.rating_generators]
-
-        rg = self.rating_generators[0]
-        match_ids_calculated = rg.calculated_match_ids
-        not_calculated_match_ids = (
-            df.filter(~nw.col(self.column_names.match_id).is_in(match_ids_calculated))
-            .unique(self.column_names.match_id)[self.column_names.match_id]
-            .to_list()
-        )
-
-        df_no_ratings = df.filter(
-            nw.col(self.column_names.match_id).is_in(not_calculated_match_ids)
-        )
-        for rating_idx, rating_generator in enumerate(self.rating_generators):
-            if len(df_no_ratings) > 0:
-
-                if matches is None:
-                    rating_matches = convert_df_to_matches(
-                        column_names=self.column_names,
-                        df=df_no_ratings,
-                        league_identifier=LeagueIdentifier(),
-                        performance_column_name=rating_generator.performance_column,
-                    )
-                else:
-                    rating_matches = matches[rating_idx]
-                    if len(df_no_ratings) != len(df):
-                        rating_matches = [
-                            m
-                            for m in rating_matches
-                            if m.id in not_calculated_match_ids
-                        ]
-
-                match_ratings = rating_generator.generate_historical_by_matches(
-                    matches=rating_matches, column_names=self.column_names
-                )
-
-                for rating_feature, values in match_ratings.items():
-                    rating_feature_str = rating_feature
-                    df_no_ratings = df_no_ratings.with_columns(
-                        nw.new_series(
-                            name=rating_feature_str,
-                            values=values,
-                            native_namespace=nw.get_native_namespace(df_no_ratings),
-                        )
-                    )
-
-        df = df_no_ratings
-
-        return df
-
     @nw.narwhalify
-    def future_predict(
-        self,
-        df: FrameT,
-        return_features: bool = False,
-        return_rating_features: bool = False,
+    def predict(
+            self,
+            df: FrameT,
+
     ) -> IntoFrameT:
         """
         Generates predictions on a future dataset from the entire pipeline
@@ -567,17 +210,8 @@ class Pipeline:
                 df_with_predict = df_with_predict.drop(
                     [rating_generator.performance_column]
                 )
-            rating_column_names = rating_generator.column_names
-
-            matches = convert_df_to_matches(
-                column_names=rating_column_names,
-                df=df_with_predict,
-                league_identifier=LeagueIdentifier(),
-                performance_column_name=rating_generator.performance_column,
-            )
-
             df_with_predict = nw.from_native(
-                rating_generator.generate_future(matches=matches, df=df_with_predict)
+                rating_generator.generate_future(df=df_with_predict)
             )
 
         for pre_lag_transformer in self.pre_lag_transformers:
@@ -585,7 +219,6 @@ class Pipeline:
                 pre_lag_transformer.transform(df_with_predict)
             )
         for idx, lag_generator in enumerate(self.lag_generators):
-
             df_with_predict = nw.from_native(
                 lag_generator.generate_future(df_with_predict)
             )
@@ -594,52 +227,17 @@ class Pipeline:
                 post_lag_transformer.transform(df_with_predict)
             )
 
-        df_with_predict = nw.from_native(self.predictor.add_prediction(df_with_predict))
-
+        df_with_predict = nw.from_native(self.predictor.predict(df_with_predict))
         cn = self.column_names
 
-        if return_features:
-            new_feats = [f for f in df_with_predict.columns if f not in df.columns]
-            return df.join(
-                df_with_predict.select(
-                    new_feats + [cn.match_id, cn.team_id, cn.player_id]
-                ),
-                on=[cn.match_id, cn.team_id, cn.player_id],
-                how="left",
-            )
-        elif return_rating_features:
-            rating_feats_out = [
-                f
-                for i in range(len(self.rating_generators))
-                for f in self.rating_generators[i].known_features_return
-            ]
-            cols_to_add = (
-                self.predictor.columns_added
-                + [cn.match_id, cn.team_id, cn.player_id]
-                + rating_feats_out
-            )
-        else:
-            cols_to_add = self.predictor.columns_added + [
-                cn.match_id,
-                cn.team_id,
-                cn.player_id,
-            ]
-
-        return (
-            df.join(
-                df_with_predict.select(cols_to_add),
-                on=[cn.match_id, cn.team_id, cn.player_id],
-                how="left",
-            )
-            .sort("__row_index")
-            .drop(["__row_index"])
+        new_feats = [f for f in df_with_predict.columns if f not in df.columns]
+        joined = df.join(
+            df_with_predict.select(
+                new_feats + [cn.match_id, cn.team_id, cn.player_id]
+            ),
+            on=[cn.match_id, cn.team_id, cn.player_id],
+            how="left",
         )
-
-    @property
-    def classes_(self) -> Optional[list[str]]:
-        """
-        Returns the classes of the predictor if available
-        """
-        if "classes_" not in dir(self.predictor.estimator):
-            return None
-        return self.predictor.estimator.classes_
+        if '__row_index' in joined.columns:
+            joined = joined.drop(['__row_index'])
+        return joined

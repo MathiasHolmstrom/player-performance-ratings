@@ -10,8 +10,6 @@ import numpy as np
 import pandas as pd
 from polars.polars import col
 
-from player_performance_ratings.consts import PredictColumnNames
-
 import polars as pl
 
 
@@ -132,7 +130,7 @@ class MeanBiasScorer(BaseScorer):
     def __init__(
         self,
         pred_column: str,
-        target: Optional[str] = PredictColumnNames.TARGET,
+        target: str,
         validation_column: Optional[str] = None,
         granularity: Optional[list[str]] = None,
         filters: Optional[list[Filter]] = None,
@@ -166,7 +164,7 @@ class SklearnScorer(BaseScorer):
         self,
         pred_column: str,
         scorer_function: Callable,
-        target: Optional[str] = PredictColumnNames.TARGET,
+        target: str,
         validation_column: Optional[str] = None,
         granularity: Optional[list[str]] = None,
         filters: Optional[list[Filter]] = None,
@@ -221,8 +219,8 @@ class ProbabilisticMeanBias(BaseScorer):
     def __init__(
         self,
         pred_column: str,
+        target: str,
         class_column_name: str = "classes",
-        target: Optional[str] = PredictColumnNames.TARGET,
         validation_column: Optional[str] = None,
         granularity: Optional[list[str]] = None,
         filters: Optional[list[Filter]] = None,
@@ -315,7 +313,7 @@ class OrdinalLossScorerPolars(BaseScorer):
     def __init__(
         self,
         pred_column: str,
-        target: Optional[str] = PredictColumnNames.TARGET,
+        target: str,
         validation_column: Optional[str] = None,
         granularity: Optional[list[str]] = None,
         filters: Optional[list[Filter]] = None,
@@ -386,8 +384,8 @@ class OrdinalLossScorer(BaseScorer):
     def __init__(
         self,
         pred_column: str,
+        target: str,
         class_column_name: str = "classes",
-        target: Optional[str] = PredictColumnNames.TARGET,
         validation_column: Optional[str] = None,
         granularity: Optional[list[str]] = None,
         filters: Optional[list[Filter]] = None,

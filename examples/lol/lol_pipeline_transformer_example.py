@@ -1,7 +1,9 @@
 import pandas as pd
+from lightgbm import LGBMRegressor
 
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.pipeline_transformer import PipelineTransformer
+from player_performance_ratings.predictor import GameTeamPredictor, Predictor
 from player_performance_ratings.ratings import (
     UpdateRatingGenerator,
     RatingKnownFeatures,
@@ -67,5 +69,24 @@ transformer = PipelineTransformer(
 
 historical_df = transformer.fit_transform(historical_df)
 
+game_winner_predictor = GameTeamPredictor(
+    target="result",
+    game_id_colum=column_names.match_id,
+    team_id_column=column_names.team_id,
+    estimator_features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED, "side"],
+)
+
+player_kills_predictor = Predictor(
+    estimator=LGBMRegressor(verbose=-100),
+    target="kills",
+    estimator_features=["rolling_mean_20_kills", game_winner_predictor.pred_column],
+)
+
+game_winner_predictor.train(historical_df)
+player_kills_predictor.train(historical_df)
+
 future_df = transformer.transform(future_df)
+future_df = game_winner_predictor.predict(future_df)
+future_df = player_kills_predictor.predict(future_df)
+
 print(future_df.head(10))
