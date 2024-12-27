@@ -361,7 +361,7 @@ def test_match_predictor_generate_and_predict(df):
     )
 
     pipeline.train(df=historical_df)
-    new_df = pipeline.add_prediction(future_df)
+    new_df = pipeline.predict(future_df)
     expected_columns = list(future_df.columns) + [*rating_generator.features_out, pipeline.predictor.pred_column]
     if isinstance(new_df, pd.DataFrame):
         assert new_df.columns.to_list() == expected_columns
@@ -449,7 +449,7 @@ def test_train_predict_post_pre_and_lag_transformers():
 
     assert predictor.pred_column not in train_df.columns
 
-    predicted_df = pipeline.add_prediction(future_df)
+    predicted_df = pipeline.predict(future_df)
     for f in rating_generator.known_features_out:
         assert f in predicted_df.columns
         assert f not in future_df.columns

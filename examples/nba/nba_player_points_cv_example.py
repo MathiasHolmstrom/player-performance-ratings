@@ -1,6 +1,6 @@
 import polars as pl
 from sklearn.metrics import mean_absolute_error
-
+from lightgbm import LGBMRegressor
 from player_performance_ratings.cross_validator import MatchKFoldCrossValidator
 
 from player_performance_ratings.pipeline import Pipeline
@@ -9,7 +9,6 @@ from player_performance_ratings.predictor import Predictor
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.scorer import SklearnScorer
 from player_performance_ratings.transformers.lag_generators import RollingMeanTransformer
-import pandas as pd
 
 
 df = pl.read_parquet("data/game_player_subsample.parquet")
@@ -29,33 +28,8 @@ df = df.sort(
     ]
 )
 
-df = (
-    df.with_columns(
-        pl.col(column_names.team_id)
-          .n_unique()
-          .over(column_names.match_id)
-          .alias("team_count")
-    )
-    .filter(pl.col("team_count") == 2)
-    .drop("team_count")
-)
-
-most_recent_10_games = (
-    df.select(pl.col(column_names.match_id).unique())
-      .to_series()
-      .tail(10)
-      .to_list()
-)
-
-historical_df = df.filter(~pl.col(column_names.match_id).is_in(most_recent_10_games))
-
-# 5. Create future_df by including only the most recent 10 games and dropping "points"
-future_df = (
-    df.filter(pl.col(column_names.match_id).is_in(most_recent_10_games))
-      .drop("points")
-)
-
 predictor = Predictor(
+    estimator=LGBMRegressor(verbose=-100),
     convert_to_cat_feats_to_cat_dtype=True,
     estimator_features=['location'],
     target='points'
@@ -85,6 +59,6 @@ cross_validator = MatchKFoldCrossValidator(
     match_id_column_name=column_names.match_id,
     predictor=pipeline
 )
-validation_df = cross_validator.generate_validation_df(df=historical_df, column_names=column_names)
+validation_df = cross_validator.generate_validation_df(df=df, column_names=column_names)
 score = cross_validator.cross_validation_score(validation_df=validation_df, scorer=scorer)
 print(score)

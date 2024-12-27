@@ -69,7 +69,7 @@ class BasePredictor(ABC):
         pass
 
     @abstractmethod
-    def add_prediction(self, df: FrameT) -> IntoFrameT:
+    def predict(self, df: FrameT) -> IntoFrameT:
         pass
 
     @property

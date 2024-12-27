@@ -190,7 +190,7 @@ class Pipeline(BasePredictor):
             transformer.reset()
 
     @nw.narwhalify
-    def add_prediction(
+    def predict(
             self,
             df: FrameT,
 
@@ -227,7 +227,7 @@ class Pipeline(BasePredictor):
                 post_lag_transformer.transform(df_with_predict)
             )
 
-        df_with_predict = nw.from_native(self.predictor.add_prediction(df_with_predict))
+        df_with_predict = nw.from_native(self.predictor.predict(df_with_predict))
         cn = self.column_names
 
         new_feats = [f for f in df_with_predict.columns if f not in df.columns]

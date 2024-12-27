@@ -38,7 +38,7 @@ def test_game_team_predictor_add_predictiondf(df):
         }
     )
 
-    result = predictor.add_prediction(data)
+    result = predictor.predict(data)
     if isinstance(data, pd.DataFrame):
         expected_df = data.copy()
         expected_df[predictor.pred_column] = [0.8, 0.4, 0.7]
@@ -81,7 +81,7 @@ def test_multiclass_train(predictor, df):
 
     predictor.train(data, estimator_features=["feature1"])
 
-    df_with_predictions = predictor.add_prediction(data)
+    df_with_predictions = predictor.predict(data)
     assert predictor.pred_column in df_with_predictions.columns
     if isinstance(df_with_predictions, pd.DataFrame):
         df_with_predictions = pl.DataFrame(df_with_predictions)
@@ -158,7 +158,7 @@ def test_game_team_predictor(target_values, df):
     )
 
     predictor.train(data, estimator_features=["feature1"])
-    df = predictor.add_prediction(data)
+    df = predictor.predict(data)
     assert predictor.pred_column in df.columns
 
 
@@ -181,7 +181,7 @@ def test_predictor_regressor(target_values, df):
     )
 
     predictor.train(data, estimator_features=["feature1"])
-    df = predictor.add_prediction(data)
+    df = predictor.predict(data)
     assert predictor.pred_column in df.columns
 
 
@@ -205,5 +205,5 @@ def test_granularity_predictor(target_values, df):
     )
 
     predictor.train(data, estimator_features=["feature1"])
-    df = predictor.add_prediction(data)
+    df = predictor.predict(data)
     assert predictor.pred_column in df.columns

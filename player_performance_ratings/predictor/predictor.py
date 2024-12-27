@@ -145,7 +145,7 @@ class GameTeamPredictor(BasePredictor):
         )
 
     @nw.narwhalify
-    def add_prediction(self, df: FrameT) -> IntoFrameT:
+    def predict(self, df: FrameT) -> IntoFrameT:
         """
         Adds prediction to df
 
@@ -402,7 +402,7 @@ class Predictor(BasePredictor):
         )
 
     @nw.narwhalify
-    def add_prediction(self, df: FrameT) -> IntoFrameT:
+    def predict(self, df: FrameT) -> IntoFrameT:
         """
         Adds prediction to df
 
@@ -439,7 +439,8 @@ class Predictor(BasePredictor):
 
             if len(set(df[self.pred_column].head(1).item(0))) == 2:
                 raise ValueError(
-                    "Too many unique values in relation to rows in the training dataset causes multiclassifier to not train properly"
+                    "Too many unique values in relation to rows in the training dataset causes multiclassifier to not train properly."
+                    "Either limit unique classes or explicitly make the estimator a Regressor"
                 )
 
         elif not hasattr(self._deepest_estimator, "predict_proba"):
@@ -605,7 +606,7 @@ class GranularityPredictor(BasePredictor):
             self.classes_[granularity].sort()
 
     @nw.narwhalify
-    def add_prediction(self, df: FrameT) -> IntoFrameT:
+    def predict(self, df: FrameT) -> IntoFrameT:
 
         if isinstance(df.to_native(), pd.DataFrame):
             df = nw.from_native(pl.DataFrame(df))
