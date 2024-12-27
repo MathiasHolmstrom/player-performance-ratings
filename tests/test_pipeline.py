@@ -371,7 +371,6 @@ def test_match_predictor_generate_and_predict(df):
     assert len(pipeline.performances_generator.transformers) > 0
 
 
-
 def test_train_predict_post_pre_and_lag_transformers():
     df = pd.DataFrame(
         {
@@ -396,7 +395,8 @@ def test_train_predict_post_pre_and_lag_transformers():
     )
 
     column_weights = [ColumnWeight(name="kills", weight=1)]
-    predictor = Predictor(estimator=LinearRegression(), target='__target')
+    predictor = Predictor(estimator=LinearRegression(), target='__target', scale_features=True,
+                          one_hot_encode_cat_features=True)
 
     column_names = ColumnNames(
         match_id="game_id",
@@ -411,6 +411,8 @@ def test_train_predict_post_pre_and_lag_transformers():
     )
     pre_transformer = PredictorTransformer(
         predictor=Predictor(
+            scale_features=True,
+            one_hot_encode_cat_features=True,
             estimator=LinearRegression(),
             estimator_features=rating_generator.features_out,
             target='__target',
@@ -423,6 +425,8 @@ def test_train_predict_post_pre_and_lag_transformers():
     post_transformer = RatioTeamPredictorTransformer(
         features=["kills"],
         predictor=Predictor(
+            scale_features=True,
+            one_hot_encode_cat_features=True,
             estimator=LinearRegression(), estimator_features=lag_generator.features_out,
             target='__target'
         ),
@@ -445,7 +449,7 @@ def test_train_predict_post_pre_and_lag_transformers():
 
     assert predictor.pred_column not in train_df.columns
 
-    predicted_df = pipeline.add_prediction(future_df, return_features=True)
+    predicted_df = pipeline.add_prediction(future_df)
     for f in rating_generator.known_features_out:
         assert f in predicted_df.columns
         assert f not in future_df.columns

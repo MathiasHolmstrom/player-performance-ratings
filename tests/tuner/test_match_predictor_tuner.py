@@ -39,7 +39,9 @@ def test_match_predictor_tuner():
     pipeline = Pipeline(
         column_names=col_names,
         rating_generators=UpdateRatingGenerator(performance_column="performance"),
-        predictor=Predictor(),
+        predictor=Predictor(
+            target="won",
+        ),
     )
 
     cv_mock = mock.Mock()

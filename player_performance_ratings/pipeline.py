@@ -82,8 +82,14 @@ class Pipeline(BasePredictor):
         est_feats = predictor.estimator_features
         for r in self.rating_generators:
             est_feats = list(set(est_feats + r.known_features_return))
+
+        for idx, pre_transformer in enumerate(self.pre_lag_transformers):
+            if hasattr(pre_transformer, "predictor") and not pre_transformer.features:
+                self.pre_lag_transformers[idx].features = est_feats.copy()
+
         for f in self.lag_generators:
             est_feats = list(set(est_feats + f.estimator_features_out))
+
         for idx, post_transformer in enumerate(self.post_lag_transformers):
             if hasattr(post_transformer, "predictor") and not post_transformer.features:
                 self.post_lag_transformers[idx].features = est_feats.copy()
@@ -130,6 +136,18 @@ class Pipeline(BasePredictor):
                 f"Target {self.predictor.target} not in df columns. Available columns: {df.columns}"
             )
 
+        if self.performances_generator:
+            df = nw.from_native(self.performances_generator.generate(df))
+
+        for idx in range(len(self.rating_generators)):
+            self.rating_generators[idx].reset_ratings()
+
+            df = nw.from_native(
+                self.rating_generators[idx].generate_historical(
+                    df, column_names=self.column_names
+                )
+            )
+
         for idx in range(len(self.pre_lag_transformers)):
             self.pre_lag_transformers[idx].reset()
             df = nw.from_native(
@@ -147,17 +165,6 @@ class Pipeline(BasePredictor):
                 )
             )
 
-        if self.performances_generator:
-           df = nw.from_native(self.performances_generator.generate(df))
-
-        for idx in range(len(self.rating_generators)):
-            self.rating_generators[idx].reset_ratings()
-
-            df = nw.from_native(
-                self.rating_generators[idx].generate_historical(
-                    df, column_names=self.column_names
-                )
-            )
 
         for idx in range(len(self.post_lag_transformers)):
             self.post_lag_transformers[idx].reset()
@@ -186,6 +193,7 @@ class Pipeline(BasePredictor):
     def add_prediction(
             self,
             df: FrameT,
+
     ) -> IntoFrameT:
         """
         Generates predictions on a future dataset from the entire pipeline
@@ -220,7 +228,6 @@ class Pipeline(BasePredictor):
             )
 
         df_with_predict = nw.from_native(self.predictor.add_prediction(df_with_predict))
-
         cn = self.column_names
 
         new_feats = [f for f in df_with_predict.columns if f not in df.columns]

@@ -137,6 +137,7 @@ def test_transformer_tuner_2_performances(estimator):
         predictor=Predictor(
             estimator=estimator,
             estimator_features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+            target="won",
         ),
         column_names=column_names1,
         performances_generator=PerformancesGenerator(
