@@ -9,10 +9,8 @@ from lightgbm import LGBMClassifier
 
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
-from player_performance_ratings.consts import PredictColumnNames
 from player_performance_ratings.predictor import (
     GameTeamPredictor,
-    OrdinalClassifier,
     Predictor,
 )
 from player_performance_ratings.predictor.predictor import GranularityPredictor
@@ -27,7 +25,7 @@ def test_game_team_predictor_add_predictiondf(df):
     mock_model.estimator = LogisticRegression()
 
     predictor = GameTeamPredictor(
-        game_id_colum="game_id", team_id_column="team_id", estimator=mock_model
+        game_id_colum="game_id", team_id_column="team_id", estimator=mock_model, target='__target'
     )
     predictor._estimator_features = ["feature1", "feature2"]
     data = df(
@@ -36,7 +34,7 @@ def test_game_team_predictor_add_predictiondf(df):
             "team_id": [1, 2, 1],
             "feature1": [0.1, 0.5, 0.3],
             "feature2": [0.4, 0.6, 0.8],
-            PredictColumnNames.TARGET: [1, 0, 1],
+            "__target": [1, 0, 1],
         }
     )
 
@@ -63,12 +61,13 @@ def test_game_team_predictor_add_predictiondf(df):
             multiclass_output_as_struct=True,
             game_id_colum="game_id",
             team_id_column="team_id",
+            target='__target',
         ),
-        Predictor(),
-        GranularityPredictor(granularity_column_name="position"),
+        Predictor(target='__target'),
+        GranularityPredictor(granularity_column_name="position", target='__target'),
     ],
 )
-@pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
+@pytest.mark.parametrize("df", [ pd.DataFrame, pl.DataFrame])
 def test_multiclass_train(predictor, df):
     data = df(
         {
@@ -105,6 +104,7 @@ def test_game_team_predictor_game_player(df):
         team_id_column="team_id",
         estimator=mock_model,
         pre_transformers=[],
+        target='__target',
     )
 
     data = df(
@@ -143,7 +143,7 @@ def test_game_team_predictor(target_values, df):
     "should identify it's a regressor and train and predict works as intended"
 
     predictor = GameTeamPredictor(
-        game_id_colum="game_id", team_id_column="team_id", estimator=LinearRegression()
+        game_id_colum="game_id", team_id_column="team_id", estimator=LinearRegression(), target='__target'
     )
 
     data = df(
@@ -167,7 +167,7 @@ def test_game_team_predictor(target_values, df):
 def test_predictor_regressor(target_values, df):
     "should identify it's a regressor and train and predict works as intended"
 
-    predictor = Predictor(estimator=LinearRegression())
+    predictor = Predictor(estimator=LinearRegression(), target='__target')
 
     data = df(
         {
@@ -191,7 +191,7 @@ def test_granularity_predictor(target_values, df):
     "should identify it's a regressor and train and predict works as intended"
 
     predictor = GranularityPredictor(
-        estimator=LinearRegression(), granularity_column_name="position"
+        estimator=LinearRegression(), granularity_column_name="position", target='__target'
     )
 
     data = df(
