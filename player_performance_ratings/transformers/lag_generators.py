@@ -786,6 +786,7 @@ class RollingMeanTransformer(BaseLagGenerator):
 
         self.column_names = column_names
         self.granularity = self.granularity or [self.column_names.player_id]
+        validate_sorting(df=df, column_names=self.column_names)
         self._store_df(df)
         concat_df = self._generate_concat_df_with_feats(df)
         transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
