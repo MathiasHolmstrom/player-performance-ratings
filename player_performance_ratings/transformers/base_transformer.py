@@ -12,10 +12,10 @@ from player_performance_ratings import ColumnNames
 class BaseTransformer(ABC):
 
     def __init__(
-        self,
-        features: list[str],
-        features_out: list[str],
-        are_estimator_features: bool = True,
+            self,
+            features: list[str],
+            features_out: list[str],
+            are_estimator_features: bool = True,
     ):
         self._features_out = features_out
         self.features = features
@@ -27,7 +27,7 @@ class BaseTransformer(ABC):
 
     @abstractmethod
     def fit_transform(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+            self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         pass
 
@@ -47,17 +47,16 @@ class BaseTransformer(ABC):
         return self
 
 
-
 class BaseLagGenerator:
 
     def __init__(
-        self,
-        granularity: list[str],
-        features: list[str],
-        add_opponent: bool,
-        iterations: list[int],
-        prefix: str,
-        are_estimator_features: bool = True,
+            self,
+            granularity: list[str],
+            features: list[str],
+            add_opponent: bool,
+            iterations: list[int],
+            prefix: str,
+            are_estimator_features: bool = True,
     ):
 
         self.features = features
@@ -126,17 +125,20 @@ class BaseLagGenerator:
             concat_df[self.column_names.start_date] = pd.to_datetime(
                 concat_df[self.column_names.start_date]
             )
-        return concat_df.unique(
-            subset=[
-                self.column_names.match_id,
+
+        unique_cols = [         self.column_names.match_id,
                 self.column_names.team_id,
-                self.column_names.player_id,
-            ],
+                self.column_names.player_id] if self.column_names.player_id in concat_df.columns else [
+            self.column_names.match_id,
+            self.column_names.team_id,
+        ]
+        return concat_df.unique(
+            subset=unique_cols,
             maintain_order=True,
         )
 
     def _store_df(
-        self, df: nw.DataFrame, additional_cols_to_use: Optional[list[str]] = None
+            self, df: nw.DataFrame, additional_cols_to_use: Optional[list[str]] = None
     ):
         df = df.with_columns(
             [
@@ -161,6 +163,8 @@ class BaseLagGenerator:
                 self.column_names.start_date,
             }
         )
+        if self.column_names.player_id not in df.columns:
+            cols.remove(self.column_names.player_id)
         if self.column_names.participation_weight in df.columns:
             cols += [self.column_names.participation_weight]
         if self.column_names.projected_participation_weight in df.columns:
@@ -174,21 +178,21 @@ class BaseLagGenerator:
         else:
             self._df = nw.concat([self._df, df.select(cols)])
 
+        sort_cols = [
+            self.column_names.match_id,
+            self.column_names.team_id,
+            self.column_names.player_id,
+        ] if self.column_names.player_id in self._df.columns else [
+            self.column_names.match_id,
+            self.column_names.team_id,
+        ]
+
         self._df = (
-            self._df.sort(
-                [
-                    self.column_names.match_id,
-                    self.column_names.team_id,
-                    self.column_names.player_id,
-                ],
-                #   descending=True
-            )
+            self._df.sort(sort_cols
+                          #   descending=True
+                          )
             .unique(
-                subset=[
-                    self.column_names.match_id,
-                    self.column_names.team_id,
-                    self.column_names.player_id,
-                ],
+                subset=sort_cols,
                 maintain_order=True,
             )
             .to_native()
@@ -208,17 +212,17 @@ class BaseLagGenerator:
 
         if self.add_opponent:
             concat_df = self._add_opponent_features(df=concat_df)
-
-        ori_cols = [c for c in df.columns if c not in concat_df.columns] + [
+        on_cols = [cn.match_id, cn.team_id, cn.player_id] if cn.player_id in df.columns else [
             cn.match_id,
-            cn.player_id,
             cn.team_id,
         ]
+        ori_cols = [c for c in df.columns if c not in concat_df.columns] + on_cols
 
         df = self._string_convert(df)
 
+
         transformed_df = concat_df.join(
-            df.select(ori_cols), on=[cn.match_id, cn.player_id, cn.team_id], how="inner"
+            df.select(ori_cols), on=on_cols, how="inner"
         )
         return transformed_df.select(list(set(df.columns + self.features_out)))
 
@@ -243,28 +247,28 @@ class BaseLagGenerator:
         ).drop(["__opponent_team_id"])
 
         new_feats = [f"{f}_opponent" for f in self._entity_features]
+        on_cols = [self.column_names.match_id,
+                    self.column_names.team_id,
+                    self.column_names.player_id] if self.column_names.player_id in df.columns else [
+            self.column_names.match_id,
+        self.column_names.team_id,
+        ]
         return df.join(
             new_df.select(
                 [
-                    self.column_names.match_id,
-                    self.column_names.team_id,
-                    self.column_names.player_id,
+                    *on_cols,
                     *new_feats,
                 ]
             ),
-            on=[
-                self.column_names.match_id,
-                self.column_names.team_id,
-                self.column_names.player_id,
-            ],
+            on=on_cols,
             how="left",
         )
 
     def _generate_future_feats(
-        self,
-        transformed_df: FrameT,
-        ori_df: FrameT,
-        known_future_features: Optional[list[str]] = None,
+            self,
+            transformed_df: FrameT,
+            ori_df: FrameT,
+            known_future_features: Optional[list[str]] = None,
     ) -> FrameT:
         known_future_features = known_future_features or []
         ori_cols = ori_df.columns

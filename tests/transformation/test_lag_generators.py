@@ -518,6 +518,86 @@ def test_lag_transformer_parent_match_id(df, column_names: ColumnNames):
         )
 
 
+
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_rolling_mean_fit_transform_game_team(df, column_names):
+    data = df(
+        {
+            "game": [1, 1, 2, 2, 3,3],
+            "points": [1, 2, 3, 2, 4,5],
+            "start_date": [
+                pd.to_datetime("2023-01-01"),
+                pd.to_datetime("2023-01-01"),
+                pd.to_datetime("2023-01-02"),
+                pd.to_datetime("2023-01-02"),
+                pd.to_datetime("2023-01-03"),
+                pd.to_datetime("2023-01-03"),
+            ],
+            "team": [1, 2, 1, 2, 1,3],
+        }
+    )
+    try:
+        original_df = data.copy()
+    except:
+        original_df = data.clone()
+
+    rolling_mean_transformation = RollingMeanTransformer(
+        features=["points"],
+        window=3,
+        min_periods=1,
+        granularity=["team"],
+        add_opponent=True
+    )
+
+    df_with_rolling_mean = rolling_mean_transformation.generate_historical(
+        data, column_names=column_names
+    )
+    if isinstance(data, pd.DataFrame):
+        expected_df = original_df.assign(
+            **{
+                f"{rolling_mean_transformation.prefix}3_points": [
+                    None,
+                    None,
+                    1,
+                    2,
+                    2,
+                    None
+                ],
+                f"{rolling_mean_transformation.prefix}3_points_opponent": [
+                    None,
+                    None,
+                    2,
+                    1,
+                    None,
+                    2,
+                ]
+            }
+        )
+        pd.testing.assert_frame_equal(
+            df_with_rolling_mean, expected_df, check_like=True, check_dtype=False
+        )
+    else:
+        expected_df = original_df.with_columns(
+            [
+                pl.Series(
+                    f"{rolling_mean_transformation.prefix}3_points",
+                    [None, None, 1, 2,2,None],
+                    strict=False,
+                ),
+                pl.Series(
+                    f"{rolling_mean_transformation.prefix}3_points_opponent",
+                    [None, None, 2, 1, None, 2],
+                    strict=False,
+                )
+            ]
+        )
+        pl.testing.assert_frame_equal(
+            df_with_rolling_mean,
+            expected_df.select(df_with_rolling_mean.columns),
+            check_dtype=False,
+        )
+
+
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_rolling_mean_fit_transform(df, column_names):
     data = df(
