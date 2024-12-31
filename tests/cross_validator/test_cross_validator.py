@@ -78,7 +78,7 @@ def test_match_k_fold_cross_validator(df, column_names):
         )
 
     predictor = mock.Mock()
-    predictor.add_prediction.side_effect = [
+    predictor.predict.side_effect = [
         return_add_prediction1,
         return_add_prediction2,
     ]
@@ -134,7 +134,7 @@ def test_match_k_fold_cross_validator_add_train_prediction(column_names):
     return_value = df.copy()
     return_value["__target_prediction"] = 3.2
     return_value["__cv_match_number"] = list(range(len(df)))
-    predictor.add_prediction.return_value = return_value
+    predictor.predict.return_value = return_value
 
     cv = MatchKFoldCrossValidator(
         scorer=scorer,
