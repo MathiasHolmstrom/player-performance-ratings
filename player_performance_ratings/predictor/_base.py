@@ -64,6 +64,10 @@ class BasePredictor(ABC):
 
         return predictor.estimator
 
+
+    def reset(self) -> None:
+        pass
+
     @abstractmethod
     def train(self, df: FrameT, estimator_features: Optional[list[str]] = None) -> None:
         pass

@@ -130,7 +130,7 @@ class Pipeline(BasePredictor):
         """
         estimator_features = estimator_features or self._estimator_features
 
-        self.reset_pipeline()
+        self.reset()
         if self.predictor.target not in df.columns:
             raise ValueError(
                 f"Target {self.predictor.target} not in df columns. Available columns: {df.columns}"
@@ -178,7 +178,7 @@ class Pipeline(BasePredictor):
             df=df, estimator_features=estimator_features
         )
 
-    def reset_pipeline(self):
+    def reset(self):
         for idx in range(len(self.rating_generators)):
             self.rating_generators[idx].reset_ratings()
 

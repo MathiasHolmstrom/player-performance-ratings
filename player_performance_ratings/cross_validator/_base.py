@@ -29,11 +29,7 @@ class CrossValidator(ABC):
         self,
         df: FrameT,
         column_names: ColumnNames,
-        estimator_features: list[str],
-        return_features: bool,
-        pre_lag_transformers: Optional[list[BaseTransformer]] = None,
-        lag_generators: Optional[list[BaseLagGenerator]] = None,
-        post_lag_transformers: Optional[list[BaseTransformer]] = None,
+        return_features: bool = False,
         add_train_prediction: bool = False,
     ) -> IntoFrameT:
         pass
