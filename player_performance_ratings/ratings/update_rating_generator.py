@@ -123,27 +123,28 @@ class UpdateRatingGenerator(RatingGenerator):
                 nw.from_native(self.historical_df)[self.column_names.match_id].unique().to_list()))
         else:
             df_with_new_matches = df
-        matches = convert_df_to_matches(
-            df=df_with_new_matches,
-            column_names=self.column_names,
-            performance_column_name=self.performance_column,
-            separate_player_by_position=self.seperate_player_by_position,
-        )
+        if len(df_with_new_matches) > 0:
+            matches = convert_df_to_matches(
+                df=df_with_new_matches,
+                column_names=self.column_names,
+                performance_column_name=self.performance_column,
+                separate_player_by_position=self.seperate_player_by_position,
+            )
 
-        potential_feature_values = self._generate_potential_feature_values(
-            matches=matches, ori_df=pl.DataFrame()
-        )
+            potential_feature_values = self._generate_potential_feature_values(
+                matches=matches, ori_df=pl.DataFrame()
+            )
 
-        df_with_new_matches = df_with_new_matches.join(
-            nw.from_dict(
-                potential_feature_values, native_namespace=nw.get_native_namespace(df_with_new_matches)
-            ),
-            on=[self.column_names.match_id, self.column_names.player_id],
-            how="left",
-        )
+            df_with_new_matches = df_with_new_matches.join(
+                nw.from_dict(
+                    potential_feature_values, native_namespace=nw.get_native_namespace(df_with_new_matches)
+                ),
+                on=[self.column_names.match_id, self.column_names.player_id],
+                how="left",
+            )
 
-        self._store_df(df_with_new_matches)
-        self._calculated_match_ids = nw.from_native(self.historical_df)[self.column_names.match_id].unique().to_list()
+            self._store_df(df_with_new_matches)
+            self._calculated_match_ids = nw.from_native(self.historical_df)[self.column_names.match_id].unique().to_list()
 
         df = df.drop([f for f in self.all_rating_features_out if
                       f in df.columns]).join(

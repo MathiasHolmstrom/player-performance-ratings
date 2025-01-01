@@ -396,7 +396,7 @@ def test_train_predict_post_pre_and_lag_transformers():
 
     column_weights = [ColumnWeight(name="kills", weight=1)]
     predictor = Predictor(estimator=LinearRegression(), target='__target', scale_features=True,
-                          one_hot_encode_cat_features=True)
+                          one_hot_encode_cat_features=True, impute_missing_values=True)
 
     column_names = ColumnNames(
         match_id="game_id",

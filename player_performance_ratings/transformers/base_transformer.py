@@ -115,20 +115,23 @@ class BaseLagGenerator:
         for col in stored_df.columns:
             if col in df.columns and stored_df.schema[col] != df.schema[col]:
                 df = df.with_columns(df[col].cast(stored_df.schema[col]))
+
+        sort_cols = [self.column_names.start_date, self.column_names.match_id, self.column_names.team_id,
+                     self.column_names.player_id] if self.column_names.player_id in df.columns else [
+            self.column_names.start_date, self.column_names.match_id, self.column_names.team_id]
         concat_df = nw.concat(
             [stored_df, df.select(cols)],
             how="diagonal",
             # how="diagonal_relaxed"
-        )
-
+        ).sort(sort_cols).unique(subset=sort_cols, maintain_order=True)
         if concat_df[self.column_names.start_date].dtype in ("str", "object"):
             concat_df[self.column_names.start_date] = pd.to_datetime(
                 concat_df[self.column_names.start_date]
             )
 
-        unique_cols = [         self.column_names.match_id,
-                self.column_names.team_id,
-                self.column_names.player_id] if self.column_names.player_id in concat_df.columns else [
+        unique_cols = [self.column_names.match_id,
+                       self.column_names.team_id,
+                       self.column_names.player_id] if self.column_names.player_id in concat_df.columns else [
             self.column_names.match_id,
             self.column_names.team_id,
         ]
@@ -220,7 +223,6 @@ class BaseLagGenerator:
 
         df = self._string_convert(df)
 
-
         transformed_df = concat_df.join(
             df.select(ori_cols), on=on_cols, how="inner"
         )
@@ -248,10 +250,10 @@ class BaseLagGenerator:
 
         new_feats = [f"{f}_opponent" for f in self._entity_features]
         on_cols = [self.column_names.match_id,
-                    self.column_names.team_id,
-                    self.column_names.player_id] if self.column_names.player_id in df.columns else [
+                   self.column_names.team_id,
+                   self.column_names.player_id] if self.column_names.player_id in df.columns else [
             self.column_names.match_id,
-        self.column_names.team_id,
+            self.column_names.team_id,
         ]
         return df.join(
             new_df.select(

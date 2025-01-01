@@ -30,6 +30,7 @@ class BasePredictor(ABC):
             scale_features: bool = False,
             one_hot_encode_cat_features: bool = False,
             convert_to_cat_feats_to_cat_dtype: bool = False,
+            impute_missing_values: bool = False,
             pre_transformers: Optional[list[PredictorTransformer]] = None,
             post_predict_transformers: Optional[list[SimpleTransformer]] = None,
             pred_column: Optional[str] = None,
@@ -41,6 +42,7 @@ class BasePredictor(ABC):
         self._target = target
         self.post_predict_transformers = post_predict_transformers or []
         self.convert_to_cat_feats_to_cat_dtype = convert_to_cat_feats_to_cat_dtype
+        self.impute_missing_values = impute_missing_values
         self._pred_column = pred_column or f"{self._target}_prediction"
         self.pre_transformers = pre_transformers or []
         self.scale_features = scale_features
@@ -166,21 +168,17 @@ class BasePredictor(ABC):
                 )
             )
 
-            if "SimpleImputer" not in [
-                pre_transformer.transformer.__class__.__name__
-                for pre_transformer in self.pre_transformers
-                if hasattr(pre_transformer, "transformer")
-            ]:
-                numeric_feats = [
-                    f
-                    for f in self._estimator_features
-                    if f not in cat_feats_to_transform
-                ]
-                pre_transformers.append(
-                    SkLearnTransformerWrapper(
-                        transformer=SimpleImputer(),
-                        features=numeric_feats,
-                    )
+        if self.impute_missing_values:
+            numeric_feats = [
+                f
+                for f in self._estimator_features
+                if f not in cat_feats_to_transform
+            ]
+            pre_transformers.append(
+                SkLearnTransformerWrapper(
+                    transformer=SimpleImputer(),
+                    features=numeric_feats,
+                )
                 )
         return pre_transformers
 

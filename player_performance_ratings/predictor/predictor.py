@@ -47,6 +47,7 @@ class GameTeamPredictor(BasePredictor):
             scale_features: bool = False,
             one_hot_encode_cat_features: bool = False,
             convert_to_cat_feats_to_cat_dtype: bool = False,
+            impute_missing_values: bool = False,
             estimator: Optional = None,
             estimator_features: Optional[list[str]] = None,
             multiclassifier: bool = False,
@@ -93,6 +94,7 @@ class GameTeamPredictor(BasePredictor):
             pred_column=pred_column,
             pre_transformers=pre_transformers,
             estimator_features=estimator_features,
+            impute_missing_values=impute_missing_values,
             filters=filters,
             post_predict_transformers=post_predict_transformers,
         )
@@ -296,6 +298,7 @@ class Predictor(BasePredictor):
             scale_features: bool = False,
             one_hot_encode_cat_features: bool = False,
             convert_to_cat_feats_to_cat_dtype: bool = False,
+            impute_missing_values: bool= False,
             multiclassifier: bool = False,
             pred_column: Optional[str] = None,
             column_names: Optional[ColumnNames] = None,
@@ -340,6 +343,7 @@ class Predictor(BasePredictor):
             post_predict_transformers=post_predict_transformers,
             filters=filters,
             estimator_features=estimator_features,
+            impute_missing_values=impute_missing_values
         )
         self.classes_ = None
 
@@ -489,6 +493,7 @@ class GranularityPredictor(BasePredictor):
             scale_features: bool = False,
             one_hot_encode_cat_features: bool = False,
             convert_to_cat_feats_to_cat_dtype: bool = False,
+            impute_missing_values: bool = False,
             estimator: Optional = None,
             estimator_features: Optional[list[str]] = None,
             filters: Optional[list[Filter]] = None,
@@ -539,6 +544,7 @@ class GranularityPredictor(BasePredictor):
             estimator_features=estimator_features,
             multiclass_output_as_struct=multiclass_output_as_struct,
             post_predict_transformers=[],
+            impute_missing_values=impute_missing_values
         )
         self.classes_ = {}
 
