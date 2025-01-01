@@ -1,8 +1,6 @@
 import pandas as pd
 from sklearn.metrics import log_loss
 
-from player_performance_ratings import PredictColumnNames
-
 from player_performance_ratings.pipeline import Pipeline
 from player_performance_ratings.predictor import GameTeamPredictor
 
@@ -11,7 +9,7 @@ from player_performance_ratings.ratings import UpdateRatingGenerator
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.scorer import SklearnScorer
 
-df = pd.read_pickle("data/game_player_subsample.pickle")
+df = pd.read_parquet("data/game_player_subsample.parquet")
 
 # Defines the column names as they appear in the dataframe
 column_names = ColumnNames(
@@ -30,8 +28,6 @@ df = df.sort_values(
     ]
 )
 
-# Defines the target column we inted to predict
-df[PredictColumnNames.TARGET] = df["won"].astype(int)
 
 # Drops games with less or more than 2 teams
 df = (
@@ -48,7 +44,7 @@ df = (
 most_recent_10_games = df[column_names.match_id].unique()[-10:]
 historical_df = df[~df[column_names.match_id].isin(most_recent_10_games)]
 future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(
-    columns=[PredictColumnNames.TARGET, "won"]
+    columns=["won"]
 )
 
 # Defining a simple rating-generator. It will use the "won" column to update the ratings.
@@ -62,6 +58,8 @@ predictor = GameTeamPredictor(
     game_id_colum=column_names.match_id,
     team_id_column=column_names.team_id,
     estimator_features=["location"],
+    one_hot_encode_cat_features=True,
+    target="won",
 )
 
 # Pipeline is whether we define all the steps. Other transformations can take place as well.
@@ -73,38 +71,14 @@ pipeline = Pipeline(
 )
 
 # Trains the model and returns historical predictions
-historical_predictions = pipeline.train_predict(
-    df=historical_df, cross_validate_predict=True
+pipeline.train(
+    df=historical_df
 )
 
-
-historical_grouped_predictions = (
-    historical_predictions.groupby(column_names.match_id)
-    .first()[
-        [
-            column_names.start_date,
-            column_names.team_id,
-            "team_id_opponent",
-            predictor.pred_column,
-            predictor.target,
-            "is_validation",
-        ]
-    ]
-    .reset_index()
-)
-scorer = SklearnScorer(
-    pred_column=predictor.pred_column,
-    target=predictor.target,
-    scorer_function=log_loss,
-    validation_column="is_validation",
-)
-
-score = scorer.score(df=historical_grouped_predictions)
-print(f"Logloss Score on historical data: {score}")
 
 
 # Future predictions on future results
-future_predictions = pipeline.add_predict(df=future_df)
+future_predictions = pipeline.predict(df=future_df)
 
 # Grouping predictions from game-player level to game-level.
 team_grouped_predictions = future_predictions.groupby(column_names.match_id).first()[

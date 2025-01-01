@@ -1,13 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Union
 
-import narwhals as nw
 from narwhals.typing import FrameT, IntoFrameT
 
 from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
 from player_performance_ratings.ratings.enums import (
     RatingKnownFeatures,
-    RatingHistoricalFeatures,
+    RatingUnknownFeatures,
 )
 
 from player_performance_ratings.data_structures import (
@@ -21,95 +20,80 @@ from player_performance_ratings.data_structures import (
 class RatingGenerator(ABC):
 
     def __init__(
-        self,
-        performance_column: str,
-        non_estimator_known_features_out: Optional[list[RatingKnownFeatures]],
-        historical_features_out: Optional[list[RatingHistoricalFeatures]],
-        match_rating_generator: MatchRatingGenerator,
-        seperate_player_by_position: Optional[bool] = False,
-        prefix: str = "",
+            self,
+            performance_column: str,
+            features_out: Optional[list[RatingKnownFeatures]],
+            non_estimator_known_features_out: Optional[list[RatingKnownFeatures]],
+            unknown_features_out: Optional[list[RatingUnknownFeatures]],
+            match_rating_generator: MatchRatingGenerator,
+            distinct_positions: Optional[list[str]] = None,
+            seperate_player_by_position: Optional[bool] = False,
+            prefix: str = "",
     ):
+
+        self._features_out = features_out or []
+        self._non_estimator_known_features_out = non_estimator_known_features_out or []
+        self._unknown_features_out = unknown_features_out or []
         self.performance_column = performance_column
         self.seperate_player_by_position = seperate_player_by_position
         self.match_rating_generator = match_rating_generator
-        self._known_features_out = []
-        self._historical_features_out = historical_features_out or []
-        self.non_estimator_known_features_out = non_estimator_known_features_out or []
+        self.distinct_positions = distinct_positions
         self.prefix = prefix
         self.column_names = None
         self._calculated_match_ids = []
+        self._df = None
 
     def reset_ratings(self):
         self._calculated_match_ids = []
 
     @abstractmethod
-    def generate_historical_by_matches(
-        self,
-        matches: list[Match],
-        column_names: ColumnNames,
-        historical_features_out: Optional[list[RatingHistoricalFeatures]] = None,
-        known_features_out: Optional[list[RatingKnownFeatures]] = None,
-    ) -> dict[Union[RatingKnownFeatures, RatingHistoricalFeatures], list[float]]:
-        pass
-
-    @abstractmethod
     def generate_historical(
-        self,
-        df: FrameT,
-        column_names: ColumnNames,
-        historical_features_out: Optional[list[RatingHistoricalFeatures]] = None,
-        known_features_out: Optional[list[RatingKnownFeatures]] = None,
+            self,
+            df: FrameT,
+            column_names: ColumnNames,
     ) -> IntoFrameT:
         pass
 
     @abstractmethod
     def generate_future(
-        self,
-        df: Optional[FrameT],
-        matches: Optional[list[Match]] = None,
-        historical_features_out: Optional[list[RatingHistoricalFeatures]] = None,
-        known_features_out: Optional[list[RatingKnownFeatures]] = None,
+            self,
+            df: Optional[FrameT],
+            matches: Optional[list[Match]] = None,
     ) -> IntoFrameT:
         pass
 
     @property
-    def known_features_out(self) -> list[str]:
-        """
-        Rating features that do not contain leakage. Thus they can be passed into an estimator
-        """
-        return self._known_features_out
-
-    @property
     def features_out(
-        self,
+            self,
     ) -> list[str]:
         """
-        Contains both known and historical features
+        Contains features to be passed into the estimator
         """
-        return [*self.known_features_out, *self.historical_features_out]
+        if self.distinct_positions:
+            return [
+                self.prefix + RatingKnownFeatures.RATING_DIFFERENCE_POSITION + "_" + p
+                for p in self.distinct_positions
+            ] + [self.prefix + f for f in self._features_out]
+        return [self.prefix + f for f in self._features_out]
 
     @property
-    def historical_features_out(self) -> list[str]:
+    def unknown_features_out(self) -> list[str]:
         """
         Rating Features that contain leakge. Thus, they must not be passed into an estimator.
         They are only inteded to be used for data-analysis
         """
-        if self._historical_features_out:
-            return self._historical_features_out
-        return []
+        return [self.prefix + f for f in self._unknown_features_out]
 
     @property
-    def known_features_return(self) -> list[str]:
+    def non_estimator_known_features_out(self) -> list[str]:
         """
-        Rating features that do not contain leakage.
-        Contains both features intended to be passed to the estimator
-         and other features that are not intended to be passed to the estimator
+        Known features that are not used in the estimator
         """
-        if self.non_estimator_known_features_out:
-            return list(
-                set(self.non_estimator_known_features_out + self.known_features_out)
-            )
-        return self.known_features_out
+        return [self.prefix + f for f in self._non_estimator_known_features_out]
+
+    @property
+    def all_rating_features_out(self) -> list[str]:
+        return self.features_out + self.unknown_features_out + self.non_estimator_known_features_out
 
     @property
     def player_ratings(self) -> dict[str, PlayerRating]:
@@ -152,3 +136,7 @@ class RatingGenerator(ABC):
     def _validate_match(self, match: Match):
         if len(match.teams) < 2:
             raise ValueError(f"{match.id} only contains {len(match.teams)} teams")
+
+    @property
+    def historical_df(self) -> FrameT:
+        return self._df

@@ -49,7 +49,7 @@ def test_pipeline_transformer(to_polars):
         start_date="start_date",
     )
     rating_generator = UpdateRatingGenerator(
-        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
+        features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
     )
 
     pipeline = PipelineTransformer(

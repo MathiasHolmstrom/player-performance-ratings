@@ -26,7 +26,7 @@ class RatingKnownFeatures:
 
 
 @dataclass
-class RatingHistoricalFeatures:
+class RatingUnknownFeatures:
     PERFORMANCE = "performance"
     RATING_DIFFERENCE = "rating_difference"
     PLAYER_RATING_DIFFERENCE = "player_rating_difference"

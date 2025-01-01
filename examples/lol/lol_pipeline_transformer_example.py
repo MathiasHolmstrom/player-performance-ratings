@@ -35,6 +35,8 @@ df = df.assign(team_count=df.groupby("gameid")["teamname"].transform("nunique"))
     lambda x: x.team_count == 2
 ]
 
+df = df.drop_duplicates(subset=["gameid", "playername"])
+
 
 # Pretends the last 10 games are future games. The most will be trained on everything before that.
 most_recent_10_games = df[column_names.match_id].unique()[-10:]
@@ -44,7 +46,7 @@ future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(
 )
 
 rating_generator = UpdateRatingGenerator(
-    known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+    features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
     performance_column="result",
 )
 

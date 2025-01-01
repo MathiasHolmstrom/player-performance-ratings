@@ -61,32 +61,11 @@ class PipelineTransformer:
         if self.performances_generator:
             df = nw.from_native(self.performances_generator.generate(df))
 
-        if self.rating_generators:
-            matches = convert_df_to_matches(
-                column_names=self.column_names,
-                df=df,
-                league_identifier=LeagueIdentifier(),
-                performance_column_name=self.rating_generators[0].performance_column,
-            )
-        else:
-            matches = []
-        for rating_idx, rating_generator in enumerate(self.rating_generators):
-            match_ratings = rating_generator.generate_historical_by_matches(
-                column_names=self.column_names, matches=matches
-            )
-            for rating_feature, values in match_ratings.items():
-                if len(self.rating_generators) > 1:
-                    rating_feature_str = rating_feature + str(rating_idx)
-                else:
-                    rating_feature_str = rating_feature
 
-                df = df.with_columns(
-                    nw.new_series(
-                        name=rating_feature_str,
-                        values=values,
-                        native_namespace=nw.get_native_namespace(df),
-                    )
-                )
+        for rating_generator in self.rating_generators:
+            df = rating_generator.generate_historical(
+                df=df,column_names=self.column_names
+            )
 
         for transformer in self.pre_lag_transformers:
             df = transformer.fit_transform(df=df, column_names=self.column_names)

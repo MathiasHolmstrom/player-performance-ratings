@@ -13,7 +13,7 @@ from player_performance_ratings.ratings.rating_calculators import MatchRatingGen
 from player_performance_ratings.ratings import (
     RatingKnownFeatures,
     UpdateRatingGenerator,
-    RatingHistoricalFeatures,
+    RatingUnknownFeatures,
 )
 from player_performance_ratings.ratings.performance_generator import (
     Performance,
@@ -47,7 +47,7 @@ def test_pipeline_constructor():
         PredictorTransformer(predictor=Predictor(estimator=LinearRegression(), target="won"))
     ]
     rating_generator = UpdateRatingGenerator(
-        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
+        features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
     )
 
     pipeline = Pipeline(
@@ -123,7 +123,7 @@ def test_match_predictor_auto_pre_transformers(df):
 
     predictor_mock.add_prediction.return_value = expected_df
     rating_generators = UpdateRatingGenerator(
-        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+        features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         performance_column="weighted_performance",
     )
 
@@ -199,14 +199,14 @@ def test_match_predictor_multiple_rating_generators_same_performance(df):
     match_predictor = Pipeline(
         rating_generators=[
             UpdateRatingGenerator(
-                known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+                features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
                 prefix="rating_1",
             ),
             UpdateRatingGenerator(
                 match_rating_generator=MatchRatingGenerator(
                     rating_change_multiplier=20
                 ),
-                known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+                features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
                 prefix="rating_2",
             ),
         ],
@@ -348,7 +348,7 @@ def test_match_predictor_generate_and_predict(df):
         start_date="start_date",
     )
     rating_generator = UpdateRatingGenerator(
-        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
+        features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
     )
 
     pipeline = Pipeline(
@@ -406,8 +406,8 @@ def test_train_predict_post_pre_and_lag_transformers():
     )
     rating_generator = UpdateRatingGenerator(
         non_estimator_known_features_out=[RatingKnownFeatures.PLAYER_RATING],
-        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
-        historical_features_out=[RatingHistoricalFeatures.TEAM_RATING],
+        features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+        unknown_features_out=[RatingUnknownFeatures.TEAM_RATING],
     )
     pre_transformer = PredictorTransformer(
         predictor=Predictor(
@@ -450,7 +450,7 @@ def test_train_predict_post_pre_and_lag_transformers():
     assert predictor.pred_column not in train_df.columns
 
     predicted_df = pipeline.predict(future_df)
-    for f in rating_generator.known_features_out:
+    for f in rating_generator._features_out:
         assert f in predicted_df.columns
         assert f not in future_df.columns
 
@@ -458,7 +458,7 @@ def test_train_predict_post_pre_and_lag_transformers():
         assert f in predicted_df.columns
         assert f not in future_df.columns
 
-    for f in rating_generator.historical_features_out:
+    for f in rating_generator.unknown_features_out:
         assert f in predicted_df.columns
         assert f not in future_df.columns
 

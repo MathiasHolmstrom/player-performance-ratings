@@ -81,7 +81,7 @@ class Pipeline(BasePredictor):
 
         est_feats = predictor.estimator_features
         for r in self.rating_generators:
-            est_feats = list(set(est_feats + r.known_features_return))
+            est_feats = list(set(est_feats + r.features_out))
 
         for idx, pre_transformer in enumerate(self.pre_lag_transformers):
             if hasattr(pre_transformer, "predictor") and not pre_transformer.features:
@@ -99,6 +99,7 @@ class Pipeline(BasePredictor):
         super().__init__(
             estimator_features=est_feats,
             target=predictor.target,
+            pred_column=predictor.pred_column,
         )
         for c in [
             *self.lag_generators,
@@ -109,7 +110,7 @@ class Pipeline(BasePredictor):
                 f for f in c.estimator_features_out if f not in self._estimator_features
             ]
         for rating_idx, c in enumerate(self.rating_generators):
-            for rating_feature in c.known_features_out:
+            for rating_feature in c._features_out:
                 if rating_feature not in self._estimator_features:
                     self._estimator_features.append(rating_feature)
 
@@ -140,7 +141,6 @@ class Pipeline(BasePredictor):
             df = nw.from_native(self.performances_generator.generate(df))
 
         for idx in range(len(self.rating_generators)):
-            self.rating_generators[idx].reset_ratings()
 
             df = nw.from_native(
                 self.rating_generators[idx].generate_historical(
@@ -157,7 +157,6 @@ class Pipeline(BasePredictor):
             )
 
         for idx in range(len(self.lag_generators)):
-            self.lag_generators[idx].reset()
 
             df = nw.from_native(
                 self.lag_generators[idx].generate_historical(
@@ -167,7 +166,6 @@ class Pipeline(BasePredictor):
 
 
         for idx in range(len(self.post_lag_transformers)):
-            self.post_lag_transformers[idx].reset()
             df = nw.from_native(
                 self.post_lag_transformers[idx].fit_transform(
                     df, column_names=self.column_names
@@ -179,11 +177,9 @@ class Pipeline(BasePredictor):
         )
 
     def reset(self):
-        for idx in range(len(self.rating_generators)):
-            self.rating_generators[idx].reset_ratings()
+
 
         for transformer in [
-            *self.lag_generators,
             *self.pre_lag_transformers,
             *self.post_lag_transformers,
         ]:

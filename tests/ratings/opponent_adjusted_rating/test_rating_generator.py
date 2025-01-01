@@ -15,7 +15,7 @@ from player_performance_ratings.data_structures import (
 from player_performance_ratings.ratings import UpdateRatingGenerator
 from player_performance_ratings.ratings.enums import (
     RatingKnownFeatures,
-    RatingHistoricalFeatures,
+    RatingUnknownFeatures,
 )
 from player_performance_ratings.ratings.rating_calculators import (
     MatchRatingGenerator,
@@ -26,251 +26,6 @@ from player_performance_ratings.ratings.rating_calculators.performance_predictor
     MATCH_CONTRIBUTION_TO_SUM_VALUE,
 )
 
-
-def test_rating_generator_update_id_different_from_match_id():
-    """
-    When 2 matches with the same update_id but different match_ids, then rating_update should only take place after both matches are finished.
-    This means that the rating_change (expected performance) is based on the start rating of the players which defaults to 1000.
-    Thus expected_performance for all matches will be 0.5.
-    The rating_change for each match per player should then be (performance-0.5)*k*performance_weight for each match.
-     (since confidence_weight is set 0 which means only rating_change_multiplier determines magnitude of rating change)
-     The total rating_change across the update_id should be the sum of all the rating_changes for each player.
-
-    """
-
-    matches = [
-        Match(
-            id="1",
-            update_id="1",
-            day_number=2,
-            teams=[
-                MatchTeam(
-                    id="1",
-                    players=[
-                        MatchPlayer(
-                            id="1",
-                            performance=MatchPerformance(
-                                performance_value=0.7,
-                                participation_weight=0.1,
-                                projected_participation_weight=0.1,
-                            ),
-                        ),
-                        MatchPlayer(
-                            id="2",
-                            performance=MatchPerformance(
-                                performance_value=1,
-                                participation_weight=0.1,
-                                projected_participation_weight=0.1,
-                            ),
-                        ),
-                    ],
-                ),
-                MatchTeam(
-                    id="2",
-                    players=[
-                        MatchPlayer(
-                            id="3",
-                            performance=MatchPerformance(
-                                performance_value=0.3,
-                                participation_weight=0.1,
-                                projected_participation_weight=0.1,
-                            ),
-                        ),
-                        MatchPlayer(
-                            id="4",
-                            performance=MatchPerformance(
-                                performance_value=0,
-                                participation_weight=0.1,
-                                projected_participation_weight=0.1,
-                            ),
-                        ),
-                    ],
-                ),
-            ],
-        ),
-        Match(
-            id="2",
-            update_id="1",
-            day_number=2,
-            teams=[
-                MatchTeam(
-                    id="1",
-                    players=[
-                        MatchPlayer(
-                            id="1",
-                            performance=MatchPerformance(
-                                performance_value=0,
-                                participation_weight=0.2,
-                                projected_participation_weight=0.2,
-                            ),
-                        ),
-                        MatchPlayer(
-                            id="2",
-                            performance=MatchPerformance(
-                                performance_value=0.3,
-                                participation_weight=0.2,
-                                projected_participation_weight=0.2,
-                            ),
-                        ),
-                    ],
-                ),
-                MatchTeam(
-                    id="2",
-                    players=[
-                        MatchPlayer(
-                            id="3",
-                            performance=MatchPerformance(
-                                performance_value=1,
-                                participation_weight=0.2,
-                                projected_participation_weight=0.2,
-                            ),
-                        ),
-                        MatchPlayer(
-                            id="4",
-                            performance=MatchPerformance(
-                                performance_value=0.7,
-                                participation_weight=0.2,
-                                projected_participation_weight=0.2,
-                            ),
-                        ),
-                    ],
-                ),
-            ],
-        ),
-    ]
-
-    rating_change_multiplier = 10
-    column_names = ColumnNames(
-        match_id="game_id",
-        team_id="team_id",
-        player_id="player_id",
-        start_date="start_date",
-    )
-
-    rating_generator = UpdateRatingGenerator(
-        non_estimator_known_features_out=[RatingKnownFeatures.PLAYER_RATING],
-        historical_features_out=[RatingHistoricalFeatures.PLAYER_RATING_CHANGE],
-        match_rating_generator=MatchRatingGenerator(
-            rating_change_multiplier=rating_change_multiplier, confidence_weight=0
-        ),
-    )
-
-    ratings = rating_generator.generate_historical_by_matches(
-        matches=matches, column_names=column_names
-    )
-
-    assert RatingKnownFeatures.PLAYER_RATING in ratings
-    assert RatingHistoricalFeatures.PLAYER_RATING_CHANGE in ratings
-
-    expected_player_game_1_player1 = (0.7 - 0.5) * rating_change_multiplier * 0.1
-    expected_player_game_1_player2 = (1 - 0.5) * rating_change_multiplier * 0.1
-    expected_player_game_1_player3 = (0.3 - 0.5) * rating_change_multiplier * 0.1
-    expected_player_game_1_player4 = (0 - 0.5) * rating_change_multiplier * 0.1
-    expected_player_game_2_player1 = (0 - 0.5) * rating_change_multiplier * 0.2
-    expected_player_game_2_player2 = (0.3 - 0.5) * rating_change_multiplier * 0.2
-    expected_player_game_2_player3 = (1 - 0.5) * rating_change_multiplier * 0.2
-    expected_player_game_2_player4 = (0.7 - 0.5) * rating_change_multiplier * 0.2
-
-    new_confidence_sum = MATCH_CONTRIBUTION_TO_SUM_VALUE * 0.3
-    expected_player_ratings = {
-        "1": PlayerRating(
-            id="1",
-            rating_value=1000
-            + expected_player_game_1_player1
-            + expected_player_game_2_player1,
-            games_played=0.3,
-            confidence_sum=new_confidence_sum,
-        ),
-        "2": PlayerRating(
-            id="2",
-            rating_value=1000
-            + expected_player_game_1_player2
-            + expected_player_game_2_player2,
-            games_played=0.3,
-            confidence_sum=new_confidence_sum,
-        ),
-        "3": PlayerRating(
-            id="3",
-            rating_value=1000
-            + expected_player_game_1_player3
-            + expected_player_game_2_player3,
-            games_played=0.3,
-            confidence_sum=new_confidence_sum,
-        ),
-        "4": PlayerRating(
-            id="4",
-            rating_value=1000
-            + expected_player_game_1_player4
-            + expected_player_game_2_player4,
-            games_played=0.3,
-            confidence_sum=new_confidence_sum,
-        ),
-    }
-
-    def is_close(a, b, tolerance=1e-5):
-        return abs(a - b) <= tolerance
-
-    # Then, in your test:
-    for player_id, rating in rating_generator.player_ratings.items():
-        expected_rating = expected_player_ratings[player_id]
-        assert rating.id == expected_rating.id
-        assert rating.rating_value == expected_rating.rating_value
-        assert is_close(rating.games_played, expected_rating.games_played)
-        assert is_close(rating.confidence_sum, expected_rating.confidence_sum)
-
-
-def get_single_matches() -> list[Match]:
-    return [
-        Match(
-            id="1",
-            update_id="1",
-            day_number=2,
-            teams=[
-                MatchTeam(
-                    id="1",
-                    players=[
-                        MatchPlayer(
-                            id="1",
-                            performance=MatchPerformance(
-                                performance_value=0.7,
-                                participation_weight=0.1,
-                                projected_participation_weight=0.1,
-                            ),
-                        ),
-                        MatchPlayer(
-                            id="2",
-                            performance=MatchPerformance(
-                                performance_value=1,
-                                participation_weight=0.1,
-                                projected_participation_weight=0.1,
-                            ),
-                        ),
-                    ],
-                ),
-                MatchTeam(
-                    id="2",
-                    players=[
-                        MatchPlayer(
-                            id="3",
-                            performance=MatchPerformance(
-                                performance_value=0.3,
-                                participation_weight=0.1,
-                                projected_participation_weight=0.1,
-                            ),
-                        ),
-                        MatchPlayer(
-                            id="4",
-                            performance=MatchPerformance(
-                                performance_value=0,
-                                participation_weight=0.1,
-                                projected_participation_weight=0.1,
-                            ),
-                        ),
-                    ],
-                ),
-            ],
-        ),
-    ]
 
 
 @pytest.fixture
@@ -283,82 +38,6 @@ def column_names():
     )
 
 
-def test_update_rating_generator_adds_correct_columns(column_names):
-    matches = get_single_matches()
-    rating_generator = UpdateRatingGenerator()
-    ratings = rating_generator.generate_historical_by_matches(
-        matches=matches,
-        column_names=column_names,
-        historical_features_out=[RatingHistoricalFeatures.PLAYER_RATING_CHANGE],
-        known_features_out=[RatingKnownFeatures.PLAYER_RATING],
-    )
-    assert RatingHistoricalFeatures.PLAYER_RATING_CHANGE in ratings
-    assert RatingKnownFeatures.PLAYER_RATING in ratings
-
-
-def test_rating_generator_1_match(column_names):
-    """
-    When 1 match where the weighted performance is equal to the prior example with 2 matches per update_id and the sum of particiaption_weight is the same
-     --> should return same values as previous test
-
-    """
-    matches = get_single_matches()
-
-    rating_change_multiplier = 10  # k
-
-    rating_generator = UpdateRatingGenerator(
-        match_rating_generator=MatchRatingGenerator(
-            rating_change_multiplier=rating_change_multiplier, confidence_weight=0
-        )
-    )
-
-    _ = rating_generator.generate_historical_by_matches(
-        matches=matches, column_names=column_names
-    )
-
-    expected_rating_change_game_1_player1 = (0.7 - 0.5) * rating_change_multiplier * 0.1
-    expected_rating_change_game_1_player2 = (1 - 0.5) * rating_change_multiplier * 0.1
-    expected_rating_change_game_1_player3 = (0.3 - 0.5) * rating_change_multiplier * 0.1
-    expected_rating_change_game_1_player4 = (0 - 0.5) * rating_change_multiplier * 0.1
-
-    new_confidence_sum = MATCH_CONTRIBUTION_TO_SUM_VALUE * 0.1
-    expected_player_ratings = {
-        "1": PlayerRating(
-            id="1",
-            rating_value=1000 + expected_rating_change_game_1_player1,
-            games_played=0.1,
-            confidence_sum=new_confidence_sum,
-        ),
-        "2": PlayerRating(
-            id="2",
-            rating_value=1000 + expected_rating_change_game_1_player2,
-            games_played=0.1,
-            confidence_sum=new_confidence_sum,
-        ),
-        "3": PlayerRating(
-            id="3",
-            rating_value=1000 + expected_rating_change_game_1_player3,
-            games_played=0.1,
-            confidence_sum=new_confidence_sum,
-        ),
-        "4": PlayerRating(
-            id="4",
-            rating_value=1000 + expected_rating_change_game_1_player4,
-            games_played=0.1,
-            confidence_sum=new_confidence_sum,
-        ),
-    }
-
-    def is_close(a, b, tolerance=1e-5):
-        return abs(a - b) <= tolerance
-
-    # Then, in your test:
-    for player_id, rating in rating_generator.player_ratings.items():
-        expected_rating = expected_player_ratings[player_id]
-        assert rating.id == expected_rating.id
-        assert rating.rating_value == expected_rating.rating_value
-        assert is_close(rating.games_played, expected_rating.games_played)
-        assert is_close(rating.confidence_sum, expected_rating.confidence_sum)
 
 
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
@@ -373,7 +52,8 @@ def test_opponent_adjusted_rating_generator_with_projected_performance(df):
     )
 
     rating_generator = UpdateRatingGenerator(
-        known_features_out=[RatingKnownFeatures.TEAM_RATING_PROJECTED],
+        unknown_features_out=[RatingUnknownFeatures.TEAM_RATING],
+        features_out=[RatingKnownFeatures.TEAM_RATING_PROJECTED],
         match_rating_generator=MatchRatingGenerator(
             confidence_weight=0,
             start_rating_generator=StartRatingGenerator(harcoded_start_rating=1000),
@@ -422,7 +102,6 @@ def test_opponent_adjusted_rating_generator_with_projected_performance(df):
     df_with_ratings = rating_generator.generate_historical(
         df=data,
         column_names=column_names,
-        historical_features_out=[RatingHistoricalFeatures.TEAM_RATING],
     )
 
     if isinstance(df_with_ratings, pl.DataFrame):
@@ -438,7 +117,7 @@ def test_opponent_adjusted_rating_generator_with_projected_performance(df):
     )
     assert (
         df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[4]
-        < df_with_ratings[RatingHistoricalFeatures.TEAM_RATING][4]
+        < df_with_ratings[RatingUnknownFeatures.TEAM_RATING][4]
     )
 
 
@@ -453,7 +132,7 @@ def test_update_rating_generator_generate_historical(df):
         participation_weight="participation_weight",
     )
     rating_generator = UpdateRatingGenerator(
-        known_features_out=[
+        features_out=[
             RatingKnownFeatures.TEAM_RATING_PROJECTED,
             RatingKnownFeatures.PLAYER_RATING,
             RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED,
@@ -464,7 +143,7 @@ def test_update_rating_generator_generate_historical(df):
             confidence_weight=0,
             start_rating_generator=StartRatingGenerator(harcoded_start_rating=1000),
         ),
-        historical_features_out=[RatingHistoricalFeatures.PLAYER_RATING_CHANGE],
+        unknown_features_out=[RatingUnknownFeatures.PLAYER_RATING_CHANGE],
     )
     data = df(
         {
@@ -510,8 +189,8 @@ def test_update_rating_generator_generate_historical(df):
     )
     cols = [
         *data.columns,
-        *rating_generator._historical_features_out,
-        *rating_generator.known_features_out,
+        *rating_generator.unknown_features_out,
+        *rating_generator._features_out,
     ]
     for col in cols:
         assert col in ratings_df.columns
@@ -530,14 +209,14 @@ def test_update_rating_generator_historical_and_future(df):
         participation_weight="participation_weight",
     )
     rating_generator = UpdateRatingGenerator(
-        known_features_out=[
+        features_out=[
             RatingKnownFeatures.TEAM_RATING_PROJECTED,
             RatingKnownFeatures.PLAYER_RATING,
             RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED,
             RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
             RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED,
         ],
-        historical_features_out=[RatingHistoricalFeatures.PLAYER_RATING_CHANGE],
+        unknown_features_out=[RatingUnknownFeatures.PLAYER_RATING_CHANGE],
         match_rating_generator=MatchRatingGenerator(
             confidence_weight=0,
             start_rating_generator=StartRatingGenerator(harcoded_start_rating=1000),
@@ -642,7 +321,7 @@ def test_update_rating_generator_historical_and_future(df):
             player_rating_3 - team_rating2,
             player_rating_4 - team_rating2,
         ],
-        RatingHistoricalFeatures.PLAYER_RATING_CHANGE: [np.nan, np.nan, np.nan, np.nan],
+        RatingUnknownFeatures.PLAYER_RATING_CHANGE: [np.nan, np.nan, np.nan, np.nan],
     }
     if isinstance(future_df, pl.DataFrame):
         expected_future_df = future_df.hstack(pl.from_dict(expected_future_ratings))
@@ -659,3 +338,77 @@ def test_update_rating_generator_historical_and_future(df):
             check_dtype=False,
             check_like=True,
         )
+
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_update_rating_generator_stores_correct(df):
+    column_names = ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="start_date",
+    )
+    rating_generator = UpdateRatingGenerator()
+    historical_df1 = df(
+        {
+            column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2],
+            column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2],
+            column_names.player_id: [1, 2, 3, 4, 1, 2, 3, 4],
+            column_names.start_date: [
+                pd.to_datetime("2020-01-01"),
+                pd.to_datetime("2020-01-01"),
+                pd.to_datetime("2020-01-01"),
+                pd.to_datetime("2020-01-01"),
+                pd.to_datetime("2021-01-02"),
+                pd.to_datetime("2021-01-02"),
+                pd.to_datetime("2021-01-02"),
+                pd.to_datetime("2021-01-02"),
+            ],
+            rating_generator.performance_column: [1.0, 1.0, 0, 0, 1.0, 1.0, 0, 0],
+        }
+    )
+
+    historical_df2 = df(
+        {
+            column_names.match_id: [ 2, 2, 2, 2, 3, 3, 3, 3],
+            column_names.team_id: [1, 1, 2, 2, 1, 1, 3,3],
+            column_names.player_id: [ 1, 2, 3, 4, 1,2,5,6],
+            column_names.start_date: [
+                pd.to_datetime("2021-01-02"),
+                pd.to_datetime("2021-01-02"),
+                pd.to_datetime("2021-01-02"),
+                pd.to_datetime("2021-01-02"),
+                pd.to_datetime("2021-01-03"),
+                pd.to_datetime("2021-01-03"),
+                pd.to_datetime("2021-01-03"),
+                pd.to_datetime("2021-01-03"),
+            ],
+            rating_generator.performance_column: [1.0,1.0,0,0, 1.0,1.0,0,0],
+        }
+    )
+
+    hist_ratings1 = rating_generator.generate_historical(historical_df1, column_names=column_names)
+
+    if isinstance(hist_ratings1, pl.DataFrame):
+        expected_rating_difference_game2 = hist_ratings1.filter(pl.col(column_names.match_id)==2)[rating_generator.features_out[0]].head(1).item()
+    else:
+        expected_rating_difference_game2 = hist_ratings1[hist_ratings1[column_names.match_id]==2][rating_generator.features_out[0]].iloc[0]
+
+    hist_ratings2 = rating_generator.generate_historical(historical_df2, column_names=column_names)
+    if isinstance(hist_ratings1, pl.DataFrame):
+        assert hist_ratings2[rating_generator.features_out[0]].head(1).item() == expected_rating_difference_game2
+    else:
+        assert hist_ratings2[rating_generator.features_out[0]].iloc[0] == expected_rating_difference_game2
+
+    for f in rating_generator._features_out:
+        assert f in hist_ratings1.columns
+    for f in rating_generator.unknown_features_out:
+        assert f in hist_ratings2.columns
+
+    if isinstance(historical_df1, pl.DataFrame):
+        hist_ratings = pl.concat([hist_ratings1, hist_ratings2]).unique([column_names.match_id, column_names.player_id])
+        hist_ratings = hist_ratings.sort([column_names.start_date, column_names.match_id, column_names.team_id ,column_names.player_id])
+
+        assert_frame_equal(rating_generator.historical_df[rating_generator.features_out], hist_ratings[rating_generator.features_out])
+    else:
+        hist_ratings = pd.concat([hist_ratings1, hist_ratings2]).drop_duplicates([column_names.match_id, column_names.player_id])
+        pd.testing.assert_frame_equal(rating_generator.historical_df[rating_generator.features_out].reset_index(drop=True), hist_ratings[rating_generator.features_out].reset_index(drop=True))

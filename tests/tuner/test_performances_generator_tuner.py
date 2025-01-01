@@ -34,7 +34,7 @@ def test_transformer_tuner():
     )
 
     rating_generator1 = UpdateRatingGenerator(
-        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
+        features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
     )
 
     pipeline_factory = PipelineFactory(
@@ -121,12 +121,12 @@ def test_transformer_tuner_2_performances(estimator):
 
     rating_generator1 = UpdateRatingGenerator(
         performance_column="performance1",
-        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+        features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
     )
 
     rating_generator2 = UpdateRatingGenerator(
         performance_column="performance2",
-        known_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+        features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         prefix="rating2",
     )
 

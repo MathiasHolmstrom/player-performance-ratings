@@ -12,7 +12,7 @@ from player_performance_ratings import PipelineFactory
 from player_performance_ratings.ratings import UpdateRatingGenerator
 from player_performance_ratings.ratings.enums import (
     RatingKnownFeatures,
-    RatingHistoricalFeatures,
+    RatingUnknownFeatures,
 )
 from player_performance_ratings.ratings.rating_calculators.start_rating_generator import (
     StartRatingGenerator,
@@ -100,7 +100,7 @@ class StartLeagueRatingOptimizer:
             ].generate_historical_by_matches(
                 matches=matches,
                 column_names=column_names,
-                historical_features_out=[RatingHistoricalFeatures.PLAYER_RATING_CHANGE],
+                historical_features_out=[RatingUnknownFeatures.PLAYER_RATING_CHANGE],
                 known_features_out=[
                     RatingKnownFeatures.PLAYER_RATING,
                     RatingKnownFeatures.OPPONENT_LEAGUE,
@@ -145,14 +145,14 @@ class StartLeagueRatingOptimizer:
                 )
                 .agg(
                     {
-                        RatingHistoricalFeatures.PLAYER_RATING_CHANGE: "mean",
+                        RatingUnknownFeatures.PLAYER_RATING_CHANGE: "mean",
                         column_names.player_id: "count",
                     }
                 )
                 .reset_index()
                 .rename(
                     columns={
-                        RatingHistoricalFeatures.PLAYER_RATING_CHANGE: "mean_rating_change",
+                        RatingUnknownFeatures.PLAYER_RATING_CHANGE: "mean_rating_change",
                         column_names.player_id: "count",
                     }
                 )

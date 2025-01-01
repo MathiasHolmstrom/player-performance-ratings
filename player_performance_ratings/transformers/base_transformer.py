@@ -176,7 +176,7 @@ class BaseLagGenerator:
         if self._df is None:
             self._df = df.select(cols)
         else:
-            self._df = nw.concat([self._df, df.select(cols)])
+            self._df = nw.concat([nw.from_native(self._df), df.select(cols)])
 
         sort_cols = [
             self.column_names.match_id,
@@ -421,3 +421,7 @@ class BaseLagGenerator:
     def reset(self) -> "BaseLagGenerator":
         self._df = None
         return self
+
+    @property
+    def historical_df(self) -> FrameT:
+        return self._df
