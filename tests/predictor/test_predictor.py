@@ -207,3 +207,21 @@ def test_granularity_predictor(target_values, df):
     predictor.train(data, estimator_features=["feature1"])
     df = predictor.predict(data)
     assert predictor.pred_column in df.columns
+
+@pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
+def test_one_hot_encoder_train(df):
+
+    predictor = Predictor(target='__target', one_hot_encode_cat_features=True, estimator_features=["feature1", 'cat_feature'])
+    data = df(
+        {
+            "position": ["a", "b", "a", "b"],
+            "player_id": [1, 2, 1, 2],
+            "feature1": [0.1, 0.5, 0.1, 0.5],
+            "cat_feature": ["cat1", "cat2", "cat1", "cat2"],
+            "__target": [1, 1, 1, 1],
+        }
+    )
+
+    predictor.train(data)
+    assert predictor.estimator_features == ['feature1', 'cat_feature_cat1', 'cat_feature_cat2']
+

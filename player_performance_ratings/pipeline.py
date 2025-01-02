@@ -189,6 +189,7 @@ class Pipeline(BasePredictor):
     def predict(
             self,
             df: FrameT,
+            cross_validation: Optional[bool] = None
 
     ) -> IntoFrameT:
         """
@@ -202,22 +203,29 @@ class Pipeline(BasePredictor):
         df_with_predict = df.clone()
 
         for rating_idx, rating_generator in enumerate(self.rating_generators):
-            if rating_generator.performance_column in df.columns:
-                df_with_predict = df_with_predict.drop(
-                    [rating_generator.performance_column]
+            if cross_validation:
+                df_with_predict = nw.from_native(rating_generator.generate_historical(df_with_predict, column_names=self.column_names))
+            else:
+
+                if rating_generator.performance_column in df.columns:
+                    df_with_predict = df_with_predict.drop(
+                        [rating_generator.performance_column]
+                    )
+                df_with_predict = nw.from_native(
+                    rating_generator.generate_future(df=df_with_predict)
                 )
-            df_with_predict = nw.from_native(
-                rating_generator.generate_future(df=df_with_predict)
-            )
 
         for pre_lag_transformer in self.pre_lag_transformers:
             df_with_predict = nw.from_native(
                 pre_lag_transformer.transform(df_with_predict)
             )
         for idx, lag_generator in enumerate(self.lag_generators):
-            df_with_predict = nw.from_native(
-                lag_generator.generate_future(df_with_predict)
-            )
+            if cross_validation:
+                df_with_predict = nw.from_native(lag_generator.generate_historical(df_with_predict, column_names=self.column_names))
+            else:
+                df_with_predict = nw.from_native(
+                    lag_generator.generate_future(df_with_predict)
+                )
         for post_lag_transformer in self.post_lag_transformers:
             df_with_predict = nw.from_native(
                 post_lag_transformer.transform(df_with_predict)

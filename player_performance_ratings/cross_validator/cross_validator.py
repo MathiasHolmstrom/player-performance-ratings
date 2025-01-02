@@ -135,7 +135,7 @@ class MatchKFoldCrossValidator(CrossValidator):
                     c for c in train_df.columns if c not in predictor.columns_added
                 ]
                 train_df = train_df.select(columns_to_keep)
-                train_df = nw.from_native(predictor.predict(train_df))
+                train_df = nw.from_native(predictor.predict(train_df, cross_validation=True))
                 train_df = train_df.with_columns(
                     nw.lit(0).alias(self.validation_column_name)
                 )
@@ -145,7 +145,7 @@ class MatchKFoldCrossValidator(CrossValidator):
                 c for c in validation_df.columns if c not in predictor.columns_added
             ]
             validation_df = validation_df.select(columns_to_keep)
-            validation_df = nw.from_native(predictor.predict(validation_df))
+            validation_df = nw.from_native(predictor.predict(validation_df, cross_validation=True))
             validation_df = validation_df.with_columns(
                 nw.lit(1).alias(self.validation_column_name)
             )

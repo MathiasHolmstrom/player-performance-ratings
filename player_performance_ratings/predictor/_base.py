@@ -53,8 +53,6 @@ class BasePredictor(ABC):
         self.auto_pre_transform = auto_pre_transform
         self.multiclass_output_as_struct = multiclass_output_as_struct
 
-
-
     def _deepest_estimator(self, predictor: "BasePredictor") -> Any:
         iterations = 0
 
@@ -66,7 +64,6 @@ class BasePredictor(ABC):
 
         return predictor.estimator
 
-
     def reset(self) -> None:
         pass
 
@@ -75,7 +72,7 @@ class BasePredictor(ABC):
         pass
 
     @abstractmethod
-    def predict(self, df: FrameT) -> IntoFrameT:
+    def predict(self, df: FrameT, cross_validation: Optional[bool] = None) -> IntoFrameT:
         pass
 
     @property
@@ -118,7 +115,13 @@ class BasePredictor(ABC):
         all_feats_in_pre_transformers = [
             f for c in self.pre_transformers for f in c.features
         ]
+
         for estimator_feature in self._estimator_features.copy():
+            if not df[estimator_feature].dtype.is_numeric():
+                if estimator_feature not in all_feats_in_pre_transformers:
+                    cat_feats_to_transform.append(estimator_feature)
+
+        for estimator_feature in  self._estimator_features.copy():
 
             if estimator_feature not in df.columns:
                 self._estimator_features.remove(estimator_feature)
@@ -127,18 +130,13 @@ class BasePredictor(ABC):
                 )
                 continue
 
-            if not df[estimator_feature].dtype.is_numeric():
-                if estimator_feature not in all_feats_in_pre_transformers:
-                    cat_feats_to_transform.append(estimator_feature)
-
         if cat_feats_to_transform:
             if self.one_hot_encode_cat_features:
-                pre_transformers.append(
-                    SkLearnTransformerWrapper(
-                        transformer=OneHotEncoder(handle_unknown="ignore"),
-                        features=cat_feats_to_transform,
-                    )
+                one_hot_encoder = SkLearnTransformerWrapper(
+                    transformer=OneHotEncoder(handle_unknown="ignore"),
+                    features=cat_feats_to_transform,
                 )
+                pre_transformers.append(one_hot_encoder)
 
             elif self.convert_to_cat_feats_to_cat_dtype:
                 logging.info(
@@ -150,37 +148,42 @@ class BasePredictor(ABC):
                     )
                 )
 
-        for pre_transformer in self.pre_transformers:
-            for feature in pre_transformer.features:
-                if feature in self._estimator_features:
-                    self._estimator_features.remove(feature)
-
         if self.scale_features:
             numeric_feats = [
                 f
-                for f in self._estimator_features
+                for f in  self._estimator_features
                 if f not in cat_feats_to_transform
             ]
-            pre_transformers.append(
-                SkLearnTransformerWrapper(
-                    transformer=StandardScaler(),
-                    features=numeric_feats,
+            if numeric_feats:
+                pre_transformers.append(
+                    SkLearnTransformerWrapper(
+                        transformer=StandardScaler(),
+                        features=numeric_feats,
+                    )
                 )
-            )
 
         if self.impute_missing_values:
             numeric_feats = [
                 f
-                for f in self._estimator_features
+                for f in  self._estimator_features
                 if f not in cat_feats_to_transform
             ]
-            pre_transformers.append(
-                SkLearnTransformerWrapper(
+            if numeric_feats:
+
+                imputer_transformer = SkLearnTransformerWrapper(
                     transformer=SimpleImputer(),
                     features=numeric_feats,
                 )
-                )
+                if not self._transformer_exists(imputer_transformer):
+                    pre_transformers.append(imputer_transformer)
+
         return pre_transformers
+
+    def _transformer_exists(self, transformer: PredictorTransformer) -> bool:
+        for pre_transformer in self.pre_transformers:
+            if pre_transformer.__class__.__name__ == transformer.__class__.__name__ and pre_transformer.features == transformer.features:
+                return True
+        return False
 
     def _fit_transform_pre_transformers(self, df: FrameT) -> FrameT:
         if self.auto_pre_transform:
@@ -200,15 +203,12 @@ class BasePredictor(ABC):
                 for idx, col in enumerate(values.columns)
             )
 
-            feats_to_remove = [
-                f for f in pre_transformer.features if f in self._estimator_features
-            ]
-            if feats_to_remove:
-                for feat in feats_to_remove:
-                    self._estimator_features.remove(feat)
-            self._estimator_features = list(
-                set(pre_transformer.features_out + self._estimator_features)
-            )
+            for feature in pre_transformer.features:
+                if feature in self._estimator_features and feature not in pre_transformer.features_out:
+                    self._estimator_features.remove(feature)
+            for features_out in pre_transformer.features_out:
+                if features_out not in self._estimator_features:
+                    self._estimator_features.append(features_out)
 
         return df
 
