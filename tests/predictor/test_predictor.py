@@ -67,7 +67,7 @@ def test_game_team_predictor_add_predictiondf(df):
         GranularityPredictor(granularity_column_name="position", target='__target'),
     ],
 )
-@pytest.mark.parametrize("df", [ pd.DataFrame, pl.DataFrame])
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_multiclass_train(predictor, df):
     data = df(
         {
@@ -121,7 +121,6 @@ def test_game_team_predictor_game_player(df):
     feature_team1 = (0.1 * 0.5 + 0.5 * 0.5) / (0.5 + 0.5)
     feature_team2 = (0.3 * 0.5 + 0.4 * 0.5) / (0.5 + 0.5)
 
-
     expected_features = pd.DataFrame(
         {
             "feature1": [feature_team1, feature_team2],
@@ -132,7 +131,6 @@ def test_game_team_predictor_game_player(df):
         expected_features,
         check_dtype=False,
     )
-
 
     assert mock_model.fit.call_args[0][1].tolist() == [1, 0]
 
@@ -208,10 +206,11 @@ def test_granularity_predictor(target_values, df):
     df = predictor.predict(data)
     assert predictor.pred_column in df.columns
 
+
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
 def test_one_hot_encoder_train(df):
-
-    predictor = Predictor(target='__target', one_hot_encode_cat_features=True, estimator_features=["feature1", 'cat_feature'])
+    predictor = Predictor(target='__target', one_hot_encode_cat_features=True,
+                          estimator_features=["feature1", 'cat_feature'], impute_missing_values=True)
     data = df(
         {
             "position": ["a", "b", "a", "b"],
@@ -223,5 +222,5 @@ def test_one_hot_encoder_train(df):
     )
 
     predictor.train(data)
+    assert len(predictor.pre_transformers) == 2
     assert predictor.estimator_features == ['feature1', 'cat_feature_cat1', 'cat_feature_cat2']
-

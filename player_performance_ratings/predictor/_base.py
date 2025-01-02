@@ -112,14 +112,10 @@ class BasePredictor(ABC):
     def _create_pre_transformers(self, df: pl.DataFrame) -> list[PredictorTransformer]:
         pre_transformers = []
         cat_feats_to_transform = []
-        all_feats_in_pre_transformers = [
-            f for c in self.pre_transformers for f in c.features
-        ]
 
         for estimator_feature in self._estimator_features.copy():
             if not df[estimator_feature].dtype.is_numeric():
-                if estimator_feature not in all_feats_in_pre_transformers:
-                    cat_feats_to_transform.append(estimator_feature)
+                cat_feats_to_transform.append(estimator_feature)
 
         for estimator_feature in  self._estimator_features.copy():
 
