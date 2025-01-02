@@ -306,43 +306,43 @@ class UpdateRatingGenerator(RatingGenerator):
             ori_df=ori_df,
         )
         potential_feature_values[
-            self.prefix + RatingUnknownFeatures.PLAYER_RATING_DIFFERENCE
+            self.prefix + RatingUnknownFeatures.PLAYER_RATING_DIFFERENCE + self.suffix
             ] = np.array(pre_match_player_rating_values) - np.array(
             pre_match_opponent_rating_values
         )
         potential_feature_values[
-            self.prefix + RatingUnknownFeatures.RATING_DIFFERENCE
+            self.prefix + RatingUnknownFeatures.RATING_DIFFERENCE + self.suffix
             ] = np.array(pre_match_team_rating_values) - np.array(
             pre_match_opponent_rating_values
         )
-        potential_feature_values[self.prefix + RatingKnownFeatures.PLAYER_RATING] = (
+        potential_feature_values[self.prefix + RatingKnownFeatures.PLAYER_RATING + self.suffix] = (
             pre_match_player_rating_values
         )
         potential_feature_values[
-            self.prefix + RatingUnknownFeatures.OPPONENT_RATING
+            self.prefix + RatingUnknownFeatures.OPPONENT_RATING  + self.suffix
             ] = pre_match_opponent_rating_values
-        potential_feature_values[self.prefix + RatingUnknownFeatures.TEAM_RATING] = (
+        potential_feature_values[self.prefix + RatingUnknownFeatures.TEAM_RATING + self.suffix] = (
             pre_match_team_rating_values
         )
-        potential_feature_values[self.prefix + RatingUnknownFeatures.RATING_MEAN] = (
+        potential_feature_values[self.prefix + RatingUnknownFeatures.RATING_MEAN + self.suffix] = (
                 np.array(pre_match_team_rating_values) * 0.5
                 + 0.5 * np.array(pre_match_opponent_rating_values)
         )
 
         potential_feature_values[
-            self.prefix + RatingUnknownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM
+            self.prefix + RatingUnknownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM + self.suffix
             ] = np.array(pre_match_player_rating_values) - np.array(
             pre_match_team_rating_values
         )
-        potential_feature_values[self.prefix + RatingUnknownFeatures.PERFORMANCE] = (
+        potential_feature_values[self.prefix + RatingUnknownFeatures.PERFORMANCE + self.suffix] = (
             performances
         )
 
         potential_feature_values[
-            self.prefix + RatingUnknownFeatures.PLAYER_RATING_CHANGE
+            self.prefix + RatingUnknownFeatures.PLAYER_RATING_CHANGE + self.suffix
             ] = player_rating_changes
         potential_feature_values[
-            self.prefix + RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE
+            self.prefix + RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE + self.suffix
             ] = player_predicted_performances
 
         return potential_feature_values
@@ -518,7 +518,7 @@ class UpdateRatingGenerator(RatingGenerator):
                 self.column_names.team_id: team_ids,
                 "team_id_opponent": team_id_opponents,
                 self.prefix
-                + RatingKnownFeatures.PLAYER_RATING: pre_match_player_rating_values,
+                + RatingKnownFeatures.PLAYER_RATING + self.suffix: pre_match_player_rating_values,
                 "projected_participation_weight": projected_participation_weights,
                 self.column_names.player_id: player_ids,
             }
@@ -540,7 +540,7 @@ class UpdateRatingGenerator(RatingGenerator):
                 ]
             ).agg(
                 [
-                    nw.col(self.prefix + RatingKnownFeatures.PLAYER_RATING).mean(),
+                    nw.col(self.prefix + RatingKnownFeatures.PLAYER_RATING + self.suffix).mean(),
                     nw.col("projected_participation_weight").mean(),
                 ]
             )
@@ -554,7 +554,7 @@ class UpdateRatingGenerator(RatingGenerator):
 
             game_player = game_player.with_columns(
                 (
-                        nw.col(self.prefix + RatingKnownFeatures.PLAYER_RATING)
+                        nw.col(self.prefix + RatingKnownFeatures.PLAYER_RATING + self.suffix)
                         * nw.col("projected_participation_weight")
                 ).alias("weighted_pre_match_player_rating_value")
             )
@@ -565,7 +565,7 @@ class UpdateRatingGenerator(RatingGenerator):
                         .sum()
                         .over([self.column_names.match_id, self.column_names.team_id])
                         / nw.col("game_team_sum_projected_participation_weight")
-                ).alias(self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED)
+                ).alias(self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED + self.suffix)
             )
 
             game_team = game_player.group_by(
@@ -575,20 +575,20 @@ class UpdateRatingGenerator(RatingGenerator):
                     "team_id_opponent",
                 ]
             ).agg(
-                nw.col(self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED).mean()
+                nw.col(self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED + self.suffix).mean()
             )
 
             game_team_opp = game_team.select(
                 [
                     self.column_names.match_id,
                     "team_id_opponent",
-                    self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED,
+                    self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED + self.suffix,
                 ]
             ).rename(
                 {
                     self.prefix
                     + RatingKnownFeatures.TEAM_RATING_PROJECTED: self.prefix
-                                                                 + RatingKnownFeatures.OPPONENT_RATING_PROJECTED
+                                                                 + RatingKnownFeatures.OPPONENT_RATING_PROJECTED + self.suffix
                 }
             )
 
@@ -604,7 +604,7 @@ class UpdateRatingGenerator(RatingGenerator):
                     [
                         self.column_names.match_id,
                         self.column_names.team_id,
-                        self.prefix + RatingKnownFeatures.OPPONENT_RATING_PROJECTED,
+                        self.prefix + RatingKnownFeatures.OPPONENT_RATING_PROJECTED + self.suffix,
                     ]
                 ),
                 on=[self.column_names.match_id, self.column_names.team_id],
@@ -613,11 +613,11 @@ class UpdateRatingGenerator(RatingGenerator):
 
             game_player = game_player.with_columns(
                 (
-                        nw.col(self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED)
+                        nw.col(self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED + self.suffix)
                         + nw.col(
-                    self.prefix + RatingKnownFeatures.OPPONENT_RATING_PROJECTED
+                    self.prefix + RatingKnownFeatures.OPPONENT_RATING_PROJECTED + self.suffix
                 )
-                ).alias(self.prefix + RatingKnownFeatures.RATING_MEAN_PROJECTED)
+                ).alias(self.prefix + RatingKnownFeatures.RATING_MEAN_PROJECTED + self.suffix)
                 / 2
             )
 
@@ -628,10 +628,10 @@ class UpdateRatingGenerator(RatingGenerator):
                     [
                         self.column_names.match_id,
                         self.column_names.player_id,
-                        self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED,
-                        self.prefix + RatingKnownFeatures.OPPONENT_RATING_PROJECTED,
-                        self.prefix + RatingKnownFeatures.RATING_MEAN_PROJECTED,
-                        self.prefix + RatingKnownFeatures.PLAYER_RATING,
+                        self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTE + self.suffix,
+                        self.prefix + RatingKnownFeatures.OPPONENT_RATING_PROJECTED + self.suffix,
+                        self.prefix + RatingKnownFeatures.RATING_MEAN_PROJECTED + self.suffix,
+                        self.prefix + RatingKnownFeatures.PLAYER_RATING + self.suffix,
                     ]
                 ),
                 on=[self.column_names.match_id, self.column_names.player_id],
@@ -639,32 +639,32 @@ class UpdateRatingGenerator(RatingGenerator):
             )
 
             rating_differences_projected = (
-                    df[self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED]
-                    - df[self.prefix + RatingKnownFeatures.OPPONENT_RATING_PROJECTED]
+                    df[self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED + self.suffix]
+                    - df[self.prefix + RatingKnownFeatures.OPPONENT_RATING_PROJECTED + self.suffix]
             ).to_list()
 
             player_rating_difference_from_team_projected = (
-                    df[self.prefix + RatingKnownFeatures.PLAYER_RATING]
-                    - df[self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED]
+                    df[self.prefix + RatingKnownFeatures.PLAYER_RATING + self.suffix]
+                    - df[self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED + self.suffix]
             ).to_list()
 
             player_rating_differences_projected = (
-                    df[self.prefix + RatingKnownFeatures.PLAYER_RATING]
-                    - df[self.prefix + RatingKnownFeatures.OPPONENT_RATING_PROJECTED]
+                    df[self.prefix + RatingKnownFeatures.PLAYER_RATING + self.suffix]
+                    - df[self.prefix + RatingKnownFeatures.OPPONENT_RATING_PROJECTED + self.suffix]
             ).to_list()
 
             rating_means_projected = df[
-                self.prefix + RatingKnownFeatures.RATING_MEAN_PROJECTED
+                self.prefix + RatingKnownFeatures.RATING_MEAN_PROJECTED + self.suffix
                 ].to_list()
 
             pre_match_opponent_projected_rating_values = df[
-                self.prefix + RatingKnownFeatures.OPPONENT_RATING_PROJECTED
+                self.prefix + RatingKnownFeatures.OPPONENT_RATING_PROJECTED + self.suffix
                 ].to_list()
             pre_match_team_projected_rating_values = df[
-                self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED
+                self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED + self.suffix
                 ].to_list()
             pre_match_player_rating_values = df[
-                self.prefix + RatingKnownFeatures.PLAYER_RATING
+                self.prefix + RatingKnownFeatures.PLAYER_RATING + self.suffix
                 ].to_list()
 
         else:
@@ -687,20 +687,20 @@ class UpdateRatingGenerator(RatingGenerator):
 
         return_values = {
             self.prefix
-            + RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED: rating_differences_projected,
+            + RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED + self.suffix: rating_differences_projected,
             self.prefix
-            + RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED: player_rating_difference_from_team_projected,
+            + RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED + self.suffix: player_rating_difference_from_team_projected,
             self.prefix
-            + RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED: player_rating_differences_projected,
+            + RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED + self.suffix: player_rating_differences_projected,
             self.prefix
-            + RatingKnownFeatures.TEAM_RATING_PROJECTED: pre_match_team_projected_rating_values,
+            + RatingKnownFeatures.TEAM_RATING_PROJECTED + self.suffix: pre_match_team_projected_rating_values,
             self.prefix
-            + RatingKnownFeatures.OPPONENT_RATING_PROJECTED: pre_match_opponent_projected_rating_values,
+            + RatingKnownFeatures.OPPONENT_RATING_PROJECTED + self.suffix: pre_match_opponent_projected_rating_values,
             self.prefix
             + RatingKnownFeatures.PLAYER_RATING: pre_match_player_rating_values,
-            self.prefix + RatingKnownFeatures.PLAYER_LEAGUE: player_leagues,
-            self.prefix + RatingKnownFeatures.OPPONENT_LEAGUE: team_opponent_leagues,
-            self.prefix + RatingKnownFeatures.TEAM_LEAGUE: team_leagues,
+            self.prefix + RatingKnownFeatures.PLAYER_LEAGUE + self.suffix: player_leagues,
+            self.prefix + RatingKnownFeatures.OPPONENT_LEAGUE + self.suffix: team_opponent_leagues,
+            self.prefix + RatingKnownFeatures.TEAM_LEAGUE + self.suffix: team_leagues,
             self.prefix
             + RatingKnownFeatures.RATING_MEAN_PROJECTED: rating_means_projected,
             self.column_names.match_id: match_ids,
@@ -711,7 +711,7 @@ class UpdateRatingGenerator(RatingGenerator):
             for position, rating_values in position_rating_difference_values.items():
                 return_values[
                     self.prefix
-                    + RatingKnownFeatures.RATING_DIFFERENCE_POSITION
+                    + RatingKnownFeatures.RATING_DIFFERENCE_POSITION + self.suffix
                     + "_"
                     + position
                     ] = rating_values
