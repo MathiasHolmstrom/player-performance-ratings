@@ -188,19 +188,14 @@ def test_match_predictor_multiple_rating_generators_same_performance(df):
                          column_names1.player_id)
         expected_return = pl.Series([0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
 
-    predictor_mock = mock.Mock()
-    predictor_mock.target = "__target"
-    predictor_mock.add_prediction.return_value = expected_return
-    predictor_mock.columns_added = ["prediction"]
-    predictor_mock.estimator_features = [
-        RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED
-    ]
+    predictor = Predictor(estimator=LinearRegression(), target='__target')
 
-    match_predictor = Pipeline(
+    pipeline = Pipeline(
         rating_generators=[
             UpdateRatingGenerator(
                 features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
                 prefix="rating_1",
+                suffix="2",
             ),
             UpdateRatingGenerator(
                 match_rating_generator=MatchRatingGenerator(
@@ -211,24 +206,17 @@ def test_match_predictor_multiple_rating_generators_same_performance(df):
             ),
         ],
         lag_generators=[],
-        predictor=predictor_mock,
+        predictor=predictor,
         column_names=column_names1,
     )
 
-    match_predictor.train(df=data)
+    pipeline.train(df=data)
 
-    col_names_predictor_train = predictor_mock.train.call_args[1]["df"].columns
 
-    assert (
-            match_predictor.rating_generators[0].features_out[0]
-            in col_names_predictor_train
-    )
+    expected_estimator_features = pipeline.rating_generators[0].features_out + pipeline.rating_generators[1].features_out
 
-    assert (
-            match_predictor.rating_generators[1].features_out[0]
-            in col_names_predictor_train
-    )
-
+    assert sorted(expected_estimator_features) == sorted(pipeline.estimator_features)
+    assert sorted(expected_estimator_features) == sorted(pipeline.predictor.estimator_features)
 
 def test_match_predictor_0_rating_generators():
     """

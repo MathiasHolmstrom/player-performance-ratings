@@ -109,10 +109,7 @@ class Pipeline(BasePredictor):
             self._estimator_features += [
                 f for f in c.estimator_features_out if f not in self._estimator_features
             ]
-        for rating_idx, c in enumerate(self.rating_generators):
-            for rating_feature in c._features_out:
-                if rating_feature not in self._estimator_features:
-                    self._estimator_features.append(rating_feature)
+
 
         logging.info(f"Using estimator features {self._estimator_features}")
         self.performances_generator = performances_generator
