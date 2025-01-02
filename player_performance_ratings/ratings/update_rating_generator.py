@@ -587,7 +587,7 @@ class UpdateRatingGenerator(RatingGenerator):
             ).rename(
                 {
                     self.prefix
-                    + RatingKnownFeatures.TEAM_RATING_PROJECTED: self.prefix
+                    + RatingKnownFeatures.TEAM_RATING_PROJECTED + self.suffix: self.prefix
                                                                  + RatingKnownFeatures.OPPONENT_RATING_PROJECTED + self.suffix
                 }
             )
@@ -697,7 +697,7 @@ class UpdateRatingGenerator(RatingGenerator):
             self.prefix
             + RatingKnownFeatures.OPPONENT_RATING_PROJECTED + self.suffix: pre_match_opponent_projected_rating_values,
             self.prefix
-            + RatingKnownFeatures.PLAYER_RATING: pre_match_player_rating_values,
+            + RatingKnownFeatures.PLAYER_RATING + self.suffix: pre_match_player_rating_values,
             self.prefix + RatingKnownFeatures.PLAYER_LEAGUE + self.suffix: player_leagues,
             self.prefix + RatingKnownFeatures.OPPONENT_LEAGUE + self.suffix: team_opponent_leagues,
             self.prefix + RatingKnownFeatures.TEAM_LEAGUE + self.suffix: team_leagues,

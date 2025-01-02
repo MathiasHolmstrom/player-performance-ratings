@@ -454,6 +454,7 @@ def test_rating_generator_prefix_suffix(df):
         }
     )
 
+
     historical_df1_with_ratings = rating_generator.generate_historical(historical_df1, column_names=column_names)
     for non_estimator_known_features_out in rating_generator._non_estimator_known_features_out:
         expected_feature_name_out = rating_generator.prefix + non_estimator_known_features_out + rating_generator.suffix
@@ -466,5 +467,35 @@ def test_rating_generator_prefix_suffix(df):
     for f in rating_generator._features_out:
         expected_feature_out  = rating_generator.prefix + f + rating_generator.suffix
         assert expected_feature_out in historical_df1_with_ratings.columns
+
+    future_df = df(
+        {
+            column_names.match_id: [3, 3, 3, 3],
+            column_names.team_id: [1, 1, 2, 2],
+            column_names.player_id: [1, 2, 3, 4],
+            column_names.league: ['a', 'a', 'b', 'b'],
+            column_names.start_date: [
+                pd.to_datetime("2020-01-03"),
+                pd.to_datetime("2020-01-03"),
+                pd.to_datetime("2020-01-03"),
+                pd.to_datetime("2020-01-03"),
+
+            ]
+        }
+    )
+
+    future_df_ratings = rating_generator.generate_future(future_df)
+    for non_estimator_known_features_out in rating_generator._non_estimator_known_features_out:
+        expected_feature_name_out = rating_generator.prefix + non_estimator_known_features_out + rating_generator.suffix
+        assert expected_feature_name_out in future_df_ratings.columns
+
+
+    for f in rating_generator._features_out:
+        expected_feature_out  = rating_generator.prefix + f + rating_generator.suffix
+        assert expected_feature_out in future_df_ratings.columns
+
+
+
+
 
 
