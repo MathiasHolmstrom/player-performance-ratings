@@ -204,6 +204,7 @@ class Pipeline(BasePredictor):
 
         for rating_idx, rating_generator in enumerate(self.rating_generators):
             if cross_validation:
+                nw.from_native(self.performances_generator.generate(df_with_predict))
                 df_with_predict = nw.from_native(rating_generator.generate_historical(df_with_predict, column_names=self.column_names))
             else:
 

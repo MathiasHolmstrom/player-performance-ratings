@@ -29,6 +29,7 @@ class RatingGenerator(ABC):
             distinct_positions: Optional[list[str]] = None,
             seperate_player_by_position: Optional[bool] = False,
             prefix: str = "",
+            suffix: str = "",
     ):
 
         self._features_out = features_out or []
@@ -39,6 +40,7 @@ class RatingGenerator(ABC):
         self.match_rating_generator = match_rating_generator
         self.distinct_positions = distinct_positions
         self.prefix = prefix
+        self.suffix = suffix
         self.column_names = None
         self._calculated_match_ids = []
         self._df = None
@@ -73,8 +75,8 @@ class RatingGenerator(ABC):
             return [
                 self.prefix + RatingKnownFeatures.RATING_DIFFERENCE_POSITION + "_" + p
                 for p in self.distinct_positions
-            ] + [self.prefix + f for f in self._features_out]
-        return [self.prefix + f for f in self._features_out]
+            ] + [self.prefix + f + self.suffix for f in self._features_out]
+        return [self.prefix + f + self.suffix for f in self._features_out]
 
     @property
     def unknown_features_out(self) -> list[str]:
@@ -82,14 +84,14 @@ class RatingGenerator(ABC):
         Rating Features that contain leakge. Thus, they must not be passed into an estimator.
         They are only inteded to be used for data-analysis
         """
-        return [self.prefix + f for f in self._unknown_features_out]
+        return [self.prefix + f + self.suffix for f in self._unknown_features_out]
 
     @property
     def non_estimator_known_features_out(self) -> list[str]:
         """
         Known features that are not used in the estimator
         """
-        return [self.prefix + f for f in self._non_estimator_known_features_out]
+        return [self.prefix + f + self.suffix for f in self._non_estimator_known_features_out]
 
     @property
     def all_rating_features_out(self) -> list[str]:

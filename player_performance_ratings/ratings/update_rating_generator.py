@@ -47,6 +47,7 @@ class UpdateRatingGenerator(RatingGenerator):
             distinct_positions: Optional[list[str]] = None,
             seperate_player_by_position: bool = False,
             prefix: str = "",
+            suffix: str = "",
     ):
         """
         :param performance_column: The ratings will be updated by on the value of the column
@@ -80,6 +81,7 @@ class UpdateRatingGenerator(RatingGenerator):
             match_rating_generator=match_rating_generator,
             prefix=prefix,
             features_out=features_out,
+            suffix=suffix
         )
         self.distinct_positions = distinct_positions
 
