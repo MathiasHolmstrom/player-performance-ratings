@@ -13,6 +13,7 @@ from player_performance_ratings.predictor._base import BasePredictor
 from player_performance_ratings.data_structures import ColumnNames
 
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
+from player_performance_ratings.scorer.score import Filter, apply_filters
 
 from player_performance_ratings.transformers.base_transformer import (
     BaseTransformer,
@@ -43,6 +44,7 @@ class Pipeline(BasePredictor):
             self,
             predictor: BasePredictor,
             column_names: ColumnNames,
+            filters: Optional[list[Filter]] = None,
             performances_generator: Optional[PerformancesGenerator] = None,
             rating_generators: Optional[
                 Union[RatingGenerator, list[RatingGenerator]]
@@ -74,6 +76,7 @@ class Pipeline(BasePredictor):
         if rating_generators is None:
             self.rating_generators: list[RatingGenerator] = []
 
+        self.filters = filters or []
         self.pre_lag_transformers = pre_lag_transformers or []
         self.post_lag_transformers = post_lag_transformers or []
         self.lag_generators = lag_generators or []
@@ -100,6 +103,7 @@ class Pipeline(BasePredictor):
             estimator_features=est_feats,
             target=predictor.target,
             pred_column=predictor.pred_column,
+            filters=filters
         )
         for c in [
             *self.lag_generators,
@@ -126,6 +130,9 @@ class Pipeline(BasePredictor):
         :param df: DataFrame with the data to be used for training and prediction
 
         """
+
+        df = apply_filters(df, filters=self.filters)
+
         estimator_features = estimator_features or self._estimator_features
 
         self.reset()
@@ -197,11 +204,14 @@ class Pipeline(BasePredictor):
         """
         if "__row_index" not in df.columns:
             df = df.with_row_index(name="__row_index")
+
+
         df_with_predict = df.clone()
+        df = apply_filters(df_with_predict, filters=self.filters)
 
         for rating_idx, rating_generator in enumerate(self.rating_generators):
             if cross_validation:
-                nw.from_native(self.performances_generator.generate(df_with_predict))
+                df_with_predict = nw.from_native(self.performances_generator.generate(df_with_predict))
                 df_with_predict = nw.from_native(rating_generator.generate_historical(df_with_predict, column_names=self.column_names))
             else:
 

@@ -108,9 +108,6 @@ class UpdateRatingGenerator(RatingGenerator):
         """
 
         input_cols = df.columns
-        if "__row_index" not in df.columns:
-            df = df.with_row_index(name="__row_index")
-
         self.column_names = column_names
         if (
                 self.column_names.participation_weight is not None
@@ -155,7 +152,7 @@ class UpdateRatingGenerator(RatingGenerator):
             on=[self.column_names.match_id, self.column_names.player_id], how="left").unique(
             subset=[column_names.match_id, column_names.player_id], keep='last')
 
-        df = df.sort("__row_index").drop("__row_index")
+        df = df.sort([self.column_names.start_date, self.column_names.match_id, self.column_names.team_id ,self.column_names.player_id])
         out_df = df[
             list(
                 set(

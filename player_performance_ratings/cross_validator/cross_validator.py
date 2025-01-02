@@ -79,7 +79,7 @@ class MatchKFoldCrossValidator(CrossValidator):
         ori_cols = df.columns
 
         if not self.min_validation_date:
-            unique_dates = df[self.date_column_name].unique()
+            unique_dates = df[self.date_column_name].unique(maintain_order=True)
             median_number = len(unique_dates) // 2
             self.min_validation_date = unique_dates[median_number]
 
