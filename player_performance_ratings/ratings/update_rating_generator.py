@@ -628,7 +628,7 @@ class UpdateRatingGenerator(RatingGenerator):
                     [
                         self.column_names.match_id,
                         self.column_names.player_id,
-                        self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTE + self.suffix,
+                        self.prefix + RatingKnownFeatures.TEAM_RATING_PROJECTED + self.suffix,
                         self.prefix + RatingKnownFeatures.OPPONENT_RATING_PROJECTED + self.suffix,
                         self.prefix + RatingKnownFeatures.RATING_MEAN_PROJECTED + self.suffix,
                         self.prefix + RatingKnownFeatures.PLAYER_RATING + self.suffix,
