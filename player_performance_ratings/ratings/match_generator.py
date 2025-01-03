@@ -130,13 +130,8 @@ def convert_df_to_matches(
     if col_names.league is not None:
         league_in_df = True
 
-    if col_names.projected_participation_weight:
-        if col_names.projected_participation_weight not in df.columns:
-            logging.warning(
-                "projected_participation_weight column passed but not in dataframe."
-                " Will use participation_weight as projected_participation_weight"
-            )
-
+    if col_names.projected_participation_weight and col_names.projected_participation_weight not in df.columns:
+        raise ValueError("projected_participation_weight column passed but not in dataframe.")
     if (
         col_names.team_players_playing_time
         and col_names.team_players_playing_time in df.columns

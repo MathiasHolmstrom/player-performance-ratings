@@ -148,9 +148,7 @@ class BasePredictor(ABC):
                 pre_transformers.append(one_hot_encoder)
 
             elif self.convert_to_cat_feats_to_cat_dtype:
-                logging.info(
-                    f"Adding ConvertDataFrameToCategoricalTransformer to pre_transformers for features: {cat_feats_to_transform}"
-                )
+
                 pre_transformers.append(
                     ConvertDataFrameToCategoricalTransformer(
                         features=cat_feats_to_transform
