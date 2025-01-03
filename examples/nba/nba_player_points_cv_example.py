@@ -9,11 +9,13 @@ from player_performance_ratings.predictor import Predictor
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.scorer import SklearnScorer
 from player_performance_ratings.scorer.score import Filter, Operator
-from player_performance_ratings.transformers.lag_generators import RollingMeanTransformer
+from player_performance_ratings.transformers.lag_generators import (
+    RollingMeanTransformer,
+)
 
 
 df = pl.read_parquet("data/game_player_subsample.parquet")
-#df = df.filter(pl.col('minutes')>0)
+# df = df.filter(pl.col('minutes')>0)
 column_names = ColumnNames(
     team_id="team_id",
     match_id="game_id",
@@ -32,18 +34,13 @@ df = df.sort(
 predictor = Predictor(
     estimator=LGBMRegressor(verbose=-100, random_state=42),
     convert_to_cat_feats_to_cat_dtype=True,
-    estimator_features=['location'],
-    target='points'
+    estimator_features=["location"],
+    target="points",
 )
 
 pipeline = Pipeline(
-    #filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
-    lag_generators=[
-        RollingMeanTransformer(
-            features=["points"],
-            window=15
-        )
-    ],
+    # filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
+    lag_generators=[RollingMeanTransformer(features=["points"], window=15)],
     predictor=predictor,
     column_names=column_names,
 )
@@ -54,14 +51,16 @@ scorer = SklearnScorer(
     target=predictor.target,
     scorer_function=mean_absolute_error,
     validation_column="is_validation",
-    filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)]
+    filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
 )
 
 cross_validator = MatchKFoldCrossValidator(
     date_column_name=column_names.start_date,
     match_id_column_name=column_names.match_id,
-    predictor=pipeline
+    predictor=pipeline,
 )
 validation_df = cross_validator.generate_validation_df(df=df, column_names=column_names)
-score = cross_validator.cross_validation_score(validation_df=validation_df, scorer=scorer)
+score = cross_validator.cross_validation_score(
+    validation_df=validation_df, scorer=scorer
+)
 print(score, len(validation_df))

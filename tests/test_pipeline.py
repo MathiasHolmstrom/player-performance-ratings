@@ -44,7 +44,9 @@ def test_pipeline_constructor():
     ]
 
     post_lag_transformers = [
-        PredictorTransformer(predictor=Predictor(estimator=LinearRegression(), target="won"))
+        PredictorTransformer(
+            predictor=Predictor(estimator=LinearRegression(), target="won")
+        )
     ]
     rating_generator = UpdateRatingGenerator(
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
@@ -59,26 +61,28 @@ def test_pipeline_constructor():
         ),
         lag_generators=lag_generators,
         post_lag_transformers=post_lag_transformers,
-        predictor=Predictor(estimator=LinearRegression(), estimator_features=["kills"], target='won'),
+        predictor=Predictor(
+            estimator=LinearRegression(), estimator_features=["kills"], target="won"
+        ),
         rating_generators=rating_generator,
     )
 
     expected_estimator_features = (
-            ["kills"]
-            + [l.features_out for l in lag_generators][0]
-            + [p.predictor.pred_column for p in post_lag_transformers]
-            + rating_generator.features_out
+        ["kills"]
+        + [l.features_out for l in lag_generators][0]
+        + [p.predictor.pred_column for p in post_lag_transformers]
+        + rating_generator.features_out
     )
     assert pipeline._estimator_features.sort() == expected_estimator_features.sort()
 
     # asserts estimator_features gets added to the post_transformer that contains a predictor
     assert (
-            post_lag_transformers[0].features.sort()
-            == [
-                ["kills"]
-                + [l.features_out for l in lag_generators][0]
-                + rating_generator.features_out
-            ][0].sort()
+        post_lag_transformers[0].features.sort()
+        == [
+            ["kills"]
+            + [l.features_out for l in lag_generators][0]
+            + rating_generator.features_out
+        ][0].sort()
     )
 
 
@@ -184,11 +188,15 @@ def test_match_predictor_multiple_rating_generators_same_performance(df):
         )
         expected_return = pd.Series([0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
     else:
-        data = data.sort(column_names1.start_date, column_names1.match_id, column_names1.team_id,
-                         column_names1.player_id)
+        data = data.sort(
+            column_names1.start_date,
+            column_names1.match_id,
+            column_names1.team_id,
+            column_names1.player_id,
+        )
         expected_return = pl.Series([0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
 
-    predictor = Predictor(estimator=LinearRegression(), target='__target')
+    predictor = Predictor(estimator=LinearRegression(), target="__target")
 
     pipeline = Pipeline(
         rating_generators=[
@@ -212,11 +220,16 @@ def test_match_predictor_multiple_rating_generators_same_performance(df):
 
     pipeline.train(df=data)
 
-
-    expected_estimator_features = pipeline.rating_generators[0].features_out + pipeline.rating_generators[1].features_out
+    expected_estimator_features = (
+        pipeline.rating_generators[0].features_out
+        + pipeline.rating_generators[1].features_out
+    )
 
     assert sorted(expected_estimator_features) == sorted(pipeline.estimator_features)
-    assert sorted(expected_estimator_features) == sorted(pipeline.predictor.estimator_features)
+    assert sorted(expected_estimator_features) == sorted(
+        pipeline.predictor.estimator_features
+    )
+
 
 def test_match_predictor_0_rating_generators():
     """
@@ -343,14 +356,17 @@ def test_match_predictor_generate_and_predict(df):
         performances_generator=PerformancesGenerator(
             Performance(weights=column_weights)
         ),
-        predictor=Predictor(estimator=LinearRegression(), target='__target'),
+        predictor=Predictor(estimator=LinearRegression(), target="__target"),
         rating_generators=rating_generator,
         column_names=column_names,
     )
 
     pipeline.train(df=historical_df)
     new_df = pipeline.predict(future_df)
-    expected_columns = list(future_df.columns) + [*rating_generator.features_out, pipeline.predictor.pred_column]
+    expected_columns = list(future_df.columns) + [
+        *rating_generator.features_out,
+        pipeline.predictor.pred_column,
+    ]
     if isinstance(new_df, pd.DataFrame):
         assert new_df.columns.to_list() == expected_columns
     else:
@@ -383,8 +399,13 @@ def test_train_predict_post_pre_and_lag_transformers():
     )
 
     column_weights = [ColumnWeight(name="kills", weight=1)]
-    predictor = Predictor(estimator=LinearRegression(), target='__target', scale_features=True,
-                          one_hot_encode_cat_features=True, impute_missing_values=True)
+    predictor = Predictor(
+        estimator=LinearRegression(),
+        target="__target",
+        scale_features=True,
+        one_hot_encode_cat_features=True,
+        impute_missing_values=True,
+    )
 
     column_names = ColumnNames(
         match_id="game_id",
@@ -403,7 +424,7 @@ def test_train_predict_post_pre_and_lag_transformers():
             one_hot_encode_cat_features=True,
             estimator=LinearRegression(),
             estimator_features=rating_generator.features_out,
-            target='__target',
+            target="__target",
         ),
     )
 
@@ -415,8 +436,9 @@ def test_train_predict_post_pre_and_lag_transformers():
         predictor=Predictor(
             scale_features=True,
             one_hot_encode_cat_features=True,
-            estimator=LinearRegression(), estimator_features=lag_generator.features_out,
-            target='__target'
+            estimator=LinearRegression(),
+            estimator_features=lag_generator.features_out,
+            target="__target",
         ),
     )
 

@@ -41,19 +41,19 @@ class Pipeline(BasePredictor):
     """
 
     def __init__(
-            self,
-            predictor: BasePredictor,
-            column_names: ColumnNames,
-            filters: Optional[list[Filter]] = None,
-            performances_generator: Optional[PerformancesGenerator] = None,
-            rating_generators: Optional[
-                Union[RatingGenerator, list[RatingGenerator]]
-            ] = None,
-            pre_lag_transformers: Optional[list[BaseTransformer]] = None,
-            lag_generators: Optional[
-                List[Union[BaseLagGenerator, BaseLagGenerator]]
-            ] = None,
-            post_lag_transformers: Optional[list[BaseTransformer]] = None,
+        self,
+        predictor: BasePredictor,
+        column_names: ColumnNames,
+        filters: Optional[list[Filter]] = None,
+        performances_generator: Optional[PerformancesGenerator] = None,
+        rating_generators: Optional[
+            Union[RatingGenerator, list[RatingGenerator]]
+        ] = None,
+        pre_lag_transformers: Optional[list[BaseTransformer]] = None,
+        lag_generators: Optional[
+            List[Union[BaseLagGenerator, BaseLagGenerator]]
+        ] = None,
+        post_lag_transformers: Optional[list[BaseTransformer]] = None,
     ):
         """
         :param predictor: The predictor to use for generating the predictions
@@ -103,7 +103,7 @@ class Pipeline(BasePredictor):
             estimator_features=est_feats,
             target=predictor.target,
             pred_column=predictor.pred_column,
-            filters=filters
+            filters=filters,
         )
         for c in [
             *self.lag_generators,
@@ -114,17 +114,12 @@ class Pipeline(BasePredictor):
                 f for f in c.estimator_features_out if f not in self._estimator_features
             ]
 
-
         logging.info(f"Using estimator features {self._estimator_features}")
         self.performances_generator = performances_generator
         self.predictor = predictor
 
     @nw.narwhalify
-    def train(
-            self,
-            df: FrameT,
-            estimator_features: Optional[list[str]] = None
-    ) -> None:
+    def train(self, df: FrameT, estimator_features: Optional[list[str]] = None) -> None:
         """
         Trains the pipeline on the given dataframe and generates and returns predictions.
         :param df: DataFrame with the data to be used for training and prediction
@@ -145,7 +140,6 @@ class Pipeline(BasePredictor):
             df = nw.from_native(self.performances_generator.generate(df))
 
         for idx in range(len(self.rating_generators)):
-
             df = nw.from_native(
                 self.rating_generators[idx].generate_historical(
                     df, column_names=self.column_names
@@ -161,13 +155,11 @@ class Pipeline(BasePredictor):
             )
 
         for idx in range(len(self.lag_generators)):
-
             df = nw.from_native(
                 self.lag_generators[idx].generate_historical(
                     df, column_names=self.column_names
                 )
             )
-
 
         for idx in range(len(self.post_lag_transformers)):
             df = nw.from_native(
@@ -176,12 +168,9 @@ class Pipeline(BasePredictor):
                 )
             )
 
-        self.predictor.train(
-            df=df, estimator_features=estimator_features
-        )
+        self.predictor.train(df=df, estimator_features=estimator_features)
 
     def reset(self):
-
 
         for transformer in [
             *self.pre_lag_transformers,
@@ -191,10 +180,7 @@ class Pipeline(BasePredictor):
 
     @nw.narwhalify
     def predict(
-            self,
-            df: FrameT,
-            cross_validation: Optional[bool] = None
-
+        self, df: FrameT, cross_validation: Optional[bool] = None
     ) -> IntoFrameT:
         """
         Generates predictions on a future dataset from the entire pipeline
@@ -205,14 +191,19 @@ class Pipeline(BasePredictor):
         if "__row_index" not in df.columns:
             df = df.with_row_index(name="__row_index")
 
-
         df_with_predict = df.clone()
-        df = apply_filters(df_with_predict, filters=self.filters)
+        df_with_predict = apply_filters(df_with_predict, filters=self.filters)
 
         for rating_idx, rating_generator in enumerate(self.rating_generators):
             if cross_validation:
-                df_with_predict = nw.from_native(self.performances_generator.generate(df_with_predict))
-                df_with_predict = nw.from_native(rating_generator.generate_historical(df_with_predict, column_names=self.column_names))
+                df_with_predict = nw.from_native(
+                    self.performances_generator.generate(df_with_predict)
+                )
+                df_with_predict = nw.from_native(
+                    rating_generator.generate_historical(
+                        df_with_predict, column_names=self.column_names
+                    )
+                )
             else:
 
                 if rating_generator.performance_column in df.columns:
@@ -229,7 +220,11 @@ class Pipeline(BasePredictor):
             )
         for idx, lag_generator in enumerate(self.lag_generators):
             if cross_validation:
-                df_with_predict = nw.from_native(lag_generator.generate_historical(df_with_predict, column_names=self.column_names))
+                df_with_predict = nw.from_native(
+                    lag_generator.generate_historical(
+                        df_with_predict, column_names=self.column_names
+                    )
+                )
             else:
                 df_with_predict = nw.from_native(
                     lag_generator.generate_future(df_with_predict)
@@ -244,12 +239,10 @@ class Pipeline(BasePredictor):
 
         new_feats = [f for f in df_with_predict.columns if f not in df.columns]
         joined = df.join(
-            df_with_predict.select(
-                new_feats + [cn.match_id, cn.team_id, cn.player_id]
-            ),
+            df_with_predict.select(new_feats + [cn.match_id, cn.team_id, cn.player_id]),
             on=[cn.match_id, cn.team_id, cn.player_id],
             how="left",
         )
-        if '__row_index' in joined.columns:
-            joined = joined.drop(['__row_index'])
+        if "__row_index" in joined.columns:
+            joined = joined.drop(["__row_index"])
         return joined

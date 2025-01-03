@@ -71,10 +71,7 @@ pipeline = Pipeline(
 )
 
 # Trains the model and returns historical predictions
-pipeline.train(
-    df=historical_df
-)
-
+pipeline.train(df=historical_df)
 
 
 # Future predictions on future results

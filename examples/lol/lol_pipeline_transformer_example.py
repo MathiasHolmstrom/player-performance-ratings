@@ -9,7 +9,9 @@ from player_performance_ratings.ratings import (
     RatingKnownFeatures,
 )
 from player_performance_ratings.transformers import LagTransformer
-from player_performance_ratings.transformers.lag_generators import RollingMeanTransformer
+from player_performance_ratings.transformers.lag_generators import (
+    RollingMeanTransformer,
+)
 
 column_names = ColumnNames(
     team_id="teamname",

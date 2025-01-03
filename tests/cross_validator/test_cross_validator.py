@@ -93,9 +93,7 @@ def test_match_k_fold_cross_validator(df, column_names):
         predictor=predictor,
     )
 
-    validation_df = cv.generate_validation_df(
-        df=data,  column_names=column_names
-    )
+    validation_df = cv.generate_validation_df(df=data, column_names=column_names)
 
     score = cv.cross_validation_score(validation_df=validation_df)
     assert score == 0.1
@@ -142,9 +140,8 @@ def test_match_k_fold_cross_validator_add_train_prediction(column_names):
         n_splits=2,
         date_column_name="date",
         min_validation_date="2020-01-02",
-        predictor=predictor
+        predictor=predictor,
     )
-
 
     validation_df = cv.generate_validation_df(
         df=df, add_train_prediction=True, column_names=column_names

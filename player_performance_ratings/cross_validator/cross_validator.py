@@ -38,7 +38,9 @@ class MatchKFoldCrossValidator(CrossValidator):
         :param min_validation_date: The minimum date for which the cross-validation should start
         :param n_splits: The number of splits to perform
         """
-        super().__init__(scorer=scorer, min_validation_date=min_validation_date, predictor=predictor)
+        super().__init__(
+            scorer=scorer, min_validation_date=min_validation_date, predictor=predictor
+        )
         self.match_id_column_name = match_id_column_name
         self.date_column_name = date_column_name
         self.n_splits = n_splits
@@ -95,21 +97,21 @@ class MatchKFoldCrossValidator(CrossValidator):
         if df["__cv_match_number"].min() == 0:
             df = df.with_columns(nw.col("__cv_match_number") + 1)
 
-        if isinstance(self.min_validation_date, str) and df.schema.get(self.date_column_name) in (nw.Date, nw.Datetime):
-            min_validation_date = datetime.strptime(self.min_validation_date, "%Y-%m-%d")
+        if isinstance(self.min_validation_date, str) and df.schema.get(
+            self.date_column_name
+        ) in (nw.Date, nw.Datetime):
+            min_validation_date = datetime.strptime(
+                self.min_validation_date, "%Y-%m-%d"
+            )
         else:
             min_validation_date = self.min_validation_date
 
         min_validation_match_number = (
-            df.filter(
-                nw.col(self.date_column_name)
-                >= nw.lit(min_validation_date)
-            )
+            df.filter(nw.col(self.date_column_name) >= nw.lit(min_validation_date))
             .select(nw.col("__cv_match_number").min())
             .head(1)
             .item()
         )
-
 
         max_match_number = df.select(nw.col("__cv_match_number").max()).to_numpy()[0][0]
         train_cut_off_match_number = min_validation_match_number
@@ -135,7 +137,9 @@ class MatchKFoldCrossValidator(CrossValidator):
                     c for c in train_df.columns if c not in predictor.columns_added
                 ]
                 train_df = train_df.select(columns_to_keep)
-                train_df = nw.from_native(predictor.predict(train_df, cross_validation=True))
+                train_df = nw.from_native(
+                    predictor.predict(train_df, cross_validation=True)
+                )
                 train_df = train_df.with_columns(
                     nw.lit(0).alias(self.validation_column_name)
                 )
@@ -145,7 +149,9 @@ class MatchKFoldCrossValidator(CrossValidator):
                 c for c in validation_df.columns if c not in predictor.columns_added
             ]
             validation_df = validation_df.select(columns_to_keep)
-            validation_df = nw.from_native(predictor.predict(validation_df, cross_validation=True))
+            validation_df = nw.from_native(
+                predictor.predict(validation_df, cross_validation=True)
+            )
             validation_df = validation_df.with_columns(
                 nw.lit(1).alias(self.validation_column_name)
             )
@@ -186,7 +192,7 @@ class MatchKFoldCrossValidator(CrossValidator):
                 column_names.player_id,
             ],
             keep="first",
-            maintain_order=True
+            maintain_order=True,
         )
         validate_sorting(df=concat_validation_df, column_names=column_names)
         return concat_validation_df

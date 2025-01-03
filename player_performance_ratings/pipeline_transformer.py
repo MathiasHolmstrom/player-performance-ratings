@@ -61,10 +61,9 @@ class PipelineTransformer:
         if self.performances_generator:
             df = nw.from_native(self.performances_generator.generate(df))
 
-
         for rating_generator in self.rating_generators:
             df = rating_generator.generate_historical(
-                df=df,column_names=self.column_names
+                df=df, column_names=self.column_names
             )
 
         for transformer in self.pre_lag_transformers:

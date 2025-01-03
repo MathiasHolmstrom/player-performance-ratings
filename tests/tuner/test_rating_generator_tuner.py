@@ -51,7 +51,7 @@ def test_opponent_adjusted_rating_generator_tuner_team_rating():
 
     pipeline_factory = PipelineFactory(
         rating_generators=rating_generators,
-        predictor=Predictor(target='__target'),
+        predictor=Predictor(target="__target"),
         column_names=column_names,
     )
 
@@ -142,7 +142,7 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
                 f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}0",
                 f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}1",
             ],
-            target='__target',
+            target="__target",
         ),
         column_names=column_names,
     )
@@ -243,7 +243,7 @@ def test_update_rating_generator_tuner_start_rating():
                 f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}0",
                 f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}1",
             ],
-            target='__target',
+            target="__target",
         ),
         column_names=column_names,
     )

@@ -15,7 +15,12 @@ from narwhals.typing import FrameT, IntoFrameT
 
 class CrossValidator(ABC):
 
-    def __init__(self, scorer: Optional[BaseScorer], min_validation_date: str, predictor: BasePredictor):
+    def __init__(
+        self,
+        scorer: Optional[BaseScorer],
+        min_validation_date: str,
+        predictor: BasePredictor,
+    ):
         self.scorer = scorer
         self.min_validation_date = min_validation_date
         self.predictor = predictor

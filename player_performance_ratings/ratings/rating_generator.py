@@ -20,16 +20,16 @@ from player_performance_ratings.data_structures import (
 class RatingGenerator(ABC):
 
     def __init__(
-            self,
-            performance_column: str,
-            features_out: Optional[list[RatingKnownFeatures]],
-            non_estimator_known_features_out: Optional[list[RatingKnownFeatures]],
-            unknown_features_out: Optional[list[RatingUnknownFeatures]],
-            match_rating_generator: MatchRatingGenerator,
-            distinct_positions: Optional[list[str]] = None,
-            seperate_player_by_position: Optional[bool] = False,
-            prefix: str = "",
-            suffix: str = "",
+        self,
+        performance_column: str,
+        features_out: Optional[list[RatingKnownFeatures]],
+        non_estimator_known_features_out: Optional[list[RatingKnownFeatures]],
+        unknown_features_out: Optional[list[RatingUnknownFeatures]],
+        match_rating_generator: MatchRatingGenerator,
+        distinct_positions: Optional[list[str]] = None,
+        seperate_player_by_position: Optional[bool] = False,
+        prefix: str = "",
+        suffix: str = "",
     ):
 
         self._features_out = features_out or []
@@ -50,23 +50,23 @@ class RatingGenerator(ABC):
 
     @abstractmethod
     def generate_historical(
-            self,
-            df: FrameT,
-            column_names: ColumnNames,
+        self,
+        df: FrameT,
+        column_names: ColumnNames,
     ) -> IntoFrameT:
         pass
 
     @abstractmethod
     def generate_future(
-            self,
-            df: Optional[FrameT],
-            matches: Optional[list[Match]] = None,
+        self,
+        df: Optional[FrameT],
+        matches: Optional[list[Match]] = None,
     ) -> IntoFrameT:
         pass
 
     @property
     def features_out(
-            self,
+        self,
     ) -> list[str]:
         """
         Contains features to be passed into the estimator
@@ -91,11 +91,18 @@ class RatingGenerator(ABC):
         """
         Known features that are not used in the estimator
         """
-        return [self.prefix + f + self.suffix for f in self._non_estimator_known_features_out]
+        return [
+            self.prefix + f + self.suffix
+            for f in self._non_estimator_known_features_out
+        ]
 
     @property
     def all_rating_features_out(self) -> list[str]:
-        return self.features_out + self.unknown_features_out + self.non_estimator_known_features_out
+        return (
+            self.features_out
+            + self.unknown_features_out
+            + self.non_estimator_known_features_out
+        )
 
     @property
     def player_ratings(self) -> dict[str, PlayerRating]:

@@ -16,15 +16,15 @@ from player_performance_ratings.utils import validate_sorting
 class LagTransformer(BaseLagGenerator):
 
     def __init__(
-            self,
-            features: list[str],
-            lag_length: int,
-            granularity: Optional[list[str]] = None,
-            days_between_lags: Optional[list[int]] = None,
-            scale_by_participation_weight: bool = False,
-            future_lag: bool = False,
-            prefix: str = "lag_",
-            add_opponent: bool = False,
+        self,
+        features: list[str],
+        lag_length: int,
+        granularity: Optional[list[str]] = None,
+        days_between_lags: Optional[list[int]] = None,
+        scale_by_participation_weight: bool = False,
+        future_lag: bool = False,
+        prefix: str = "lag_",
+        add_opponent: bool = False,
     ):
         """
         :param features. List of features to create lags for
@@ -114,13 +114,13 @@ class LagTransformer(BaseLagGenerator):
             raise ValueError("fit_transform needs to be called before transform")
 
         if len(
-                df.unique(
-                    subset=[
-                        self.column_names.player_id,
-                        self.column_names.team_id,
-                        self.column_names.match_id,
-                    ]
-                )
+            df.unique(
+                subset=[
+                    self.column_names.player_id,
+                    self.column_names.team_id,
+                    self.column_names.match_id,
+                ]
+            )
         ) != len(df):
             raise ValueError(
                 f"Duplicated rows in df. Df must be a unique combination of {self.column_names.player_id} and {self.column_names.update_match_id}"
@@ -129,13 +129,13 @@ class LagTransformer(BaseLagGenerator):
         concat_df = self._concat_df(df=df)
 
         if (
-                self.column_names.participation_weight
-                and self.scale_by_participation_weight
+            self.column_names.participation_weight
+            and self.scale_by_participation_weight
         ):
             for feature in self.features:
                 concat_df = concat_df.with_columns(
                     (
-                            nw.col(feature) * nw.col(self.column_names.participation_weight)
+                        nw.col(feature) * nw.col(self.column_names.participation_weight)
                     ).alias(feature)
                 )
 
@@ -158,12 +158,12 @@ class LagTransformer(BaseLagGenerator):
                 )
                 grouped = grouped.with_columns(
                     (
-                            (
-                                    nw.col("shifted_days").cast(nw.Date)
-                                    - nw.col(self.column_names.start_date).cast(nw.Date)
-                            ).dt.total_minutes()
-                            / 60
-                            / 24
+                        (
+                            nw.col("shifted_days").cast(nw.Date)
+                            - nw.col(self.column_names.start_date).cast(nw.Date)
+                        ).dt.total_minutes()
+                        / 60
+                        / 24
                     ).alias(f"{self.prefix}{days_lag}_days_ago")
                 )
             else:
@@ -175,12 +175,12 @@ class LagTransformer(BaseLagGenerator):
                 )
                 grouped = grouped.with_columns(
                     (
-                            (
-                                    nw.col(self.column_names.start_date).cast(nw.Date)
-                                    - nw.col("shifted_days").cast(nw.Date)
-                            ).dt.total_minutes()
-                            / 60
-                            / 24
+                        (
+                            nw.col(self.column_names.start_date).cast(nw.Date)
+                            - nw.col("shifted_days").cast(nw.Date)
+                        ).dt.total_minutes()
+                        / 60
+                        / 24
                     ).alias(f"{self.prefix}{days_lag}_days_ago")
                 )
             grouped = grouped.drop("shifted_days")
@@ -226,7 +226,7 @@ class LagTransformer(BaseLagGenerator):
                 + feats_out
             ),
             on=self.granularity
-               + [self.column_names.update_match_id, self.column_names.start_date],
+            + [self.column_names.update_match_id, self.column_names.start_date],
             how="left",
         )
 
@@ -240,14 +240,14 @@ class LagTransformer(BaseLagGenerator):
 class RollingMeanDaysTransformer(BaseLagGenerator):
 
     def __init__(
-            self,
-            features: list[str],
-            days: Union[int, list[int]],
-            granularity: Union[list[str], str] = None,
-            scale_by_participation_weight: bool = False,
-            add_count: bool = False,
-            add_opponent: bool = False,
-            prefix: str = "rolling_mean_days_",
+        self,
+        features: list[str],
+        days: Union[int, list[int]],
+        granularity: Union[list[str], str] = None,
+        scale_by_participation_weight: bool = False,
+        add_count: bool = False,
+        add_opponent: bool = False,
+        prefix: str = "rolling_mean_days_",
     ):
         self.days = days
         self.scale_by_participation_weight = scale_by_participation_weight
@@ -274,7 +274,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                     self._features_out.append(f"{self.prefix}{day}_count_opponent")
 
     def generate_historical(
-            self, df: pd.DataFrame, column_names: ColumnNames
+        self, df: pd.DataFrame, column_names: ColumnNames
     ) -> pd.DataFrame:
         ori_types = {c: df[c].dtype for c in df.columns}
         df = df.assign(is_future=0)
@@ -340,13 +340,13 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         for feature_name in self.features:
 
             if (
-                    self.column_names.participation_weight
-                    and self.scale_by_participation_weight
+                self.column_names.participation_weight
+                and self.scale_by_participation_weight
             ):
                 concat_df = concat_df.assign(
                     **{
                         feature_name: concat_df[feature_name]
-                                      * concat_df[self.column_names.participation_weight]
+                        * concat_df[self.column_names.participation_weight]
                     }
                 )
 
@@ -392,7 +392,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         return concat_df.drop(columns="__date_day")
 
     def _add_rolling_feature(
-            self, concat_df: pd.DataFrame, day: int, granularity: list[str], prefix_day: str
+        self, concat_df: pd.DataFrame, day: int, granularity: list[str], prefix_day: str
     ):
 
         if len(granularity) > 1:
@@ -424,11 +424,11 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         df1.columns = feats + ["is_nan_sum", "is_nan_count"]
         for feature_name in self.features:
             df1[f"{prefix_day}_{feature_name}_count"] = (
-                    df1[f"{prefix_day}_{feature_name}_count"] - df1["is_nan_sum"]
+                df1[f"{prefix_day}_{feature_name}_count"] - df1["is_nan_sum"]
             )
             df1[f"{prefix_day}_{feature_name}"] = df1[
-                                                      f"{prefix_day}_{feature_name}_sum"
-                                                  ] / (df1[f"{prefix_day}_{feature_name}_count"])
+                f"{prefix_day}_{feature_name}_sum"
+            ] / (df1[f"{prefix_day}_{feature_name}_count"])
 
             df1.loc[
                 df1[f"{prefix_day}_{feature_name}_count"] == 0,
@@ -464,15 +464,15 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
 class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
     def __init__(
-            self,
-            features: list[str],
-            window: int,
-            binary_column: str,
-            granularity: list[str] = None,
-            prob_column: Optional[str] = None,
-            min_periods: int = 1,
-            add_opponent: bool = False,
-            prefix: str = "rolling_mean_binary_",
+        self,
+        features: list[str],
+        window: int,
+        binary_column: str,
+        granularity: list[str] = None,
+        prob_column: Optional[str] = None,
+        min_periods: int = 1,
+        add_opponent: bool = False,
+        prefix: str = "rolling_mean_binary_",
     ):
         super().__init__(
             features=features,
@@ -604,10 +604,10 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
                 )
                 transformed_df = transformed_df.with_columns(
                     (
-                            nw.col(f"{self.prefix}{self.window}_{feature_name}_1")
-                            * nw.col(self.prob_column)
-                            + nw.col(f"{self.prefix}{self.window}_{feature_name}_0")
-                            * (1 - nw.col(self.prob_column))
+                        nw.col(f"{self.prefix}{self.window}_{feature_name}_1")
+                        * nw.col(self.prob_column)
+                        + nw.col(f"{self.prefix}{self.window}_{feature_name}_0")
+                        * (1 - nw.col(self.prob_column))
                     ).alias(weighted_prob_feat_name)
                 )
         return transformed_df
@@ -713,15 +713,15 @@ class RollingMeanTransformer(BaseLagGenerator):
     """
 
     def __init__(
-            self,
-            features: list[str],
-            window: int,
-            granularity: Union[list[str], str] = None,
-            add_opponent: bool = False,
-            scale_by_participation_weight: bool = False,
-            min_periods: int = 1,
-            are_estimator_features=True,
-            prefix: str = "rolling_mean_",
+        self,
+        features: list[str],
+        window: int,
+        granularity: Union[list[str], str] = None,
+        add_opponent: bool = False,
+        scale_by_participation_weight: bool = False,
+        min_periods: int = 1,
+        are_estimator_features=True,
+        prefix: str = "rolling_mean_",
     ):
         """
         :param features:   Features to create rolling mean for
@@ -767,19 +767,12 @@ class RollingMeanTransformer(BaseLagGenerator):
         else:
             ori_type = "pl"
 
-        unique_cols = [column_names.player_id,
-                       column_names.team_id,
-                       column_names.match_id] if column_names.player_id in df.columns else [
-            column_names.team_id,
-            column_names.match_id
-        ]
-        if (
-                df.unique(
-                    subset=
-                    unique_cols
-                ).shape[0]
-                != df.shape[0]
-        ):
+        unique_cols = (
+            [column_names.player_id, column_names.team_id, column_names.match_id]
+            if column_names.player_id in df.columns
+            else [column_names.team_id, column_names.match_id]
+        )
+        if df.unique(subset=unique_cols).shape[0] != df.shape[0]:
             raise ValueError(
                 f"Duplicated rows in df. Df must be a unique combination of {column_names.player_id} and {column_names.update_match_id}"
             )
@@ -795,9 +788,7 @@ class RollingMeanTransformer(BaseLagGenerator):
         cn = self.column_names
 
         df = df.join(
-            transformed_df.select(
-                *unique_cols, *self.features_out
-            ),
+            transformed_df.select(*unique_cols, *self.features_out),
             on=unique_cols,
             how="left",
         )
@@ -862,14 +853,14 @@ class RollingMeanTransformer(BaseLagGenerator):
 
         concat_df = self._concat_df(df)
         if (
-                self.column_names.participation_weight
-                and self.scale_by_participation_weight
+            self.column_names.participation_weight
+            and self.scale_by_participation_weight
         ):
             concat_df = concat_df.with_columns(
                 [
                     (
-                            concat_df[feature_name]
-                            * concat_df[self.column_names.participation_weight]
+                        concat_df[feature_name]
+                        * concat_df[self.column_names.participation_weight]
                     ).alias(feature_name)
                     for feature_name in self.features
                 ]
@@ -896,9 +887,9 @@ class RollingMeanTransformer(BaseLagGenerator):
         grp = grp.with_columns(rolling_means)
 
         selection_columns = (
-                self.granularity
-                + [self.column_names.update_match_id]
-                + [f"{self.prefix}{self.window}_{feature}" for feature in self.features]
+            self.granularity
+            + [self.column_names.update_match_id]
+            + [f"{self.prefix}{self.window}_{feature}" for feature in self.features]
         )
         concat_df = concat_df.join(
             grp.select(selection_columns),
@@ -906,16 +897,20 @@ class RollingMeanTransformer(BaseLagGenerator):
             how="left",
         )
 
-        sort_cols = [
-            self.column_names.start_date,
-            self.column_names.match_id,
-            self.column_names.team_id,
-            self.column_names.player_id,
-        ] if self.column_names.player_id in concat_df.columns else [
-            self.column_names.start_date,
-            self.column_names.match_id,
-            self.column_names.team_id
-        ]
+        sort_cols = (
+            [
+                self.column_names.start_date,
+                self.column_names.match_id,
+                self.column_names.team_id,
+                self.column_names.player_id,
+            ]
+            if self.column_names.player_id in concat_df.columns
+            else [
+                self.column_names.start_date,
+                self.column_names.match_id,
+                self.column_names.team_id,
+            ]
+        )
         concat_df = concat_df.sort(sort_cols)
 
         feats_added = [f for f in self.features_out if f in concat_df.columns]

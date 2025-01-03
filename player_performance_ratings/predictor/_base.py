@@ -24,22 +24,24 @@ DataFrameType = TypeVar("DataFrameType", pd.DataFrame, pl.DataFrame)
 class BasePredictor(ABC):
 
     def __init__(
-            self,
-            estimator_features: list[str],
-            target: str,
-            scale_features: bool = False,
-            one_hot_encode_cat_features: bool = False,
-            convert_to_cat_feats_to_cat_dtype: bool = False,
-            impute_missing_values: bool = False,
-            pre_transformers: Optional[list[PredictorTransformer]] = None,
-            post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-            pred_column: Optional[str] = None,
-            filters: Optional[dict] = None,
-            auto_pre_transform: bool = True,
-            multiclass_output_as_struct: bool = False,
+        self,
+        estimator_features: list[str],
+        target: str,
+        estimator_features_contain: Optional[list[str]] = None,
+        scale_features: bool = False,
+        one_hot_encode_cat_features: bool = False,
+        convert_to_cat_feats_to_cat_dtype: bool = False,
+        impute_missing_values: bool = False,
+        pre_transformers: Optional[list[PredictorTransformer]] = None,
+        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+        pred_column: Optional[str] = None,
+        filters: Optional[dict] = None,
+        auto_pre_transform: bool = True,
+        multiclass_output_as_struct: bool = False,
     ):
         self._estimator_features = estimator_features or []
         self._target = target
+        self._estimator_features_contain = estimator_features_contain or []
         self.post_predict_transformers = post_predict_transformers or []
         self.convert_to_cat_feats_to_cat_dtype = convert_to_cat_feats_to_cat_dtype
         self.impute_missing_values = impute_missing_values
@@ -67,12 +69,23 @@ class BasePredictor(ABC):
     def reset(self) -> None:
         pass
 
+    def _add_estimator_features_contain(self, df: FrameT) -> FrameT:
+        columns = df.columns
+        for contain in self._estimator_features_contain:
+            for column in columns:
+                if column not in self._estimator_features and contain in column:
+                    self._estimator_features.append(column)
+
+        return df
+
     @abstractmethod
     def train(self, df: FrameT, estimator_features: Optional[list[str]] = None) -> None:
         pass
 
     @abstractmethod
-    def predict(self, df: FrameT, cross_validation: Optional[bool] = None) -> IntoFrameT:
+    def predict(
+        self, df: FrameT, cross_validation: Optional[bool] = None
+    ) -> IntoFrameT:
         pass
 
     @property
@@ -90,7 +103,7 @@ class BasePredictor(ABC):
         return [self.pred_column, "classes"]
 
     def _convert_multiclass_predictions_to_struct(
-            self, df: FrameT, classes: list[str]
+        self, df: FrameT, classes: list[str]
     ) -> FrameT:
         df = df.to_native()
         assert isinstance(df, pl.DataFrame)
@@ -117,7 +130,7 @@ class BasePredictor(ABC):
             if not df[estimator_feature].dtype.is_numeric():
                 cat_feats_to_transform.append(estimator_feature)
 
-        for estimator_feature in  self._estimator_features.copy():
+        for estimator_feature in self._estimator_features.copy():
 
             if estimator_feature not in df.columns:
                 self._estimator_features.remove(estimator_feature)
@@ -146,9 +159,7 @@ class BasePredictor(ABC):
 
         if self.scale_features:
             numeric_feats = [
-                f
-                for f in  self._estimator_features
-                if f not in cat_feats_to_transform
+                f for f in self._estimator_features if f not in cat_feats_to_transform
             ]
             if numeric_feats:
                 pre_transformers.append(
@@ -160,9 +171,7 @@ class BasePredictor(ABC):
 
         if self.impute_missing_values:
             numeric_feats = [
-                f
-                for f in  self._estimator_features
-                if f not in cat_feats_to_transform
+                f for f in self._estimator_features if f not in cat_feats_to_transform
             ]
             if numeric_feats:
 
@@ -177,7 +186,10 @@ class BasePredictor(ABC):
 
     def _transformer_exists(self, transformer: PredictorTransformer) -> bool:
         for pre_transformer in self.pre_transformers:
-            if pre_transformer.__class__.__name__ == transformer.__class__.__name__ and pre_transformer.features == transformer.features:
+            if (
+                pre_transformer.__class__.__name__ == transformer.__class__.__name__
+                and pre_transformer.features == transformer.features
+            ):
                 return True
         return False
 
@@ -200,7 +212,10 @@ class BasePredictor(ABC):
             )
 
             for feature in pre_transformer.features:
-                if feature in self._estimator_features and feature not in pre_transformer.features_out:
+                if (
+                    feature in self._estimator_features
+                    and feature not in pre_transformer.features_out
+                ):
                     self._estimator_features.remove(feature)
             for features_out in pre_transformer.features_out:
                 if features_out not in self._estimator_features:

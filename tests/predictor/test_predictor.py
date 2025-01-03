@@ -25,7 +25,10 @@ def test_game_team_predictor_add_predictiondf(df):
     mock_model.estimator = LogisticRegression()
 
     predictor = GameTeamPredictor(
-        game_id_colum="game_id", team_id_column="team_id", estimator=mock_model, target='__target'
+        game_id_colum="game_id",
+        team_id_column="team_id",
+        estimator=mock_model,
+        target="__target",
     )
     predictor._estimator_features = ["feature1", "feature2"]
     data = df(
@@ -61,10 +64,10 @@ def test_game_team_predictor_add_predictiondf(df):
             multiclass_output_as_struct=True,
             game_id_colum="game_id",
             team_id_column="team_id",
-            target='__target',
+            target="__target",
         ),
-        Predictor(target='__target'),
-        GranularityPredictor(granularity_column_name="position", target='__target'),
+        Predictor(target="__target"),
+        GranularityPredictor(granularity_column_name="position", target="__target"),
     ],
 )
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
@@ -104,7 +107,7 @@ def test_game_team_predictor_game_player(df):
         team_id_column="team_id",
         estimator=mock_model,
         pre_transformers=[],
-        target='__target',
+        target="__target",
     )
 
     data = df(
@@ -141,7 +144,10 @@ def test_game_team_predictor(target_values, df):
     "should identify it's a regressor and train and predict works as intended"
 
     predictor = GameTeamPredictor(
-        game_id_colum="game_id", team_id_column="team_id", estimator=LinearRegression(), target='__target'
+        game_id_colum="game_id",
+        team_id_column="team_id",
+        estimator=LinearRegression(),
+        target="__target",
     )
 
     data = df(
@@ -165,7 +171,7 @@ def test_game_team_predictor(target_values, df):
 def test_predictor_regressor(target_values, df):
     "should identify it's a regressor and train and predict works as intended"
 
-    predictor = Predictor(estimator=LinearRegression(), target='__target')
+    predictor = Predictor(estimator=LinearRegression(), target="__target")
 
     data = df(
         {
@@ -189,7 +195,9 @@ def test_granularity_predictor(target_values, df):
     "should identify it's a regressor and train and predict works as intended"
 
     predictor = GranularityPredictor(
-        estimator=LinearRegression(), granularity_column_name="position", target='__target'
+        estimator=LinearRegression(),
+        granularity_column_name="position",
+        target="__target",
     )
 
     data = df(
@@ -209,8 +217,12 @@ def test_granularity_predictor(target_values, df):
 
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
 def test_one_hot_encoder_train(df):
-    predictor = Predictor(target='__target', one_hot_encode_cat_features=True,
-                          estimator_features=["feature1", 'cat_feature'], impute_missing_values=True)
+    predictor = Predictor(
+        target="__target",
+        one_hot_encode_cat_features=True,
+        estimator_features=["feature1", "cat_feature"],
+        impute_missing_values=True,
+    )
     data = df(
         {
             "position": ["a", "b", "a", "b"],
@@ -223,4 +235,32 @@ def test_one_hot_encoder_train(df):
 
     predictor.train(data)
     assert len(predictor.pre_transformers) == 2
-    assert predictor.estimator_features == ['feature1', 'cat_feature_cat1', 'cat_feature_cat2']
+    assert predictor.estimator_features == [
+        "feature1",
+        "cat_feature_cat1",
+        "cat_feature_cat2",
+    ]
+
+
+@pytest.mark.parametrize("predictor", [
+    Predictor(target='__target', estimator_features=['feature1'],estimator=LinearRegression(), estimator_features_contain=['lag']),
+    GranularityPredictor(target='__target',estimator_features=['feature1'],estimator=LinearRegression(),
+                         granularity_column_name='group', estimator_features_contain=['lag']),
+    GameTeamPredictor(target='__target',estimator=LinearRegression(),  game_id_colum='game_id', team_id_column='team_id', estimator_features=['feature1'], estimator_features_contain=['lag'])])
+@pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
+def test_estimator_features_contain(predictor, df):
+    data = df(
+        {
+            "game_id": [1, 1, 2, 2],
+            "team_id": [1, 2, 1, 2],
+            "player_id": [1, 2, 1, 2],
+            "feature1": [0.1, 0.5, 0.1, 0.5],
+            'lag_feature1': [0.2, 0.3, 0.4, 0.5],
+            'lag_feature2': [0.4, 0.3, 0.4, 0.5],
+            "group": [1, 1, 1, 1],
+            "__target": [1, 0, 1, 0],
+        }
+    )
+
+    predictor.train(data)
+    assert predictor.estimator_features == ['feature1', 'lag_feature1', 'lag_feature2']

@@ -33,8 +33,6 @@ def column_names():
     )
 
 
-
-
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_opponent_adjusted_rating_generator_with_projected_performance(df):
     column_names = ColumnNames(
@@ -334,6 +332,7 @@ def test_update_rating_generator_historical_and_future(df):
             check_like=True,
         )
 
+
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_update_rating_generator_stores_correct(df):
     column_names = ColumnNames(
@@ -364,9 +363,9 @@ def test_update_rating_generator_stores_correct(df):
 
     historical_df2 = df(
         {
-            column_names.match_id: [ 2, 2, 2, 2, 3, 3, 3, 3],
-            column_names.team_id: [1, 1, 2, 2, 1, 1, 3,3],
-            column_names.player_id: [ 1, 2, 3, 4, 1,2,5,6],
+            column_names.match_id: [2, 2, 2, 2, 3, 3, 3, 3],
+            column_names.team_id: [1, 1, 2, 2, 1, 1, 3, 3],
+            column_names.player_id: [1, 2, 3, 4, 1, 2, 5, 6],
             column_names.start_date: [
                 pd.to_datetime("2021-01-02"),
                 pd.to_datetime("2021-01-02"),
@@ -377,22 +376,40 @@ def test_update_rating_generator_stores_correct(df):
                 pd.to_datetime("2021-01-03"),
                 pd.to_datetime("2021-01-03"),
             ],
-            rating_generator.performance_column: [1.0,1.0,0,0, 1.0,1.0,0,0],
+            rating_generator.performance_column: [1.0, 1.0, 0, 0, 1.0, 1.0, 0, 0],
         }
     )
 
-    hist_ratings1 = rating_generator.generate_historical(historical_df1, column_names=column_names)
+    hist_ratings1 = rating_generator.generate_historical(
+        historical_df1, column_names=column_names
+    )
 
     if isinstance(hist_ratings1, pl.DataFrame):
-        expected_rating_difference_game2 = hist_ratings1.filter(pl.col(column_names.match_id)==2)[rating_generator.features_out[0]].head(1).item()
+        expected_rating_difference_game2 = (
+            hist_ratings1.filter(pl.col(column_names.match_id) == 2)[
+                rating_generator.features_out[0]
+            ]
+            .head(1)
+            .item()
+        )
     else:
-        expected_rating_difference_game2 = hist_ratings1[hist_ratings1[column_names.match_id]==2][rating_generator.features_out[0]].iloc[0]
+        expected_rating_difference_game2 = hist_ratings1[
+            hist_ratings1[column_names.match_id] == 2
+        ][rating_generator.features_out[0]].iloc[0]
 
-    hist_ratings2 = rating_generator.generate_historical(historical_df2, column_names=column_names)
+    hist_ratings2 = rating_generator.generate_historical(
+        historical_df2, column_names=column_names
+    )
     if isinstance(hist_ratings1, pl.DataFrame):
-        assert hist_ratings2[rating_generator.features_out[0]].head(1).item() == expected_rating_difference_game2
+        assert (
+            hist_ratings2[rating_generator.features_out[0]].head(1).item()
+            == expected_rating_difference_game2
+        )
     else:
-        assert hist_ratings2[rating_generator.features_out[0]].iloc[0] == expected_rating_difference_game2
+        assert (
+            hist_ratings2[rating_generator.features_out[0]].iloc[0]
+            == expected_rating_difference_game2
+        )
 
     for f in rating_generator._features_out:
         assert f in hist_ratings1.columns
@@ -400,13 +417,33 @@ def test_update_rating_generator_stores_correct(df):
         assert f in hist_ratings2.columns
 
     if isinstance(historical_df1, pl.DataFrame):
-        hist_ratings = pl.concat([hist_ratings1, hist_ratings2]).unique([column_names.match_id, column_names.player_id])
-        hist_ratings = hist_ratings.sort([column_names.start_date, column_names.match_id, column_names.team_id ,column_names.player_id])
+        hist_ratings = pl.concat([hist_ratings1, hist_ratings2]).unique(
+            [column_names.match_id, column_names.player_id]
+        )
+        hist_ratings = hist_ratings.sort(
+            [
+                column_names.start_date,
+                column_names.match_id,
+                column_names.team_id,
+                column_names.player_id,
+            ]
+        )
 
-        assert_frame_equal(rating_generator.historical_df[rating_generator.features_out], hist_ratings[rating_generator.features_out])
+        assert_frame_equal(
+            rating_generator.historical_df[rating_generator.features_out],
+            hist_ratings[rating_generator.features_out],
+        )
     else:
-        hist_ratings = pd.concat([hist_ratings1, hist_ratings2]).drop_duplicates([column_names.match_id, column_names.player_id])
-        pd.testing.assert_frame_equal(rating_generator.historical_df[rating_generator.features_out].reset_index(drop=True), hist_ratings[rating_generator.features_out].reset_index(drop=True))
+        hist_ratings = pd.concat([hist_ratings1, hist_ratings2]).drop_duplicates(
+            [column_names.match_id, column_names.player_id]
+        )
+        pd.testing.assert_frame_equal(
+            rating_generator.historical_df[rating_generator.features_out].reset_index(
+                drop=True
+            ),
+            hist_ratings[rating_generator.features_out].reset_index(drop=True),
+        )
+
 
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_rating_generator_prefix_suffix(df):
@@ -416,30 +453,35 @@ def test_rating_generator_prefix_suffix(df):
         team_id="team_id",
         player_id="player_id",
         start_date="start_date",
-        league='league'
+        league="league",
     )
-    rating_generator = UpdateRatingGenerator(prefix="prefix_", suffix="_suffix", unknown_features_out=[
-        RatingUnknownFeatures.PLAYER_RATING_CHANGE,
-        RatingUnknownFeatures.PERFORMANCE,
-        RatingUnknownFeatures.RATING_DIFFERENCE,
-        RatingUnknownFeatures.OPPONENT_RATING,
-        RatingUnknownFeatures.RATING_MEAN
-    ], non_estimator_known_features_out=[
-        RatingKnownFeatures.TEAM_RATING_PROJECTED,
-        RatingKnownFeatures.PLAYER_RATING,
-        RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
-        RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED,
-        RatingKnownFeatures.TEAM_LEAGUE,
-        RatingKnownFeatures.PLAYER_LEAGUE,
-        RatingKnownFeatures.OPPONENT_LEAGUE,
-        RatingKnownFeatures.OPPONENT_RATING_PROJECTED
-    ])
+    rating_generator = UpdateRatingGenerator(
+        prefix="prefix_",
+        suffix="_suffix",
+        unknown_features_out=[
+            RatingUnknownFeatures.PLAYER_RATING_CHANGE,
+            RatingUnknownFeatures.PERFORMANCE,
+            RatingUnknownFeatures.RATING_DIFFERENCE,
+            RatingUnknownFeatures.OPPONENT_RATING,
+            RatingUnknownFeatures.RATING_MEAN,
+        ],
+        non_estimator_known_features_out=[
+            RatingKnownFeatures.TEAM_RATING_PROJECTED,
+            RatingKnownFeatures.PLAYER_RATING,
+            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
+            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED,
+            RatingKnownFeatures.TEAM_LEAGUE,
+            RatingKnownFeatures.PLAYER_LEAGUE,
+            RatingKnownFeatures.OPPONENT_LEAGUE,
+            RatingKnownFeatures.OPPONENT_RATING_PROJECTED,
+        ],
+    )
     historical_df1 = df(
         {
             column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2],
             column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2],
             column_names.player_id: [1, 2, 3, 4, 1, 2, 3, 4],
-            column_names.league: ['a', 'a', 'b', 'b', 'a', 'a', 'b', 'b'],
+            column_names.league: ["a", "a", "b", "b", "a", "a", "b", "b"],
             column_names.start_date: [
                 pd.to_datetime("2020-01-01"),
                 pd.to_datetime("2020-01-01"),
@@ -454,18 +496,27 @@ def test_rating_generator_prefix_suffix(df):
         }
     )
 
-
-    historical_df1_with_ratings = rating_generator.generate_historical(historical_df1, column_names=column_names)
-    for non_estimator_known_features_out in rating_generator._non_estimator_known_features_out:
-        expected_feature_name_out = rating_generator.prefix + non_estimator_known_features_out + rating_generator.suffix
+    historical_df1_with_ratings = rating_generator.generate_historical(
+        historical_df1, column_names=column_names
+    )
+    for (
+        non_estimator_known_features_out
+    ) in rating_generator._non_estimator_known_features_out:
+        expected_feature_name_out = (
+            rating_generator.prefix
+            + non_estimator_known_features_out
+            + rating_generator.suffix
+        )
         assert expected_feature_name_out in historical_df1_with_ratings.columns
 
     for unknown_features_out in rating_generator._unknown_features_out:
-        expected_feature_name_out = rating_generator.prefix + unknown_features_out + rating_generator.suffix
+        expected_feature_name_out = (
+            rating_generator.prefix + unknown_features_out + rating_generator.suffix
+        )
         assert expected_feature_name_out in historical_df1_with_ratings.columns
 
     for f in rating_generator._features_out:
-        expected_feature_out  = rating_generator.prefix + f + rating_generator.suffix
+        expected_feature_out = rating_generator.prefix + f + rating_generator.suffix
         assert expected_feature_out in historical_df1_with_ratings.columns
 
     future_df = df(
@@ -473,29 +524,27 @@ def test_rating_generator_prefix_suffix(df):
             column_names.match_id: [3, 3, 3, 3],
             column_names.team_id: [1, 1, 2, 2],
             column_names.player_id: [1, 2, 3, 4],
-            column_names.league: ['a', 'a', 'b', 'b'],
+            column_names.league: ["a", "a", "b", "b"],
             column_names.start_date: [
                 pd.to_datetime("2020-01-03"),
                 pd.to_datetime("2020-01-03"),
                 pd.to_datetime("2020-01-03"),
                 pd.to_datetime("2020-01-03"),
-
-            ]
+            ],
         }
     )
 
     future_df_ratings = rating_generator.generate_future(future_df)
-    for non_estimator_known_features_out in rating_generator._non_estimator_known_features_out:
-        expected_feature_name_out = rating_generator.prefix + non_estimator_known_features_out + rating_generator.suffix
+    for (
+        non_estimator_known_features_out
+    ) in rating_generator._non_estimator_known_features_out:
+        expected_feature_name_out = (
+            rating_generator.prefix
+            + non_estimator_known_features_out
+            + rating_generator.suffix
+        )
         assert expected_feature_name_out in future_df_ratings.columns
 
-
     for f in rating_generator._features_out:
-        expected_feature_out  = rating_generator.prefix + f + rating_generator.suffix
+        expected_feature_out = rating_generator.prefix + f + rating_generator.suffix
         assert expected_feature_out in future_df_ratings.columns
-
-
-
-
-
-
