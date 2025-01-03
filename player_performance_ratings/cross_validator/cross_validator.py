@@ -52,7 +52,7 @@ class MatchKFoldCrossValidator(CrossValidator):
         df: FrameT,
         column_names: ColumnNames,
         return_features: bool = False,
-        add_train_prediction: bool = False,
+        add_train_prediction: bool = True,
     ) -> IntoFrameT:
         """
         Generate predictions on validation dataset.
@@ -75,6 +75,9 @@ class MatchKFoldCrossValidator(CrossValidator):
 
         if "__row_index" in df.columns:
             df = df.drop("__row_index")
+
+        if self.validation_column_name in df.columns:
+            df = df.drop(self.validation_column_name)
 
         predictor = copy.deepcopy(self.predictor)
         validation_dfs = []
@@ -122,6 +125,8 @@ class MatchKFoldCrossValidator(CrossValidator):
             raise ValueError(
                 f"train_df is empty. train_cut_off_day_number: {train_cut_off_match_number}. Select a lower validation_match value."
             )
+
+
 
         validation_df = df.filter(
             (nw.col("__cv_match_number") >= train_cut_off_match_number)

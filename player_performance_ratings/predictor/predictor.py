@@ -150,7 +150,7 @@ class GameTeamPredictor(BasePredictor):
         )
 
     @nw.narwhalify
-    def predict(self, df: FrameT) -> IntoFrameT:
+    def predict(self, df: FrameT, cross_validation: bool = False) -> IntoFrameT:
         """
         Adds prediction to df
 
@@ -415,7 +415,7 @@ class Predictor(BasePredictor):
         )
 
     @nw.narwhalify
-    def predict(self, df: FrameT) -> IntoFrameT:
+    def predict(self, df: FrameT, cross_validation: bool = False) -> IntoFrameT:
         """
         Adds prediction to df
 
@@ -631,7 +631,7 @@ class GranularityPredictor(BasePredictor):
             self.classes_[granularity].sort()
 
     @nw.narwhalify
-    def predict(self, df: FrameT) -> IntoFrameT:
+    def predict(self, df: FrameT, cross_validation: bool = False) -> IntoFrameT:
 
         if isinstance(df.to_native(), pd.DataFrame):
             df = nw.from_native(pl.DataFrame(df))

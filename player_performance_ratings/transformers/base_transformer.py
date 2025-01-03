@@ -75,10 +75,10 @@ class BaseLagGenerator:
 
         for feature_name in self.features:
             for lag in iterations:
-                self._features_out.append(f"{prefix}{lag}_{feature_name}")
-                self._entity_features.append(f"{prefix}{lag}_{feature_name}")
+                self._features_out.append(f"{prefix}_{feature_name}{lag}")
+                self._entity_features.append(f"{prefix}_{feature_name}{lag}")
                 if self.add_opponent:
-                    self._features_out.append(f"{prefix}{lag}_{feature_name}_opponent")
+                    self._features_out.append(f"{prefix}_{feature_name}{lag}_opponent")
 
     @abstractmethod
     def generate_historical(self, df: FrameT, column_names: ColumnNames) -> IntoFrameT:
@@ -134,7 +134,6 @@ class BaseLagGenerator:
             nw.concat(
                 [stored_df, df.select(cols)],
                 how="diagonal",
-                # how="diagonal_relaxed"
             )
             .sort(sort_cols)
             .unique(subset=sort_cols, maintain_order=True)
@@ -424,13 +423,6 @@ class BaseLagGenerator:
             ],
             how="left",
         )
-
-        #        ori_df = ori_df.with_columns(
-        #         [
-        #             nw.col(col).cast(nw.String).alias(col)
-        #               for col in [cn.match_id, cn.player_id, cn.team_id]
-        #         ]
-        #     )
 
         ori_feats_to_use = [f for f in ori_cols if f not in self.features_out]
         transformed_feats_to_use = [

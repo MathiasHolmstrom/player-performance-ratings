@@ -63,7 +63,7 @@ def test_lag_team_fit_transform(df, column_names):
     if isinstance(data, pl.DataFrame):
         expected_df = original_df.with_columns(
             [
-                pl.Series("lag_1_points", [None, None, None, None, 1.5, 1.5, 2.5, 2.5]),
+                pl.Series("lag_points1", [None, None, None, None, 1.5, 1.5, 2.5, 2.5]),
                 pl.col("team"),
                 pl.col("game"),
                 pl.col("player"),
@@ -75,7 +75,7 @@ def test_lag_team_fit_transform(df, column_names):
 
     elif isinstance(data, pd.DataFrame):
         expected_df = original_df.assign(
-            **{"lag_1_points": [None, None, None, None, 1.5, 1.5, 2.5, 2.5]}
+            **{"lag_points1": [None, None, None, None, 1.5, 1.5, 2.5, 2.5]}
         )
         expected_df["team"] = expected_df["team"]
         expected_df["game"] = expected_df["game"]
@@ -119,13 +119,11 @@ def test_lag_fit_transform_2_features(df, column_names):
     if isinstance(data, pd.DataFrame):
         expected_df = original_df.assign(
             **{
-                "lag_1_points": [None, None, 1],
-                "lag_1_points_per_minute": [None, None, 0.5],
+                "lag_points1": [None, None, 1],
+                "lag_points_per_minute1": [None, None, 0.5],
             }
         )
-        expected_df["team"] = expected_df["team"]
-        expected_df["game"] = expected_df["game"]
-        expected_df["player"] = expected_df["player"]
+
         pd.testing.assert_frame_equal(
             df_with_lags, expected_df, check_like=True, check_dtype=False
         )
@@ -133,8 +131,8 @@ def test_lag_fit_transform_2_features(df, column_names):
     else:
         expected_df = original_df.with_columns(
             [
-                pl.Series("lag_1_points", [None, None, 1]),
-                pl.Series("lag_1_points_per_minute", [None, None, 0.5]),
+                pl.Series("lag_points1", [None, None, 1]),
+                pl.Series("lag_points_per_minute1", [None, None, 0.5]),
                 pl.col("team"),
                 pl.col("game"),
                 pl.col("player"),
@@ -178,13 +176,11 @@ def test_lag_fit_transform_lag_length_2(df, column_names):
     if isinstance(data, pd.DataFrame):
         expected_df = original_df.assign(
             **{
-                "lag_1_points": [None, None, 1, 3],
-                "lag_2_points": [None, None, None, 1],
+                "lag_points1": [None, None, 1, 3],
+                "lag_points2": [None, None, None, 1],
             }
         )
-        expected_df["team"] = expected_df["team"]
-        expected_df["game"] = expected_df["game"]
-        expected_df["player"] = expected_df["player"]
+
         pd.testing.assert_frame_equal(
             df_with_lags, expected_df, check_like=True, check_dtype=False
         )
@@ -192,8 +188,8 @@ def test_lag_fit_transform_lag_length_2(df, column_names):
     else:
         expected_df = original_df.with_columns(
             [
-                pl.Series("lag_1_points", [None, None, 1, 3]),
-                pl.Series("lag_2_points", [None, None, None, 1]),
+                pl.Series("lag_points1", [None, None, 1, 3]),
+                pl.Series("lag_points2", [None, None, None, 1]),
                 pl.col("team"),
                 pl.col("game"),
                 pl.col("player"),
@@ -249,18 +245,16 @@ def test_lag_fit_transform_and_transform(df, column_names):
 
     if isinstance(future_df, pd.DataFrame):
         expected_df = future_df_copy.assign(
-            **{lag_transformation.prefix + "1_points": [3, 2, 3]}
+            **{lag_transformation.prefix + "_points1": [3, 2, 3]}
         )
-        expected_df["team"] = expected_df["team"]
-        expected_df["game"] = expected_df["game"]
-        expected_df["player"] = expected_df["player"]
+
         pd.testing.assert_frame_equal(
             future_transformed_df, expected_df, check_like=True, check_dtype=False
         )
     else:
         expected_df = future_df_copy.with_columns(
             [
-                pl.Series(lag_transformation.prefix + "1_points", [3, 2, 3]),
+                pl.Series(lag_transformation.prefix + "_points1", [3, 2, 3]),
                 pl.col("team"),
                 pl.col("game"),
                 pl.col("player"),
@@ -317,22 +311,20 @@ def test_lag_transformation_transform_2_lags(df, column_names):
 
     if isinstance(future_df, pd.DataFrame):
         expected_df = future_df_copy.assign(
-            **{lag_transformation.prefix + "1_points": [3, 2, 3]}
+            **{lag_transformation.prefix + "_points1": [3, 2, 3]}
         )
         expected_df = expected_df.assign(
-            **{lag_transformation.prefix + "2_points": [1, None, 1]}
+            **{lag_transformation.prefix + "_points2": [1, None, 1]}
         )
-        expected_df["team"] = expected_df["team"]
-        expected_df["game"] = expected_df["game"]
-        expected_df["player"] = expected_df["player"]
+
         pd.testing.assert_frame_equal(
             future_transformed_df, expected_df, check_like=True, check_dtype=False
         )
     else:
         expected_df = future_df_copy.with_columns(
             [
-                pl.Series(lag_transformation.prefix + "1_points", [3, 2, 3]),
-                pl.Series(lag_transformation.prefix + "2_points", [1, None, 1]),
+                pl.Series(lag_transformation.prefix + "_points1", [3, 2, 3]),
+                pl.Series(lag_transformation.prefix + "_points2", [1, None, 1]),
                 pl.col("team"),
                 pl.col("game"),
                 pl.col("player"),
@@ -383,9 +375,7 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
                 lag_transformation.features_out[3]: [None, None, None, None],
             }
         )
-        expected_df["team"] = expected_df["team"]
-        expected_df["game"] = expected_df["game"]
-        expected_df["player"] = expected_df["player"]
+
         pd.testing.assert_frame_equal(
             df_with_lags, expected_df, check_like=True, check_dtype=False
         )
@@ -401,6 +391,7 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
                 pl.col("player"),
             ]
         )
+        assert_frame_equal(df_with_lags, expected_df.select(df_with_lags.columns), check_dtype=False)
 
     future_df = pd.DataFrame(
         {
@@ -431,9 +422,7 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
                 lag_transformation.features_out[3]: [None, 1, None, None],
             }
         )
-        expected_future_df["team"] = expected_future_df["team"]
-        expected_future_df["game"] = expected_future_df["game"]
-        expected_future_df["player"] = expected_future_df["player"]
+
         pd.testing.assert_frame_equal(
             future_df, expected_future_df, check_like=True, check_dtype=False
         )
@@ -495,10 +484,7 @@ def test_lag_transformer_parent_match_id(df, column_names: ColumnNames):
         expected_df = expected_df.assign(
             **{lag_transformation.features_out[1]: [None, None, None, 1.5]}
         )
-        expected_df["team"] = expected_df["team"]
-        expected_df["game"] = expected_df["game"]
-        expected_df["player"] = expected_df["player"]
-        expected_df["series_id"] = expected_df["series_id"]
+
         pd.testing.assert_frame_equal(
             transformed_df, expected_df, check_like=True, check_dtype=False
         )
@@ -556,7 +542,7 @@ def test_rolling_mean_fit_transform_game_team(df, column_names):
     if isinstance(data, pd.DataFrame):
         expected_df = original_df.assign(
             **{
-                f"{rolling_mean_transformation.prefix}3_points": [
+                f"{rolling_mean_transformation.prefix}_points3": [
                     None,
                     None,
                     1,
@@ -564,7 +550,7 @@ def test_rolling_mean_fit_transform_game_team(df, column_names):
                     2,
                     None,
                 ],
-                f"{rolling_mean_transformation.prefix}3_points_opponent": [
+                f"{rolling_mean_transformation.prefix}_points3_opponent": [
                     None,
                     None,
                     2,
@@ -581,12 +567,12 @@ def test_rolling_mean_fit_transform_game_team(df, column_names):
         expected_df = original_df.with_columns(
             [
                 pl.Series(
-                    f"{rolling_mean_transformation.prefix}3_points",
+                    f"{rolling_mean_transformation.prefix}_points3",
                     [None, None, 1, 2, 2, None],
                     strict=False,
                 ),
                 pl.Series(
-                    f"{rolling_mean_transformation.prefix}3_points_opponent",
+                    f"{rolling_mean_transformation.prefix}_points3_opponent",
                     [None, None, 2, 1, None, 2],
                     strict=False,
                 ),
@@ -633,7 +619,7 @@ def test_rolling_mean_fit_transform(df, column_names):
     if isinstance(data, pd.DataFrame):
         expected_df = original_df.assign(
             **{
-                f"{rolling_mean_transformation.prefix}2_points": [
+                f"{rolling_mean_transformation.prefix}_points2": [
                     None,
                     None,
                     1,
@@ -648,7 +634,7 @@ def test_rolling_mean_fit_transform(df, column_names):
         expected_df = original_df.with_columns(
             [
                 pl.Series(
-                    f"{rolling_mean_transformation.prefix}2_points",
+                    f"{rolling_mean_transformation.prefix}_points2",
                     [None, None, 1, (3 + 1) / 2],
                     strict=False,
                 )
@@ -710,7 +696,7 @@ def test_rolling_mean_fit_transform_and_transform(df, column_names):
     if isinstance(future_df, pd.DataFrame):
         expected_df = original_future_df.assign(
             **{
-                f"{rolling_mean_transformation.prefix}2_points": [2.5, 2, 2.5, 2],
+                f"{rolling_mean_transformation.prefix}_points2": [2.5, 2, 2.5, 2],
                 rolling_mean_transformation.features_out[1]: [2, 2.5, 2, 2.5],
             }
         )
@@ -721,7 +707,7 @@ def test_rolling_mean_fit_transform_and_transform(df, column_names):
         expected_df = original_future_df.with_columns(
             [
                 pl.Series(
-                    f"{rolling_mean_transformation.prefix}2_points", [2.5, 2, 2.5, 2]
+                    f"{rolling_mean_transformation.prefix}_points2", [2.5, 2, 2.5, 2]
                 ),
                 pl.Series(
                     rolling_mean_transformation.features_out[1], [2, 2.5, 2, 2.5]
@@ -771,7 +757,7 @@ def test_rolling_mean_transformer_fit_transformer_team_stat(df, column_names):
         historical_df, column_names=column_names
     )
     if isinstance(historical_df, pd.DataFrame):
-        expected_df[rolling_mean_transformation.prefix + "2_score_difference"] = [
+        expected_df[rolling_mean_transformation.prefix + "_score_difference2"] = [
             None,
             None,
             None,
@@ -788,7 +774,7 @@ def test_rolling_mean_transformer_fit_transformer_team_stat(df, column_names):
         expected_df = expected_df.with_columns(
             [
                 pl.Series(
-                    rolling_mean_transformation.prefix + "2_score_difference",
+                    rolling_mean_transformation.prefix + "_score_difference2",
                     [None, None, None, None, 10, 10, -10, -10],
                 )
             ]
