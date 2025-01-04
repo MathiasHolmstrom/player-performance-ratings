@@ -81,7 +81,7 @@ class PerformancesGenerator:
         performances: Union[list[Performance], Performance],
         transformers: Optional[list[BaseTransformer]] = None,
         auto_transform_performance: bool = True,
-        auto_generated_features_prefix: str = "peformance__",
+        auto_generated_features_prefix: str = "performance__",
         return_auto_generated_features: bool = False,
     ):
         self.return_auto_generated_features = return_auto_generated_features

@@ -9,6 +9,7 @@ from player_performance_ratings.ratings import (
     UpdateRatingGenerator,
     RatingKnownFeatures,
 )
+from player_performance_ratings.ratings.performance_generator import PerformancesGenerator, Performance, ColumnWeight
 from player_performance_ratings.transformers import LagTransformer
 from player_performance_ratings.transformers.lag_generators import (
     RollingMeanTransformer,
@@ -48,10 +49,16 @@ future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(
     columns=["result"]
 )
 
-rating_generator = UpdateRatingGenerator(
+rating_generator_result = UpdateRatingGenerator(
     features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
     performance_column="result",
 )
+
+rating_generator_player_kills = UpdateRatingGenerator(
+    features_out=[RatingKnownFeatures.RATING_MEAN_PROJECTED],
+    performance_column="performance_kills",
+)
+
 
 lag_generators = [
     LagTransformer(
@@ -67,8 +74,16 @@ lag_generators = [
 
 
 transformer = PipelineTransformer(
+    performances_generator=PerformancesGenerator(
+        performances=Performance(
+            name='performance_kills',
+            weights=[
+                ColumnWeight(name="kills", weight=1),
+            ]
+        ),
+    ),
     column_names=column_names,
-    rating_generators=rating_generator,
+    rating_generators=[rating_generator_result, rating_generator_player_kills],
     lag_generators=lag_generators,
 )
 
