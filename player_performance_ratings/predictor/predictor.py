@@ -144,6 +144,7 @@ class GameTeamPredictor(BasePredictor):
             raise ValueError(f"target {self._target} not in df")
 
         grouped = self._create_grouped(df)
+        logging.info(f"Training with features: {self._estimator_features}")
         self.estimator.fit(
             grouped.select(self._estimator_features).to_pandas(),
             grouped[self._target].to_numpy(),
@@ -409,6 +410,8 @@ class Predictor(BasePredictor):
         if hasattr(self._deepest_estimator, "predict_proba"):
             filtered_df = filtered_df.with_columns(nw.col(self._target).cast(nw.Int64))
 
+        logging.info(f"Training with {len(filtered_df)} rows. Features: {self._estimator_features}")
+
         self.estimator.fit(
             filtered_df.select(self._estimator_features).to_pandas(),
             filtered_df[self._target].to_list(),
@@ -617,7 +620,7 @@ class GranularityPredictor(BasePredictor):
                 )
 
         self._granularities = filtered_df[self.granularity_column_name].unique()
-
+        logging.info(f"Training with features: {self._estimator_features}")
         for granularity in self._granularities:
             self._granularity_estimators[granularity] = clone(self.estimator)
             rows = filtered_df.filter(

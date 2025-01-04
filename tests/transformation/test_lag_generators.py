@@ -693,6 +693,7 @@ def test_rolling_mean_fit_transform_and_transform(df, column_names):
         df=historical_df, column_names=column_names
     )
     transformed_future_df = rolling_mean_transformation.generate_future(future_df)
+
     if isinstance(future_df, pd.DataFrame):
         expected_df = original_future_df.assign(
             **{

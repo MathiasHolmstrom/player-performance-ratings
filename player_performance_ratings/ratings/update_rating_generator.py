@@ -65,7 +65,7 @@ class UpdateRatingGenerator(RatingGenerator):
         match_rating_generator = match_rating_generator or MatchRatingGenerator()
         if not features_out:
             if (
-                match_rating_generator.performance_predictor
+                match_rating_generator.performance_predictor.__class__
                 == RatingMeanPerformancePredictor
             ):
                 features_out = [RatingKnownFeatures.RATING_MEAN_PROJECTED]
@@ -774,7 +774,7 @@ class UpdateRatingGenerator(RatingGenerator):
             + self.suffix: team_opponent_leagues,
             self.prefix + RatingKnownFeatures.TEAM_LEAGUE + self.suffix: team_leagues,
             self.prefix
-            + RatingKnownFeatures.RATING_MEAN_PROJECTED: rating_means_projected,
+            + RatingKnownFeatures.RATING_MEAN_PROJECTED + self.suffix: rating_means_projected,
             self.column_names.match_id: match_ids,
             self.column_names.player_id: player_ids,
         }
