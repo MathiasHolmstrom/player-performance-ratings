@@ -3,6 +3,7 @@ from typing import Optional, Union
 
 from narwhals.typing import FrameT, IntoFrameT
 
+from player_performance_ratings.ratings.performance_generator import PerformancesGenerator
 from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
 from player_performance_ratings.ratings.enums import (
     RatingKnownFeatures,
@@ -22,6 +23,7 @@ class RatingGenerator(ABC):
     def __init__(
         self,
         performance_column: str,
+        performances_generator: Optional[PerformancesGenerator],
         features_out: Optional[list[RatingKnownFeatures]],
         non_estimator_known_features_out: Optional[list[RatingKnownFeatures]],
         unknown_features_out: Optional[list[RatingUnknownFeatures]],
@@ -31,11 +33,13 @@ class RatingGenerator(ABC):
         prefix: str = "",
         suffix: str = "",
     ):
-
+        self.performances_generator = performances_generator
         self._features_out = features_out or []
         self._non_estimator_known_features_out = non_estimator_known_features_out or []
         self._unknown_features_out = unknown_features_out or []
         self.performance_column = performance_column
+        if self.performances_generator:
+            self.performance_column = self.performances_generator.features_out[0]
         self.seperate_player_by_position = seperate_player_by_position
         self.match_rating_generator = match_rating_generator
         self.distinct_positions = distinct_positions
@@ -84,7 +88,7 @@ class RatingGenerator(ABC):
         Rating Features that contain leakge. Thus, they must not be passed into an estimator.
         They are only inteded to be used for data-analysis
         """
-        return [self.prefix + f + self.suffix for f in self._unknown_features_out]
+        return [self.prefix + f + self.suffix for f in self._unknown_features_out] + self.performances_generator.features_out if self.performances_generator else []
 
     @property
     def non_estimator_known_features_out(self) -> list[str]:

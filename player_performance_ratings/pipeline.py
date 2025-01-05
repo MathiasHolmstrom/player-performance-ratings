@@ -45,7 +45,6 @@ class Pipeline(BasePredictor):
         predictor: BasePredictor,
         column_names: ColumnNames,
         filters: Optional[list[Filter]] = None,
-        performances_generator: Optional[PerformancesGenerator] = None,
         rating_generators: Optional[
             Union[RatingGenerator, list[RatingGenerator]]
         ] = None,
@@ -113,9 +112,10 @@ class Pipeline(BasePredictor):
             self._estimator_features += [
                 f for f in c.estimator_features_out if f not in self._estimator_features
             ]
-
-        logging.info(f"Using estimator features {self._estimator_features}")
-        self.performances_generator = performances_generator
+        if predictor._estimator_features_contain:
+            logging.info(f"Using estimator features {self._estimator_features} and {predictor._estimator_features_contain}")
+        else:
+            logging.info(f"Using estimator features {self._estimator_features}")
         self.predictor = predictor
 
     @nw.narwhalify
@@ -136,8 +136,6 @@ class Pipeline(BasePredictor):
                 f"Target {self.predictor.target} not in df columns. Available columns: {df.columns}"
             )
 
-        if self.performances_generator:
-            df = nw.from_native(self.performances_generator.generate(df))
 
         for idx in range(len(self.rating_generators)):
             df = nw.from_native(
@@ -196,9 +194,7 @@ class Pipeline(BasePredictor):
 
         for rating_idx, rating_generator in enumerate(self.rating_generators):
             if cross_validation:
-                df_with_predict = nw.from_native(
-                    self.performances_generator.generate(df_with_predict)
-                )
+
                 df_with_predict = nw.from_native(
                     rating_generator.generate_historical(
                         df_with_predict, column_names=self.column_names

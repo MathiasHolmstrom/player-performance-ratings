@@ -129,16 +129,16 @@ def test_match_predictor_auto_pre_transformers(df):
     rating_generators = UpdateRatingGenerator(
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         performance_column="weighted_performance",
-    )
-
-    pipeline = Pipeline(
-        predictor=predictor_mock,
-        rating_generators=rating_generators,
         performances_generator=PerformancesGenerator(
             performances=Performance(
                 name="weighted_performance", weights=column_weights
             )
         ),
+    )
+
+    pipeline = Pipeline(
+        predictor=predictor_mock,
+        rating_generators=rating_generators,
         column_names=ColumnNames(
             match_id="game_id",
             team_id="team_id",
@@ -148,7 +148,7 @@ def test_match_predictor_auto_pre_transformers(df):
     )
 
     pipeline.train(df=data)
-    assert len(pipeline.performances_generator.transformers) > 0
+    assert len(pipeline.rating_generators[0].performances_generator.transformers) > 0
 
 
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
@@ -349,13 +349,13 @@ def test_match_predictor_generate_and_predict(df):
         start_date="start_date",
     )
     rating_generator = UpdateRatingGenerator(
-        features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
-    )
-
-    pipeline = Pipeline(
+        features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         performances_generator=PerformancesGenerator(
             Performance(weights=column_weights)
         ),
+    )
+
+    pipeline = Pipeline(
         predictor=Predictor(estimator=LinearRegression(), target="__target"),
         rating_generators=rating_generator,
         column_names=column_names,
@@ -372,7 +372,7 @@ def test_match_predictor_generate_and_predict(df):
     else:
         assert new_df.columns == expected_columns
 
-    assert len(pipeline.performances_generator.transformers) > 0
+    assert len(pipeline.rating_generators[0].performances_generator.transformers) > 0
 
 
 def test_train_predict_post_pre_and_lag_transformers():
@@ -417,6 +417,9 @@ def test_train_predict_post_pre_and_lag_transformers():
         non_estimator_known_features_out=[RatingKnownFeatures.PLAYER_RATING],
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         unknown_features_out=[RatingUnknownFeatures.TEAM_RATING],
+        performances_generator=PerformancesGenerator(
+            Performance(weights=column_weights)
+        ),
     )
     pre_transformer = PredictorTransformer(
         predictor=Predictor(
@@ -443,9 +446,6 @@ def test_train_predict_post_pre_and_lag_transformers():
     )
 
     pipeline = Pipeline(
-        performances_generator=PerformancesGenerator(
-            Performance(weights=column_weights)
-        ),
         predictor=predictor,
         rating_generators=rating_generator,
         pre_lag_transformers=[pre_transformer],

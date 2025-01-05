@@ -2,17 +2,15 @@ from typing import Optional, Any, Union
 
 import numpy as np
 import polars as pl
-import pandas as pd
 import narwhals as nw
 from narwhals.typing import FrameT, IntoFrameT
 
 from player_performance_ratings.ratings import convert_df_to_matches
+from player_performance_ratings.ratings.performance_generator import PerformancesGenerator
 from player_performance_ratings.ratings.rating_calculators import (
     RatingMeanPerformancePredictor,
 )
-from player_performance_ratings.ratings.rating_calculators.performance_predictor import (
-    RatingNonOpponentPerformancePredictor,
-)
+
 from player_performance_ratings.ratings.rating_calculators.match_rating_generator import (
     MatchRatingGenerator,
 )
@@ -40,6 +38,7 @@ class UpdateRatingGenerator(RatingGenerator):
     def __init__(
         self,
         performance_column: str = "performance",
+        performances_generator: Optional[PerformancesGenerator] = None,
         match_rating_generator: Optional[MatchRatingGenerator] = None,
         features_out: Optional[list[RatingKnownFeatures]] = None,
         unknown_features_out: Optional[list[RatingUnknownFeatures]] = None,
@@ -73,6 +72,7 @@ class UpdateRatingGenerator(RatingGenerator):
                 features_out = [RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
 
         super().__init__(
+            performances_generator=performances_generator,
             non_estimator_known_features_out=non_estimator_known_features_out,
             unknown_features_out=unknown_features_out,
             performance_column=performance_column,
@@ -115,6 +115,10 @@ class UpdateRatingGenerator(RatingGenerator):
             raise ValueError(
                 f"participation_weight {self.column_names.participation_weight} not in df columns"
             )
+
+        if self.performances_generator:
+            df = nw.from_native(self.performances_generator.generate(df))
+
         ori_game_ids = df[self.column_names.match_id].unique().to_list()
         if self.historical_df is not None:
             df_with_new_matches = df.filter(

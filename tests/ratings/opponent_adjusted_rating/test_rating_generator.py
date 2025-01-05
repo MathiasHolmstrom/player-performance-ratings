@@ -17,6 +17,7 @@ from player_performance_ratings.ratings.enums import (
     RatingKnownFeatures,
     RatingUnknownFeatures,
 )
+from player_performance_ratings.ratings.performance_generator import PerformancesGenerator, Performance, ColumnWeight
 from player_performance_ratings.ratings.rating_calculators import (
     MatchRatingGenerator,
     StartRatingGenerator,
@@ -548,3 +549,81 @@ def test_rating_generator_prefix_suffix(df):
     for f in rating_generator._features_out:
         expected_feature_out = rating_generator.prefix + f + rating_generator.suffix
         assert expected_feature_out in future_df_ratings.columns
+
+
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_update_rating_generator_with_performances_generator(df):
+    column_names = ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="start_date",
+        league="league",
+    )
+    rating_generator = UpdateRatingGenerator(
+        performances_generator=PerformancesGenerator(
+            performances=[
+                Performance(
+                    name="performance_weighted",
+                    weights=[
+                        ColumnWeight(
+                            name='points_difference',
+                            weight=0.5
+                        ),
+                        ColumnWeight(
+                            name='won',
+                            weight=0.5
+                        )
+                    ]
+                )
+            ]
+        ),
+        prefix="prefix_",
+        suffix="_suffix",
+        unknown_features_out=[
+            RatingUnknownFeatures.PLAYER_RATING_CHANGE,
+            RatingUnknownFeatures.PERFORMANCE,
+            RatingUnknownFeatures.RATING_DIFFERENCE,
+            RatingUnknownFeatures.OPPONENT_RATING,
+            RatingUnknownFeatures.RATING_MEAN,
+        ],
+        non_estimator_known_features_out=[
+            RatingKnownFeatures.TEAM_RATING_PROJECTED,
+            RatingKnownFeatures.PLAYER_RATING,
+            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
+            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED,
+            RatingKnownFeatures.TEAM_LEAGUE,
+            RatingKnownFeatures.PLAYER_LEAGUE,
+            RatingKnownFeatures.OPPONENT_LEAGUE,
+            RatingKnownFeatures.OPPONENT_RATING_PROJECTED,
+        ],
+    )
+    historical_df = df(
+        {
+            column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2],
+            column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2],
+            column_names.player_id: [1, 2, 3, 4, 1, 2, 3, 4],
+            column_names.league: ["a", "a", "b", "b", "a", "a", "b", "b"],
+            column_names.start_date: [
+                pd.to_datetime("2020-01-01"),
+                pd.to_datetime("2020-01-01"),
+                pd.to_datetime("2020-01-01"),
+                pd.to_datetime("2020-01-01"),
+                pd.to_datetime("2021-01-02"),
+                pd.to_datetime("2021-01-02"),
+                pd.to_datetime("2021-01-02"),
+                pd.to_datetime("2021-01-02"),
+            ],
+            "won": [1.0, 1.0, 0, 0, 1.0, 1.0, 0, 0],
+            "points_difference":[10, 5, -5, -10, 10, 5, -5, -10]
+        }
+    )
+
+    historical_df_with_ratings = rating_generator.generate_historical(
+        historical_df, column_names=column_names
+    )
+    assert rating_generator.performance_column == "performance_weighted"
+    if isinstance(historical_df, pl.DataFrame):
+        assert historical_df_with_ratings['performance_weighted'].to_list() == [1.0, 0.875, 0.125, 0,1.0, 0.875, 0.125, 0]
+    else:
+        assert historical_df_with_ratings['performance_weighted'].tolist() == [1.0, 0.875, 0.125, 0, 1.0, 0.875, 0.125, 0]

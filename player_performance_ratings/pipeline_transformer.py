@@ -29,7 +29,6 @@ class PipelineTransformer:
     def __init__(
         self,
         column_names: ColumnNames,
-        performances_generator: Optional[PerformancesGenerator] = None,
         rating_generators: Optional[
             Union[RatingGenerator, list[RatingGenerator]]
         ] = None,
@@ -40,7 +39,6 @@ class PipelineTransformer:
         post_lag_transformers: Optional[list[BaseTransformer]] = None,
     ):
         self.column_names = column_names
-        self.performances_generator = performances_generator
         self.rating_generators = rating_generators
         if rating_generators is None:
             self.rating_generators = []
@@ -58,8 +56,6 @@ class PipelineTransformer:
         :param df: Either polars or Pandas dataframe
         """
 
-        if self.performances_generator:
-            df = nw.from_native(self.performances_generator.generate(df))
 
         for rating_generator in self.rating_generators:
             df = rating_generator.generate_historical(
@@ -81,8 +77,6 @@ class PipelineTransformer:
         Transform the pipeline on future data
         :param df: Either polars or Pandas dataframe
         """
-        if self.performances_generator:
-            df = self.performances_generator.generate(df)
 
         if self.rating_generators:
             matches = convert_df_to_matches(

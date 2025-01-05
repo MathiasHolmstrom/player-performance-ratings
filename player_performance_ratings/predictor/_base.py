@@ -71,13 +71,13 @@ class BasePredictor(ABC):
 
     def _add_estimator_features_contain(self, df: FrameT) -> FrameT:
         columns = df.columns
-        column_count = len(df.columns)
         for contain in self._estimator_features_contain:
+            estimator_feature_count = len(self._estimator_features)
             for column in columns:
                 if column not in self._estimator_features and contain in column:
                     self._estimator_features.append(column)
-        if column_count == len(df.columns) and self._estimator_features_contain:
-            logging.warning(f"Found no columns containing {self._estimator_features_contain}")
+            if len(self._estimator_features) == estimator_feature_count:
+                logging.warning(f"Added no new columns containing {contain}")
         return df
 
     @abstractmethod

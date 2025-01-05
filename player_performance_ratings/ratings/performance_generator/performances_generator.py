@@ -34,9 +34,9 @@ class Performance:
 
 
 def auto_create_pre_performance_transformations(
-    pre_transformers: list[BaseTransformer],
-    performances: list[Performance],
-    auto_generated_features_prefix: str,
+        pre_transformers: list[BaseTransformer],
+        performances: list[Performance],
+        auto_generated_features_prefix: str,
 ) -> list[BaseTransformer]:
     """
     Creates a list of transformers that ensure the performance column is generated in a way that makes sense for the rating model.
@@ -77,12 +77,12 @@ def auto_create_pre_performance_transformations(
 class PerformancesGenerator:
 
     def __init__(
-        self,
-        performances: Union[list[Performance], Performance],
-        transformers: Optional[list[BaseTransformer]] = None,
-        auto_transform_performance: bool = True,
-        auto_generated_features_prefix: str = "performance__",
-        return_auto_generated_features: bool = False,
+            self,
+            performances: Union[list[Performance], Performance],
+            transformers: Optional[list[BaseTransformer]] = None,
+            auto_transform_performance: bool = True,
+            auto_generated_features_prefix: str = "performance__",
+            return_auto_generated_features: bool = False,
     ):
         self.return_auto_generated_features = return_auto_generated_features
         self.auto_generated_features_prefix = auto_generated_features_prefix
@@ -143,7 +143,7 @@ class PerformancesGenerator:
             )
 
             if len(df.filter(nw.col(performance.name).is_null())) > 0 or len(
-                df.filter(nw.col(performance.name).is_finite())
+                    df.filter(nw.col(performance.name).is_finite())
             ) != len(df):
                 logging.error(
                     f"df[{performance.name}] contains nan values. Make sure all column_names used in column_weights are imputed beforehand"
@@ -153,11 +153,11 @@ class PerformancesGenerator:
         return df.select(list(set([*input_cols, *self.features_out])))
 
     def _weight_columns(
-        self,
-        df: FrameT,
-        performance_column_name: str,
-        col_weights: list[ColumnWeight],
-        column_weighs_mapping: dict[str, str],
+            self,
+            df: FrameT,
+            performance_column_name: str,
+            col_weights: list[ColumnWeight],
+            column_weighs_mapping: dict[str, str],
     ) -> FrameT:
         df = df.with_columns(nw.lit(0).alias(f"__{performance_column_name}"))
 
@@ -194,7 +194,7 @@ class PerformancesGenerator:
         for column_weight in col_weights:
             df = df.with_columns(
                 (
-                    nw.col(f"weight__{column_weight.name}") / nw.col("sum_cols_weights")
+                        nw.col(f"weight__{column_weight.name}") / nw.col("sum_cols_weights")
                 ).alias(f"weight__{column_weight.name}")
             )
 
@@ -214,7 +214,7 @@ class PerformancesGenerator:
                     nw.col(f"__{performance_column_name}")
                     + (
                         (
-                            nw.col(weight_col) / sum_weight * (1 - nw.col(feature_name))
+                                nw.col(weight_col) / sum_weight * (1 - nw.col(feature_name))
                         ).alias(f"__{performance_column_name}")
                     )
                 )
@@ -237,13 +237,11 @@ class PerformancesGenerator:
     @property
     def features_out(self) -> list[str]:
         return list(
-            set(
-                [c.name for c in self.performances]
-                + [
-                    feature
-                    for t in self.transformers
-                    for feature in t.features
-                    if self.auto_generated_features_prefix
-                ]
-            )
+            [c.name for c in self.performances]
+            + list(set([
+                feature
+                for t in self.transformers
+                for feature in t.features
+                if self.auto_generated_features_prefix
+            ]))
         )
