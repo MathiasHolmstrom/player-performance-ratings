@@ -88,7 +88,8 @@ class RatingGenerator(ABC):
         Rating Features that contain leakge. Thus, they must not be passed into an estimator.
         They are only inteded to be used for data-analysis
         """
-        return [self.prefix + f + self.suffix for f in self._unknown_features_out] + self.performances_generator.features_out if self.performances_generator else []
+
+        return [self.prefix + f + self.suffix for f in self._unknown_features_out]
 
     @property
     def non_estimator_known_features_out(self) -> list[str]:

@@ -155,6 +155,14 @@ class MeanBiasScorer(BaseScorer):
 
     @narwhals.narwhalify
     def score(self, df: Union[pd.DataFrame, pl.DataFrame]) -> float:
+        if self.granularity:
+            grouped = df.group_by(self.granularity).agg(
+                [
+                    nw.col(self.pred_column_name).sum().alias(self.pred_column_name),
+                    nw.col(self.target).sum().alias(self.target),
+                ]
+            )
+            return (grouped[self.pred_column] - grouped[self.target]).mean()
         return (df[self.pred_column] - df[self.target]).mean()
 
 
@@ -194,10 +202,10 @@ class SklearnScorer(BaseScorer):
 
         df = apply_filters(df=df, filters=self.filters)
         if self.granularity:
-            grouped = df.groupby(self.granularity).agg(
+            grouped = df.group_by( self.granularity).agg(
                 [
-                    pl.col(self.pred_column_name).mean().alias(self.pred_column_name),
-                    pl.col(self.target).mean().alias(self.target),
+                    nw.col(self.pred_column_name).sum().alias(self.pred_column_name),
+                    nw.col(self.target).sum().alias(self.target),
                 ]
             )
         else:

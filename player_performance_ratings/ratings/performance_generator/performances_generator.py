@@ -129,7 +129,7 @@ class PerformancesGenerator:
             if self.transformers:
                 max_idx = len(self.transformers) - 1
                 column_weighs_mapping = {
-                    col_weight.name: self.transformers[max_idx].features_out[idx]
+                    performance.name: self.transformers[max_idx].features_out[idx]
                     for idx, col_weight in enumerate(performance.weights)
                 }
             else:

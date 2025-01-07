@@ -93,7 +93,7 @@ def test_match_k_fold_cross_validator(df, column_names):
         predictor=predictor,
     )
 
-    validation_df = cv.generate_validation_df(df=data, column_names=column_names)
+    validation_df = cv.generate_validation_df(df=data, column_names=column_names, add_train_prediction=False)
 
     score = cv.cross_validation_score(validation_df=validation_df)
     assert score == 0.1

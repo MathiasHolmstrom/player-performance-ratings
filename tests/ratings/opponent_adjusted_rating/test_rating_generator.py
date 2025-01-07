@@ -624,6 +624,6 @@ def test_update_rating_generator_with_performances_generator(df):
     )
     assert rating_generator.performance_column == "performance_weighted"
     if isinstance(historical_df, pl.DataFrame):
-        assert historical_df_with_ratings['performance_weighted'].to_list() == [1.0, 0.875, 0.125, 0,1.0, 0.875, 0.125, 0]
+        assert historical_df_with_ratings[rating_generator.prefix + 'performance'+rating_generator.suffix].to_list() == [1.0, 0.875, 0.125, 0,1.0, 0.875, 0.125, 0]
     else:
-        assert historical_df_with_ratings['performance_weighted'].tolist() == [1.0, 0.875, 0.125, 0, 1.0, 0.875, 0.125, 0]
+        assert historical_df_with_ratings[rating_generator.prefix + 'performance'+rating_generator.suffix].tolist() == [1.0, 0.875, 0.125, 0, 1.0, 0.875, 0.125, 0]

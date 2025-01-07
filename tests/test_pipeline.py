@@ -364,7 +364,7 @@ def test_match_predictor_generate_and_predict(df):
     pipeline.train(df=historical_df)
     new_df = pipeline.predict(future_df)
     expected_columns = list(future_df.columns) + [
-        *rating_generator.features_out,
+        *rating_generator.all_rating_features_out,
         pipeline.predictor.pred_column,
     ]
     if isinstance(new_df, pd.DataFrame):
