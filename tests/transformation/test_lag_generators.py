@@ -1049,8 +1049,8 @@ def test_rolling_mean_days_transformer_transform(column_names):
         **{
             transformer.features_out[0]: [None, None, 1, 2],
             transformer.features_out[1]: [None, None, 2, 1],
-            f"{transformer.prefix}10_count": [0, 0, 1, 1],
-            f"{transformer.prefix}10_count_opponent": [0, 0, 1, 1],
+            f"{transformer.prefix}_count10": [0, 0, 1, 1],
+            f"{transformer.prefix}_count10_opponent": [0, 0, 1, 1],
         }
     )
 
@@ -1066,8 +1066,8 @@ def test_rolling_mean_days_transformer_transform(column_names):
         **{
             transformer.features_out[0]: [2, 3, 2, 3],
             transformer.features_out[1]: [3, 2, 3, 2],
-            f"{transformer.prefix}10_count": [2, 2, 2, 2],
-            f"{transformer.prefix}10_count_opponent": [2, 2, 2, 2],
+            f"{transformer.prefix}_count10": [2, 2, 2, 2],
+            f"{transformer.prefix}_count10_opponent": [2, 2, 2, 2],
         }
     )
 
@@ -1110,8 +1110,8 @@ def test_rolling_mean_days_tranformer_transform_first_future_beyond_window(
         **{
             transformer.features_out[0]: [None, None, None, None],
             transformer.features_out[1]: [None, None, None, None],
-            f"{transformer.prefix}10_count": [0, 0, 0, 0],
-            f"{transformer.prefix}10_count_opponent": [0, 0, 0, 0],
+            f"{transformer.prefix}_count10": [0, 0, 0, 0],
+            f"{transformer.prefix}_count10_opponent": [0, 0, 0, 0],
         }
     )
 
@@ -1141,8 +1141,8 @@ def test_rolling_mean_days_tranformer_transform_first_future_beyond_window(
         **{
             transformer.features_out[0]: [3, 2, 3, 2],
             transformer.features_out[1]: [2, 3, 2, 3],
-            f"{transformer.prefix}10_count": [1, 1, 1, 1],
-            f"{transformer.prefix}10_count_opponent": [1, 1, 1, 1],
+            f"{transformer.prefix}_count10": [1, 1, 1, 1],
+            f"{transformer.prefix}_count10_opponent": [1, 1, 1, 1],
         }
     )
 

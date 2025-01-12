@@ -182,7 +182,7 @@ class UpdateRatingGenerator(RatingGenerator):
                 self.column_names.player_id,
             ]
         )
-        out_df = df[list(set(input_cols + self.all_rating_features_out))]
+        out_df = df[list(set(input_cols + self.all_rating_features_out + self.performances_generator.features_out))]
 
         return out_df.filter(nw.col(self.column_names.match_id).is_in(ori_game_ids))
 
