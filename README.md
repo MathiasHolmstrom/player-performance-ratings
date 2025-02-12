@@ -21,8 +21,6 @@ There are multiple different use-cases for the framework, such as:
 
 If you only desire to generate ratings this is simple:
 ```
-import pandas as pd
-
 from player_performance_ratings.ratings import UpdateRatingGenerator
 from examples import get_sub_sample_nba_data
 from player_performance_ratings.data_structures import ColumnNames
@@ -75,9 +73,7 @@ Even if the concept of a player doesn't exist in the dataset, you can use team_i
 Utilizing a rating model can be as simple as:
 
 ```
-import pandas as pd
-from player_performance_ratings import PredictColumnNames
-
+from examples import get_sub_sample_nba_data
 from player_performance_ratings.pipeline import Pipeline
 from player_performance_ratings.predictor import GameTeamPredictor
 
@@ -122,7 +118,8 @@ predictor = GameTeamPredictor(
     game_id_colum=column_names.match_id,
     team_id_column=column_names.team_id,
     estimator_features=['location'],
-    target='won'
+    target='won',
+    one_hot_encode_cat_features=True
 )
 
 # Pipeline is whether we define all the steps. Other transformations can take place as well.
@@ -134,10 +131,10 @@ pipeline = Pipeline(
 )
 
 # Trains the model and returns historical predictions
-historical_predictions = pipeline.train_predict(df=historical_df)
+historical_predictions = pipeline.train(df=historical_df)
 
 # Future predictions on future results
-future_predictions = pipeline.future_predict(df=future_df)
+future_predictions = pipeline.predict(df=future_df)
 
 #Grouping predictions from game-player level to game-level.
 team_grouped_predictions = future_predictions.groupby(column_names.match_id).first()[
@@ -152,14 +149,13 @@ If the user simply wants to calculate features without directly feeding into a p
 The example below calculates rolling-means and lags for kills, deaths, the result and calculates a rating based on the result.
 It then outputs the dataframe with the new features.
 ```
-import pandas as pd
-
+from examples import get_sub_sample_lol_data
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.pipeline_transformer import PipelineTransformer
-from player_performance_ratings.ratings import UpdateRatingGenerator, MatchRatingGenerator, StartRatingGenerator, \
-    RatingKnownFeatures
+from player_performance_ratings.ratings import UpdateRatingGenerator
+
 from player_performance_ratings.transformers import LagTransformer
-from player_performance_ratings.transformers.lag_generators import RollingMeanTransformerPolars
+from player_performance_ratings.transformers.lag_generators import RollingMeanTransformer
 
 column_names = ColumnNames(
     team_id='teamname',
@@ -189,7 +185,6 @@ historical_df = df[~df[column_names.match_id].isin(most_recent_10_games)]
 future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(columns=['result'])
 
 rating_generator = UpdateRatingGenerator(
-    estimator_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
     performance_column='result'
 )
 
