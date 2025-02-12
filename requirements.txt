@@ -7,4 +7,4 @@ lightgbm>=4.0.0
 narwhals>=1.19.0
 polars >=1.17.0
 pyarrow
-pytest >= 19.0.0
+pyarrow >= 19.0.0
