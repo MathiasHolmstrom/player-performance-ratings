@@ -24,7 +24,7 @@ If you only desire to generate ratings this is simple:
 import pandas as pd
 
 from player_performance_ratings.ratings import UpdateRatingGenerator
-
+from examples import get_sub_sample_nba_data
 from player_performance_ratings.data_structures import ColumnNames
 
 df = get_sub_sample_nba_data(as_pandas=True)

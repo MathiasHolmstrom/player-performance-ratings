@@ -1,1 +1,3 @@
 include requirements.txt
+recursive-include examples/nba/data *.parquet
+recursive-include examples/lol/data *.parquet
