@@ -1,6 +1,7 @@
 import pandas as pd
 from lightgbm import LGBMRegressor
 
+from examples import get_sub_sample_lol_data
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.cross_validator import MatchKFoldCrossValidator
 from player_performance_ratings.pipeline_transformer import PipelineTransformer
@@ -23,7 +24,7 @@ column_names = ColumnNames(
     league="league",
     position="position",
 )
-df = pd.read_parquet("data/subsample_lol_data")
+df = get_sub_sample_lol_data(as_pandas=True)
 df = (
     df.loc[lambda x: x.position != "team"]
     .assign(team_count=df.groupby("gameid")["teamname"].transform("nunique"))

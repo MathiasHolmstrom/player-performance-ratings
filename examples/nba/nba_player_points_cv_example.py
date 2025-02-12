@@ -1,6 +1,8 @@
 import polars as pl
 from sklearn.metrics import mean_absolute_error
 from lightgbm import LGBMRegressor
+
+from examples import get_sub_sample_nba_data
 from player_performance_ratings.cross_validator import MatchKFoldCrossValidator
 
 from player_performance_ratings.pipeline import Pipeline
@@ -14,7 +16,7 @@ from player_performance_ratings.transformers.lag_generators import (
 )
 
 
-df = pl.read_parquet("data/game_player_subsample.parquet")
+df = get_sub_sample_nba_data(as_polars=True, as_pandas=False)
 # df = df.filter(pl.col('minutes')>0)
 column_names = ColumnNames(
     team_id="team_id",
