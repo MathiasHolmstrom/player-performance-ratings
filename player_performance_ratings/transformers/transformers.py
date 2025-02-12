@@ -172,6 +172,8 @@ class OperatorTransformer(BaseTransformer):
 
     @nw.narwhalify
     def transform(self, df: FrameT) -> FrameT:
+        if self.feature1 not in df.columns or self.feature2 not in df.columns:
+            return df
         if self.operation == Operation.SUBTRACT:
             df = df.with_columns(
                 (nw.col(self.feature1) - nw.col(self.feature2)).alias(

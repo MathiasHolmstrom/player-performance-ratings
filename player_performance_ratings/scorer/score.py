@@ -315,7 +315,7 @@ class ProbabilisticMeanBias(BaseScorer):
         return sum_lr
 
 
-class OrdinalLossScorerPolars(BaseScorer):
+class OrdinalLossScorer(BaseScorer):
     """TODO: Support different types of probability-class constructions"""
 
     def __init__(
@@ -336,7 +336,10 @@ class OrdinalLossScorerPolars(BaseScorer):
             validation_column=validation_column,
         )
 
-    def score(self, df: pl.DataFrame) -> float:
+    def score(self, df: Union[pd.DataFrame, pl.DataFrame]) -> float:
+        if isinstance(df, pd.DataFrame):
+            df = pl.DataFrame(df)
+
         df = apply_filters(df, self.filters)
         field_names = [int(field) for field in df[self.pred_column].struct.fields]
         min_field = min(field_names)
@@ -368,7 +371,7 @@ class OrdinalLossScorerPolars(BaseScorer):
 
             df = df.with_columns(
                 [
-                    pl.when(pl.col("__target") < class_)
+                    pl.when(pl.col(self.target) < class_)
                     .then(pl.col(prob_col_under).log())
                     .otherwise((1 - pl.col(prob_col_under)).log())
                     .alias("log_loss")
@@ -387,7 +390,7 @@ class OrdinalLossScorerPolars(BaseScorer):
         return sum_lr
 
 
-class OrdinalLossScorer(BaseScorer):
+class OrdinalLossScorerOld(BaseScorer):
 
     def __init__(
         self,

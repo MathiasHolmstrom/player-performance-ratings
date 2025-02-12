@@ -375,7 +375,13 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                 granularity=self.granularity,
             )
 
-        concat_df = concat_df.join(grouped, on=self.granularity + ['__date_day'], how="left")
+        concat_df = concat_df.join(grouped, on=self.granularity + ['__date_day'], how="left").unique(
+            subset=[
+                self.column_names.match_id,
+                self.column_names.team_id,
+                self.column_names.player_id,
+            ]
+        )
 
         concat_df = concat_df.sort(
             by=[
@@ -675,11 +681,11 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
             ).with_columns(
                 [
                     nw.col("value_result_1_shifted")
-                    .rolling_mean(window_size=self.window, min_periods=self.min_periods)
+                    .rolling_mean(window_size=self.window, min_samples=self.min_periods)
                     .over(self.granularity)
                     .alias(f"{self.prefix}_{feature}{self.window}_1"),
                     nw.col("value_result_0_shifted")
-                    .rolling_mean(window_size=self.window, min_periods=self.min_periods)
+                    .rolling_mean(window_size=self.window, min_samples=self.min_periods)
                     .over(self.granularity)
                     .alias(f"{self.prefix}_{feature}{self.window}_0"),
                 ]
@@ -888,7 +894,7 @@ class RollingMeanTransformer(BaseLagGenerator):
         rolling_means = [
             nw.col(feature_name)
             .shift(n=1)
-            .rolling_mean(window_size=self.window, min_periods=self.min_periods)
+            .rolling_mean(window_size=self.window, min_samples=self.min_periods)
             .over(self.granularity)
             .alias(f"{self.prefix}_{feature_name}{self.window}")
             for feature_name in self.features

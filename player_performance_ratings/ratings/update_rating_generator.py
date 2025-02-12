@@ -182,7 +182,8 @@ class UpdateRatingGenerator(RatingGenerator):
                 self.column_names.player_id,
             ]
         )
-        out_df = df[list(set(input_cols + self.all_rating_features_out + self.performances_generator.features_out))]
+        feats_out = input_cols + self.all_rating_features_out + self.performances_generator.features_out if self.performances_generator else input_cols + self.all_rating_features_out
+        out_df = df[list(set(feats_out))]
 
         return out_df.filter(nw.col(self.column_names.match_id).is_in(ori_game_ids))
 
@@ -500,7 +501,7 @@ class UpdateRatingGenerator(RatingGenerator):
             nw.from_dict(
                 potential_feature_values, native_namespace=nw.get_native_namespace(df)
             ),
-            on=[self.column_names.match_id, self.column_names.player_id],
+            on=[self.column_names.match_id, self.column_names.player_id, self.column_names.team_id],
             how="left",
         )
 
@@ -781,6 +782,7 @@ class UpdateRatingGenerator(RatingGenerator):
             + RatingKnownFeatures.RATING_MEAN_PROJECTED + self.suffix: rating_means_projected,
             self.column_names.match_id: match_ids,
             self.column_names.player_id: player_ids,
+            self.column_names.team_id: team_ids
         }
 
         if self.distinct_positions:

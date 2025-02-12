@@ -19,16 +19,15 @@ There are multiple different use-cases for the framework, such as:
 
 ### Training a Rating Model
 
-If you only desire to generate ratings this is quite simple:
+If you only desire to generate ratings this is simple:
 ```
 import pandas as pd
-from player_performance_ratings import PredictColumnNames
 
-from player_performance_ratings.ratings import UpdateRatingGenerator, RatingEstimatorFeatures
+from player_performance_ratings.ratings import UpdateRatingGenerator
 
 from player_performance_ratings.data_structures import ColumnNames
 
-df = pd.read_pickle("data/game_player_subsample.pickle")
+df = get_sub_sample_nba_data(as_pandas=True)
 
 # Defines the column names as they appear in the dataframe
 column_names = ColumnNames(
@@ -40,8 +39,6 @@ column_names = ColumnNames(
 # Sorts the dataframe. The dataframe must always be sorted as below
 df = df.sort_values(by=[column_names.start_date, column_names.match_id, column_names.team_id, column_names.player_id])
 
-# Defines the target column we inted to predict
-df[PredictColumnNames.TARGET] = df['won']
 
 # Drops games with less or more than 2 teams
 df = (
@@ -53,7 +50,7 @@ df = (
 # Pretends the last 10 games are future games. The most will be trained on everything before that.
 most_recent_10_games = df[column_names.match_id].unique()[-10:]
 historical_df = df[~df[column_names.match_id].isin(most_recent_10_games)]
-future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(columns=[PredictColumnNames.TARGET, 'won'])
+future_df = df[df[column_names.match_id].isin(most_recent_10_games)]
 
 # Defining a simple rating-generator. It will use the "won" column to update the ratings.
 # In contrast to a typical Elo, ratings will follow players.
@@ -88,7 +85,7 @@ from player_performance_ratings.ratings import UpdateRatingGenerator
 
 from player_performance_ratings.data_structures import ColumnNames
 
-df = pd.read_pickle("data/game_player_subsample.pickle")
+df = get_sub_sample_nba_data(as_pandas=True)
 
 # Defines the column names as they appear in the dataframe
 column_names = ColumnNames(
@@ -100,8 +97,7 @@ column_names = ColumnNames(
 # Sorts the dataframe. The dataframe must always be sorted as below
 df = df.sort_values(by=[column_names.start_date, column_names.match_id, column_names.team_id, column_names.player_id])
 
-# Defines the target column we inted to predict
-df[PredictColumnNames.TARGET] = df['won']
+
 
 # Drops games with less or more than 2 teams
 df = (
@@ -113,7 +109,7 @@ df = (
 # Pretends the last 10 games are future games. The most will be trained on everything before that.
 most_recent_10_games = df[column_names.match_id].unique()[-10:]
 historical_df = df[~df[column_names.match_id].isin(most_recent_10_games)]
-future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(columns=[PredictColumnNames.TARGET, 'won'])
+future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(columns=['won'])
 
 # Defining a simple rating-generator. It will use the "won" column to update the ratings.
 # In contrast to a typical Elo, ratings will follow players.
@@ -125,7 +121,8 @@ rating_generator = UpdateRatingGenerator(performance_column='won')
 predictor = GameTeamPredictor(
     game_id_colum=column_names.match_id,
     team_id_column=column_names.team_id,
-    estimator_features=['location']
+    estimator_features=['location'],
+    target='won'
 )
 
 # Pipeline is whether we define all the steps. Other transformations can take place as well.
@@ -157,10 +154,10 @@ It then outputs the dataframe with the new features.
 ```
 import pandas as pd
 
-from player_performance_ratings import ColumnNames, PredictColumnNames
+from player_performance_ratings import ColumnNames
 from player_performance_ratings.pipeline_transformer import PipelineTransformer
 from player_performance_ratings.ratings import UpdateRatingGenerator, MatchRatingGenerator, StartRatingGenerator, \
-    RatingEstimatorFeatures
+    RatingKnownFeatures
 from player_performance_ratings.transformers import LagTransformer
 from player_performance_ratings.transformers.lag_generators import RollingMeanTransformerPolars
 
@@ -172,7 +169,7 @@ column_names = ColumnNames(
     league='league',
     position='position',
 )
-df = pd.read_parquet("data/subsample_lol_data")
+df = get_sub_sample_lol_data(as_pandas=True)
 df = (
     df.loc[lambda x: x.position != 'team']
     .assign(team_count=df.groupby('gameid')['teamname'].transform('nunique'))
@@ -192,7 +189,7 @@ historical_df = df[~df[column_names.match_id].isin(most_recent_10_games)]
 future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(columns=['result'])
 
 rating_generator = UpdateRatingGenerator(
-    estimator_features_out=[RatingEstimatorFeatures.RATING_DIFFERENCE_PROJECTED],
+    estimator_features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
     performance_column='result'
 )
 
@@ -202,7 +199,7 @@ lag_generators = [
         lag_length=3,
         granularity=['playername']
     ),
-    RollingMeanTransformerPolars(
+    RollingMeanTransformer(
         features=["kills", "deaths", "result"],
         window=20,
         min_periods=1,
@@ -224,110 +221,7 @@ print(future_df.head())
 ```
 
 ### Hyperparameter tuning
-Tuning the parameters can often lead to higher accuracy.
-For player-performance-ratings, hyperparameter-tuning is easy to implement. 
-Hyperparameter-tuning can be used for the predictor-parameters, but also for the rating-generator-parameters.
-In the example below, the optimal way to calculate the margin of victory by determining the weight of multiple columns is designed as a hyperparameter-tuning problem
-
-```
-import pandas as pd
-
-from player_performance_ratings.pipeline import Pipeline
-from player_performance_ratings.predictor import GameTeamPredictor
-from player_performance_ratings.tuner.performances_generator_tuner import PerformancesSearchRange
-from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
-
-from player_performance_ratings.tuner.rating_generator_tuner import UpdateRatingGeneratorTuner
-from player_performance_ratings.ratings import UpdateRatingGenerator
-
-from player_performance_ratings.data_structures import ColumnNames
-
-from player_performance_ratings.tuner import PipelineTuner, PerformancesGeneratorTuner
-from player_performance_ratings.tuner.utils import ParameterSearchRange, get_default_team_rating_search_range
-
-column_names = ColumnNames(
-    team_id='teamname',
-    match_id='gameid',
-    start_date="date",
-    player_id="playername",
-    league='league',
-    position='position',
-)
-df = pd.read_parquet("data/subsample_lol_data")
-df = df.sort_values(by=['date', 'gameid', 'teamname', "playername"])
-df['champion_position'] = df['champion'] + df['position']
-df['__target'] = df['result']
-
-df = df.drop_duplicates(subset=['gameid', 'teamname', 'playername'])
-
-df = (
-    df.assign(team_count=df.groupby('gameid')['teamname'].transform('nunique'))
-    .loc[lambda x: x.team_count == 2]
-    .drop(columns=['team_count'])
-)
-df = df.drop_duplicates(subset=['gameid', 'teamname', 'playername'])
-
-rating_generator = UpdateRatingGenerator(performance_column='performance')
-
-predictor = GameTeamPredictor(
-    game_id_colum="gameid",
-    team_id_column="teamname",
-)
-
-pipeline = Pipeline(
-    rating_generators=rating_generator,
-    predictor=predictor,
-    column_names=column_names
-)
-
-
-performance_generator_tuner = PerformancesGeneratorTuner(
-    performances_search_range=PerformancesSearchRange(search_ranges=[
-        ParameterSearchRange(
-            name='damagetochampions',
-            type='uniform',
-            low=0,
-            high=0.45
-        ),
-        ParameterSearchRange(
-            name='deaths',
-            type='uniform',
-            low=0,
-            high=.3,
-            lower_is_better=True
-        ),
-        ParameterSearchRange(
-            name='kills',
-            type='uniform',
-            low=0,
-            high=0.3
-        ),
-        ParameterSearchRange(
-            name='result',
-            type='uniform',
-            low=0.25,
-            high=0.85
-        ),
-    ]),
-    n_trials=3
-)
-
-rating_generator_tuner = UpdateRatingGeneratorTuner(
-    team_rating_search_ranges=get_default_team_rating_search_range(),
-    start_rating_search_ranges=start_rating_search_range,
-    optimize_league_ratings=True,
-    team_rating_n_trials=3
-)
-
-tuner = PipelineTuner(
-    performances_generator_tuners=performance_generator_tuner,
-    predictor_tuner=PredictorTuner(n_trials=1, search_ranges=[
-        ParameterSearchRange(name='C', type='categorical', choices=[1.0, 0.5])]),
-    fit_best=True,
-    pipeline=pipeline,
-)
-best_match_predictor, df = tuner.tune(df=df, return_df=True, return_cross_validated_predictions=True)
-
+TODO
 ```
 
 ## Advanced usecases
