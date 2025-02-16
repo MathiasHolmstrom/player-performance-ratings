@@ -71,6 +71,15 @@ class LagTransformer(BaseLagGenerator):
         self._store_df(df)
         concat_df = self._generate_concat_df_with_feats(df)
         df = self._create_transformed_df(df=df, concat_df=concat_df)
+        unique_cols = [self.column_names.player_id, self.column_names.match_id,
+                       self.column_names.team_id] if self.column_names.team_id else [self.column_names.team_id,
+                                                                                     self.column_names.match_id]
+        if df.unique(subset=unique_cols).shape[
+            0] != df.shape[0]:
+            raise ValueError(
+                f"Duplicated rows in df. Df must be a unique combination of {column_names.player_id} and {column_names.update_match_id}"
+            )
+
         if "is_future" in df.columns:
             df = df.drop("is_future")
         if ori_native == "pd":
@@ -109,17 +118,13 @@ class LagTransformer(BaseLagGenerator):
         return transformed_future
 
     def _generate_concat_df_with_feats(self, df: FrameT) -> FrameT:
-
-        if self._df is None:
-            raise ValueError("fit_transform needs to be called before transform")
-
+        unique_cols = [self.column_names.player_id, self.column_names.match_id,
+                       self.column_names.team_id] if self.column_names.team_id else [self.column_names.team_id,
+                                                                                     self.column_names.match_id]
         if len(
                 df.unique(
-                    subset=[
-                        self.column_names.player_id,
-                        self.column_names.team_id,
-                        self.column_names.match_id,
-                    ]
+                    subset=unique_cols
+
                 )
         ) != len(df):
             raise ValueError(
@@ -141,8 +146,9 @@ class LagTransformer(BaseLagGenerator):
 
         grouped = concat_df.group_by(
             self.granularity
-            + [self.column_names.update_match_id, self.column_names.start_date]
-        ).agg([nw.col(feature).mean().alias(feature) for feature in self.features])
+            + [self.column_names.update_match_id]
+        ).agg([nw.col(feature).mean().alias(feature) for feature in self.features] + [
+            nw.col(self.column_names.start_date).min().alias(self.column_names.start_date)])
 
         grouped = grouped.sort(
             [self.column_names.start_date, self.column_names.update_match_id]
@@ -222,11 +228,11 @@ class LagTransformer(BaseLagGenerator):
         concat_df = concat_df.join(
             grouped.select(
                 self.granularity
-                + [self.column_names.update_match_id, self.column_names.start_date]
+                + [self.column_names.update_match_id]
                 + feats_out
             ),
             on=self.granularity
-               + [self.column_names.update_match_id, self.column_names.start_date],
+               + [self.column_names.update_match_id],
             how="left",
         )
 
@@ -295,7 +301,8 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
 
         concat_df = self._generate_concat_df_with_feats(df)
 
-        df = pl.DataFrame(self._create_transformed_df(df=nw.from_native(df), concat_df=nw.from_native(concat_df)))
+        df = pl.DataFrame(self._create_transformed_df(df=nw.from_native(df), concat_df=nw.from_native(concat_df),
+                                                      match_id_join_on=self.column_names.match_id))
 
         if self.add_count:
             for day in self.days:
@@ -310,11 +317,20 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                     )
 
         df = df.select(ori_cols + self.features_out)
+        unique_cols = [self.column_names.player_id, self.column_names.match_id,
+                       self.column_names.team_id] if self.column_names.team_id else [self.column_names.team_id,
+                                                                                     self.column_names.match_id]
+
+        if df.unique(subset=unique_cols).shape[
+            0] != df.shape[0]:
+            raise ValueError(
+                f"Duplicated rows in df. Df must be a unique combination of {unique_cols}"
+            )
         if "is_future" in df.schema:
             df = df.drop("is_future")
         if ori_type == "pd":
             df = nw.from_native(df.to_pandas())
-
+        validate_sorting(df=df, column_names=self.column_names)
         return df
 
     @nw.narwhalify
@@ -327,10 +343,10 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
             df = df.to_native()
             ori_type = "pl"
 
-
         df = df.with_columns(pl.lit(1).alias("is_future"))
         concat_df = self._generate_concat_df_with_feats(df=df)
-        concat_df = concat_df.filter(pl.col(self.column_names.match_id).is_in(df[self.column_names.match_id].unique().to_list()))
+        concat_df = concat_df.filter(
+            pl.col(self.column_names.match_id).is_in(df[self.column_names.match_id].unique().to_list()))
         transformed_future = pl.DataFrame(self._generate_future_feats(
             transformed_df=nw.from_native(concat_df), ori_df=nw.from_native(df)
         ))
@@ -374,13 +390,12 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                 day=day,
                 granularity=self.granularity,
             )
+        unique_cols = [self.column_names.player_id, self.column_names.match_id,
+                       self.column_names.team_id] if self.column_names.team_id else [self.column_names.team_id,
+                                                                                     self.column_names.match_id]
 
         concat_df = concat_df.join(grouped, on=self.granularity + ['__date_day'], how="left").unique(
-            subset=[
-                self.column_names.match_id,
-                self.column_names.team_id,
-                self.column_names.player_id,
-            ]
+            subset=unique_cols
         )
 
         concat_df = concat_df.sort(
@@ -555,6 +570,17 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         if "is_future" in transformed_df.columns:
             transformed_df = transformed_df.drop("is_future")
         transformed_df = self._add_weighted_prob(transformed_df=transformed_df)
+
+        unique_cols = [self.column_names.player_id, self.column_names.match_id,
+                       self.column_names.team_id] if self.column_names.team_id else [self.column_names.team_id,
+                                                                                     self.column_names.match_id]
+
+        if transformed_df.unique(
+                subset=unique_cols).shape[0] != \
+                transformed_df.shape[0]:
+            raise ValueError(
+                f"Duplicated rows in df. Df must be a unique combination of {unique_cols}"
+            )
         if ori_native == "pd":
             return transformed_df.to_pandas()
         return transformed_df
@@ -789,7 +815,7 @@ class RollingMeanTransformer(BaseLagGenerator):
         )
         if df.unique(subset=unique_cols).shape[0] != df.shape[0]:
             raise ValueError(
-                f"Duplicated rows in df. Df must be a unique combination of {column_names.player_id} and {column_names.update_match_id}"
+                f"Duplicated rows in df. Df must be a unique combination of {unique_cols}"
             )
 
         df = df.with_columns(nw.lit(0).alias("is_future"))
@@ -801,12 +827,19 @@ class RollingMeanTransformer(BaseLagGenerator):
         concat_df = self._generate_concat_df_with_feats(df)
         transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
         cn = self.column_names
-
+        unique_cols = [cn.player_id, cn.team_id, cn.match_id] if cn.player_id in df.columns else [cn.team_id,
+                                                                                                  cn.match_id]
         df = df.join(
             transformed_df.select(*unique_cols, *self.features_out),
             on=unique_cols,
             how="left",
         )
+        if df.unique(subset=unique_cols).shape[
+            0] != df.shape[0]:
+            raise ValueError(
+                f"Duplicated rows in df. Df must be a unique combination of {unique_cols}"
+            )
+
         if "is_future" in df.columns:
             df = df.drop("is_future")
 

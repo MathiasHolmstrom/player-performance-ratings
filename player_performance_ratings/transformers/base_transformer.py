@@ -12,10 +12,10 @@ from player_performance_ratings import ColumnNames
 class BaseTransformer(ABC):
 
     def __init__(
-        self,
-        features: list[str],
-        features_out: list[str],
-        are_estimator_features: bool = True,
+            self,
+            features: list[str],
+            features_out: list[str],
+            are_estimator_features: bool = True,
     ):
         self._features_out = features_out
         self.features = features
@@ -27,7 +27,7 @@ class BaseTransformer(ABC):
 
     @abstractmethod
     def fit_transform(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+            self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         pass
 
@@ -50,13 +50,13 @@ class BaseTransformer(ABC):
 class BaseLagGenerator:
 
     def __init__(
-        self,
-        granularity: list[str],
-        features: list[str],
-        add_opponent: bool,
-        iterations: list[int],
-        prefix: str,
-        are_estimator_features: bool = True,
+            self,
+            granularity: list[str],
+            features: list[str],
+            add_opponent: bool,
+            iterations: list[int],
+            prefix: str,
+            are_estimator_features: bool = True,
     ):
 
         self.features = features
@@ -161,7 +161,7 @@ class BaseLagGenerator:
         )
 
     def _store_df(
-        self, df: nw.DataFrame, additional_cols_to_use: Optional[list[str]] = None
+            self, df: nw.DataFrame, additional_cols_to_use: Optional[list[str]] = None
     ):
         df = df.with_columns(
             [
@@ -234,30 +234,39 @@ class BaseLagGenerator:
             )
         return df
 
-    def _create_transformed_df(self, df: FrameT, concat_df: FrameT) -> IntoFrameT:
+    def _create_transformed_df(self, df: FrameT, concat_df: FrameT,
+                               match_id_join_on: Optional[str] = None) -> IntoFrameT:
 
         cn = self.column_names
-
+        match_id_join = match_id_join_on or cn.update_match_id
         if self.add_opponent:
             concat_df = self._add_opponent_features(df=concat_df)
         on_cols = (
-            [cn.match_id, cn.team_id, cn.player_id]
+            [match_id_join, cn.team_id, cn.player_id]
             if cn.player_id in df.columns
             else [
-                cn.match_id,
+                match_id_join,
                 cn.team_id,
             ]
         )
         ori_cols = [c for c in df.columns if c not in concat_df.columns] + on_cols
 
         df = self._string_convert(df)
+        unique_cols = [self.column_names.player_id, self.column_names.team_id,
+                       self.column_names.match_id] if self.column_names.player_id in df.columns else [
+            self.column_names.team_id, self.column_names.match_id]
 
-        transformed_df = concat_df.join(df.select(ori_cols), on=on_cols, how="inner")
+        sort_cols = [self.column_names.start_date, self.column_names.match_id, self.column_names.team_id,
+                     self.column_names.player_id] if self.column_names.player_id in df.columns else [
+            self.column_names.start_date, self.column_names.match_id, self.column_names.team_id]
+
+        transformed_df = concat_df.join(df.select(ori_cols), on=on_cols, how="inner").unique(
+            unique_cols).sort(sort_cols)
         return transformed_df.select(list(set(df.columns + self.features_out)))
 
     def _add_opponent_features(self, df: FrameT) -> FrameT:
         team_features = df.group_by(
-            [self.column_names.team_id, self.column_names.match_id]
+            [self.column_names.team_id, self.column_names.update_match_id]
         ).agg(**{col: nw.mean(col) for col in self._entity_features})
 
         df_opponent_feature = team_features.with_columns(
@@ -268,7 +277,7 @@ class BaseLagGenerator:
         )
 
         new_df = df.join(
-            df_opponent_feature, on=self.column_names.match_id, suffix="_team_sum"
+            df_opponent_feature, on=self.column_names.update_match_id, suffix="_team_sum"
         )
 
         new_df = new_df.filter(
@@ -300,10 +309,10 @@ class BaseLagGenerator:
         )
 
     def _generate_future_feats(
-        self,
-        transformed_df: FrameT,
-        ori_df: FrameT,
-        known_future_features: Optional[list[str]] = None,
+            self,
+            transformed_df: FrameT,
+            ori_df: FrameT,
+            known_future_features: Optional[list[str]] = None,
     ) -> FrameT:
         known_future_features = known_future_features or []
         ori_cols = ori_df.columns
