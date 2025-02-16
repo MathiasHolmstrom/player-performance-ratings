@@ -193,7 +193,7 @@ class UpdateRatingGenerator(RatingGenerator):
         pre_match_opponent_projected_rating_values = []
         pre_match_opponent_rating_values = []
         team_opponent_leagues = []
-        rating_update_match_ids = []
+        rating_match_ids = []
         rating_update_team_ids = []
         rating_update_team_ids_opponent = []
         player_rating_changes = []
@@ -264,7 +264,7 @@ class UpdateRatingGenerator(RatingGenerator):
                     player_leagues.append(player_rating_change.league)
                     team_opponent_leagues.append(opponent_team.league)
                     team_leagues.append(team_rating_change.league)
-                    rating_update_match_ids.append(match.update_id)
+                    rating_match_ids.append(match.id)
                     rating_update_team_ids.append(match.teams[team_idx].update_id)
                     rating_update_team_ids_opponent.append(
                         match.teams[-team_idx + 1].update_id
@@ -316,7 +316,7 @@ class UpdateRatingGenerator(RatingGenerator):
             player_leagues=player_leagues,
             team_opponent_leagues=team_opponent_leagues,
             projected_participation_weights=projected_participation_weights,
-            match_ids=rating_update_match_ids,
+            match_ids=rating_match_ids,
             team_ids=rating_update_team_ids,
             team_id_opponents=rating_update_team_ids_opponent,
             player_ids=player_ids,
