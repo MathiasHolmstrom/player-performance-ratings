@@ -1,3 +1,5 @@
+import copy
+
 import pandas as pd
 import pytest
 import polars as pl
@@ -33,6 +35,7 @@ def test_lag_team_fit_transform(df, column_names):
             "team": [1, 1, 2, 2, 1, 1, 2, 2],
             "game": [1, 1, 1, 1, 2, 2, 2, 2],
             "points": [1, 2, 3, 2, 4, 5, 6, 7],
+            'points2': [1, 2, 3, 2, 4, 5, 6, 7],
             "start_date": [
                 pd.to_datetime("2023-01-01"),
                 pd.to_datetime("2023-01-01"),
@@ -77,9 +80,6 @@ def test_lag_team_fit_transform(df, column_names):
         expected_df = original_df.assign(
             **{"lag_points1": [None, None, None, None, 1.5, 1.5, 2.5, 2.5]}
         )
-        expected_df["team"] = expected_df["team"]
-        expected_df["game"] = expected_df["game"]
-        expected_df["player"] = expected_df["player"]
 
         pd.testing.assert_frame_equal(
             df_with_lags, expected_df[df_with_lags.columns], check_dtype=False
@@ -87,7 +87,71 @@ def test_lag_team_fit_transform(df, column_names):
 
 
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
-def test_lag_fit_transform_2_features(df, column_names):
+def test_lag_fit_transform_update_match_id(df, column_names):
+    "Should calculate average point of prior game"
+    column_names = copy.deepcopy(column_names)
+    column_names.update_match_id = "update_match_id"
+    data = df(
+        {
+            "player": ["a", "b", "a", "b", "a", "b", "a", "b"],
+            "update_match_id": [1,1,1,1,2,2,2,2],
+            "team": [1, 2, 1, 2, 1, 2, 1, 2],
+            "game": [1, 1, 2,2, 3, 3, 4, 4],
+            "points": [1, 2, 3, 2, 4, 5, 6, 7],
+            'points2': [1, 2, 3, 4, 5, 6, 7, 8],
+            "start_date": [
+                pd.to_datetime("2023-01-01"),
+                pd.to_datetime("2023-01-01"),
+                pd.to_datetime("2023-01-01"),
+                pd.to_datetime("2023-01-01"),
+                pd.to_datetime("2023-01-02"),
+                pd.to_datetime("2023-01-02"),
+                pd.to_datetime("2023-01-02"),
+                pd.to_datetime("2023-01-02"),
+            ],
+        }
+    )
+
+    try:
+        original_df = data.copy()
+    except:
+        original_df = data.clone()
+
+    lag_transformation = LagTransformer(
+        features=["points"],
+        lag_length=1,
+        granularity=["team"],
+    )
+
+    df_with_lags = lag_transformation.generate_historical(
+        data, column_names=column_names
+    )
+    if isinstance(data, pl.DataFrame):
+        expected_df = original_df.with_columns(
+            [
+                pl.Series("lag_points1", [None, None, None, None, 2, 2, 2, 2]),
+                pl.col("team"),
+                pl.col("game"),
+                pl.col("player"),
+            ]
+        )
+        pl.testing.assert_frame_equal(
+            df_with_lags, expected_df.select(df_with_lags.columns), check_dtype=False
+        )
+
+    elif isinstance(data, pd.DataFrame):
+        expected_df = original_df.assign(
+            **{"lag_points1": [None, None, None, None, 2, 2, 2, 2]}
+        )
+
+        pd.testing.assert_frame_equal(
+            df_with_lags, expected_df[df_with_lags.columns], check_dtype=False
+        )
+
+
+
+@pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
+def test_lag_fit_transform_2_features_update_match_id(df, column_names):
     data = df(
         {
             "player": ["a", "b", "a"],
@@ -443,68 +507,6 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
         )
 
 
-@pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
-def test_lag_transformer_parent_match_id(df, column_names: ColumnNames):
-    column_names = column_names
-    column_names.update_match_id = "series_id"
-    historical_df = df(
-        {
-            "player": ["a", "a", "a", "a"],
-            "game": [1, 2, 3, 4],
-            "points": [1, 2, 3, 2],
-            "start_date": [
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-02"),
-                pd.to_datetime("2023-01-04"),
-            ],
-            "team": [1, 1, 1, 1],
-            "series_id": [1, 1, 2, 3],
-        }
-    )
-    try:
-        expected_df = historical_df.copy()
-    except:
-        expected_df = historical_df.clone()
-
-    lag_transformation = LagTransformer(
-        features=["points"],
-        lag_length=2,
-        granularity=["player"],
-    )
-
-    transformed_df = lag_transformation.generate_historical(
-        historical_df, column_names=column_names
-    )
-
-    if isinstance(historical_df, pd.DataFrame):
-        expected_df = expected_df.assign(
-            **{lag_transformation.features_out[0]: [None, None, 1.5, 3]}
-        )
-        expected_df = expected_df.assign(
-            **{lag_transformation.features_out[1]: [None, None, None, 1.5]}
-        )
-
-        pd.testing.assert_frame_equal(
-            transformed_df, expected_df, check_like=True, check_dtype=False
-        )
-    else:
-        expected_df = expected_df.with_columns(
-            [
-                pl.Series(lag_transformation.features_out[0], [None, None, 1.5, 3]),
-                pl.Series(lag_transformation.features_out[1], [None, None, None, 1.5]),
-                pl.col("team"),
-                pl.col("game"),
-                pl.col("player"),
-                pl.col("series_id"),
-            ]
-        )
-        pl.testing.assert_frame_equal(
-            transformed_df,
-            expected_df.select(transformed_df.columns),
-            check_dtype=False,
-        )
-
 
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_rolling_mean_fit_transform_game_team(df, column_names):
@@ -795,6 +797,7 @@ def test_rolling_mean_transform_parent_match_id(column_names: ColumnNames):
             "player": ["a", "a", "a", "a"],
             "game": [1, 2, 3, 4],
             "points": [1, 2, 3, 2],
+            'points2': [1, 2, 3, 4],
             "start_date": [
                 pd.to_datetime("2023-01-01"),
                 pd.to_datetime("2023-01-01"),
@@ -873,6 +876,7 @@ def test_rolling_mean_days_series_id(column_names: ColumnNames):
             "player": ["a", "a", "a", "a"],
             "game": [1, 2, 3, 4],
             "points": [1, 2, 3, 2],
+            'points2': [1, 2, 3, 4],
             "start_date": [
                 pd.to_datetime("2023-01-01"),
                 pd.to_datetime("2023-01-01"),

@@ -70,7 +70,7 @@ class LagTransformer(BaseLagGenerator):
         validate_sorting(df=df, column_names=self.column_names)
         self._store_df(df)
         concat_df = self._generate_concat_df_with_feats(df)
-        df = self._create_transformed_df(df=df, concat_df=concat_df)
+        df = self._create_transformed_df(df=df, concat_df=concat_df, match_id_join_on=self.column_names.match_id)
         unique_cols = [self.column_names.player_id, self.column_names.match_id,
                        self.column_names.team_id] if self.column_names.team_id else [self.column_names.team_id,
                                                                                      self.column_names.match_id]
