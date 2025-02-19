@@ -80,6 +80,12 @@ def convert_df_to_matches(
             )
             raise ValueError("performance contains nan values")
 
+    if column_names.update_match_id != column_names.match_id:
+        df = df.with_columns(
+            nw.col(column_names.start_date).min().over(column_names.update_match_id).alias(
+                column_names.start_date)
+        ).sort([column_names.start_date, column_names.match_id, column_names.team_id, column_names.player_id])
+
     validate_sorting(df=df, column_names=column_names)
 
     col_names = column_names
