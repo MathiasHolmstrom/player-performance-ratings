@@ -1,19 +1,16 @@
 from typing import Optional, Union, List
 
-import polars as pl
 from narwhals.typing import FrameT, IntoFrameT
 import narwhals as nw
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.predictor._base import DataFrameType
+
 
 from player_performance_ratings.ratings import convert_df_to_matches, LeagueIdentifier
-from player_performance_ratings.ratings.performance_generator import (
-    PerformancesGenerator,
-)
+
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.transformers.base_transformer import (
-    BaseLagGenerator,
+
     BaseLagGenerator,
     BaseTransformer,
 )
@@ -69,6 +66,9 @@ class PipelineTransformer:
             df = lag_generator.generate_historical(
                 df=df, column_names=self.column_names
             )
+
+        for transformer in self.post_lag_transformers:
+            df = transformer.transform(df)
 
         return df
 

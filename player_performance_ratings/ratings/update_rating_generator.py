@@ -665,12 +665,13 @@ class UpdateRatingGenerator(RatingGenerator):
             )
 
             df = df.select(
-                [self.column_names.match_id, self.column_names.player_id]
+                [self.column_names.match_id, self.column_names.player_id, self.column_names.team_id]
             ).join(
                 game_player.select(
                     [
                         self.column_names.match_id,
                         self.column_names.player_id,
+                        self.column_names.team_id,
                         self.prefix
                         + RatingKnownFeatures.TEAM_RATING_PROJECTED
                         + self.suffix,
@@ -683,7 +684,7 @@ class UpdateRatingGenerator(RatingGenerator):
                         self.prefix + RatingKnownFeatures.PLAYER_RATING + self.suffix,
                     ]
                 ),
-                on=[self.column_names.match_id, self.column_names.player_id],
+                on=[self.column_names.match_id, self.column_names.player_id, self.column_names.team_id],
                 how="left",
             )
 

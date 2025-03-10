@@ -155,6 +155,7 @@ class MeanBiasScorer(BaseScorer):
 
     @narwhals.narwhalify
     def score(self, df: Union[pd.DataFrame, pl.DataFrame]) -> float:
+        df = apply_filters(df, self.filters)
         if self.granularity:
             grouped = df.group_by(self.granularity).agg(
                 [
