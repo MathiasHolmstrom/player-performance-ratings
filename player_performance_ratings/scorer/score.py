@@ -343,6 +343,7 @@ class OrdinalLossScorer(BaseScorer):
 
         df = apply_filters(df, self.filters)
         field_names = [int(field) for field in df[self.pred_column].struct.fields]
+        field_names.sort()
         min_field = min(field_names)
         df = df.with_columns(
             [

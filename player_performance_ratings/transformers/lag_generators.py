@@ -21,7 +21,6 @@ class LagTransformer(BaseLagGenerator):
             lag_length: int,
             granularity: Optional[list[str]] = None,
             days_between_lags: Optional[list[int]] = None,
-            scale_by_participation_weight: bool = False,
             future_lag: bool = False,
             prefix: str = "lag",
             add_opponent: bool = False,
@@ -45,7 +44,6 @@ class LagTransformer(BaseLagGenerator):
             iterations=[i for i in range(1, lag_length + 1)],
             granularity=granularity,
         )
-        self.scale_by_participation_weight = scale_by_participation_weight
         self.days_between_lags = days_between_lags or []
         for days_lag in self.days_between_lags:
             self._features_out.append(f"{prefix}{days_lag}_days_ago")
@@ -132,17 +130,6 @@ class LagTransformer(BaseLagGenerator):
             )
 
         concat_df = self._concat_df(df=df)
-
-        if (
-                self.column_names.participation_weight
-                and self.scale_by_participation_weight
-        ):
-            for feature in self.features:
-                concat_df = concat_df.with_columns(
-                    (
-                            nw.col(feature) * nw.col(self.column_names.participation_weight)
-                    ).alias(feature)
-                )
 
         grouped = concat_df.group_by(
             self.granularity
@@ -373,8 +360,14 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                     and self.scale_by_participation_weight
             ):
                 concat_df = concat_df.with_columns(
-                    (pl.col(feature_name) * pl.col(self.column_names.participation_weight)).alias(feature_name)
+                    nw.col(self.column_names.participation_weight).mean().over(self.granularity).alias(
+                        '__mean_participation_weight')
                 )
+
+                concat_df = concat_df.with_columns(
+                    (pl.col(feature_name) * pl.col(self.column_names.participation_weight)/pl.col('__mean_participation_weight')
+                     ).alias(feature_name)
+                ).drop('__mean_participation_weight')
 
         concat_df = concat_df.with_columns(
             pl.col(self.column_names.start_date).dt.date().alias("__date_day")
@@ -904,15 +897,20 @@ class RollingMeanTransformer(BaseLagGenerator):
                 self.column_names.participation_weight
                 and self.scale_by_participation_weight
         ):
+
+            concat_df = concat_df.with_columns(
+                nw.col(self.column_names.participation_weight).mean().over(self.granularity).alias('__mean_participation_weight')
+            )
+
             concat_df = concat_df.with_columns(
                 [
                     (
-                            concat_df[feature_name]
-                            * concat_df[self.column_names.participation_weight]
+                            nw.col(feature_name)
+                            * nw.col(self.column_names.participation_weight)/ nw.col('__mean_participation_weight')
                     ).alias(feature_name)
                     for feature_name in self.features
                 ]
-            )
+            ).drop('__mean_participation_weight')
 
         grp = concat_df.group_by(
             self.granularity

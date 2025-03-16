@@ -7,6 +7,7 @@ from player_performance_ratings.predictor import GameTeamPredictor
 from player_performance_ratings.ratings import UpdateRatingGenerator
 
 from player_performance_ratings.data_structures import ColumnNames
+from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
 from player_performance_ratings.scorer import SklearnScorer
 
 df = pd.read_parquet("data/game_player_subsample.parquet")
@@ -28,7 +29,6 @@ df = df.sort_values(
     ]
 )
 
-
 # Drops games with less or more than 2 teams
 df = (
     df.assign(
@@ -49,7 +49,12 @@ future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(
 
 # Defining a simple rating-generator. It will use the "won" column to update the ratings.
 # In contrast to a typical Elo, ratings will follow players.
-rating_generator = UpdateRatingGenerator(performance_column="won")
+
+match_rating_generator = MatchRatingGenerator(
+    rating_change_multiplier=30
+)
+
+rating_generator = UpdateRatingGenerator(performance_column="won", match_rating_generator=match_rating_generator)
 
 # Defines the predictor. A machine-learning model will be used to predict game winner on a game-team-level.
 # Mean team-ratings will be calculated (from player-level) and rating-difference between the 2 teams calculated.
@@ -72,7 +77,6 @@ pipeline = Pipeline(
 
 # Trains the model and returns historical predictions
 pipeline.train(df=historical_df)
-
 
 # Future predictions on future results
 future_predictions = pipeline.predict(df=future_df)
