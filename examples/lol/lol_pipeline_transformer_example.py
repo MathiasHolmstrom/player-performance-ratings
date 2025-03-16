@@ -6,6 +6,7 @@ from player_performance_ratings import ColumnNames
 from player_performance_ratings.cross_validator import MatchKFoldCrossValidator
 from player_performance_ratings.pipeline_transformer import PipelineTransformer
 from player_performance_ratings.predictor import GameTeamPredictor, Predictor
+from player_performance_ratings.predictor.classifier import NegativeBinomialPredictor
 from player_performance_ratings.ratings import (
     UpdateRatingGenerator,
     RatingKnownFeatures,
@@ -130,6 +131,10 @@ historical_df = cross_validator_player_kills.generate_validation_df(historical_d
 future_df = transformer.transform(future_df)
 future_df = game_winner_predictor.predict(future_df)
 future_df = player_kills_predictor.predict(future_df)
+
+probability_predictor = NegativeBinomialPredictor(target='kills',point_estimate_pred_column=player_kills_predictor.pred_column, estimator_features=['position'], max_value=15)
+probability_predictor.train(historical_df)
+future_df = probability_predictor.predict(future_df)
 
 
 print(future_df.head(10))

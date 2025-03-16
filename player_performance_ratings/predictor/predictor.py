@@ -21,7 +21,6 @@ from typing import Optional
 
 from sklearn.linear_model import LogisticRegression
 
-
 from player_performance_ratings.data_structures import ColumnNames
 from player_performance_ratings.predictor._base import BasePredictor, DataFrameType
 
@@ -40,23 +39,23 @@ class GameTeamPredictor(BasePredictor):
     """
 
     def __init__(
-        self,
-        target: str,
-        game_id_colum: str,
-        team_id_column: str,
-        scale_features: bool = False,
-        one_hot_encode_cat_features: bool = False,
-        convert_to_cat_feats_to_cat_dtype: bool = False,
-        impute_missing_values: bool = False,
-        estimator: Optional = None,
-        estimator_features: Optional[list[str]] = None,
-        estimator_features_contain: Optional[list[str]] = None,
-        multiclassifier: bool = False,
-        pred_column: Optional[str] = None,
-        pre_transformers: Optional[list[PredictorTransformer]] = None,
-        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-        filters: Optional[list[Filter]] = None,
-        multiclass_output_as_struct: bool = True,
+            self,
+            target: str,
+            game_id_colum: str,
+            team_id_column: str,
+            scale_features: bool = False,
+            one_hot_encode_cat_features: bool = False,
+            convert_to_cat_feats_to_cat_dtype: bool = False,
+            impute_missing_values: bool = False,
+            estimator: Optional = None,
+            estimator_features: Optional[list[str]] = None,
+            estimator_features_contain: Optional[list[str]] = None,
+            multiclassifier: bool = False,
+            pred_column: Optional[str] = None,
+            pre_transformers: Optional[list[PredictorTransformer]] = None,
+            post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+            filters: Optional[list[Filter]] = None,
+            multiclass_output_as_struct: bool = True,
     ):
         """
         :param game_id_colum - name of game_id column
@@ -126,7 +125,7 @@ class GameTeamPredictor(BasePredictor):
         df = apply_filters(df=df, filters=self.filters)
         df = self._fit_transform_pre_transformers(df=df)
         if len(df[self._target].unique()) > 2 and hasattr(
-            self.estimator, "predict_proba"
+                self.estimator, "predict_proba"
         ):
             self.multiclassifier = True
             if self.estimator.__class__.__name__ == "LogisticRegression":
@@ -271,7 +270,7 @@ class GameTeamPredictor(BasePredictor):
             )
 
         if self._target in df.columns and hasattr(
-            self._deepest_estimator(self), "predict_proba"
+                self._deepest_estimator(self), "predict_proba"
         ):
             grouped = grouped.with_columns(nw.col(self._target).cast(nw.Int64))
 
@@ -286,35 +285,78 @@ class GameTeamPredictor(BasePredictor):
         return grouped
 
 
+class SKlearnPredictor(BasePredictor):
+
+    def __init__(self, estimator, target: str, pred_column: Optional[str] = None,
+                 estimator_features: Optional[list[str]] = None):
+        self.estimator = estimator
+
+        super().__init__(target=target, pred_column=pred_column, estimator_features=estimator_features)
+
+    @nw.narwhalify
+    def train(self, df: FrameT, estimator_features: Optional[list[str]] = None) -> None:
+
+        if hasattr(self.estimator, "predict_proba"):
+            try:
+                filtered_df = df.with_columns(
+                    nw.col(self._target).cast(nw.Int64)
+                )
+                self.classes_ = filtered_df[self._target].unique().to_list()
+                self.classes_.sort()
+            except Exception:
+                pass
+
+        deepest_estimator = self._deepest_estimator(predictor=self)
+
+        if (
+                not self.multiclassifier
+                and len(df[self._target].unique()) > 2
+                and hasattr(deepest_estimator, "predict_proba")
+        ):
+            self.multiclassifier = True
+
+            if len(df[self._target].unique()) > 50:
+                logging.warning(
+                    f"target has {len(df[self._target].unique())} unique values. This may machine-learning model to not function properly."
+                    f" It is recommended to limit max and min values to ensure less than 50 unique targets"
+                )
+
+        estimator_features = estimator_features or self._estimator_features
+        self.estimator.fit(df.select(estimator_features).to_pandas(), df[self.target].to_numpy())
+
+    @nw.narwhalify
+    def predict(self, df: FrameT) -> IntoFrameT:
+        return df.with_columns(nw.new_series(name=self.pred_column, values=self.estimator.predict(
+            df.select(self._estimator_features).to_pandas()), native_namespace=nw.get_native_namespace(df)))
+
+
 class Predictor(BasePredictor):
     """
-    Wrapper for sklearn models that predicts game results.
-    Can be used similarly to an Sklearn pipeline by injecting pre_transformers into it.
     By default the Predictor will always create pre_transformers to ensure that the estimator can train on the estimator-features that it receives.
     Adding basic encoding of categorical features, standardizing or imputation is therefore not required.
     """
 
     def __init__(
-        self,
-        target: str,
-        estimator: Optional = None,
-        estimator_features: Optional[list[str]] = None,
-        estimator_features_contain: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
-        scale_features: bool = False,
-        one_hot_encode_cat_features: bool = False,
-        convert_to_cat_feats_to_cat_dtype: bool = False,
-        impute_missing_values: bool = False,
-        multiclassifier: bool = False,
-        pred_column: Optional[str] = None,
-        column_names: Optional[ColumnNames] = None,
-        pre_transformers: Optional[list[PredictorTransformer]] = None,
-        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-        multiclass_output_as_struct: bool = True,
+            self,
+            target: str,
+            predictor: BasePredictor,
+            estimator_features: Optional[list[str]] = None,
+            estimator_features_contain: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
+            scale_features: bool = False,
+            one_hot_encode_cat_features: bool = False,
+            convert_to_cat_feats_to_cat_dtype: bool = False,
+            impute_missing_values: bool = False,
+            multiclassifier: bool = False,
+            pred_column: Optional[str] = None,
+            column_names: Optional[ColumnNames] = None,
+            pre_transformers: Optional[list[PredictorTransformer]] = None,
+            post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+            multiclass_output_as_struct: bool = True,
     ):
         """
         :param target - Name of the column that the predictor should predict
-        :param estimator: Sklearn like Estimator
+        :param predictor: Predictor to use
         :param estimator_features: Features that the estimator should use to train.
             Note the estimator_features passed to the constructor can be overriden by estimator_features passed to .train()
         :param multiclassifier: If set to true the output when calling add_prediction() will be in multiclassifier format.
@@ -331,14 +373,9 @@ class Predictor(BasePredictor):
         self._target = target
         self.multiclassifier = multiclassifier
         self.column_names = column_names
-        self.estimator = estimator or LGBMClassifier(
-            max_depth=2, n_estimators=100, verbose=-100
-        )
+        self.predictor = predictor
 
-        if estimator is None:
-            logging.warning(
-                "model is not set. Will use LGBMClassifier(max_depth=2, n_estimators=100, learning_rate=0.1)"
-            )
+
 
         super().__init__(
             target=self._target,
@@ -380,42 +417,17 @@ class Predictor(BasePredictor):
         self._add_estimator_features_contain(df)
 
         filtered_df = apply_filters(df=df, filters=self.filters)
-        if hasattr(self.estimator, "predict_proba"):
-            try:
-                filtered_df = filtered_df.with_columns(
-                    nw.col(self._target).cast(nw.Int64)
-                )
-                self.classes_ = filtered_df[self._target].unique().to_list()
-                self.classes_.sort()
-            except Exception:
-                pass
 
-        deepest_estimator = self._deepest_estimator(predictor=self)
         filtered_df = self._fit_transform_pre_transformers(df=filtered_df)
 
-        if (
-            not self.multiclassifier
-            and len(filtered_df[self._target].unique()) > 2
-            and hasattr(deepest_estimator, "predict_proba")
-        ):
-            self.multiclassifier = True
-            if self.estimator.__class__.__name__ == "LogisticRegression":
-                self.estimator = OrdinalClassifier(self.estimator)
-            if len(filtered_df[self._target].unique()) > 50:
-                logging.warning(
-                    f"target has {len(df[self._target].unique())} unique values. This may machine-learning model to not function properly."
-                    f" It is recommended to limit max and min values to ensure less than 50 unique targets"
-                )
 
         if hasattr(self._deepest_estimator, "predict_proba"):
             filtered_df = filtered_df.with_columns(nw.col(self._target).cast(nw.Int64))
 
         logging.info(f"Training with {len(filtered_df)} rows. Features: {self._estimator_features}")
 
-        self.estimator.fit(
-            filtered_df.select(self._estimator_features).to_pandas(),
-            filtered_df[self._target].to_list(),
-        )
+        self.predictor.train(filtered_df, estimator_features=self._estimator_features)
+
 
     @nw.narwhalify
     def predict(self, df: FrameT, cross_validation: bool = False) -> IntoFrameT:
@@ -501,22 +513,22 @@ class GranularityPredictor(BasePredictor):
     """
 
     def __init__(
-        self,
-        target: str,
-        granularity_column_name: str,
-        scale_features: bool = False,
-        one_hot_encode_cat_features: bool = False,
-        convert_to_cat_feats_to_cat_dtype: bool = False,
-        impute_missing_values: bool = False,
-        estimator: Optional = None,
-        estimator_features: Optional[list[str]] = None,
-        estimator_features_contain: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
-        multiclassifier: bool = False,
-        pred_column: Optional[str] = None,
-        column_names: Optional[ColumnNames] = None,
-        pre_transformers: Optional[list[PredictorTransformer]] = None,
-        multiclass_output_as_struct: bool = True,
+            self,
+            target: str,
+            granularity_column_name: str,
+            scale_features: bool = False,
+            one_hot_encode_cat_features: bool = False,
+            convert_to_cat_feats_to_cat_dtype: bool = False,
+            impute_missing_values: bool = False,
+            estimator: Optional = None,
+            estimator_features: Optional[list[str]] = None,
+            estimator_features_contain: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
+            multiclassifier: bool = False,
+            pred_column: Optional[str] = None,
+            column_names: Optional[ColumnNames] = None,
+            pre_transformers: Optional[list[PredictorTransformer]] = None,
+            multiclass_output_as_struct: bool = True,
     ):
         """
         :param target - Name of the column that the predictor should predict
@@ -606,9 +618,9 @@ class GranularityPredictor(BasePredictor):
             filtered_df = filtered_df.with_columns(nw.col(self._target).cast(nw.Int64))
 
         if (
-            not self.multiclassifier
-            and len(filtered_df[self._target].unique()) > 2
-            and hasattr(deepest_estimator, "predict_proba")
+                not self.multiclassifier
+                and len(filtered_df[self._target].unique()) > 2
+                and hasattr(deepest_estimator, "predict_proba")
         ):
             self.multiclassifier = True
             if self.estimator.__class__.__name__ == "LogisticRegression":
@@ -707,7 +719,7 @@ class GranularityPredictor(BasePredictor):
         return df
 
     def _unify_struct_fields(
-        self, dfs: list[FrameT], struct_col: str
+            self, dfs: list[FrameT], struct_col: str
     ) -> list[IntoFrameT]:
         dfs = [df.to_native() for df in dfs]
         all_fields = set()
