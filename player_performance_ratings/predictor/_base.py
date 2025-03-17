@@ -37,7 +37,7 @@ class BasePredictor(ABC):
         pred_column: Optional[str] = None,
         filters: Optional[dict] = None,
         auto_pre_transform: bool = True,
-        multiclass_output_as_struct: bool = False,
+        multiclass_output_as_struct: bool = True,
     ):
         self._estimator_features = estimator_features or []
         self._target = target
