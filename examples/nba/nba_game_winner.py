@@ -1,8 +1,9 @@
 import pandas as pd
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
 
 from player_performance_ratings.pipeline import Pipeline
-from player_performance_ratings.predictor import GameTeamPredictor
+from player_performance_ratings.predictor import GameTeamPredictor, SklearnPredictor
 
 from player_performance_ratings.ratings import UpdateRatingGenerator
 
@@ -50,11 +51,11 @@ future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(
 # Defining a simple rating-generator. It will use the "won" column to update the ratings.
 # In contrast to a typical Elo, ratings will follow players.
 
-match_rating_generator = MatchRatingGenerator(
-    rating_change_multiplier=30
-)
+match_rating_generator = MatchRatingGenerator(rating_change_multiplier=30)
 
-rating_generator = UpdateRatingGenerator(performance_column="won", match_rating_generator=match_rating_generator)
+rating_generator = UpdateRatingGenerator(
+    performance_column="won", match_rating_generator=match_rating_generator
+)
 
 # Defines the predictor. A machine-learning model will be used to predict game winner on a game-team-level.
 # Mean team-ratings will be calculated (from player-level) and rating-difference between the 2 teams calculated.
@@ -62,9 +63,10 @@ rating_generator = UpdateRatingGenerator(performance_column="won", match_rating_
 predictor = GameTeamPredictor(
     game_id_colum=column_names.match_id,
     team_id_column=column_names.team_id,
-    estimator_features=["location"],
+    predictor=SklearnPredictor(
+        estimator_features=["location"], target="won", estimator=LogisticRegression()
+    ),
     one_hot_encode_cat_features=True,
-    target="won",
 )
 
 # Pipeline is whether we define all the steps. Other transformations can take place as well.

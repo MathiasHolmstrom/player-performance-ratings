@@ -4,7 +4,7 @@ from unittest import mock
 import pandas as pd
 from skbase.utils import deep_equals
 
-from player_performance_ratings.predictor import Predictor
+from player_performance_ratings.predictor import SklearnPredictor, SklearnPredictor
 from player_performance_ratings.tuner.performances_generator_tuner import (
     PerformancesSearchRange,
 )
@@ -39,8 +39,9 @@ def test_match_predictor_tuner():
     pipeline = Pipeline(
         column_names=col_names,
         rating_generators=UpdateRatingGenerator(performance_column="performance"),
-        predictor=Predictor(
+        predictor=SklearnPredictor(
             target="won",
+            estimator=mock.Mock(),
         ),
     )
 

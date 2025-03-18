@@ -17,7 +17,11 @@ from player_performance_ratings.ratings.enums import (
     RatingKnownFeatures,
     RatingUnknownFeatures,
 )
-from player_performance_ratings.ratings.performance_generator import PerformancesGenerator, Performance, ColumnWeight
+from player_performance_ratings.ratings.performance_generator import (
+    PerformancesGenerator,
+    Performance,
+    ColumnWeight,
+)
 from player_performance_ratings.ratings.rating_calculators import (
     MatchRatingGenerator,
     StartRatingGenerator,
@@ -566,15 +570,9 @@ def test_update_rating_generator_with_performances_generator(df):
                 Performance(
                     name="performance_weighted",
                     weights=[
-                        ColumnWeight(
-                            name='points_difference',
-                            weight=0.5
-                        ),
-                        ColumnWeight(
-                            name='won',
-                            weight=0.5
-                        )
-                    ]
+                        ColumnWeight(name="points_difference", weight=0.5),
+                        ColumnWeight(name="won", weight=0.5),
+                    ],
                 )
             ]
         ),
@@ -615,7 +613,7 @@ def test_update_rating_generator_with_performances_generator(df):
                 pd.to_datetime("2021-01-02"),
             ],
             "won": [1.0, 1.0, 0, 0, 1.0, 1.0, 0, 0],
-            "points_difference":[10, 5, -5, -10, 10, 5, -5, -10]
+            "points_difference": [10, 5, -5, -10, 10, 5, -5, -10],
         }
     )
 
@@ -624,6 +622,10 @@ def test_update_rating_generator_with_performances_generator(df):
     )
     assert rating_generator.performance_column == "performance_weighted"
     if isinstance(historical_df, pl.DataFrame):
-        assert historical_df_with_ratings[rating_generator.prefix + 'performance'+rating_generator.suffix].to_list() == [1.0, 0.875, 0.125, 0,1.0, 0.875, 0.125, 0]
+        assert historical_df_with_ratings[
+            rating_generator.prefix + "performance" + rating_generator.suffix
+        ].to_list() == [1.0, 0.875, 0.125, 0, 1.0, 0.875, 0.125, 0]
     else:
-        assert historical_df_with_ratings[rating_generator.prefix + 'performance'+rating_generator.suffix].tolist() == [1.0, 0.875, 0.125, 0, 1.0, 0.875, 0.125, 0]
+        assert historical_df_with_ratings[
+            rating_generator.prefix + "performance" + rating_generator.suffix
+        ].tolist() == [1.0, 0.875, 0.125, 0, 1.0, 0.875, 0.125, 0]

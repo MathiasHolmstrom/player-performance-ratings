@@ -122,7 +122,7 @@ class BaseScorer(ABC):
         self.granularity = granularity
 
     @abstractmethod
-    def score(self, df: Union[pl.DataFrame, pd.DataFrame]) -> float:
+    def score(self, df: FrameT) -> float:
         pass
 
 
@@ -154,7 +154,7 @@ class MeanBiasScorer(BaseScorer):
         )
 
     @narwhals.narwhalify
-    def score(self, df: Union[pd.DataFrame, pl.DataFrame]) -> float:
+    def score(self, df: FrameT) -> float:
         df = apply_filters(df, self.filters)
         if self.granularity:
             grouped = df.group_by(self.granularity).agg(
@@ -199,11 +199,11 @@ class SklearnScorer(BaseScorer):
         )
 
     @narwhals.narwhalify
-    def score(self, df: Union[pd.DataFrame, pl.DataFrame]) -> float:
+    def score(self, df: FrameT) -> float:
 
         df = apply_filters(df=df, filters=self.filters)
         if self.granularity:
-            grouped = df.group_by( self.granularity).agg(
+            grouped = df.group_by(self.granularity).agg(
                 [
                     nw.col(self.pred_column_name).sum().alias(self.pred_column_name),
                     nw.col(self.target).sum().alias(self.target),
@@ -337,11 +337,10 @@ class OrdinalLossScorer(BaseScorer):
             validation_column=validation_column,
         )
 
-    def score(self, df: Union[pd.DataFrame, pl.DataFrame]) -> float:
-        if isinstance(df, pd.DataFrame):
-            df = pl.DataFrame(df)
-
+    @narwhals.narwhalify
+    def score(self, df: FrameT) -> float:
         df = apply_filters(df, self.filters)
+        df = df.to_polars()
         field_names = [int(field) for field in df[self.pred_column].struct.fields]
         field_names.sort()
         min_field = min(field_names)

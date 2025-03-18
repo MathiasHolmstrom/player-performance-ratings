@@ -3,7 +3,9 @@ from typing import Optional, Union
 
 from narwhals.typing import FrameT, IntoFrameT
 
-from player_performance_ratings.ratings.performance_generator import PerformancesGenerator
+from player_performance_ratings.ratings.performance_generator import (
+    PerformancesGenerator,
+)
 from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
 from player_performance_ratings.ratings.enums import (
     RatingKnownFeatures,

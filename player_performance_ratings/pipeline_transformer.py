@@ -10,7 +10,6 @@ from player_performance_ratings.ratings import convert_df_to_matches, LeagueIden
 
 from player_performance_ratings.ratings.rating_generator import RatingGenerator
 from player_performance_ratings.transformers.base_transformer import (
-
     BaseLagGenerator,
     BaseTransformer,
 )
@@ -52,7 +51,6 @@ class PipelineTransformer:
         Fit and transform the pipeline on historical data
         :param df: Either polars or Pandas dataframe
         """
-
 
         for rating_generator in self.rating_generators:
             df = rating_generator.generate_historical(

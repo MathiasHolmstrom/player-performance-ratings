@@ -1,16 +1,26 @@
 import pandas as pd
 from lightgbm import LGBMRegressor
+from sklearn.linear_model import LogisticRegression
 
 from examples import get_sub_sample_lol_data
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.cross_validator import MatchKFoldCrossValidator
 from player_performance_ratings.pipeline_transformer import PipelineTransformer
-from player_performance_ratings.predictor import GameTeamPredictor, Predictor
+from player_performance_ratings.predictor import (
+    GameTeamPredictor,
+    SklearnPredictor,
+    SklearnPredictor,
+)
+from player_performance_ratings.predictor.classifier import NegativeBinomialPredictor
 from player_performance_ratings.ratings import (
     UpdateRatingGenerator,
     RatingKnownFeatures,
 )
-from player_performance_ratings.ratings.performance_generator import PerformancesGenerator, Performance, ColumnWeight
+from player_performance_ratings.ratings.performance_generator import (
+    PerformancesGenerator,
+    Performance,
+    ColumnWeight,
+)
 from player_performance_ratings.transformers import LagTransformer
 from player_performance_ratings.transformers.lag_generators import (
     RollingMeanTransformer,
@@ -42,7 +52,6 @@ df = df.assign(team_count=df.groupby("gameid")["teamname"].transform("nunique"))
 
 df = df.drop_duplicates(subset=["gameid", "playername"])
 
-
 # Pretends the last 10 games are future games. The most will be trained on everything before that.
 most_recent_10_games = df[column_names.match_id].unique()[-10:]
 historical_df = df[~df[column_names.match_id].isin(most_recent_10_games)]
@@ -53,22 +62,19 @@ future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(
 rating_generator_result = UpdateRatingGenerator(
     features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
     performance_column="result",
-
 )
 
 rating_generator_player_kills = UpdateRatingGenerator(
     features_out=[RatingKnownFeatures.RATING_MEAN_PROJECTED],
     performances_generator=PerformancesGenerator(
         performances=Performance(
-            name='performance_kills',
+            name="performance_kills",
             weights=[
                 ColumnWeight(name="kills", weight=1),
-            ]
+            ],
         ),
     ),
-
 )
-
 
 lag_generators = [
     LagTransformer(
@@ -82,9 +88,8 @@ lag_generators = [
     ),
 ]
 
-
 transformer = PipelineTransformer(
-       column_names=column_names,
+    column_names=column_names,
     rating_generators=[rating_generator_result, rating_generator_player_kills],
     lag_generators=lag_generators,
 )
@@ -92,19 +97,22 @@ transformer = PipelineTransformer(
 historical_df = transformer.fit_transform(historical_df)
 
 game_winner_predictor = GameTeamPredictor(
+    predictor=SklearnPredictor(
+        estimator=LogisticRegression(),
+        target="result",
+        estimator_features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+    ),
     one_hot_encode_cat_features=True,
     impute_missing_values=True,
-    target="result",
     game_id_colum=column_names.match_id,
     team_id_column=column_names.team_id,
-    estimator_features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
 )
 
-player_kills_predictor = Predictor(
+player_kills_predictor = SklearnPredictor(
     estimator=LGBMRegressor(verbose=-100),
     target="kills",
-    estimator_features=[ game_winner_predictor.pred_column],
-    estimator_features_contain=["rolling_mean_kills", "lag_kills"]
+    estimator_features=[game_winner_predictor.pred_column],
+    estimator_features_contain=["rolling_mean_kills", "lag_kills"],
 )
 
 cross_validator_game_winner = MatchKFoldCrossValidator(
@@ -114,7 +122,9 @@ cross_validator_game_winner = MatchKFoldCrossValidator(
 )
 
 game_winner_predictor.train(historical_df)
-historical_df = cross_validator_game_winner.generate_validation_df(historical_df, column_names)
+historical_df = cross_validator_game_winner.generate_validation_df(
+    historical_df, column_names
+)
 
 cross_validator_player_kills = MatchKFoldCrossValidator(
     date_column_name=column_names.start_date,
@@ -124,12 +134,27 @@ cross_validator_player_kills = MatchKFoldCrossValidator(
 
 player_kills_predictor.train(historical_df)
 print(player_kills_predictor.estimator_features)
-historical_df = cross_validator_player_kills.generate_validation_df(historical_df, column_names)
-
+historical_df = cross_validator_player_kills.generate_validation_df(
+    historical_df, column_names
+)
 
 future_df = transformer.transform(future_df)
 future_df = game_winner_predictor.predict(future_df)
 future_df = player_kills_predictor.predict(future_df)
 
+probability_predictor = NegativeBinomialPredictor(
+    target="kills",
+    point_estimate_pred_column=player_kills_predictor.pred_column,
+    relative_error_predictor=SklearnPredictor(
+        estimator=LGBMRegressor(),
+        target=None,
+        estimator_features=["position"],
+        convert_to_cat_feats_to_cat_dtype=True,
+    ),
+    max_value=15,
+)
+
+probability_predictor.train(historical_df)
+future_df = probability_predictor.predict(future_df)
 
 print(future_df.head(10))

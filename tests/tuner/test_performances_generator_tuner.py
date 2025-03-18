@@ -6,7 +6,7 @@ import pytest
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from player_performance_ratings import ColumnNames, PipelineFactory
-from player_performance_ratings.predictor import Predictor
+from player_performance_ratings.predictor import SklearnPredictor
 from player_performance_ratings.ratings import (
     RatingKnownFeatures,
     UpdateRatingGenerator,
@@ -44,7 +44,7 @@ def test_transformer_tuner():
         ),
         column_names=column_names,
         rating_generators=rating_generator1,
-        predictor=Predictor(
+        predictor=SklearnPredictor(
             estimator=LogisticRegression(),
             estimator_features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         ),
@@ -134,7 +134,7 @@ def test_transformer_tuner_2_performances(estimator):
 
     match_predictor_factory = PipelineFactory(
         rating_generators=rating_generators,
-        predictor=Predictor(
+        predictor=SklearnPredictor(
             estimator=estimator,
             estimator_features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
             target="won",

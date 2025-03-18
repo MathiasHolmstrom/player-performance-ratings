@@ -250,7 +250,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
         self.predictor = predictor
         self.team_total_prediction_column = team_total_prediction_column
         self.prefix = prefix
-        self.predictor._pred_column = f"__prediction__{self.predictor.target}"
+        # self.predictor._pred_column = f"__prediction__{self.predictor.target}"
         self.lag_generators = lag_generators or []
         super().__init__(
             features=features,

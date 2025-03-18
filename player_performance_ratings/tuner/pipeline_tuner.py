@@ -71,7 +71,6 @@ class PipelineTuner:
         self.pipeline = pipeline
         self._pipeline_factory = PipelineFactory(
             rating_generators=pipeline.rating_generators,
-            performances_generator=pipeline.performances_generator,
             post_lag_transformers=pipeline.post_lag_transformers,
             lag_generators=pipeline.lag_generators,
             pre_lag_transformers=pipeline.pre_lag_transformers,
@@ -97,11 +96,7 @@ class PipelineTuner:
                 "Number of rating_generator_tuners must match number of rating_generators"
             )
 
-        if (
-            not self.pipeline.rating_generators
-            and not self.pipeline.performances_generator
-            and not self.predictor_tuner
-        ):
+        if not self.pipeline.rating_generators and not self.predictor_tuner:
 
             if "LGBM" in self.pipeline.predictor.deepest_estimator.__class__.__name__:
                 self.predictor_tuner = PredictorTuner(
