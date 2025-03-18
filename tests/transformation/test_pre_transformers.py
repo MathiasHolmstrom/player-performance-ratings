@@ -345,7 +345,7 @@ def test_ratio_team_predictor(df):
     )
     transformer = RatioTeamPredictorTransformer(
         features=["performance"],
-        predictor=SklearnPredictor(predictor=SklearnPredictor(target="target", estimator=LinearRegression())),
+        predictor=SklearnPredictor(target="target", estimator=LinearRegression()),
     )
 
     fit_transformed_data = transformer.fit_transform(data, column_names=column_names)

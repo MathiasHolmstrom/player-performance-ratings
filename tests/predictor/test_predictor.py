@@ -1,6 +1,5 @@
 from unittest.mock import Mock
 
-import numpy as np
 import pandas as pd
 import polars as pl
 from polars.testing import assert_frame_equal
@@ -10,7 +9,6 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from player_performance_ratings.predictor import (
     GameTeamPredictor,
-    SklearnPredictor,
     GranularityPredictor,
     SklearnPredictor
 )
@@ -79,8 +77,6 @@ def test_game_team_predictor_add_prediction_df(df):
                                        multiclass_output_as_struct=True),
         ),
         SklearnPredictor(estimator=LogisticRegression(), target="__target", multiclass_output_as_struct=True),
-        SklearnPredictor(predictor=SklearnPredictor(estimator=LogisticRegression(), target="__target",
-                                                    multiclass_output_as_struct=True)),
 
     ],
 )
@@ -118,14 +114,13 @@ def test_game_team_predictor_train_input(df):
 
     mock_model = Mock()
     mock_model.target = "__target"
-    mock_model.estimator_features_contain  = []
+    mock_model.estimator_features_contain = []
     predictor = GameTeamPredictor(
         game_id_colum="game_id",
         team_id_column="team_id",
         predictor=mock_model,
         pre_transformers=[],
     )
-
 
     data = df(
         {
@@ -188,7 +183,7 @@ def test_game_team_predictor(target_values, df):
 def test_predictor_regressor(target_values, df):
     "should identify it's a regressor and train and predict works as intended"
 
-    predictor = SklearnPredictor(predictor=SklearnPredictor(estimator=LinearRegression(), target='__target'))
+    predictor = SklearnPredictor(estimator=LinearRegression(), target='__target')
 
     data = df(
         {
@@ -234,10 +229,8 @@ def test_granularity_predictor(target_values, df):
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
 def test_one_hot_encoder_train(df):
     predictor = SklearnPredictor(
-        predictor=SklearnPredictor(
-            estimator=LinearRegression(), target='__target',
-            estimator_features=["feature1", "cat_feature"],
-        ),
+        estimator=LinearRegression(), target='__target',
+        estimator_features=["feature1", "cat_feature"],
         one_hot_encode_cat_features=True,
         impute_missing_values=True,
     )
@@ -262,14 +255,16 @@ def test_one_hot_encoder_train(df):
 
 @pytest.mark.parametrize("predictor", [
     SklearnPredictor(
-              predictor=SklearnPredictor(estimator=LinearRegression(), target='__target', estimator_features=['feature1'],  estimator_features_contain=['lag']),
-            ),
+        estimator=LinearRegression(), target='__target', estimator_features=['feature1'],
+                                   estimator_features_contain=['lag']
+    ),
     GranularityPredictor(predictor=SklearnPredictor(estimator=LinearRegression(), target='__target'),
                          estimator_features=['feature1'],
                          granularity_column_name='group', estimator_features_contain=['lag']),
-    GameTeamPredictor(predictor=SklearnPredictor(estimator=LinearRegression(), target='__target', estimator_features=['feature1'],
-                      estimator_features_contain=['lag']),
-                      game_id_colum='game_id', team_id_column='team_id')])
+    GameTeamPredictor(
+        predictor=SklearnPredictor(estimator=LinearRegression(), target='__target', estimator_features=['feature1'],
+                                   estimator_features_contain=['lag']),
+        game_id_colum='game_id', team_id_column='team_id')])
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
 def test_estimator_features_contain(predictor, df):
     data = df(

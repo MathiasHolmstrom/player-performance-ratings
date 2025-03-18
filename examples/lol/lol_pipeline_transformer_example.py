@@ -132,7 +132,13 @@ future_df = player_kills_predictor.predict(future_df)
 
 probability_predictor = NegativeBinomialPredictor(target='kills',
                                                   point_estimate_pred_column=player_kills_predictor.pred_column,
-                                                  estimator_features=['position'], max_value=15)
+                                                  relative_error_predictor=SklearnPredictor(estimator=LGBMRegressor(),
+                                                                                            target=None,
+                                                                                            estimator_features=[
+                                                                                                'position'],
+                                                                                            convert_to_cat_feats_to_cat_dtype=True),
+                                                  max_value=15)
+
 probability_predictor.train(historical_df)
 future_df = probability_predictor.predict(future_df)
 

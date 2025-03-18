@@ -35,7 +35,7 @@ class ConvertDataFrameToCategoricalTransformer(PredictorTransformer):
     @nw.narwhalify
     def fit_transform(self, df: FrameT) -> IntoFrameT:
         self._features_out = self.features
-        return self.transform(df).select(self._features_out)
+        return nw.from_native(self.transform(df)).select(self._features_out)
 
     @nw.narwhalify
     def transform(self, df: FrameT) -> IntoFrameT:
