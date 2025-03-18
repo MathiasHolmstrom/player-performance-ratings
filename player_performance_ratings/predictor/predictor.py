@@ -1,15 +1,12 @@
 import copy
 import logging
 import warnings
-from lightgbm import LGBMClassifier
 from pandas.errors import SettingWithCopyWarning
 import polars as pl
 import narwhals as nw
 from narwhals.typing import FrameT, IntoFrameT
 import pandas as pd
-from sklearn import clone
 
-from player_performance_ratings.predictor.sklearn_estimator import OrdinalClassifier
 from player_performance_ratings.predictor_transformer import PredictorTransformer
 from player_performance_ratings.predictor_transformer._simple_transformer import (
     SimpleTransformer,
@@ -104,8 +101,11 @@ class GameTeamPredictor(BasePredictor):
 
         if len(df) == 0:
             raise ValueError("df is empty")
-
-        self._estimator_features = estimator_features or self._estimator_features
+        estimator_features = estimator_features or []
+        if self._ori_estimator_features or estimator_features:
+            self._estimator_features = estimator_features.copy() or self._ori_estimator_features.copy()
+        else:
+            self._estimator_features = []
         self._add_estimator_features_contain(df)
         df = apply_filters(df=df, filters=self.filters)
         df = self._fit_transform_pre_transformers(df=df)
@@ -380,10 +380,6 @@ class SklearnPredictor(BasePredictor):
                     native_namespace=nw.get_native_namespace(df),
                 )
             )
-            if self.multiclass_output_as_struct:
-                df = self._convert_multiclass_predictions_to_struct(
-                    df=df, classes=self.classes_
-                )
 
         else:
             predictions = self.estimator.predict_proba(
@@ -481,8 +477,11 @@ class GranularityPredictor(BasePredictor):
         :param df - Dataframe containing the estimator_features and target.
         :param estimator_features - If Estimator features are passed they will the estimator_features created by the constructor
         """
-
-        estimator_features = estimator_features or self._estimator_features
+        estimator_features = estimator_features or []
+        if self._ori_estimator_features or estimator_features:
+            self._estimator_features = estimator_features.copy() or self._ori_estimator_features.copy()
+        else:
+            self._estimator_features = []
 
         if isinstance(df.to_native(), pd.DataFrame):
             df = nw.from_native(pl.DataFrame(df))
@@ -490,13 +489,8 @@ class GranularityPredictor(BasePredictor):
         if len(df) == 0:
             raise ValueError("df is empty")
 
-        if estimator_features is None and self._estimator_features is None:
-            raise ValueError(
-                "estimator features must either be passed to .train() or injected into constructor"
-            )
-        self._estimator_features = estimator_features or self._estimator_features
-        self._estimator_features = self._estimator_features.copy()
         self._add_estimator_features_contain(df)
+        assert self._estimator_features
 
         filtered_df = apply_filters(df=df, filters=self.filters)
 

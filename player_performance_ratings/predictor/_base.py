@@ -40,7 +40,7 @@ class BasePredictor(ABC):
         multiclass_output_as_struct: bool = False,
     ):
         self._estimator_features = estimator_features or []
-        self._ori_estimator_features = estimator_features
+        self._ori_estimator_features = self._estimator_features.copy()
         self._target = target
         self.estimator_features_contain = estimator_features_contain or []
         self.post_predict_transformers = post_predict_transformers or []
