@@ -5,7 +5,7 @@ from polars.testing import assert_frame_equal
 import pytest
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.predictor import Predictor
+from player_performance_ratings.predictor import SklearnPredictor, SklearnPredictor
 from player_performance_ratings.predictor_transformer import SkLearnTransformerWrapper
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -345,7 +345,7 @@ def test_ratio_team_predictor(df):
     )
     transformer = RatioTeamPredictorTransformer(
         features=["performance"],
-        predictor=Predictor(target="target", estimator=LinearRegression()),
+        predictor=SklearnPredictor(predictor=SklearnPredictor(target="target", estimator=LinearRegression())),
     )
 
     fit_transformed_data = transformer.fit_transform(data, column_names=column_names)

@@ -75,6 +75,7 @@ def _apply_filters_polars(df: pl.DataFrame, filters: list[Filter]) -> pl.DataFra
     return df
 
 
+
 def apply_filters(df: FrameT, filters: list[Filter]) -> FrameT:
     for filter in filters:
         if filter.operator == Operator.EQUALS:
@@ -339,9 +340,8 @@ class OrdinalLossScorer(BaseScorer):
 
     @narwhals.narwhalify
     def score(self, df: FrameT) -> float:
-        df = df.to_polars()
-
         df = apply_filters(df, self.filters)
+        df = df.to_polars()
         field_names = [int(field) for field in df[self.pred_column].struct.fields]
         field_names.sort()
         min_field = min(field_names)

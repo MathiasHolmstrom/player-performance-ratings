@@ -6,7 +6,7 @@ from polars.testing import assert_frame_equal
 import pytest
 from player_performance_ratings.cross_validator import MatchKFoldCrossValidator
 
-from player_performance_ratings.predictor import Predictor
+from player_performance_ratings.predictor import SklearnPredictor, SklearnPredictor
 from sklearn.linear_model import LinearRegression
 
 from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
@@ -45,7 +45,7 @@ def test_pipeline_constructor():
 
     post_lag_transformers = [
         PredictorTransformer(
-            predictor=Predictor(estimator=LinearRegression(), target="won")
+            predictor=SklearnPredictor(estimator=LinearRegression(), target="won")
         )
     ]
     rating_generator = UpdateRatingGenerator(
@@ -61,7 +61,7 @@ def test_pipeline_constructor():
         ),
         lag_generators=lag_generators,
         post_lag_transformers=post_lag_transformers,
-        predictor=Predictor(
+        predictor=SklearnPredictor(
             estimator=LinearRegression(), estimator_features=["kills"], target="won"
         ),
         rating_generators=rating_generator,
@@ -196,7 +196,7 @@ def test_match_predictor_multiple_rating_generators_same_performance(df):
         )
         expected_return = pl.Series([0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
 
-    predictor = Predictor(estimator=LinearRegression(), target="__target")
+    predictor = SklearnPredictor(estimator=LinearRegression(), target="__target")
 
     pipeline = Pipeline(
         rating_generators=[
@@ -356,7 +356,7 @@ def test_match_predictor_generate_and_predict(df):
     )
 
     pipeline = Pipeline(
-        predictor=Predictor(estimator=LinearRegression(), target="__target"),
+        predictor=SklearnPredictor(estimator=LinearRegression(), target="__target"),
         rating_generators=rating_generator,
         column_names=column_names,
     )
@@ -399,9 +399,11 @@ def test_train_predict_post_pre_and_lag_transformers():
     )
 
     column_weights = [ColumnWeight(name="kills", weight=1)]
-    predictor = Predictor(
-        estimator=LinearRegression(),
-        target="__target",
+    predictor = SklearnPredictor(
+        predictor=SklearnPredictor(
+            estimator=LinearRegression(),
+            target="__target",
+        ),
         scale_features=True,
         one_hot_encode_cat_features=True,
         impute_missing_values=True,
@@ -422,12 +424,14 @@ def test_train_predict_post_pre_and_lag_transformers():
         ),
     )
     pre_transformer = PredictorTransformer(
-        predictor=Predictor(
+        predictor=SklearnPredictor(
             scale_features=True,
             one_hot_encode_cat_features=True,
-            estimator=LinearRegression(),
-            estimator_features=rating_generator.features_out,
-            target="__target",
+            predictor=SklearnPredictor(
+                estimator=LinearRegression(),
+                estimator_features=rating_generator.features_out,
+                target="__target",
+            ),
         ),
     )
 
@@ -436,12 +440,14 @@ def test_train_predict_post_pre_and_lag_transformers():
     )
     post_transformer = RatioTeamPredictorTransformer(
         features=["kills"],
-        predictor=Predictor(
+        predictor=SklearnPredictor(
             scale_features=True,
             one_hot_encode_cat_features=True,
-            estimator=LinearRegression(),
-            estimator_features=lag_generator.features_out,
-            target="__target",
+            predictor=SklearnPredictor(
+                estimator=LinearRegression(),
+                estimator_features=lag_generator.features_out,
+                target="__target",
+            ),
         ),
     )
 

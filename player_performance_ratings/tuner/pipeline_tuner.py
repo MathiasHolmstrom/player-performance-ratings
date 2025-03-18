@@ -71,7 +71,6 @@ class PipelineTuner:
         self.pipeline = pipeline
         self._pipeline_factory = PipelineFactory(
             rating_generators=pipeline.rating_generators,
-            performances_generator=pipeline.performances_generator,
             post_lag_transformers=pipeline.post_lag_transformers,
             lag_generators=pipeline.lag_generators,
             pre_lag_transformers=pipeline.pre_lag_transformers,
@@ -99,7 +98,6 @@ class PipelineTuner:
 
         if (
             not self.pipeline.rating_generators
-            and not self.pipeline.performances_generator
             and not self.predictor_tuner
         ):
 

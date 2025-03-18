@@ -112,11 +112,12 @@ class Pipeline(BasePredictor):
             self._estimator_features += [
                 f for f in c.estimator_features_out if f not in self._estimator_features
             ]
-        if predictor._estimator_features_contain:
-            logging.info(f"Using estimator features {self._estimator_features} and {predictor._estimator_features_contain}")
+        if predictor.estimator_features_contain:
+            logging.info(f"Using estimator features {self._estimator_features} and {predictor.estimator_features_contain}")
         else:
             logging.info(f"Using estimator features {self._estimator_features}")
         self.predictor = predictor
+        self._pred_columns_added = self.predictor._pred_columns_added
 
     @nw.narwhalify
     def train(self, df: FrameT, estimator_features: Optional[list[str]] = None) -> None:

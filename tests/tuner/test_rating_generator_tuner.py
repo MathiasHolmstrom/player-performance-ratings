@@ -2,7 +2,7 @@ import copy
 from unittest import mock
 
 import pandas as pd
-from player_performance_ratings.predictor import Predictor
+from player_performance_ratings.predictor import SklearnPredictor
 
 from player_performance_ratings import ColumnNames, PipelineFactory
 from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
@@ -51,7 +51,7 @@ def test_opponent_adjusted_rating_generator_tuner_team_rating():
 
     pipeline_factory = PipelineFactory(
         rating_generators=rating_generators,
-        predictor=Predictor(target="__target"),
+        predictor=SklearnPredictor(target="__target"),
         column_names=column_names,
     )
 
@@ -137,7 +137,7 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
 
     match_predictor_factory = PipelineFactory(
         rating_generators=rating_generators,
-        predictor=Predictor(
+        predictor=SklearnPredictor(
             estimator_features=[
                 f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}0",
                 f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}1",
@@ -238,7 +238,7 @@ def test_update_rating_generator_tuner_start_rating():
 
     match_predictor_factory = PipelineFactory(
         rating_generators=rating_generators,
-        predictor=Predictor(
+        predictor=SklearnPredictor(
             estimator_features=[
                 f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}0",
                 f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}1",

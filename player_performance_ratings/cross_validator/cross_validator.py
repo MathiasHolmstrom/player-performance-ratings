@@ -127,7 +127,6 @@ class MatchKFoldCrossValidator(CrossValidator):
             )
 
 
-
         validation_df = df.filter(
             (nw.col("__cv_match_number") >= train_cut_off_match_number)
             & (nw.col("__cv_match_number") <= train_cut_off_match_number + step_matches)

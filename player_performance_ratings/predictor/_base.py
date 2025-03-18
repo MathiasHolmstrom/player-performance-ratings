@@ -37,15 +37,17 @@ class BasePredictor(ABC):
         pred_column: Optional[str] = None,
         filters: Optional[dict] = None,
         auto_pre_transform: bool = True,
-        multiclass_output_as_struct: bool = True,
+        multiclass_output_as_struct: bool = False,
     ):
         self._estimator_features = estimator_features or []
+        self._ori_estimator_features = estimator_features
         self._target = target
-        self._estimator_features_contain = estimator_features_contain or []
+        self.estimator_features_contain = estimator_features_contain or []
         self.post_predict_transformers = post_predict_transformers or []
         self.convert_to_cat_feats_to_cat_dtype = convert_to_cat_feats_to_cat_dtype
         self.impute_missing_values = impute_missing_values
         self._pred_column = pred_column or f"{self._target}_prediction"
+        self._pred_columns_added = [self._pred_column]
         self.pre_transformers = pre_transformers or []
         self.scale_features = scale_features
         self.one_hot_encode_cat_features = one_hot_encode_cat_features
@@ -55,30 +57,21 @@ class BasePredictor(ABC):
         self.auto_pre_transform = auto_pre_transform
         self.multiclass_output_as_struct = multiclass_output_as_struct
 
-    def _deepest_estimator(self, predictor: "BasePredictor") -> Any:
-        iterations = 0
 
-        while not hasattr(predictor, "estimator"):
-            predictor = predictor.predictor
-            iterations += 1
-            if iterations > 10:
-                raise ValueError("estimator is too deep")
-
-        return predictor.estimator
 
     def reset(self) -> None:
         pass
 
-    def _add_estimator_features_contain(self, df: FrameT) -> FrameT:
+    def _add_estimator_features_contain(self, df: FrameT) -> None:
         columns = df.columns
-        for contain in self._estimator_features_contain:
+        for contain in self.estimator_features_contain:
             estimator_feature_count = len(self._estimator_features)
             for column in columns:
                 if column not in self._estimator_features and contain in column:
                     self._estimator_features.append(column)
             if len(self._estimator_features) == estimator_feature_count:
                 logging.warning(f"Added no new columns containing {contain}")
-        return df
+
 
     @abstractmethod
     def train(self, df: FrameT, estimator_features: Optional[list[str]] = None) -> None:
@@ -89,20 +82,29 @@ class BasePredictor(ABC):
         self, df: FrameT, cross_validation: Optional[bool] = None
     ) -> IntoFrameT:
         pass
-
     @property
     def pred_column(self) -> str:
         return self._pred_column
+
+    @pred_column.setter
+    def pred_column(self, new_pred_column: str):
+        self._pred_column = new_pred_column
+
 
     @property
     def target(self) -> str:
         return self._target
 
+    @target.setter
+    def target(self, new_target_name: str):
+        self._target = new_target_name
+
+
     @property
     def columns_added(self) -> list[str]:
         if not self.multiclassifier or self.multiclass_output_as_struct:
-            return [self.pred_column]
-        return [self.pred_column, "classes"]
+            return self._pred_columns_added
+        return [*self._pred_columns_added, "classes"]
 
     def _convert_multiclass_predictions_to_struct(
         self, df: FrameT, classes: list[str]

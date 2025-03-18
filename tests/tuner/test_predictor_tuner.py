@@ -4,7 +4,7 @@ import pandas as pd
 from deepdiff import DeepDiff
 
 from player_performance_ratings import PipelineFactory
-from player_performance_ratings.predictor import Predictor
+from player_performance_ratings.predictor import SklearnPredictor
 from sklearn.linear_model import LogisticRegression
 
 
@@ -26,7 +26,7 @@ def test_predictor_tuner():
     )
 
     predictor_factory = PipelineFactory(
-        predictor=Predictor(
+        predictor=SklearnPredictor(
             estimator=LogisticRegression(),
             estimator_features=["rating_difference"],
             target="__target",
@@ -45,7 +45,7 @@ def test_predictor_tuner():
         df=df, cross_validator=cross_validator, pipeline_factory=predictor_factory
     )
 
-    expected_best_predictor = Predictor(
+    expected_best_predictor = SklearnPredictor(
         estimator=LogisticRegression(C=0.5),
         estimator_features=["rating_difference"],
         target="__target",
