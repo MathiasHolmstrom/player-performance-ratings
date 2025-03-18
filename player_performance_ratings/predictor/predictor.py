@@ -38,18 +38,17 @@ class GameTeamPredictor(BasePredictor):
     """
 
     def __init__(
-            self,
-            game_id_colum: str,
-            team_id_column: str,
-            predictor: BasePredictor,
-            scale_features: bool = False,
-            one_hot_encode_cat_features: bool = False,
-            convert_to_cat_feats_to_cat_dtype: bool = False,
-            impute_missing_values: bool = False,
-            pre_transformers: Optional[list[PredictorTransformer]] = None,
-            post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-            filters: Optional[list[Filter]] = None,
-
+        self,
+        game_id_colum: str,
+        team_id_column: str,
+        predictor: BasePredictor,
+        scale_features: bool = False,
+        one_hot_encode_cat_features: bool = False,
+        convert_to_cat_feats_to_cat_dtype: bool = False,
+        impute_missing_values: bool = False,
+        pre_transformers: Optional[list[PredictorTransformer]] = None,
+        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+        filters: Optional[list[Filter]] = None,
     ):
         """
         :param game_id_colum - name of game_id column
@@ -125,14 +124,19 @@ class GameTeamPredictor(BasePredictor):
 
         if not self._estimator_features:
             raise ValueError("estimator_features not set. Please train first")
-        if '__row_index' not in df.columns:
-            df = df.with_row_index(name='__row_index')
+        if "__row_index" not in df.columns:
+            df = df.with_row_index(name="__row_index")
         df = self._transform_pre_transformers(df=df)
         grouped = self._create_grouped(df)
 
         grouped = nw.from_native(self.predictor.predict(grouped))
-        df = df.join(grouped.select([*self.predictor.columns_added, self.game_id_colum, self.team_id_column]),
-                     on=[self.game_id_colum, self.team_id_column], how='left').drop('__row_index')
+        df = df.join(
+            grouped.select(
+                [*self.predictor.columns_added, self.game_id_colum, self.team_id_column]
+            ),
+            on=[self.game_id_colum, self.team_id_column],
+            how="left",
+        ).drop("__row_index")
 
         for simple_transformer in self.post_predict_transformers:
             df = simple_transformer.transform(df)
@@ -163,36 +167,44 @@ class GameTeamPredictor(BasePredictor):
                 nw.col(feature).mean() for feature in numeric_features
             )
 
-        return grouped.join(
-            df.select(
-                [self.game_id_colum, self.team_id_column, *cat_feats, '__row_index']
-            ).unique(subset=[self.game_id_colum, self.team_id_column]),
-            on=[self.game_id_colum, self.team_id_column],
-            how="inner",
-        ).sort('__row_index').drop('__row_index')
+        return (
+            grouped.join(
+                df.select(
+                    [self.game_id_colum, self.team_id_column, *cat_feats, "__row_index"]
+                ).unique(subset=[self.game_id_colum, self.team_id_column]),
+                on=[self.game_id_colum, self.team_id_column],
+                how="inner",
+            )
+            .sort("__row_index")
+            .drop("__row_index")
+        )
 
 
 class DistributionPredictor(BasePredictor):
 
-    def __init__(self,
-                 point_predictor: BasePredictor,
-                 distribution_predictor: BasePredictor,
-                 filters: Optional[list[Filter]] = None,
-                 post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-
-                 multiclass_output_as_struct: bool = False
-                 ):
+    def __init__(
+        self,
+        point_predictor: BasePredictor,
+        distribution_predictor: BasePredictor,
+        filters: Optional[list[Filter]] = None,
+        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+        multiclass_output_as_struct: bool = False,
+    ):
         self.point_predictor = point_predictor
         self.distribution_predictor = distribution_predictor
 
-        super().__init__(target=point_predictor.target,
-                         pred_column=distribution_predictor.pred_column,
-                         estimator_features=point_predictor.estimator_features,
-                         multiclass_output_as_struct=multiclass_output_as_struct,
-                         post_predict_transformers=post_predict_transformers,
-                         filters=filters,
-                         )
-        self._pred_columns_added = [point_predictor.pred_column, distribution_predictor.pred_column]
+        super().__init__(
+            target=point_predictor.target,
+            pred_column=distribution_predictor.pred_column,
+            estimator_features=point_predictor.estimator_features,
+            multiclass_output_as_struct=multiclass_output_as_struct,
+            post_predict_transformers=post_predict_transformers,
+            filters=filters,
+        )
+        self._pred_columns_added = [
+            point_predictor.pred_column,
+            distribution_predictor.pred_column,
+        ]
 
     @nw.narwhalify
     def train(self, df: FrameT, estimator_features: Optional[list[str]] = None) -> None:
@@ -213,55 +225,62 @@ class DistributionPredictor(BasePredictor):
         return df
 
 
-
 class SklearnPredictor(BasePredictor):
     """
     Sklearn wrapper with additional pre-and-post feature transformations.
     """
 
-    def __init__(self,
-                 estimator,
-                 target: str,
-                 pred_column: Optional[str] = None,
-                 estimator_features: Optional[list[str]] = None,
-                 estimator_features_contain: Optional[list[str]] = None,
-                 filters: Optional[list[Filter]] = None,
-                 scale_features: bool = False,
-                 one_hot_encode_cat_features: bool = False,
-                 convert_to_cat_feats_to_cat_dtype: bool = False,
-                 impute_missing_values: bool = False,
-                 pre_transformers: Optional[list[PredictorTransformer]] = None,
-                 post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-                 multiclass_output_as_struct: bool = False
-                 ):
+    def __init__(
+        self,
+        estimator,
+        target: str,
+        pred_column: Optional[str] = None,
+        estimator_features: Optional[list[str]] = None,
+        estimator_features_contain: Optional[list[str]] = None,
+        filters: Optional[list[Filter]] = None,
+        scale_features: bool = False,
+        one_hot_encode_cat_features: bool = False,
+        convert_to_cat_feats_to_cat_dtype: bool = False,
+        impute_missing_values: bool = False,
+        pre_transformers: Optional[list[PredictorTransformer]] = None,
+        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+        multiclass_output_as_struct: bool = False,
+    ):
         self.estimator = estimator
 
-        super().__init__(target=target,
-                         pred_column=pred_column,
-                         estimator_features=estimator_features,
-                         multiclass_output_as_struct=multiclass_output_as_struct,
-                         estimator_features_contain=estimator_features_contain,
-                         pre_transformers=pre_transformers,
-                         impute_missing_values=impute_missing_values,
-                         post_predict_transformers=post_predict_transformers,
-                         filters=filters,
-                         scale_features=scale_features,
-                         one_hot_encode_cat_features=one_hot_encode_cat_features,
-                         convert_to_cat_feats_to_cat_dtype=convert_to_cat_feats_to_cat_dtype
-                         )
+        super().__init__(
+            target=target,
+            pred_column=pred_column,
+            estimator_features=estimator_features,
+            multiclass_output_as_struct=multiclass_output_as_struct,
+            estimator_features_contain=estimator_features_contain,
+            pre_transformers=pre_transformers,
+            impute_missing_values=impute_missing_values,
+            post_predict_transformers=post_predict_transformers,
+            filters=filters,
+            scale_features=scale_features,
+            one_hot_encode_cat_features=one_hot_encode_cat_features,
+            convert_to_cat_feats_to_cat_dtype=convert_to_cat_feats_to_cat_dtype,
+        )
         self.classes_ = None
 
     @nw.narwhalify
     def train(self, df: FrameT, estimator_features: Optional[list[str]] = None) -> None:
-        self._estimator_features = estimator_features or self._ori_estimator_features.copy()
+        self._estimator_features = (
+            estimator_features or self._ori_estimator_features.copy()
+        )
         if not self._estimator_features:
-            raise ValueError("estimator_features not set. Either pass to train or pass when instantiating predictor object")
+            raise ValueError(
+                "estimator_features not set. Either pass to train or pass when instantiating predictor object"
+            )
 
         self._add_estimator_features_contain(df)
 
         filtered_df = apply_filters(df=df, filters=self.filters)
         filtered_df = self._fit_transform_pre_transformers(df=filtered_df)
-        logging.info(f"Training with {len(filtered_df)} rows. Features: {self._estimator_features}")
+        logging.info(
+            f"Training with {len(filtered_df)} rows. Features: {self._estimator_features}"
+        )
 
         if hasattr(self.estimator, "predict_proba"):
             try:
@@ -274,9 +293,9 @@ class SklearnPredictor(BasePredictor):
                 pass
 
         if (
-                not self.multiclassifier
-                and len(filtered_df[self._target].unique()) > 2
-                and hasattr(self.estimator, "predict_proba")
+            not self.multiclassifier
+            and len(filtered_df[self._target].unique()) > 2
+            and hasattr(self.estimator, "predict_proba")
         ):
             self.multiclassifier = True
 
@@ -287,7 +306,10 @@ class SklearnPredictor(BasePredictor):
                 )
 
         estimator_features = estimator_features or self._estimator_features
-        self.estimator.fit(filtered_df.select(estimator_features).to_pandas(), filtered_df[self.target].to_numpy())
+        self.estimator.fit(
+            filtered_df.select(estimator_features).to_pandas(),
+            filtered_df[self.target].to_numpy(),
+        )
 
     @nw.narwhalify
     def predict(self, df: FrameT, cross_validation: bool = False) -> IntoFrameT:
@@ -302,13 +324,20 @@ class SklearnPredictor(BasePredictor):
 
         if hasattr(self.estimator, "predict_proba"):
             predictions = self.estimator.predict_proba(
-                df.select(self._estimator_features).to_pandas())
+                df.select(self._estimator_features).to_pandas()
+            )
         else:
             predictions = self.estimator.predict(
-                df.select(self._estimator_features).to_pandas())
+                df.select(self._estimator_features).to_pandas()
+            )
 
         df = df.with_columns(
-            nw.new_series(name=self.pred_column, values=predictions, native_namespace=nw.get_native_namespace(df)))
+            nw.new_series(
+                name=self.pred_column,
+                values=predictions,
+                native_namespace=nw.get_native_namespace(df),
+            )
+        )
 
         if self.multiclassifier:
 
@@ -392,18 +421,18 @@ class GranularityPredictor(BasePredictor):
     """
 
     def __init__(
-            self,
-            granularity_column_name: str,
-            predictor: BasePredictor,
-            scale_features: bool = False,
-            one_hot_encode_cat_features: bool = False,
-            convert_to_cat_feats_to_cat_dtype: bool = False,
-            impute_missing_values: bool = False,
-            estimator_features: Optional[list[str]] = None,
-            estimator_features_contain: Optional[list[str]] = None,
-            filters: Optional[list[Filter]] = None,
-            column_names: Optional[ColumnNames] = None,
-            pre_transformers: Optional[list[PredictorTransformer]] = None,
+        self,
+        granularity_column_name: str,
+        predictor: BasePredictor,
+        scale_features: bool = False,
+        one_hot_encode_cat_features: bool = False,
+        convert_to_cat_feats_to_cat_dtype: bool = False,
+        impute_missing_values: bool = False,
+        estimator_features: Optional[list[str]] = None,
+        estimator_features_contain: Optional[list[str]] = None,
+        filters: Optional[list[Filter]] = None,
+        column_names: Optional[ColumnNames] = None,
+        pre_transformers: Optional[list[PredictorTransformer]] = None,
     ):
         """
         :param predictor - Predictor
@@ -479,7 +508,9 @@ class GranularityPredictor(BasePredictor):
             rows = filtered_df.filter(
                 nw.col(self.granularity_column_name) == granularity
             )
-            self._granularity_predictors[granularity].train(rows, estimator_features=self._estimator_features)
+            self._granularity_predictors[granularity].train(
+                rows, estimator_features=self._estimator_features
+            )
 
             self.classes_[granularity] = rows[self._target].unique().to_list()
             self.classes_[granularity].sort()
@@ -504,7 +535,9 @@ class GranularityPredictor(BasePredictor):
             dfs.append(rows)
 
         if self.predictor.multiclass_output_as_struct:
-            dfs = self._unify_struct_fields(dfs=dfs, struct_col=self.predictor.pred_column)
+            dfs = self._unify_struct_fields(
+                dfs=dfs, struct_col=self.predictor.pred_column
+            )
 
         df = nw.concat(dfs)
         for simple_transformer in self.post_predict_transformers:
@@ -515,7 +548,7 @@ class GranularityPredictor(BasePredictor):
         return df
 
     def _unify_struct_fields(
-            self, dfs: list[FrameT], struct_col: str
+        self, dfs: list[FrameT], struct_col: str
     ) -> list[IntoFrameT]:
         dfs = [df.to_native() for df in dfs]
         all_fields = set()

@@ -10,7 +10,7 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 from player_performance_ratings.predictor import (
     GameTeamPredictor,
     GranularityPredictor,
-    SklearnPredictor
+    SklearnPredictor,
 )
 
 
@@ -20,7 +20,7 @@ def test_game_team_predictor_add_prediction_df(df):
         {
             "game_id": [1, 1, 1, 1, 2, 2],
             "team_id": [1, 1, 2, 2, 1, 2],
-            'player_id': [1, 2, 3, 4, 1, 2],
+            "player_id": [1, 2, 3, 4, 1, 2],
             "feature1": [0.1] * 6,
             "feature2": [0.4] * 6,
             "__target": [1, 1, 0, 0, 1, 0],
@@ -34,15 +34,26 @@ def test_game_team_predictor_add_prediction_df(df):
     return_pred_values = [1.0, 0.0, 0.7, 0.3]
 
     if isinstance(data, pd.DataFrame):
-        predict_return_value = data.groupby(["game_id", "team_id"])[["feature1", "feature2"]].mean().reset_index()
-        predict_return_value['pred_col'] = return_pred_values
+        predict_return_value = (
+            data.groupby(["game_id", "team_id"])[["feature1", "feature2"]]
+            .mean()
+            .reset_index()
+        )
+        predict_return_value["pred_col"] = return_pred_values
         expected_df = data.copy()
-        expected_df['pred_col'] = [1.0, 1.0, 0.0, 0.0, 0.7, 0.3]
+        expected_df["pred_col"] = [1.0, 1.0, 0.0, 0.0, 0.7, 0.3]
     else:
-        grouped = data.group_by(["game_id", "team_id"]).agg(pl.col(['feature1', 'feature2']).mean()).sort(
-            ['game_id', 'team_id'])
-        predict_return_value = grouped.with_columns(pl.Series('pred_col', return_pred_values))
-        expected_df = data.with_columns(pl.Series('pred_col', [1.0, 1.0, 0.0, 0.0, 0.7, 0.3]))
+        grouped = (
+            data.group_by(["game_id", "team_id"])
+            .agg(pl.col(["feature1", "feature2"]).mean())
+            .sort(["game_id", "team_id"])
+        )
+        predict_return_value = grouped.with_columns(
+            pl.Series("pred_col", return_pred_values)
+        )
+        expected_df = data.with_columns(
+            pl.Series("pred_col", [1.0, 1.0, 0.0, 0.0, 0.7, 0.3])
+        )
 
     mock_predictor.predict.return_value = predict_return_value
     mock_predictor.columns_added = ["pred_col"]
@@ -67,17 +78,28 @@ def test_game_team_predictor_add_prediction_df(df):
 @pytest.mark.parametrize(
     "predictor",
     [
-        GranularityPredictor(granularity_column_name="position",
-                             predictor=SklearnPredictor(estimator=LogisticRegression(), target="__target",
-                                                        multiclass_output_as_struct=True)),
+        GranularityPredictor(
+            granularity_column_name="position",
+            predictor=SklearnPredictor(
+                estimator=LogisticRegression(),
+                target="__target",
+                multiclass_output_as_struct=True,
+            ),
+        ),
         GameTeamPredictor(
             game_id_colum="game_id",
             team_id_column="team_id",
-            predictor=SklearnPredictor(estimator=LogisticRegression(), target="__target",
-                                       multiclass_output_as_struct=True),
+            predictor=SklearnPredictor(
+                estimator=LogisticRegression(),
+                target="__target",
+                multiclass_output_as_struct=True,
+            ),
         ),
-        SklearnPredictor(estimator=LogisticRegression(), target="__target", multiclass_output_as_struct=True),
-
+        SklearnPredictor(
+            estimator=LogisticRegression(),
+            target="__target",
+            multiclass_output_as_struct=True,
+        ),
     ],
 )
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
@@ -109,8 +131,8 @@ def test_class_output_as_struct(predictor, df):
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
 def test_game_team_predictor_train_input(df):
     """
-     Asserts correct input is passed to .train()
-     """
+    Asserts correct input is passed to .train()
+    """
 
     mock_model = Mock()
     mock_model.target = "__target"
@@ -136,13 +158,15 @@ def test_game_team_predictor_train_input(df):
     feature_team1 = (0.1 * 0.5 + 0.5 * 0.5) / (0.5 + 0.5)
     feature_team2 = (0.3 * 0.5 + 0.4 * 0.5) / (0.5 + 0.5)
     import narwhals as nw
+
     expeced_train_input = nw.from_dict(
         {
-            'game_id': [1, 1],
-            'team_id': [1, 2],
+            "game_id": [1, 1],
+            "team_id": [1, 2],
             "feature1": [feature_team1, feature_team2],
-            '__target': [1, 0]
-        }, native_namespace=nw.get_native_namespace(data)
+            "__target": [1, 0],
+        },
+        native_namespace=nw.get_native_namespace(data),
     )
     pd.testing.assert_frame_equal(
         mock_model.train.call_args[0][0].to_pandas(),
@@ -159,7 +183,7 @@ def test_game_team_predictor(target_values, df):
     predictor = GameTeamPredictor(
         game_id_colum="game_id",
         team_id_column="team_id",
-        predictor=SklearnPredictor(estimator=LinearRegression(), target='__target')
+        predictor=SklearnPredictor(estimator=LinearRegression(), target="__target"),
     )
 
     data = df(
@@ -183,7 +207,7 @@ def test_game_team_predictor(target_values, df):
 def test_predictor_regressor(target_values, df):
     "should identify it's a regressor and train and predict works as intended"
 
-    predictor = SklearnPredictor(estimator=LinearRegression(), target='__target')
+    predictor = SklearnPredictor(estimator=LinearRegression(), target="__target")
 
     data = df(
         {
@@ -207,7 +231,7 @@ def test_granularity_predictor(target_values, df):
     "should identify it's a regressor and train and predict works as intended"
 
     predictor = GranularityPredictor(
-        predictor=SklearnPredictor(estimator=LinearRegression(), target='__target'),
+        predictor=SklearnPredictor(estimator=LinearRegression(), target="__target"),
         granularity_column_name="position",
     )
 
@@ -229,7 +253,8 @@ def test_granularity_predictor(target_values, df):
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
 def test_one_hot_encoder_train(df):
     predictor = SklearnPredictor(
-        estimator=LinearRegression(), target='__target',
+        estimator=LinearRegression(),
+        target="__target",
         estimator_features=["feature1", "cat_feature"],
         one_hot_encode_cat_features=True,
         impute_missing_values=True,
@@ -253,18 +278,33 @@ def test_one_hot_encoder_train(df):
     ]
 
 
-@pytest.mark.parametrize("predictor", [
-    SklearnPredictor(
-        estimator=LinearRegression(), target='__target', estimator_features=['feature1'],
-                                   estimator_features_contain=['lag']
-    ),
-    GranularityPredictor(predictor=SklearnPredictor(estimator=LinearRegression(), target='__target'),
-                         estimator_features=['feature1'],
-                         granularity_column_name='group', estimator_features_contain=['lag']),
-    GameTeamPredictor(
-        predictor=SklearnPredictor(estimator=LinearRegression(), target='__target', estimator_features=['feature1'],
-                                   estimator_features_contain=['lag']),
-        game_id_colum='game_id', team_id_column='team_id')])
+@pytest.mark.parametrize(
+    "predictor",
+    [
+        SklearnPredictor(
+            estimator=LinearRegression(),
+            target="__target",
+            estimator_features=["feature1"],
+            estimator_features_contain=["lag"],
+        ),
+        GranularityPredictor(
+            predictor=SklearnPredictor(estimator=LinearRegression(), target="__target"),
+            estimator_features=["feature1"],
+            granularity_column_name="group",
+            estimator_features_contain=["lag"],
+        ),
+        GameTeamPredictor(
+            predictor=SklearnPredictor(
+                estimator=LinearRegression(),
+                target="__target",
+                estimator_features=["feature1"],
+                estimator_features_contain=["lag"],
+            ),
+            game_id_colum="game_id",
+            team_id_column="team_id",
+        ),
+    ],
+)
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
 def test_estimator_features_contain(predictor, df):
     data = df(
@@ -273,13 +313,13 @@ def test_estimator_features_contain(predictor, df):
             "team_id": [1, 2, 1, 2],
             "player_id": [1, 2, 1, 2],
             "feature1": [0.1, 0.5, 0.1, 0.5],
-            'lag_feature1': [0.2, 0.3, 0.4, 0.5],
-            'lag_feature2': [0.4, 0.3, 0.4, 0.5],
+            "lag_feature1": [0.2, 0.3, 0.4, 0.5],
+            "lag_feature2": [0.4, 0.3, 0.4, 0.5],
             "group": [1, 1, 1, 1],
             "__target": [1, 0, 1, 0],
         }
     )
 
     predictor.train(data)
-    assert predictor.estimator_features == ['feature1', 'lag_feature1', 'lag_feature2']
+    assert predictor.estimator_features == ["feature1", "lag_feature1", "lag_feature2"]
     predictor.predict(data)

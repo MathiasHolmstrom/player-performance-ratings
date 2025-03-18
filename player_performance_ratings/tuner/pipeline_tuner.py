@@ -96,10 +96,7 @@ class PipelineTuner:
                 "Number of rating_generator_tuners must match number of rating_generators"
             )
 
-        if (
-            not self.pipeline.rating_generators
-            and not self.predictor_tuner
-        ):
+        if not self.pipeline.rating_generators and not self.predictor_tuner:
 
             if "LGBM" in self.pipeline.predictor.deepest_estimator.__class__.__name__:
                 self.predictor_tuner = PredictorTuner(

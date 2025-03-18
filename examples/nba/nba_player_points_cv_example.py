@@ -34,9 +34,7 @@ df = df.sort(
     ]
 )
 
-df = df.with_columns(
-    pl.col('points').clip(0, 40).alias('points')
-)
+df = df.with_columns(pl.col("points").clip(0, 40).alias("points"))
 
 predictor = DistributionPredictor(
     point_predictor=SklearnPredictor(
@@ -47,10 +45,8 @@ predictor = DistributionPredictor(
         pred_column="points_estimate",
     ),
     distribution_predictor=NegativeBinomialPredictor(
-        max_value=40,
-        target="points",
-        point_estimate_pred_column='points_estimate'
-    )
+        max_value=40, target="points", point_estimate_pred_column="points_estimate"
+    ),
 )
 
 pipeline = Pipeline(
@@ -64,7 +60,9 @@ cross_validator = MatchKFoldCrossValidator(
     match_id_column_name=column_names.match_id,
     predictor=pipeline,
 )
-validation_df = cross_validator.generate_validation_df(df=df, column_names=column_names, return_features=True)
+validation_df = cross_validator.generate_validation_df(
+    df=df, column_names=column_names, return_features=True
+)
 
 mean_absolute_scorer = SklearnScorer(
     pred_column=predictor.point_predictor.pred_column,
@@ -93,11 +91,15 @@ print(f"Ordinal Loss {ordinal_loss_score}")
 
 lgbm_classifier_predictor = SklearnPredictor(
     estimator=LGBMClassifier(verbose=-100, random_state=42, max_depth=2),
-    estimator_features=[*pipeline.lag_generators[0].features_out, 'location', predictor.point_predictor.pred_column],
+    estimator_features=[
+        *pipeline.lag_generators[0].features_out,
+        "location",
+        predictor.point_predictor.pred_column,
+    ],
     target=predictor.target,
     pred_column="lgbm_classifier_point_estimate",
     convert_to_cat_feats_to_cat_dtype=True,
-    multiclass_output_as_struct=True
+    multiclass_output_as_struct=True,
 )
 
 lgbm_classifier_cross_validator = MatchKFoldCrossValidator(
@@ -106,7 +108,9 @@ lgbm_classifier_cross_validator = MatchKFoldCrossValidator(
     predictor=lgbm_classifier_predictor,
 )
 
-validation_df = lgbm_classifier_cross_validator.generate_validation_df(df=validation_df, column_names=column_names)
+validation_df = lgbm_classifier_cross_validator.generate_validation_df(
+    df=validation_df, column_names=column_names
+)
 
 ordinal_scorer_lgbm_classifier = OrdinalLossScorer(
     pred_column=lgbm_classifier_predictor.pred_column,
@@ -116,7 +120,9 @@ ordinal_scorer_lgbm_classifier = OrdinalLossScorer(
 )
 
 
-lgbm_classifier_ordinal_loss_score = lgbm_classifier_cross_validator.cross_validation_score(
-    validation_df=validation_df, scorer=ordinal_scorer_lgbm_classifier
+lgbm_classifier_ordinal_loss_score = (
+    lgbm_classifier_cross_validator.cross_validation_score(
+        validation_df=validation_df, scorer=ordinal_scorer_lgbm_classifier
+    )
 )
 print(f"Ordinal Loss Lgbm Classifier {lgbm_classifier_ordinal_loss_score}")

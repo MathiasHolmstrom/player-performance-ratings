@@ -113,7 +113,9 @@ class Pipeline(BasePredictor):
                 f for f in c.estimator_features_out if f not in self._estimator_features
             ]
         if predictor.estimator_features_contain:
-            logging.info(f"Using estimator features {self._estimator_features} and {predictor.estimator_features_contain}")
+            logging.info(
+                f"Using estimator features {self._estimator_features} and {predictor.estimator_features_contain}"
+            )
         else:
             logging.info(f"Using estimator features {self._estimator_features}")
         self.predictor = predictor
@@ -136,7 +138,6 @@ class Pipeline(BasePredictor):
             raise ValueError(
                 f"Target {self.predictor.target} not in df columns. Available columns: {df.columns}"
             )
-
 
         for idx in range(len(self.rating_generators)):
             df = nw.from_native(

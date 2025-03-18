@@ -16,7 +16,11 @@ from player_performance_ratings.scorer import OrdinalLossScorer
 def test_ordinal_loss_scorer_multiclass_rename_class_column_name():
     data = pl.DataFrame(
         {
-            "predictions": [{"0": 0.1, "1": 0.6, "2": 0.3}, {"0": 0.5, "1": 0.3, "2": 0.2}, {"0": 0.2, "1": 0.3, "2": 0.5}],
+            "predictions": [
+                {"0": 0.1, "1": 0.6, "2": 0.3},
+                {"0": 0.5, "1": 0.3, "2": 0.2},
+                {"0": 0.2, "1": 0.3, "2": 0.5},
+            ],
             "__target": [1, 0, 2],
             "total_points_classes": [[0, 1, 2], [0, 1, 2], [0, 1, 2]],
         }
@@ -33,7 +37,11 @@ def test_ordinal_loss_scorer_multiclass_rename_class_column_name():
 def test_ordinal_loss_scorer_multiclass():
     data = pd.DataFrame(
         {
-            "predictions": [{"0": 0.1, "1": 0.6, "2": 0.3}, {"0": 0.5, "1": 0.3, "2": 0.2}, {"0": 0.2, "1": 0.3, "2": 0.5}],
+            "predictions": [
+                {"0": 0.1, "1": 0.6, "2": 0.3},
+                {"0": 0.5, "1": 0.3, "2": 0.2},
+                {"0": 0.2, "1": 0.3, "2": 0.5},
+            ],
             "__target": [1, 0, 2],
             "classes": [[0, 1, 2], [0, 1, 2], [0, 1, 2]],
         }
@@ -41,8 +49,6 @@ def test_ordinal_loss_scorer_multiclass():
     score = OrdinalLossScorer(pred_column="predictions", target="__target").score(data)
     assert score > 0
     assert score < 0.693
-
-
 
 
 def test_sklearn_scorer_multiclass_log_loss():

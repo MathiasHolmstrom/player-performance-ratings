@@ -68,21 +68,21 @@ def test_pipeline_constructor():
     )
 
     expected_estimator_features = (
-            ["kills"]
-            + [l.features_out for l in lag_generators][0]
-            + [p.predictor.pred_column for p in post_lag_transformers]
-            + rating_generator.features_out
+        ["kills"]
+        + [l.features_out for l in lag_generators][0]
+        + [p.predictor.pred_column for p in post_lag_transformers]
+        + rating_generator.features_out
     )
     assert pipeline._estimator_features.sort() == expected_estimator_features.sort()
 
     # asserts estimator_features gets added to the post_transformer that contains a predictor
     assert (
-            post_lag_transformers[0].features.sort()
-            == [
-                ["kills"]
-                + [l.features_out for l in lag_generators][0]
-                + rating_generator.features_out
-            ][0].sort()
+        post_lag_transformers[0].features.sort()
+        == [
+            ["kills"]
+            + [l.features_out for l in lag_generators][0]
+            + rating_generator.features_out
+        ][0].sort()
     )
 
 
@@ -221,8 +221,8 @@ def test_match_predictor_multiple_rating_generators_same_performance(df):
     pipeline.train(df=data)
 
     expected_estimator_features = (
-            pipeline.rating_generators[0].features_out
-            + pipeline.rating_generators[1].features_out
+        pipeline.rating_generators[0].features_out
+        + pipeline.rating_generators[1].features_out
     )
 
     assert sorted(expected_estimator_features) == sorted(pipeline.estimator_features)
@@ -402,7 +402,6 @@ def test_train_predict_post_pre_and_lag_transformers():
     predictor = SklearnPredictor(
         estimator=LinearRegression(),
         target="__target",
-
         scale_features=True,
         one_hot_encode_cat_features=True,
         impute_missing_values=True,
@@ -429,7 +428,6 @@ def test_train_predict_post_pre_and_lag_transformers():
             estimator=LinearRegression(),
             estimator_features=rating_generator.features_out,
             target="__target",
-
         ),
     )
 
@@ -444,7 +442,6 @@ def test_train_predict_post_pre_and_lag_transformers():
             estimator=LinearRegression(),
             estimator_features=lag_generator.features_out,
             target="__target",
-
         ),
     )
 

@@ -27,11 +27,11 @@ HOUR_NUMBER_COLUMN_NAME = "hour_number"
 
 @nw.narwhalify
 def convert_df_to_matches(
-        df: FrameT,
-        column_names: ColumnNames,
-        performance_column_name: str,
-        separate_player_by_position: bool = False,
-        league_identifier: Optional[LeagueIdentifier] = LeagueIdentifier(),
+    df: FrameT,
+    column_names: ColumnNames,
+    performance_column_name: str,
+    separate_player_by_position: bool = False,
+    league_identifier: Optional[LeagueIdentifier] = LeagueIdentifier(),
 ) -> list[Match]:
     """
     Converts a dataframe to a list of matches.
@@ -54,16 +54,16 @@ def convert_df_to_matches(
     """
 
     if (
-            column_names.participation_weight is None
-            and column_names.projected_participation_weight is not None
+        column_names.participation_weight is None
+        and column_names.projected_participation_weight is not None
     ):
         raise ValueError(
             "projected_participation_weight column passed but not participation_weight column"
         )
     if performance_column_name in df.columns:
         if (
-                max(df[performance_column_name]) > 1.001
-                or min(df[performance_column_name]) < -0.001
+            max(df[performance_column_name]) > 1.001
+            or min(df[performance_column_name]) < -0.001
         ):
             raise ValueError("performance column must be between 0 and 1")
 
@@ -82,9 +82,18 @@ def convert_df_to_matches(
 
     if column_names.update_match_id != column_names.match_id:
         df = df.with_columns(
-            nw.col(column_names.start_date).min().over(column_names.update_match_id).alias(
-                column_names.start_date)
-        ).sort([column_names.start_date, column_names.match_id, column_names.team_id, column_names.player_id])
+            nw.col(column_names.start_date)
+            .min()
+            .over(column_names.update_match_id)
+            .alias(column_names.start_date)
+        ).sort(
+            [
+                column_names.start_date,
+                column_names.match_id,
+                column_names.team_id,
+                column_names.player_id,
+            ]
+        )
 
     validate_sorting(df=df, column_names=column_names)
 
@@ -136,11 +145,16 @@ def convert_df_to_matches(
     if col_names.league is not None:
         league_in_df = True
 
-    if col_names.projected_participation_weight and col_names.projected_participation_weight not in df.columns:
-        raise ValueError("projected_participation_weight column passed but not in dataframe.")
     if (
-            col_names.team_players_playing_time
-            and col_names.team_players_playing_time in df.columns
+        col_names.projected_participation_weight
+        and col_names.projected_participation_weight not in df.columns
+    ):
+        raise ValueError(
+            "projected_participation_weight column passed but not in dataframe."
+        )
+    if (
+        col_names.team_players_playing_time
+        and col_names.team_players_playing_time in df.columns
     ):
 
         is_team_players_playing_time = True
@@ -148,8 +162,8 @@ def convert_df_to_matches(
         is_team_players_playing_time = False
 
     if (
-            col_names.opponent_players_playing_time
-            and col_names.opponent_players_playing_time in df.columns
+        col_names.opponent_players_playing_time
+        and col_names.opponent_players_playing_time in df.columns
     ):
 
         is_opponent_players_playing_time = True
@@ -169,8 +183,19 @@ def convert_df_to_matches(
     if len(df) == 0:
         return matches
 
-    select_cols = list(set([HOUR_NUMBER_COLUMN_NAME, col_names.match_id, col_names.team_id, col_names.parent_team_id,
-                            col_names.update_match_id, col_names.start_date, col_names.player_id]))
+    select_cols = list(
+        set(
+            [
+                HOUR_NUMBER_COLUMN_NAME,
+                col_names.match_id,
+                col_names.team_id,
+                col_names.parent_team_id,
+                col_names.update_match_id,
+                col_names.start_date,
+                col_names.player_id,
+            ]
+        )
+    )
     if col_names.league in df.columns:
         select_cols.append(col_names.league)
     if col_names.participation_weight in df.columns:
@@ -193,10 +218,10 @@ def convert_df_to_matches(
         team_id = row[col_names.team_id]
         update_team_id = row[col_names.parent_team_id]
         if (
-                team_id != prev_team_id
-                and prev_team_id != None
-                or prev_match_id != match_id
-                and prev_match_id != None
+            team_id != prev_team_id
+            and prev_team_id != None
+            or prev_match_id != match_id
+            and prev_match_id != None
         ):
             match_team = _create_match_team(
                 team_league_counts=team_league_counts,
@@ -269,8 +294,8 @@ def convert_df_to_matches(
             opponent_players_playing_time = {}
 
         if (
-                col_names.projected_participation_weight
-                and col_names.projected_participation_weight in row
+            col_names.projected_participation_weight
+            and col_names.projected_participation_weight in row
         ):
             projected_participation_weight = row[
                 col_names.projected_participation_weight
@@ -334,10 +359,10 @@ def convert_df_to_matches(
 
 
 def _create_match(
-        league_in_df,
-        row: dict[str, Any],
-        match_teams: list[MatchTeam],
-        column_names: ColumnNames,
+    league_in_df,
+    row: dict[str, Any],
+    match_teams: list[MatchTeam],
+    column_names: ColumnNames,
 ) -> Match:
     match_id = row[column_names.match_id]
     if league_in_df:
@@ -355,10 +380,10 @@ def _create_match(
 
 
 def _create_match_team(
-        team_league_counts: dict,
-        team_id: str,
-        update_team_id: str,
-        match_team_players: list[MatchPlayer],
+    team_league_counts: dict,
+    team_id: str,
+    update_team_id: str,
+    match_team_players: list[MatchPlayer],
 ) -> MatchTeam:
     if team_league_counts:
         team_league = max(

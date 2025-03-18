@@ -35,7 +35,7 @@ def test_lag_team_fit_transform(df, column_names):
             "team": [1, 1, 2, 2, 1, 1, 2, 2],
             "game": [1, 1, 1, 1, 2, 2, 2, 2],
             "points": [1, 2, 3, 2, 4, 5, 6, 7],
-            'points2': [1, 2, 3, 2, 4, 5, 6, 7],
+            "points2": [1, 2, 3, 2, 4, 5, 6, 7],
             "start_date": [
                 pd.to_datetime("2023-01-01"),
                 pd.to_datetime("2023-01-01"),
@@ -94,11 +94,11 @@ def test_lag_fit_transform_update_match_id(df, column_names):
     data = df(
         {
             "player": ["a", "b", "a", "b", "a", "b", "a", "b"],
-            "update_match_id": [1,1,1,1,2,2,2,2],
+            "update_match_id": [1, 1, 1, 1, 2, 2, 2, 2],
             "team": [1, 2, 1, 2, 1, 2, 1, 2],
-            "game": [1, 1, 2,2, 3, 3, 4, 4],
+            "game": [1, 1, 2, 2, 3, 3, 4, 4],
             "points": [1, 2, 3, 2, 4, 5, 6, 7],
-            'points2': [1, 2, 3, 4, 5, 6, 7, 8],
+            "points2": [1, 2, 3, 4, 5, 6, 7, 8],
             "start_date": [
                 pd.to_datetime("2023-01-01"),
                 pd.to_datetime("2023-01-01"),
@@ -147,7 +147,6 @@ def test_lag_fit_transform_update_match_id(df, column_names):
         pd.testing.assert_frame_equal(
             df_with_lags, expected_df[df_with_lags.columns], check_dtype=False
         )
-
 
 
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
@@ -455,7 +454,9 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
                 pl.col("player"),
             ]
         )
-        assert_frame_equal(df_with_lags, expected_df.select(df_with_lags.columns), check_dtype=False)
+        assert_frame_equal(
+            df_with_lags, expected_df.select(df_with_lags.columns), check_dtype=False
+        )
 
     future_df = pd.DataFrame(
         {
@@ -505,7 +506,6 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
         pl.testing.assert_frame_equal(
             future_df, expected_future_df.select(future_df.columns), check_dtype=False
         )
-
 
 
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
@@ -797,7 +797,7 @@ def test_rolling_mean_transform_parent_match_id(column_names: ColumnNames):
             "player": ["a", "a", "a", "a"],
             "game": [1, 2, 3, 4],
             "points": [1, 2, 3, 2],
-            'points2': [1, 2, 3, 4],
+            "points2": [1, 2, 3, 4],
             "start_date": [
                 pd.to_datetime("2023-01-01"),
                 pd.to_datetime("2023-01-01"),
@@ -876,7 +876,7 @@ def test_rolling_mean_days_series_id(column_names: ColumnNames):
             "player": ["a", "a", "a", "a"],
             "game": [1, 2, 3, 4],
             "points": [1, 2, 3, 2],
-            'points2': [1, 2, 3, 4],
+            "points2": [1, 2, 3, 4],
             "start_date": [
                 pd.to_datetime("2023-01-01"),
                 pd.to_datetime("2023-01-01"),

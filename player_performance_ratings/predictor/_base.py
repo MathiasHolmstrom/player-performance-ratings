@@ -57,8 +57,6 @@ class BasePredictor(ABC):
         self.auto_pre_transform = auto_pre_transform
         self.multiclass_output_as_struct = multiclass_output_as_struct
 
-
-
     def reset(self) -> None:
         pass
 
@@ -72,7 +70,6 @@ class BasePredictor(ABC):
             if len(self._estimator_features) == estimator_feature_count:
                 logging.warning(f"Added no new columns containing {contain}")
 
-
     @abstractmethod
     def train(self, df: FrameT, estimator_features: Optional[list[str]] = None) -> None:
         pass
@@ -82,6 +79,7 @@ class BasePredictor(ABC):
         self, df: FrameT, cross_validation: Optional[bool] = None
     ) -> IntoFrameT:
         pass
+
     @property
     def pred_column(self) -> str:
         return self._pred_column
@@ -90,7 +88,6 @@ class BasePredictor(ABC):
     def pred_column(self, new_pred_column: str):
         self._pred_column = new_pred_column
 
-
     @property
     def target(self) -> str:
         return self._target
@@ -98,7 +95,6 @@ class BasePredictor(ABC):
     @target.setter
     def target(self, new_target_name: str):
         self._target = new_target_name
-
 
     @property
     def columns_added(self) -> list[str]:

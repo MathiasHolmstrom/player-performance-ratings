@@ -6,7 +6,9 @@ import narwhals as nw
 from narwhals.typing import FrameT, IntoFrameT
 
 from player_performance_ratings.ratings import convert_df_to_matches
-from player_performance_ratings.ratings.performance_generator import PerformancesGenerator
+from player_performance_ratings.ratings.performance_generator import (
+    PerformancesGenerator,
+)
 from player_performance_ratings.ratings.rating_calculators import (
     RatingMeanPerformancePredictor,
 )
@@ -182,7 +184,13 @@ class UpdateRatingGenerator(RatingGenerator):
                 self.column_names.player_id,
             ]
         )
-        feats_out = input_cols + self.all_rating_features_out + self.performances_generator.features_out if self.performances_generator else input_cols + self.all_rating_features_out
+        feats_out = (
+            input_cols
+            + self.all_rating_features_out
+            + self.performances_generator.features_out
+            if self.performances_generator
+            else input_cols + self.all_rating_features_out
+        )
         out_df = df[list(set(feats_out))]
 
         return out_df.filter(nw.col(self.column_names.match_id).is_in(ori_game_ids))
@@ -501,7 +509,11 @@ class UpdateRatingGenerator(RatingGenerator):
             nw.from_dict(
                 potential_feature_values, native_namespace=nw.get_native_namespace(df)
             ),
-            on=[self.column_names.match_id, self.column_names.player_id, self.column_names.team_id],
+            on=[
+                self.column_names.match_id,
+                self.column_names.player_id,
+                self.column_names.team_id,
+            ],
             how="left",
         )
 
@@ -665,7 +677,11 @@ class UpdateRatingGenerator(RatingGenerator):
             )
 
             df = df.select(
-                [self.column_names.match_id, self.column_names.player_id, self.column_names.team_id]
+                [
+                    self.column_names.match_id,
+                    self.column_names.player_id,
+                    self.column_names.team_id,
+                ]
             ).join(
                 game_player.select(
                     [
@@ -684,7 +700,11 @@ class UpdateRatingGenerator(RatingGenerator):
                         self.prefix + RatingKnownFeatures.PLAYER_RATING + self.suffix,
                     ]
                 ),
-                on=[self.column_names.match_id, self.column_names.player_id, self.column_names.team_id],
+                on=[
+                    self.column_names.match_id,
+                    self.column_names.player_id,
+                    self.column_names.team_id,
+                ],
                 how="left",
             )
 
@@ -780,10 +800,11 @@ class UpdateRatingGenerator(RatingGenerator):
             + self.suffix: team_opponent_leagues,
             self.prefix + RatingKnownFeatures.TEAM_LEAGUE + self.suffix: team_leagues,
             self.prefix
-            + RatingKnownFeatures.RATING_MEAN_PROJECTED + self.suffix: rating_means_projected,
+            + RatingKnownFeatures.RATING_MEAN_PROJECTED
+            + self.suffix: rating_means_projected,
             self.column_names.match_id: match_ids,
             self.column_names.player_id: player_ids,
-            self.column_names.team_id: team_ids
+            self.column_names.team_id: team_ids,
         }
 
         if self.distinct_positions:
