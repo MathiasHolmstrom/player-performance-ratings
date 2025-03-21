@@ -76,7 +76,7 @@ class NetOverPredictedPostTransformer(BaseTransformer):
                 }
             )
         for lag_generator in self.lag_generators:
-            df = lag_generator.generate_historical(df, column_names=self.column_names)
+            df = lag_generator.transform_historical(df, column_names=self.column_names)
         return df[list(set(ori_cols + self.features_out))]
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -94,7 +94,7 @@ class NetOverPredictedPostTransformer(BaseTransformer):
             )
 
         for lag_generator in self.lag_generators:
-            df = lag_generator.generate_future(df)
+            df = lag_generator.transform_future(df)
 
         return df[list(set(ori_cols + self.features_out))]
 
@@ -277,7 +277,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
         transformed_df = nw.from_native(self.transform(df))
         for lag_generator in self.lag_generators:
             transformed_df = nw.from_native(
-                lag_generator.generate_historical(
+                lag_generator.transform_historical(
                     transformed_df, column_names=self.column_names
                 )
             )
@@ -317,7 +317,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
                 ]
             )
         for lag_transformer in self.lag_generators:
-            df = lag_transformer.generate_historical(df, column_names=self.column_names)
+            df = lag_transformer.transform_historical(df, column_names=self.column_names)
 
         return df.drop([self.predictor.pred_column + "_sum"])
 

@@ -1,6 +1,6 @@
+import logging
 from typing import Optional, Union
 
-import numpy as np
 import narwhals as nw
 from narwhals.typing import FrameT, IntoFrameT
 import pandas as pd
@@ -16,14 +16,16 @@ from player_performance_ratings.utils import validate_sorting
 class LagTransformer(BaseLagGenerator):
 
     def __init__(
-        self,
-        features: list[str],
-        lag_length: int,
-        granularity: Optional[list[str]] = None,
-        days_between_lags: Optional[list[int]] = None,
-        future_lag: bool = False,
-        prefix: str = "lag",
-        add_opponent: bool = False,
+            self,
+            features: list[str],
+            lag_length: int,
+            granularity: list[str],
+            days_between_lags: Optional[list[int]] = None,
+            future_lag: bool = False,
+            prefix: str = "lag",
+            add_opponent: bool = False,
+            update_match_id_column: Optional[str] = None,
+            column_names: Optional[ColumnNames] = None,
     ):
         """
         :param features. List of features to create lags for
@@ -43,18 +45,34 @@ class LagTransformer(BaseLagGenerator):
             prefix=prefix,
             iterations=[i for i in range(1, lag_length + 1)],
             granularity=granularity,
+            column_names=column_names
         )
         self.days_between_lags = days_between_lags or []
         for days_lag in self.days_between_lags:
             self._features_out.append(f"{prefix}{days_lag}_days_ago")
 
+        self.update_id_column = update_match_id_column
         self.lag_length = lag_length
         self.future_lag = future_lag
         self._df = None
 
     @nw.narwhalify
-    def generate_historical(self, df: FrameT, column_names: ColumnNames) -> IntoFrameT:
+    def transform_historical(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
         """ """
+        input_cols = df.columns
+        self.column_names = column_names or self.column_names
+        if not self.column_names:
+            if '__row_index' not in df.columns:
+                df = df.with_row_index(name='__row_index')
+            if self.days_between_lags:
+                raise ValueError("column names must be passed if days_between_lags is set")
+            assert self.update_id_column is not None, "if column names is not passed. update_id_column must be passed"
+
+            if self.add_opponent:
+                logging.warning("add_opponent is set but column names be passed for opponent feats to be created")
+        else:
+            self.update_id_column = self.column_names.update_match_id
+
         native = nw.to_native(df)
         if isinstance(native, pd.DataFrame):
             ori_native = "pd"
@@ -63,36 +81,24 @@ class LagTransformer(BaseLagGenerator):
             ori_native = "pl"
 
         df = df.with_columns(nw.lit(0).alias("is_future"))
-        self.column_names = column_names
-        self.granularity = self.granularity or [self.column_names.player_id]
-        validate_sorting(df=df, column_names=self.column_names)
-        self._store_df(df)
-        concat_df = self._generate_concat_df_with_feats(df)
-        df = self._create_transformed_df(
-            df=df, concat_df=concat_df, match_id_join_on=self.column_names.match_id
-        )
-        unique_cols = (
-            [
-                self.column_names.player_id,
-                self.column_names.match_id,
-                self.column_names.team_id,
-            ]
-            if self.column_names.team_id
-            else [self.column_names.team_id, self.column_names.match_id]
-        )
-        if df.unique(subset=unique_cols).shape[0] != df.shape[0]:
-            raise ValueError(
-                f"Duplicated rows in df. Df must be a unique combination of {column_names.player_id} and {column_names.update_match_id}"
+        if self.column_names:
+            validate_sorting(df=df, column_names=self.column_names)
+            self._store_df(df)
+            concat_df = self._concat_with_stored_and_calculate_feats(df)
+            df = self._create_transformed_df(
+                df=df, concat_df=concat_df, match_id_join_on=self.column_names.match_id
             )
+        else:
+            df = self._concat_with_stored_and_calculate_feats(df).sort('__row_index')
 
         if "is_future" in df.columns:
             df = df.drop("is_future")
         if ori_native == "pd":
-            return df.to_pandas()
-        return df
+            return df.select(list(set(input_cols + self.features_out))).to_pandas()
+        return df.select(list(set(input_cols + self.features_out)))
 
     @nw.narwhalify
-    def generate_future(self, df: FrameT) -> IntoFrameT:
+    def transform_future(self, df: FrameT) -> IntoFrameT:
         native = nw.to_native(df)
         if isinstance(native, pd.DataFrame):
             df = nw.from_native(pl.DataFrame(native))
@@ -100,15 +106,15 @@ class LagTransformer(BaseLagGenerator):
         else:
             ori_native = "pl"
         df = df.with_columns(nw.lit(1).alias("is_future"))
-        concat_df = self._generate_concat_df_with_feats(df=df)
+        concat_df = self._concat_with_stored_and_calculate_feats(df=df)
 
         transformed_df = concat_df.filter(
-            nw.col(self.column_names.match_id).is_in(
+            nw.col(self.update_id_column).is_in(
                 df.select(
-                    nw.col(self.column_names.match_id)
+                    nw.col(self.update_id_column)
                     #   .cast(nw.String)
                 )
-                .unique()[self.column_names.match_id]
+                .unique()[self.update_id_column]
                 .to_list()
             )
         )
@@ -122,37 +128,28 @@ class LagTransformer(BaseLagGenerator):
             return transformed_future.to_pandas()
         return transformed_future
 
-    def _generate_concat_df_with_feats(self, df: FrameT) -> FrameT:
-        unique_cols = (
-            [
-                self.column_names.player_id,
-                self.column_names.match_id,
-                self.column_names.team_id,
-            ]
-            if self.column_names.team_id
-            else [self.column_names.team_id, self.column_names.match_id]
-        )
-        if len(df.unique(subset=unique_cols)) != len(df):
-            raise ValueError(
-                f"Duplicated rows in df. Df must be a unique combination of {self.column_names.player_id} and {self.column_names.update_match_id}"
-            )
+    def _concat_with_stored_and_calculate_feats(self, df: FrameT) -> FrameT:
+        grp_cols = self.granularity + [self.update_id_column]
+        if self.column_names and self._df is not None:
+            concat_df = self._concat_with_stored(df=df)
+            sort_col = self.column_names.start_date
 
-        concat_df = self._concat_df(df=df)
+        else:
+            concat_df = df
+            if '__row_index' not in concat_df.columns:
+                concat_df = concat_df.with_row_index(name='__row_index')
+            sort_col = '__row_index'
 
         grouped = concat_df.group_by(
-            self.granularity + [self.column_names.update_match_id]
+            grp_cols
         ).agg(
             [nw.col(feature).mean().alias(feature) for feature in self.features]
             + [
-                nw.col(self.column_names.start_date)
-                .min()
-                .alias(self.column_names.start_date)
+                nw.col(sort_col)
+            .min()
+            .alias(sort_col)
             ]
-        )
-
-        grouped = grouped.sort(
-            [self.column_names.start_date, self.column_names.update_match_id]
-        )
+        ).sort(sort_col)
 
         for days_lag in self.days_between_lags:
             if self.future_lag:
@@ -164,12 +161,12 @@ class LagTransformer(BaseLagGenerator):
                 )
                 grouped = grouped.with_columns(
                     (
-                        (
-                            nw.col("shifted_days").cast(nw.Date)
-                            - nw.col(self.column_names.start_date).cast(nw.Date)
-                        ).dt.total_minutes()
-                        / 60
-                        / 24
+                            (
+                                    nw.col("shifted_days").cast(nw.Date)
+                                    - nw.col(self.column_names.start_date).cast(nw.Date)
+                            ).dt.total_minutes()
+                            / 60
+                            / 24
                     ).alias(f"{self.prefix}{days_lag}_days_ago")
                 )
             else:
@@ -181,12 +178,12 @@ class LagTransformer(BaseLagGenerator):
                 )
                 grouped = grouped.with_columns(
                     (
-                        (
-                            nw.col(self.column_names.start_date).cast(nw.Date)
-                            - nw.col("shifted_days").cast(nw.Date)
-                        ).dt.total_minutes()
-                        / 60
-                        / 24
+                            (
+                                    nw.col(self.column_names.start_date).cast(nw.Date)
+                                    - nw.col("shifted_days").cast(nw.Date)
+                            ).dt.total_minutes()
+                            / 60
+                            / 24
                     ).alias(f"{self.prefix}{days_lag}_days_ago")
                 )
             grouped = grouped.drop("shifted_days")
@@ -225,292 +222,13 @@ class LagTransformer(BaseLagGenerator):
         for days_lag in self.days_between_lags:
             feats_out.append(f"{self.prefix}{days_lag}_days_ago")
 
-        concat_df = concat_df.join(
+        return concat_df.join(
             grouped.select(
-                self.granularity + [self.column_names.update_match_id] + feats_out
+                grp_cols + feats_out
             ),
-            on=self.granularity + [self.column_names.update_match_id],
+            on=grp_cols,
             how="left",
-        )
-
-        return concat_df
-
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out
-
-
-class RollingMeanDaysTransformer(BaseLagGenerator):
-
-    def __init__(
-        self,
-        features: list[str],
-        days: Union[int, list[int]],
-        granularity: Union[list[str], str] = None,
-        scale_by_participation_weight: bool = False,
-        add_count: bool = False,
-        add_opponent: bool = False,
-        prefix: str = "rolling_mean_days",
-    ):
-        self.days = days
-        self.scale_by_participation_weight = scale_by_participation_weight
-        if isinstance(self.days, int):
-            self.days = [self.days]
-        super().__init__(
-            features=features,
-            iterations=[i for i in self.days],
-            prefix=prefix,
-            add_opponent=add_opponent,
-            granularity=granularity,
-        )
-
-        self.add_count = add_count
-        self._fitted_game_ids = []
-
-        for day in self.days:
-            if self.add_count:
-                feature = f"{self.prefix}_count{day}"
-                self._features_out.append(feature)
-                self._entity_features.append(feature)
-
-                if self.add_opponent:
-                    self._features_out.append(f"{self.prefix}_count{day}_opponent")
-
-    @nw.narwhalify
-    def generate_historical(self, df: FrameT, column_names: ColumnNames) -> IntoFrameT:
-        ori_cols = df.columns
-        if isinstance(df.to_native(), pd.DataFrame):
-            ori_type = "pd"
-            df = pl.DataFrame(df.to_native())
-        else:
-            df = df.to_native()
-            ori_type = "pl"
-
-        df = df.with_columns(pl.lit(0).alias("is_future"))
-        self.column_names = column_names
-        self.granularity = self.granularity or [self.column_names.player_id]
-
-        validate_sorting(df=df, column_names=self.column_names)
-
-        self._store_df(nw.from_native(df))
-
-        concat_df = self._generate_concat_df_with_feats(df)
-
-        df = pl.DataFrame(
-            self._create_transformed_df(
-                df=nw.from_native(df),
-                concat_df=nw.from_native(concat_df),
-                match_id_join_on=self.column_names.match_id,
-            )
-        )
-
-        if self.add_count:
-            for day in self.days:
-                df = df.with_columns(
-                    pl.col(f"{self.prefix}_count{day}")
-                    .fill_null(0)
-                    .alias(f"{self.prefix}_count{day}")
-                )
-                if self.add_opponent:
-                    df = df.with_columns(
-                        pl.col(f"{self.prefix}_count{day}_opponent")
-                        .fill_null(0)
-                        .alias(f"{self.prefix}_count{day}_opponent")
-                    )
-
-        df = df.select(ori_cols + self.features_out)
-        unique_cols = (
-            [
-                self.column_names.player_id,
-                self.column_names.match_id,
-                self.column_names.team_id,
-            ]
-            if self.column_names.team_id
-            else [self.column_names.team_id, self.column_names.match_id]
-        )
-
-        if df.unique(subset=unique_cols).shape[0] != df.shape[0]:
-            raise ValueError(
-                f"Duplicated rows in df. Df must be a unique combination of {unique_cols}"
-            )
-        if "is_future" in df.schema:
-            df = df.drop("is_future")
-        if ori_type == "pd":
-            df = nw.from_native(df.to_pandas())
-        validate_sorting(df=df, column_names=self.column_names)
-        return df
-
-    @nw.narwhalify
-    def generate_future(self, df: FrameT) -> IntoFrameT:
-        ori_cols = df.columns
-        if isinstance(df.to_native(), pd.DataFrame):
-            ori_type = "pd"
-            df = pl.DataFrame(df.to_native())
-        else:
-            df = df.to_native()
-            ori_type = "pl"
-
-        df = df.with_columns(pl.lit(1).alias("is_future"))
-        concat_df = self._generate_concat_df_with_feats(df=df)
-        concat_df = concat_df.filter(
-            pl.col(self.column_names.match_id).is_in(
-                df[self.column_names.match_id].unique().to_list()
-            )
-        )
-        transformed_future = pl.DataFrame(
-            self._generate_future_feats(
-                transformed_df=nw.from_native(concat_df), ori_df=nw.from_native(df)
-            )
-        )
-        if "is_future" in transformed_future.columns:
-            transformed_future = transformed_future.drop("is_future")
-
-        transformed_future = transformed_future.select(ori_cols + self.features_out)
-
-        if ori_type == "pd":
-            transformed_future = nw.from_native(transformed_future.to_pandas())
-
-        return transformed_future
-
-    def _generate_concat_df_with_feats(self, df: pl.DataFrame) -> pl.DataFrame:
-
-        if self._df is None:
-            raise ValueError("fit_transform needs to be called before transform")
-
-        concat_df = self._concat_df(nw.from_native(df)).to_native()
-
-        for feature_name in self.features:
-            if (
-                self.column_names.participation_weight
-                and self.scale_by_participation_weight
-            ):
-                concat_df = concat_df.with_columns(
-                    nw.col(self.column_names.participation_weight)
-                    .mean()
-                    .over(self.granularity)
-                    .alias("__mean_participation_weight")
-                )
-
-                concat_df = concat_df.with_columns(
-                    (
-                        pl.col(feature_name)
-                        * pl.col(self.column_names.participation_weight)
-                        / pl.col("__mean_participation_weight")
-                    ).alias(feature_name)
-                ).drop("__mean_participation_weight")
-
-        concat_df = concat_df.with_columns(
-            pl.col(self.column_names.start_date).dt.date().alias("__date_day")
-        )
-
-        grouped = concat_df.group_by(
-            ["__date_day", *self.granularity, self.column_names.team_id]
-        ).agg(
-            [
-                *[pl.col(feature).mean().alias(feature) for feature in self.features],
-                pl.count().alias("__count"),
-            ]
-        )
-
-        for day in self.days:
-            grouped = self._add_rolling_feature(
-                concat_df=grouped,
-                day=day,
-                granularity=self.granularity,
-            )
-        unique_cols = (
-            [
-                self.column_names.player_id,
-                self.column_names.match_id,
-                self.column_names.team_id,
-            ]
-            if self.column_names.team_id
-            else [self.column_names.team_id, self.column_names.match_id]
-        )
-
-        concat_df = concat_df.join(
-            grouped, on=self.granularity + ["__date_day"], how="left"
-        ).unique(subset=unique_cols)
-
-        concat_df = concat_df.sort(
-            by=[
-                self.column_names.start_date,
-                self.column_names.match_id,
-                self.column_names.team_id,
-                self.column_names.player_id,
-            ]
-        )
-
-        return concat_df
-
-    def _add_rolling_feature(
-        self,
-        concat_df: pl.DataFrame,
-        day: int,
-        granularity: list[str],
-    ) -> pl.DataFrame:
-        full_calendar = (
-            concat_df.select(granularity)
-            .unique()
-            .join(
-                pl.DataFrame(
-                    {
-                        "__date_day": pl.date_range(
-                            concat_df["__date_day"].min(),
-                            concat_df["__date_day"].max(),
-                            eager=True,
-                        )
-                    }
-                ),
-                how="cross",
-            )
-        )
-        full_df = (
-            full_calendar.join(concat_df, on=[*granularity, "__date_day"], how="left")
-            .sort([*granularity, "__date_day"])
-            .unique([*granularity, "__date_day"], maintain_order=True)
-        )
-
-        full_df = full_df.with_columns(
-            (pl.col("__count") / pl.col("__count").max()).alias("weight")
-        )
-
-        rolling_result = (
-            full_df.group_by(*granularity, maintain_order=True)
-            .agg(
-                [
-                    pl.col("__date_day").alias("__date_day"),
-                ]
-                + [
-                    (
-                        (pl.col(feature) * pl.col("weight")).rolling_sum(
-                            window_size=day, min_periods=1
-                        )
-                        / pl.col("weight").rolling_sum(window_size=day, min_periods=1)
-                    )
-                    .shift(1)
-                    .alias(f"{self.prefix}_{feature}{day}")
-                    for feature in self.features
-                ]
-                + [
-                    pl.col("__count")
-                    .rolling_sum(window_size=day, weights=None, min_periods=1)
-                    .shift(1)
-                    .alias(f"{self.prefix}_count{day}")
-                ]
-            )
-            .explode(["__date_day", *self._entity_features])
-        )
-
-        concat_df = concat_df.join(
-            rolling_result, on=[*granularity, "__date_day"], how="left"
-        )
-
-        return concat_df
-
-    def reset(self):
-        self._df = None
-        self._fitted_game_ids = []
+        ).sort(sort_col)
 
     @property
     def features_out(self) -> list[str]:
@@ -520,15 +238,15 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
 class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
     def __init__(
-        self,
-        features: list[str],
-        window: int,
-        binary_column: str,
-        granularity: list[str] = None,
-        prob_column: Optional[str] = None,
-        min_periods: int = 1,
-        add_opponent: bool = False,
-        prefix: str = "rolling_mean_binary",
+            self,
+            features: list[str],
+            window: int,
+            binary_column: str,
+            granularity: list[str] = None,
+            prob_column: Optional[str] = None,
+            min_periods: int = 1,
+            add_opponent: bool = False,
+            prefix: str = "rolling_mean_binary",
     ):
         super().__init__(
             features=features,
@@ -567,7 +285,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         self._estimator_features_out = self._features_out.copy()
 
     @nw.narwhalify
-    def generate_historical(self, df: FrameT, column_names: ColumnNames) -> IntoFrameT:
+    def transform_historical(self, df: FrameT, column_names: ColumnNames) -> IntoFrameT:
 
         native = nw.to_native(df)
         if isinstance(native, pd.DataFrame):
@@ -605,8 +323,8 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         )
 
         if (
-            transformed_df.unique(subset=unique_cols).shape[0]
-            != transformed_df.shape[0]
+                transformed_df.unique(subset=unique_cols).shape[0]
+                != transformed_df.shape[0]
         ):
             raise ValueError(
                 f"Duplicated rows in df. Df must be a unique combination of {unique_cols}"
@@ -616,7 +334,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         return transformed_df
 
     @nw.narwhalify
-    def generate_future(self, df: FrameT) -> IntoFrameT:
+    def transform_future(self, df: FrameT) -> IntoFrameT:
 
         native = nw.to_native(df)
         if isinstance(native, pd.DataFrame):
@@ -675,17 +393,17 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
                 )
                 transformed_df = transformed_df.with_columns(
                     (
-                        nw.col(f"{self.prefix}_{feature_name}{self.window}_1")
-                        * nw.col(self.prob_column)
-                        + nw.col(f"{self.prefix}_{feature_name}{self.window}_0")
-                        * (1 - nw.col(self.prob_column))
+                            nw.col(f"{self.prefix}_{feature_name}{self.window}_1")
+                            * nw.col(self.prob_column)
+                            + nw.col(f"{self.prefix}_{feature_name}{self.window}_0")
+                            * (1 - nw.col(self.prob_column))
                     ).alias(weighted_prob_feat_name)
                 )
         return transformed_df
 
     def _generate_concat_df_with_feats(self, df: FrameT) -> FrameT:
 
-        concat_df = self._concat_df(df)
+        concat_df = self._concat_with_stored(df)
 
         groupby_cols = [
             self.column_names.update_match_id,
@@ -782,15 +500,15 @@ class RollingMeanTransformer(BaseLagGenerator):
     """
 
     def __init__(
-        self,
-        features: list[str],
-        window: int,
-        granularity: Union[list[str], str] = None,
-        add_opponent: bool = False,
-        scale_by_participation_weight: bool = False,
-        min_periods: int = 1,
-        are_estimator_features=True,
-        prefix: str = "rolling_mean",
+            self,
+            features: list[str],
+            window: int,
+            granularity: Union[list[str], str] = None,
+            add_opponent: bool = False,
+            scale_by_participation_weight: bool = False,
+            min_periods: int = 1,
+            are_estimator_features=True,
+            prefix: str = "rolling_mean",
     ):
         """
         :param features:   Features to create rolling mean for
@@ -819,7 +537,7 @@ class RollingMeanTransformer(BaseLagGenerator):
         self.min_periods = min_periods
 
     @nw.narwhalify
-    def generate_historical(self, df: FrameT, column_names: ColumnNames) -> IntoFrameT:
+    def transform_historical(self, df: FrameT, column_names: ColumnNames) -> IntoFrameT:
         """
         Generates rolling mean for historical data
         Stored the historical data as instance-variables so it's possible to generate future data afterwards
@@ -878,7 +596,7 @@ class RollingMeanTransformer(BaseLagGenerator):
         return df.to_native()
 
     @nw.narwhalify
-    def generate_future(self, df: FrameT) -> IntoFrameT:
+    def transform_future(self, df: FrameT) -> IntoFrameT:
         """
         Generates rolling mean for future data
         Assumes that .generate_historical() has been called before
@@ -929,12 +647,11 @@ class RollingMeanTransformer(BaseLagGenerator):
         if self._df is None:
             raise ValueError("fit_transform needs to be called before transform")
 
-        concat_df = self._concat_df(df)
+        concat_df = self._concat_with_stored(df)
         if (
-            self.column_names.participation_weight
-            and self.scale_by_participation_weight
+                self.column_names.participation_weight
+                and self.scale_by_participation_weight
         ):
-
             concat_df = concat_df.with_columns(
                 nw.col(self.column_names.participation_weight)
                 .mean()
@@ -945,9 +662,9 @@ class RollingMeanTransformer(BaseLagGenerator):
             concat_df = concat_df.with_columns(
                 [
                     (
-                        nw.col(feature_name)
-                        * nw.col(self.column_names.participation_weight)
-                        / nw.col("__mean_participation_weight")
+                            nw.col(feature_name)
+                            * nw.col(self.column_names.participation_weight)
+                            / nw.col("__mean_participation_weight")
                     ).alias(feature_name)
                     for feature_name in self.features
                 ]
@@ -974,9 +691,9 @@ class RollingMeanTransformer(BaseLagGenerator):
         grp = grp.with_columns(rolling_means)
 
         selection_columns = (
-            self.granularity
-            + [self.column_names.update_match_id]
-            + [f"{self.prefix}_{feature}{self.window}" for feature in self.features]
+                self.granularity
+                + [self.column_names.update_match_id]
+                + [f"{self.prefix}_{feature}{self.window}" for feature in self.features]
         )
         concat_df = concat_df.join(
             grp.select(selection_columns),

@@ -61,7 +61,7 @@ class PipelineTransformer:
             df = transformer.fit_transform(df=df, column_names=self.column_names)
 
         for lag_generator in self.lag_generators:
-            df = lag_generator.generate_historical(
+            df = lag_generator.transform_historical(
                 df=df, column_names=self.column_names
             )
 
@@ -93,7 +93,7 @@ class PipelineTransformer:
             df = transformer.transform(df)
 
         for lag_generator in self.lag_generators:
-            df = lag_generator.generate_future(df)
+            df = lag_generator.transform_future(df)
 
         for transformer in self.post_lag_transformers:
             df = transformer.transform(df)

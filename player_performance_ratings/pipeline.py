@@ -156,7 +156,7 @@ class Pipeline(BasePredictor):
 
         for idx in range(len(self.lag_generators)):
             df = nw.from_native(
-                self.lag_generators[idx].generate_historical(
+                self.lag_generators[idx].transform_historical(
                     df, column_names=self.column_names
                 )
             )
@@ -219,13 +219,13 @@ class Pipeline(BasePredictor):
         for idx, lag_generator in enumerate(self.lag_generators):
             if cross_validation:
                 df_with_predict = nw.from_native(
-                    lag_generator.generate_historical(
+                    lag_generator.transform_historical(
                         df_with_predict, column_names=self.column_names
                     )
                 )
             else:
                 df_with_predict = nw.from_native(
-                    lag_generator.generate_future(df_with_predict)
+                    lag_generator.transform_future(df_with_predict)
                 )
         for post_lag_transformer in self.post_lag_transformers:
             df_with_predict = nw.from_native(

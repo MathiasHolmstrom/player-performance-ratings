@@ -13,7 +13,7 @@ from player_performance_ratings.predictor.classifier import NegativeBinomialPred
 from player_performance_ratings.predictor.predictor import DistributionPredictor
 from player_performance_ratings.scorer import SklearnScorer, OrdinalLossScorer
 from player_performance_ratings.scorer.score import Filter, Operator
-from player_performance_ratings.transformers.lag_generators import (
+from player_performance_ratings.transformers._lag import (
     RollingMeanTransformer,
 )
 

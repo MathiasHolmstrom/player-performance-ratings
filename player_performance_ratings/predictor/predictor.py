@@ -1,7 +1,5 @@
 import copy
 import logging
-import warnings
-from pandas.errors import SettingWithCopyWarning
 import polars as pl
 import narwhals as nw
 from narwhals.typing import FrameT, IntoFrameT
@@ -13,7 +11,6 @@ from player_performance_ratings.predictor_transformer._simple_transformer import
 )
 from player_performance_ratings.scorer.score import Filter, apply_filters, Operator
 
-warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 
 from typing import Optional
 
