@@ -8,7 +8,7 @@ import polars as pl
 
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.transformers.base_transformer import (
-    BaseLagGenerator, required_lag_column_names,
+    BaseLagGenerator, required_lag_column_names, row_count_validator,
 )
 from player_performance_ratings.utils import validate_sorting
 
@@ -24,7 +24,7 @@ class LagTransformer(BaseLagGenerator):
             future_lag: bool = False,
             prefix: str = "lag",
             add_opponent: bool = False,
-            update_match_id_column: Optional[str] = None,
+            match_id_update_column: Optional[str] = None,
             column_names: Optional[ColumnNames] = None,
     ):
         """
@@ -45,22 +45,24 @@ class LagTransformer(BaseLagGenerator):
             prefix=prefix,
             iterations=[i for i in range(1, lag_length + 1)],
             granularity=granularity,
-            column_names=column_names
+            column_names=column_names,
+            match_id_update_column=match_id_update_column,
         )
         self.days_between_lags = days_between_lags or []
         for days_lag in self.days_between_lags:
             self._features_out.append(f"{prefix}{days_lag}_days_ago")
 
-        self.match_id_update_column = update_match_id_column
         self.lag_length = lag_length
         self.future_lag = future_lag
         self._df = None
 
     @nw.narwhalify
     @required_lag_column_names
+    @row_count_validator
     def transform_historical(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
         """ """
         input_cols = df.columns
+        self.column_names = column_names or self.column_names
 
         native = nw.to_native(df)
         if isinstance(native, pd.DataFrame):
@@ -79,14 +81,15 @@ class LagTransformer(BaseLagGenerator):
             )
         else:
             df = self._concat_with_stored_and_calculate_feats(df).sort('__row_index')
-
-        if "is_future" in df.columns:
-            df = df.drop("is_future")
+        df = df.select(list(set(input_cols + self.features_out)))
+        if '__row_index' in df.columns:
+            df = df.drop('__row_index')
         if ori_native == "pd":
-            return df.select(list(set(input_cols + self.features_out))).to_pandas()
-        return df.select(list(set(input_cols + self.features_out)))
+            return df.to_pandas()
+        return df
 
     @nw.narwhalify
+    @row_count_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
         native = nw.to_native(df)
         if isinstance(native, pd.DataFrame):

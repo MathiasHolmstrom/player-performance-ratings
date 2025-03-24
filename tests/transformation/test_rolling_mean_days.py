@@ -157,7 +157,7 @@ def test_rolling_mean_days_fit_transform_40_days(column_names):
     )
 
 
-def test_rolling_mean_days_fit_transform_opponent(column_names):
+def test_rolling_mean_days_generate_historical_opponent(column_names):
     df = pd.DataFrame(
         {
             "player": ["a", "b", "c", "d", "a", "b", "c", "d"],

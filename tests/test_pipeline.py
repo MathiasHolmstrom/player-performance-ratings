@@ -28,7 +28,7 @@ from player_performance_ratings.transformers import (
 )
 
 from player_performance_ratings import ColumnNames, Pipeline
-from player_performance_ratings.transformers._lag import (
+from player_performance_ratings.transformers import (
     RollingMeanTransformer,
 )
 

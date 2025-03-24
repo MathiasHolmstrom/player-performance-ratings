@@ -5,7 +5,8 @@ import polars as pl
 from narwhals.typing import FrameT, IntoFrameT
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.transformers.base_transformer import BaseLagGenerator, required_lag_column_names
+from player_performance_ratings.transformers.base_transformer import BaseLagGenerator, required_lag_column_names, \
+    row_count_validator
 from player_performance_ratings.utils import validate_sorting
 
 
@@ -61,16 +62,16 @@ class RollingMeanTransformer(BaseLagGenerator):
 
     @nw.narwhalify
     @required_lag_column_names
+    @row_count_validator
     def transform_historical(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
         """
         Generates rolling mean for historical data
         Stored the historical data as instance-variables so it's possible to generate future data afterwards
-        The calculation is done using Polars.
-         However, Pandas Dataframe can be used as input and it will also output a pandas dataframe in that case.
 
         :param df: Historical data
         :param column_names: Column names
         """
+        self.column_names = column_names or self.column_names
         input_cols = df.columns
         native = nw.to_native(df)
         if isinstance(native, pd.DataFrame):
@@ -108,6 +109,7 @@ class RollingMeanTransformer(BaseLagGenerator):
         return df.select(list(set(input_cols + self.features_out)))
 
     @nw.narwhalify
+    @row_count_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
         """
         Generates rolling mean for future data

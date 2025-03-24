@@ -6,7 +6,8 @@ import narwhals as nw
 from narwhals.typing import FrameT, IntoFrameT
 
 from player_performance_ratings import ColumnNames
-from player_performance_ratings.transformers.base_transformer import BaseLagGenerator, required_lag_column_names
+from player_performance_ratings.transformers.base_transformer import BaseLagGenerator, required_lag_column_names, \
+    row_count_validator
 from player_performance_ratings.utils import validate_sorting
 
 
@@ -50,7 +51,9 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                 self._features_out.append(f"{self._count_column_name}_opponent")
 
     @nw.narwhalify
+    @row_count_validator
     def transform_historical(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
+
         ori_cols = df.columns
         self.column_names = column_names or self.column_names
         if not self.column_names and not self.date_column:
@@ -89,7 +92,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                     match_id_join_on=self.match_id_update_column,
                 )
             )
-            if self.add_opponent:
+            if self.add_opponent and self.add_count:
                 transformed_df = transformed_df.with_columns(
                     pl.col(f"{self._count_column_name}_opponent")
                     .fill_null(0)
@@ -122,6 +125,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         return df
 
     @nw.narwhalify
+    @row_count_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
         ori_cols = df.columns
         if isinstance(df.to_native(), pd.DataFrame):

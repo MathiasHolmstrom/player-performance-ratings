@@ -13,7 +13,7 @@ from player_performance_ratings.predictor.classifier import NegativeBinomialPred
 from player_performance_ratings.predictor.predictor import DistributionPredictor
 from player_performance_ratings.scorer import SklearnScorer, OrdinalLossScorer
 from player_performance_ratings.scorer.score import Filter, Operator
-from player_performance_ratings.transformers._lag import (
+from player_performance_ratings.transformers import (
     RollingMeanTransformer,
 )
 
@@ -50,7 +50,7 @@ predictor = DistributionPredictor(
 )
 
 pipeline = Pipeline(
-    lag_generators=[RollingMeanTransformer(features=["points"], window=15)],
+    lag_generators=[RollingMeanTransformer(features=["points"], window=15, granularity=["player_id"])],
     predictor=predictor,
     column_names=column_names,
 )

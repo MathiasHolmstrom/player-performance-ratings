@@ -10,6 +10,19 @@ import narwhals as nw
 
 from player_performance_ratings import ColumnNames
 
+def row_count_validator(method):
+    @wraps(method)
+    def wrapper(self, df: FrameT, *args, **kwargs):
+        input_row_count = len(df)
+        result = method(self, df, *args, **kwargs)
+        output_row_count = len(result)
+        assert input_row_count == output_row_count, (
+            f"Row count mismatch: input had {input_row_count} rows, output had {output_row_count} rows"
+        )
+        return result
+
+    return wrapper
+
 
 def required_lag_column_names(method):
     @wraps(method)
@@ -31,7 +44,6 @@ def required_lag_column_names(method):
                 logging.warning("add_opponent is set but column names must be passed for opponent feats to be created")
         else:
             self.match_id_update_column = self.column_names.update_match_id
-
         return method(self, df, self.column_names, *args, **kwargs)
 
     return wrapper
@@ -265,8 +277,6 @@ class BaseLagGenerator:
             ]
         )
         ori_cols = [c for c in df.columns if c not in concat_df.columns] + on_cols
-
-       # df = self._string_convert(df)
         unique_cols = (
             [
                 self.column_names.player_id,

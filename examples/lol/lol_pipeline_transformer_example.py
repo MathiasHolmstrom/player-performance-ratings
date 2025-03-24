@@ -22,7 +22,7 @@ from player_performance_ratings.ratings.performance_generator import (
     ColumnWeight,
 )
 from player_performance_ratings.transformers import LagTransformer
-from player_performance_ratings.transformers._lag import (
+from player_performance_ratings.transformers import (
     RollingMeanTransformer,
 )
 
