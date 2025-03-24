@@ -8,7 +8,7 @@ import polars as pl
 
 from player_performance_ratings import ColumnNames
 from player_performance_ratings.transformers.base_transformer import (
-    BaseLagGenerator,
+    BaseLagGenerator, required_lag_column_names,
 )
 from player_performance_ratings.utils import validate_sorting
 
@@ -51,27 +51,16 @@ class LagTransformer(BaseLagGenerator):
         for days_lag in self.days_between_lags:
             self._features_out.append(f"{prefix}{days_lag}_days_ago")
 
-        self.update_id_column = update_match_id_column
+        self.match_id_update_column = update_match_id_column
         self.lag_length = lag_length
         self.future_lag = future_lag
         self._df = None
 
     @nw.narwhalify
+    @required_lag_column_names
     def transform_historical(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
         """ """
         input_cols = df.columns
-        self.column_names = column_names or self.column_names
-        if not self.column_names:
-            if '__row_index' not in df.columns:
-                df = df.with_row_index(name='__row_index')
-            if self.days_between_lags:
-                raise ValueError("column names must be passed if days_between_lags is set")
-            assert self.update_id_column is not None, "if column names is not passed. update_id_column must be passed"
-
-            if self.add_opponent:
-                logging.warning("add_opponent is set but column names be passed for opponent feats to be created")
-        else:
-            self.update_id_column = self.column_names.update_match_id
 
         native = nw.to_native(df)
         if isinstance(native, pd.DataFrame):
@@ -80,8 +69,8 @@ class LagTransformer(BaseLagGenerator):
         else:
             ori_native = "pl"
 
-        df = df.with_columns(nw.lit(0).alias("is_future"))
         if self.column_names:
+            df = df.with_columns(nw.lit(0).alias("is_future"))
             validate_sorting(df=df, column_names=self.column_names)
             self._store_df(df)
             concat_df = self._concat_with_stored_and_calculate_feats(df)
@@ -109,12 +98,12 @@ class LagTransformer(BaseLagGenerator):
         concat_df = self._concat_with_stored_and_calculate_feats(df=df)
 
         transformed_df = concat_df.filter(
-            nw.col(self.update_id_column).is_in(
+            nw.col(self.match_id_update_column).is_in(
                 df.select(
-                    nw.col(self.update_id_column)
+                    nw.col(self.match_id_update_column)
                     #   .cast(nw.String)
                 )
-                .unique()[self.update_id_column]
+                .unique()[self.match_id_update_column]
                 .to_list()
             )
         )
@@ -129,7 +118,7 @@ class LagTransformer(BaseLagGenerator):
         return transformed_future
 
     def _concat_with_stored_and_calculate_feats(self, df: FrameT) -> FrameT:
-        grp_cols = self.granularity + [self.update_id_column]
+        grp_cols = self.granularity + [self.match_id_update_column]
         if self.column_names and self._df is not None:
             concat_df = self._concat_with_stored(df=df)
             sort_col = self.column_names.start_date
@@ -488,245 +477,3 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
         return concat_df
 
-
-class RollingMeanTransformer(BaseLagGenerator):
-    """
-    Calculates the rolling mean for a list of features over a window of matches.
-    Rolling Mean Values are also shifted by one match to avoid data leakage.
-
-    Use .generate_historical() to generate rolling mean for historical data.
-        The historical data is stored as instance-variables after calling .generate_historical()
-    Use .generate_future() to generate rolling mean for future data after having called .generate_historical()
-    """
-
-    def __init__(
-            self,
-            features: list[str],
-            window: int,
-            granularity: Union[list[str], str] = None,
-            add_opponent: bool = False,
-            scale_by_participation_weight: bool = False,
-            min_periods: int = 1,
-            are_estimator_features=True,
-            prefix: str = "rolling_mean",
-    ):
-        """
-        :param features:   Features to create rolling mean for
-        :param window: Window size for rolling mean.
-            If 10 will calculate rolling mean over the prior 10 observations
-        :param min_periods: Minimum number of observations in window required to have a non-null result
-        :param granularity: Columns to group by before rolling mean. E.g. player_id or [player_id, position].
-             In the latter case it will get the rolling mean for each player_id and position combination.
-             Defaults to player_id
-        :param add_opponent: If True, will add new columns containing rolling mean for the opponent team.
-        :param are_estimator_features: If True, the features will be added to the estimator features.
-            If false, it makes it possible for the outer layer (Pipeline) to exclude these features from the estimator.
-        :param prefix: Prefix for the new rolling mean columns
-        """
-
-        super().__init__(
-            features=features,
-            add_opponent=add_opponent,
-            iterations=[window],
-            prefix=prefix,
-            granularity=granularity,
-            are_estimator_features=are_estimator_features,
-        )
-        self.scale_by_participation_weight = scale_by_participation_weight
-        self.window = window
-        self.min_periods = min_periods
-
-    @nw.narwhalify
-    def transform_historical(self, df: FrameT, column_names: ColumnNames) -> IntoFrameT:
-        """
-        Generates rolling mean for historical data
-        Stored the historical data as instance-variables so it's possible to generate future data afterwards
-        The calculation is done using Polars.
-         However, Pandas Dataframe can be used as input and it will also output a pandas dataframe in that case.
-
-        :param df: Historical data
-        :param column_names: Column names
-        """
-
-        if isinstance(nw.to_native(df), pd.DataFrame):
-            ori_type = "pd"
-            df = nw.from_native(pl.DataFrame(nw.to_native(df)))
-        else:
-            ori_type = "pl"
-
-        unique_cols = (
-            [column_names.player_id, column_names.team_id, column_names.match_id]
-            if column_names.player_id in df.columns
-            else [column_names.team_id, column_names.match_id]
-        )
-        if df.unique(subset=unique_cols).shape[0] != df.shape[0]:
-            raise ValueError(
-                f"Duplicated rows in df. Df must be a unique combination of {unique_cols}"
-            )
-
-        df = df.with_columns(nw.lit(0).alias("is_future"))
-
-        self.column_names = column_names
-        self.granularity = self.granularity or [self.column_names.player_id]
-        validate_sorting(df=df, column_names=self.column_names)
-        self._store_df(df)
-        concat_df = self._generate_concat_df_with_feats(df)
-        transformed_df = self._create_transformed_df(df=df, concat_df=concat_df)
-        cn = self.column_names
-        unique_cols = (
-            [cn.player_id, cn.team_id, cn.match_id]
-            if cn.player_id in df.columns
-            else [cn.team_id, cn.match_id]
-        )
-        df = df.join(
-            transformed_df.select(*unique_cols, *self.features_out),
-            on=unique_cols,
-            how="left",
-        )
-        if df.unique(subset=unique_cols).shape[0] != df.shape[0]:
-            raise ValueError(
-                f"Duplicated rows in df. Df must be a unique combination of {unique_cols}"
-            )
-
-        if "is_future" in df.columns:
-            df = df.drop("is_future")
-
-        if ori_type == "pd":
-            return df.to_pandas()
-        return df.to_native()
-
-    @nw.narwhalify
-    def transform_future(self, df: FrameT) -> IntoFrameT:
-        """
-        Generates rolling mean for future data
-        Assumes that .generate_historical() has been called before
-        The calculation is done using Polars.
-         However, Pandas Dataframe can be used as input and it will also output a pandas dataframe in that case.
-
-        Regardless of the scheduled data of the future match, all future matches are perceived as being played in the same date.
-        That is to ensure that a team's 2nd future match has the same rolling means as the 1st future match.
-        :param df: Future data
-        """
-
-        if isinstance(nw.to_native(df), pd.DataFrame):
-            ori_type = "pd"
-            df = nw.from_native(pl.DataFrame(nw.to_native(df)))
-        else:
-            ori_type = "pl"
-
-        df = df.with_columns(nw.lit(1).alias("is_future"))
-        concat_df = self._generate_concat_df_with_feats(df=df)
-        unique_match_ids = df.select(nw.col(self.column_names.match_id).unique())[
-            self.column_names.match_id
-        ].to_list()
-        transformed_df = concat_df.filter(
-            nw.col(self.column_names.match_id).is_in(unique_match_ids)
-        )
-        transformed_df = self._generate_future_feats(
-            transformed_df=transformed_df, ori_df=df
-        )
-        cn = self.column_names
-
-        df = df.join(
-            transformed_df.select(
-                cn.player_id, cn.team_id, cn.match_id, *self.features_out
-            ),
-            on=[cn.player_id, cn.team_id, cn.match_id],
-            how="left",
-        )
-        if "is_future" in df.columns:
-            df = df.drop("is_future")
-
-        if ori_type == "pd":
-            return df.to_pandas()
-
-        return df.to_native()
-
-    def _generate_concat_df_with_feats(self, df: FrameT) -> FrameT:
-
-        if self._df is None:
-            raise ValueError("fit_transform needs to be called before transform")
-
-        concat_df = self._concat_with_stored(df)
-        if (
-                self.column_names.participation_weight
-                and self.scale_by_participation_weight
-        ):
-            concat_df = concat_df.with_columns(
-                nw.col(self.column_names.participation_weight)
-                .mean()
-                .over(self.granularity)
-                .alias("__mean_participation_weight")
-            )
-
-            concat_df = concat_df.with_columns(
-                [
-                    (
-                            nw.col(feature_name)
-                            * nw.col(self.column_names.participation_weight)
-                            / nw.col("__mean_participation_weight")
-                    ).alias(feature_name)
-                    for feature_name in self.features
-                ]
-            ).drop("__mean_participation_weight")
-
-        grp = concat_df.group_by(
-            self.granularity
-            + [self.column_names.update_match_id, self.column_names.start_date]
-        ).agg([nw.col(feature).mean().alias(feature) for feature in self.features])
-
-        grp = grp.filter(~nw.col(self.column_names.start_date).is_null())
-        grp = grp.sort(
-            [self.column_names.start_date, self.column_names.update_match_id]
-        )
-
-        rolling_means = [
-            nw.col(feature_name)
-            .shift(n=1)
-            .rolling_mean(window_size=self.window, min_samples=self.min_periods)
-            .over(self.granularity)
-            .alias(f"{self.prefix}_{feature_name}{self.window}")
-            for feature_name in self.features
-        ]
-        grp = grp.with_columns(rolling_means)
-
-        selection_columns = (
-                self.granularity
-                + [self.column_names.update_match_id]
-                + [f"{self.prefix}_{feature}{self.window}" for feature in self.features]
-        )
-        concat_df = concat_df.join(
-            grp.select(selection_columns),
-            on=self.granularity + [self.column_names.update_match_id],
-            how="left",
-        )
-
-        sort_cols = (
-            [
-                self.column_names.start_date,
-                self.column_names.match_id,
-                self.column_names.team_id,
-                self.column_names.player_id,
-            ]
-            if self.column_names.player_id in concat_df.columns
-            else [
-                self.column_names.start_date,
-                self.column_names.match_id,
-                self.column_names.team_id,
-            ]
-        )
-        concat_df = concat_df.sort(sort_cols)
-
-        feats_added = [f for f in self.features_out if f in concat_df.columns]
-
-        concat_df = concat_df.with_columns(
-            [
-                nw.col(f).fill_null(strategy="forward").over(self.granularity).alias(f)
-                for f in feats_added
-            ]
-        )
-        return concat_df
-
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out

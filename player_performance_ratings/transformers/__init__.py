@@ -1,9 +1,9 @@
 from ._lag import (
     LagTransformer,
-    RollingMeanDaysTransformer,
-    RollingMeanTransformer,
-    BinaryOutcomeRollingMeanTransformer,
 )
+
+from ._rolling_mean import RollingMeanTransformer
+
 from .transformers import (
     RatioTeamPredictorTransformer,
     PredictorTransformer,

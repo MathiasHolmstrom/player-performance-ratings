@@ -41,18 +41,18 @@ class Pipeline(BasePredictor):
     """
 
     def __init__(
-        self,
-        predictor: BasePredictor,
-        column_names: ColumnNames,
-        filters: Optional[list[Filter]] = None,
-        rating_generators: Optional[
-            Union[RatingGenerator, list[RatingGenerator]]
-        ] = None,
-        pre_lag_transformers: Optional[list[BaseTransformer]] = None,
-        lag_generators: Optional[
-            List[Union[BaseLagGenerator, BaseLagGenerator]]
-        ] = None,
-        post_lag_transformers: Optional[list[BaseTransformer]] = None,
+            self,
+            predictor: BasePredictor,
+            column_names: ColumnNames,
+            filters: Optional[list[Filter]] = None,
+            rating_generators: Optional[
+                Union[RatingGenerator, list[RatingGenerator]]
+            ] = None,
+            pre_lag_transformers: Optional[list[BaseTransformer]] = None,
+            lag_generators: Optional[
+                List[Union[BaseLagGenerator, BaseLagGenerator]]
+            ] = None,
+            post_lag_transformers: Optional[list[BaseTransformer]] = None,
     ):
         """
         :param predictor: The predictor to use for generating the predictions
@@ -128,7 +128,10 @@ class Pipeline(BasePredictor):
         :param df: DataFrame with the data to be used for training and prediction
 
         """
-
+        unique_constraint = [self.column_names.match_id, self.column_names.team_id,
+                             self.column_names.player_id] if self.column_names.player_id else [
+            self.column_names.match_id, self.column_names.team_id]
+        assert len(df.unique(unique_constraint)) == len(df), "The dataframe contains duplicates"
         df = apply_filters(df, filters=self.filters)
 
         estimator_features = estimator_features or self._estimator_features
@@ -145,6 +148,8 @@ class Pipeline(BasePredictor):
                     df, column_names=self.column_names
                 )
             )
+            assert len(df.unique(unique_constraint)) == len(df), "The dataframe contains duplicates"
+
 
         for idx in range(len(self.pre_lag_transformers)):
             self.pre_lag_transformers[idx].reset()
@@ -160,6 +165,7 @@ class Pipeline(BasePredictor):
                     df, column_names=self.column_names
                 )
             )
+            assert len(df.unique(unique_constraint)) == len(df), "The dataframe contains duplicates"
 
         for idx in range(len(self.post_lag_transformers)):
             df = nw.from_native(
@@ -167,6 +173,7 @@ class Pipeline(BasePredictor):
                     df, column_names=self.column_names
                 )
             )
+            assert len(df.unique(unique_constraint)) == len(df), "The dataframe contains duplicates"
 
         self.predictor.train(df=df, estimator_features=estimator_features)
 
@@ -180,7 +187,7 @@ class Pipeline(BasePredictor):
 
     @nw.narwhalify
     def predict(
-        self, df: FrameT, cross_validation: Optional[bool] = None
+            self, df: FrameT, cross_validation: Optional[bool] = None
     ) -> IntoFrameT:
         """
         Generates predictions on a future dataset from the entire pipeline
@@ -190,7 +197,7 @@ class Pipeline(BasePredictor):
         """
         if "__row_index" not in df.columns:
             df = df.with_row_index(name="__row_index")
-
+        assert len(df.unique(df_with_predict)) == len(df), "The dataframe contains duplicates"
         df_with_predict = df.clone()
         df_with_predict = apply_filters(df_with_predict, filters=self.filters)
 
@@ -202,6 +209,7 @@ class Pipeline(BasePredictor):
                         df_with_predict, column_names=self.column_names
                     )
                 )
+                assert len(df.unique(df_with_predict)) == len(df_with_predict), "The dataframe contains duplicates"
             else:
 
                 if rating_generator.performance_column in df.columns:
@@ -211,6 +219,7 @@ class Pipeline(BasePredictor):
                 df_with_predict = nw.from_native(
                     rating_generator.generate_future(df=df_with_predict)
                 )
+                assert len(df_with_predict.unique(df_with_predict)) == len(df_with_predict), "The dataframe contains duplicates"
 
         for pre_lag_transformer in self.pre_lag_transformers:
             df_with_predict = nw.from_native(
@@ -227,10 +236,15 @@ class Pipeline(BasePredictor):
                 df_with_predict = nw.from_native(
                     lag_generator.transform_future(df_with_predict)
                 )
+                assert len(df_with_predict.unique(df_with_predict)) == len(
+                    df_with_predict), "The dataframe contains duplicates"
         for post_lag_transformer in self.post_lag_transformers:
             df_with_predict = nw.from_native(
                 post_lag_transformer.transform(df_with_predict)
             )
+
+            assert len(df_with_predict.unique(df_with_predict)) == len(
+                df_with_predict), "The dataframe contains duplicates"
 
         df_with_predict = nw.from_native(self.predictor.predict(df_with_predict))
         cn = self.column_names
@@ -243,4 +257,6 @@ class Pipeline(BasePredictor):
         )
         if "__row_index" in joined.columns:
             joined = joined.drop(["__row_index"])
+        assert len(df) == len(
+                joined), "Dataframe row count has changed throughout predict pipeline"
         return joined

@@ -1,4 +1,6 @@
+import logging
 from abc import abstractmethod, ABC
+from functools import wraps
 from typing import Optional
 
 import numpy as np
@@ -8,6 +10,31 @@ import narwhals as nw
 
 from player_performance_ratings import ColumnNames
 
+
+def required_lag_column_names(method):
+    @wraps(method)
+    def wrapper(self, df: FrameT, column_names: Optional[ColumnNames] = None, *args, **kwargs):
+        self.column_names = column_names or self.column_names
+
+        if not self.column_names:
+            if '__row_index' not in df.columns:
+                df = df.with_row_index(name='__row_index')
+
+            if hasattr(self, "days_between_lags") and self.days_between_lags:
+                raise ValueError("column names must be passed if days_between_lags is set")
+
+            assert self.match_id_update_column is not None, (
+                "if column names is not passed. match_id_update_column must be passed"
+            )
+
+            if self.add_opponent:
+                logging.warning("add_opponent is set but column names must be passed for opponent feats to be created")
+        else:
+            self.match_id_update_column = self.column_names.update_match_id
+
+        return method(self, df, self.column_names, *args, **kwargs)
+
+    return wrapper
 
 class BaseTransformer(ABC):
 
@@ -134,7 +161,7 @@ class BaseLagGenerator:
         concat_df = (
             nw.concat(
                 [stored_df, df.select(cols)],
-                how="vertical",
+                how="diagonal",
             )
             .sort(sort_cols)
             .unique(subset=sort_cols, maintain_order=True)
@@ -470,3 +497,5 @@ class BaseLagGenerator:
     @property
     def historical_df(self) -> FrameT:
         return self._df
+
+
