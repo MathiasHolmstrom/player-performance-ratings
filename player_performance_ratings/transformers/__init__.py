@@ -3,6 +3,7 @@ from ._lag import (
 )
 
 from ._rolling_mean import RollingMeanTransformer
+from ._rolling_mean_days import RollingMeanDaysTransformer
 
 from .transformers import (
     RatioTeamPredictorTransformer,

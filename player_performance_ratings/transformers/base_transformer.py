@@ -83,9 +83,11 @@ class BaseLagGenerator:
         add_opponent: bool,
         iterations: list[int],
         prefix: str,
+        match_id_update_column: Optional[str],
         column_names: Optional[ColumnNames] = None,
         are_estimator_features: bool = True,
     ):
+        self.match_id_update_column = match_id_update_column
         self.column_names = column_names
         self.features = features
         self.iterations = iterations

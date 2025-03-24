@@ -52,11 +52,12 @@ class RollingMeanTransformer(BaseLagGenerator):
             prefix=prefix,
             granularity=granularity,
             are_estimator_features=are_estimator_features,
+            match_id_update_column=match_id_update_column
         )
         self.scale_by_participation_weight = scale_by_participation_weight
         self.window = window
         self.min_periods = min_periods
-        self.match_id_update_column = match_id_update_column
+
 
     @nw.narwhalify
     @required_lag_column_names
@@ -165,11 +166,12 @@ class RollingMeanTransformer(BaseLagGenerator):
                 concat_df = concat_df.with_row_index(name='__row_index')
             sort_col = '__row_index'
 
+        aggr_cols = [*self.features] + [self.column_names.participation_weight] if self.scale_by_participation_weight else self.features
         grp = (concat_df.group_by(
             self.granularity
             + [self.match_id_update_column]
         ).agg([nw.col(feature).mean().alias(feature) for feature in
-               [*self.features, self.column_names.participation_weight]] + [nw.col(sort_col).mean()])
+               [*aggr_cols]] + [nw.col(sort_col).mean()])
                ).sort(sort_col)
 
         if self.scale_by_participation_weight:
