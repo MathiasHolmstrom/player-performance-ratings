@@ -2,9 +2,8 @@ import copy
 from unittest import mock
 
 import pandas as pd
-from skbase.utils import deep_equals
 
-from spforge.predictor import SklearnPredictor, SklearnPredictor
+from spforge.predictor import SklearnPredictor
 from spforge.tuner.performances_generator_tuner import (
     PerformancesSearchRange,
 )

@@ -6,7 +6,7 @@ import narwhals as nw
 from narwhals.typing import FrameT, IntoFrameT
 from spforge import ColumnNames
 
-from spforge.scorer.score import BaseScorer
+from spforge.scorer import BaseScorer
 
 from spforge.cross_validator._base import CrossValidator
 from spforge.predictor._base import BasePredictor
@@ -68,7 +68,8 @@ class MatchKFoldCrossValidator(CrossValidator):
 
             If set to false it will only return the predictions for the validation dataset
         """
-
+        if self.predictor.pred_column in df.columns:
+            df = df.drop(self.predictor.pred_column)
         if "__row_index" in df.columns:
             df = df.drop("__row_index")
         sort_cols = [column_names.start_date, column_names.match_id, column_names.team_id,
@@ -142,7 +143,7 @@ class MatchKFoldCrossValidator(CrossValidator):
                 ]
                 train_df = train_df.select(columns_to_keep)
                 train_df = nw.from_native(
-                    predictor.predict(train_df, cross_validation=True)
+                    predictor.predict(train_df, cross_validation=True, return_features=return_features)
                 )
                 train_df = train_df.with_columns(
                     nw.lit(0).alias(self.validation_column_name)
@@ -154,7 +155,7 @@ class MatchKFoldCrossValidator(CrossValidator):
             ]
             validation_df = validation_df.select(columns_to_keep)
             validation_df = nw.from_native(
-                predictor.predict(validation_df, cross_validation=True)
+                predictor.predict(validation_df, cross_validation=True, return_features=return_features)
             )
             validation_df = validation_df.with_columns(
                 nw.lit(1).alias(self.validation_column_name)

@@ -1,11 +1,10 @@
-import math
 
 import pandas as pd
 import polars as pl
 import pytest
 from sklearn.metrics import log_loss, mean_absolute_error
 
-from spforge.scorer.score import (
+from spforge.scorer import (
     SklearnScorer,
     MeanBiasScorer,
 )

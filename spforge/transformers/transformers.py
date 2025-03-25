@@ -285,6 +285,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
         return transformed_df.select(list(set(ori_cols + self.features_out)))
 
     def transform(self, df: FrameT) -> IntoFrameT:
+        input_features = df.columns
         df = nw.from_native(self.predictor.predict(df=df))
 
         df = df.with_columns(
@@ -319,7 +320,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
         for lag_transformer in self.lag_generators:
             df = lag_transformer.transform_historical(df, column_names=self.column_names)
 
-        return df.drop([self.predictor.pred_column + "_sum"])
+        return df.select(list(set(input_features +self.features_out)))
 
     @property
     def features_out(self) -> list[str]:

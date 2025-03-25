@@ -60,7 +60,7 @@ class BaseTransformer(ABC):
         self.features = features
         self._are_estimator_features = are_estimator_features
         self.column_names = None
-        self._estimator_features_out = (
+        self._predictor_features_out = (
             self._features_out if self._are_estimator_features else []
         )
 
@@ -79,8 +79,8 @@ class BaseTransformer(ABC):
         return self._features_out
 
     @property
-    def estimator_features_out(self) -> list[str]:
-        return self._estimator_features_out
+    def predictor_features_out(self) -> list[str]:
+        return self._predictor_features_out
 
     def reset(self) -> "BaseTransformer":
         return self
@@ -130,7 +130,7 @@ class BaseLagGenerator:
         pass
 
     @property
-    def estimator_features_out(self) -> list[str]:
+    def predictor_features_out(self) -> list[str]:
         if self._are_estimator_features:
             return self.features_out
         return []

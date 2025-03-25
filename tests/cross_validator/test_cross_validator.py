@@ -7,7 +7,7 @@ import pytest
 from spforge import ColumnNames
 from sklearn.metrics import mean_absolute_error
 
-from spforge.scorer.score import SklearnScorer
+from spforge.scorer import SklearnScorer
 
 from spforge.cross_validator.cross_validator import (
     MatchKFoldCrossValidator,

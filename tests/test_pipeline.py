@@ -73,7 +73,7 @@ def test_pipeline_constructor():
         + [p.predictor.pred_column for p in post_lag_transformers]
         + rating_generator.features_out
     )
-    assert pipeline._estimator_features.sort() == expected_estimator_features.sort()
+    assert pipeline.features.sort() == expected_estimator_features.sort()
 
     # asserts estimator_features gets added to the post_transformer that contains a predictor
     assert (
@@ -121,7 +121,7 @@ def test_match_predictor_auto_pre_transformers(df):
     predictor_mock = mock.Mock()
     predictor_mock.target = "__target"
     predictor_mock.columns_added = ["prediction"]
-    predictor_mock.estimator_features = [
+    predictor_mock.features = [
         RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED
     ]
 
@@ -186,7 +186,6 @@ def test_match_predictor_multiple_rating_generators_same_performance(df):
                 column_names1.player_id,
             ]
         )
-        expected_return = pd.Series([0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
     else:
         data = data.sort(
             column_names1.start_date,
@@ -194,7 +193,7 @@ def test_match_predictor_multiple_rating_generators_same_performance(df):
             column_names1.team_id,
             column_names1.player_id,
         )
-        expected_return = pl.Series([0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
+
 
     predictor = SklearnPredictor(estimator=LinearRegression(), target="__target")
 
@@ -255,7 +254,7 @@ def test_match_predictor_0_rating_generators():
     predictor_mock.target = "__target"
     predictor_mock.columns_added = ["prediction"]
     predictor_mock.add_prediction.return_value = expected_df
-    predictor_mock.estimator_features = [
+    predictor_mock.features = [
         RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED
     ]
 
@@ -362,7 +361,7 @@ def test_match_predictor_generate_and_predict(df):
     )
 
     pipeline.train(df=historical_df)
-    new_df = pipeline.predict(future_df)
+    new_df = pipeline.predict(future_df, return_features=True)
     expected_columns = list(future_df.columns) + [
         *rating_generator.all_rating_features_out,
         pipeline.predictor.pred_column,
@@ -459,12 +458,12 @@ def test_train_predict_post_pre_and_lag_transformers():
 
     assert predictor.pred_column not in train_df.columns
 
-    predicted_df = pipeline.predict(future_df)
+    predicted_df = pipeline.predict(future_df, return_features=True)
     for f in rating_generator._features_out:
         assert f in predicted_df.columns
         assert f not in future_df.columns
 
-    for f in lag_generator.estimator_features_out:
+    for f in lag_generator.predictor_features_out:
         assert f in predicted_df.columns
         assert f not in future_df.columns
 
@@ -472,11 +471,11 @@ def test_train_predict_post_pre_and_lag_transformers():
         assert f in predicted_df.columns
         assert f not in future_df.columns
 
-    for f in post_transformer.estimator_features_out:
+    for f in post_transformer.predictor_features_out:
         assert f in predicted_df.columns
         assert f not in future_df.columns
 
-    for f in pre_transformer.estimator_features_out:
+    for f in pre_transformer.predictor_features_out:
         assert f in predicted_df.columns
         assert f not in future_df.columns
 

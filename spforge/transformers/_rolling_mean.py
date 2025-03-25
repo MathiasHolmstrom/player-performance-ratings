@@ -173,7 +173,7 @@ class RollingMeanTransformer(BaseLagGenerator):
             self.granularity
             + [self.match_id_update_column]
         ).agg([nw.col(feature).mean().alias(feature) for feature in
-               [*aggr_cols]] + [nw.col(sort_col).mean()])
+               [*aggr_cols]] + [nw.col(sort_col).min()])
                ).sort(sort_col)
 
         if self.scale_by_participation_weight:

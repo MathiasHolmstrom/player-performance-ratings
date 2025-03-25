@@ -13,7 +13,7 @@ from spforge.scorer import OrdinalLossScorer
 from spforge.predictor import (
     BasePredictor,
 )
-from spforge.scorer.score import BaseScorer
+from spforge.scorer import BaseScorer
 
 
 def neg_binom_log_likelihood(r, actual_points, predicted_points):
@@ -144,7 +144,7 @@ class NegativeBinomialPredictor(BasePredictor):
             self._best_multiplier = 0
 
     @nw.narwhalify
-    def predict(self, df: FrameT, cross_validation: bool = False) -> IntoFrameT:
+    def predict(self, df: FrameT, cross_validation: bool = False, **kwargs) -> IntoFrameT:
         input_cols = df.columns
         if self.relative_error_predictor:
             df = nw.from_native(self.relative_error_predictor.predict(df))

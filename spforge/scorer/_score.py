@@ -171,8 +171,8 @@ class SklearnScorer(BaseScorer):
 
     def __init__(
         self,
-        pred_column: str,
         scorer_function: Callable,
+        pred_column: str,
         target: str,
         validation_column: Optional[str] = None,
         granularity: Optional[list[str]] = None,

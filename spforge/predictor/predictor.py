@@ -9,13 +9,13 @@ from spforge.predictor_transformer import PredictorTransformer
 from spforge.predictor_transformer._simple_transformer import (
     SimpleTransformer,
 )
-from spforge.scorer.score import Filter, apply_filters, Operator
+from spforge.scorer import Filter, apply_filters
 
 
 from typing import Optional
 
 from spforge.data_structures import ColumnNames
-from spforge.predictor._base import BasePredictor, DataFrameType
+from spforge.predictor._base import BasePredictor
 
 
 class GameTeamPredictor(BasePredictor):
@@ -111,7 +111,7 @@ class GameTeamPredictor(BasePredictor):
         self.predictor.train(grouped, features=self._features)
 
     @nw.narwhalify
-    def predict(self, df: FrameT, cross_validation: bool = False) -> IntoFrameT:
+    def predict(self, df: FrameT, cross_validation: bool = False, **kwargs) -> IntoFrameT:
         """
         Adds prediction to df
 
@@ -213,7 +213,7 @@ class DistributionPredictor(BasePredictor):
         self.distribution_predictor.train(df, features)
 
     @nw.narwhalify
-    def predict(self, df: FrameT, cross_validation: bool = False) -> IntoFrameT:
+    def predict(self, df: FrameT, cross_validation: bool = False, **kwargs) -> IntoFrameT:
         if self.point_predictor.pred_column not in df.columns:
             df = nw.from_native(self.point_predictor.predict(df))
         df = self.distribution_predictor.predict(df)
@@ -309,8 +309,9 @@ class SklearnPredictor(BasePredictor):
         )
 
     @nw.narwhalify
-    def predict(self, df: FrameT, cross_validation: bool = False) -> IntoFrameT:
-
+    def predict(self, df: FrameT, cross_validation: bool = False, **kwargs) -> IntoFrameT:
+        if self.pred_column in df.columns:
+            df = df.drop(self.pred_column)
         df = self._transform_pre_transformers(df=df)
 
         if isinstance(df.to_native(), pd.DataFrame):
@@ -507,7 +508,7 @@ class GranularityPredictor(BasePredictor):
             self.classes_[granularity].sort()
 
     @nw.narwhalify
-    def predict(self, df: FrameT, cross_validation: bool = False) -> IntoFrameT:
+    def predict(self, df: FrameT, cross_validation: bool = False, **kwargs) -> IntoFrameT:
 
         if isinstance(df.to_native(), pd.DataFrame):
             df = nw.from_native(pl.DataFrame(df))

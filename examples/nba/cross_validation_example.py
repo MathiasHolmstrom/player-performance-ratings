@@ -6,15 +6,15 @@ from examples import get_sub_sample_nba_data
 from spforge.cross_validator import MatchKFoldCrossValidator
 
 from spforge.pipeline import Pipeline
-from spforge.predictor import SklearnPredictor, SklearnPredictor
+from spforge.predictor import SklearnPredictor
 
 from spforge.data_structures import ColumnNames
 from spforge.predictor.classifier import NegativeBinomialPredictor
 from spforge.predictor.predictor import DistributionPredictor
 from spforge.scorer import SklearnScorer, OrdinalLossScorer
-from spforge.scorer.score import Filter, Operator
+from spforge.scorer import Filter, Operator
 from spforge.transformers import (
-    RollingMeanTransformer,
+    RollingMeanTransformer, LagTransformer,
 )
 
 df = get_sub_sample_nba_data(as_polars=True, as_pandas=False)
@@ -50,7 +50,10 @@ predictor = DistributionPredictor(
 )
 
 pipeline = Pipeline(
-    lag_transformers=[RollingMeanTransformer(features=["points"], window=15, granularity=["player_id"])],
+    lag_transformers=[
+        RollingMeanTransformer(features=["points"], window=15, granularity=["player_id"]),
+        LagTransformer(features=['points'],lag_length=3, granularity=['player_id'])
+    ],
     predictor=predictor,
     column_names=column_names,
 )
