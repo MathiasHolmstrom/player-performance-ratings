@@ -1,4 +1,6 @@
+import logging
 from abc import abstractmethod, ABC
+from functools import wraps
 from typing import Optional
 
 import numpy as np
@@ -8,6 +10,43 @@ import narwhals as nw
 
 from player_performance_ratings import ColumnNames
 
+def row_count_validator(method):
+    @wraps(method)
+    def wrapper(self, df: FrameT, *args, **kwargs):
+        input_row_count = len(df)
+        result = method(self, df, *args, **kwargs)
+        output_row_count = len(result)
+        assert input_row_count == output_row_count, (
+            f"Row count mismatch: input had {input_row_count} rows, output had {output_row_count} rows"
+        )
+        return result
+
+    return wrapper
+
+
+def required_lag_column_names(method):
+    @wraps(method)
+    def wrapper(self, df: FrameT, column_names: Optional[ColumnNames] = None, *args, **kwargs):
+        self.column_names = column_names or self.column_names
+
+        if not self.column_names:
+            if '__row_index' not in df.columns:
+                df = df.with_row_index(name='__row_index')
+
+            if hasattr(self, "days_between_lags") and self.days_between_lags:
+                raise ValueError("column names must be passed if days_between_lags is set")
+
+            assert self.match_id_update_column is not None, (
+                "if column names is not passed. match_id_update_column must be passed"
+            )
+
+            if self.add_opponent:
+                logging.warning("add_opponent is set but column names must be passed for opponent feats to be created")
+        else:
+            self.match_id_update_column = self.column_names.update_match_id
+        return method(self, df, self.column_names, *args, **kwargs)
+
+    return wrapper
 
 class BaseTransformer(ABC):
 
@@ -56,9 +95,12 @@ class BaseLagGenerator:
         add_opponent: bool,
         iterations: list[int],
         prefix: str,
+        match_id_update_column: Optional[str],
+        column_names: Optional[ColumnNames] = None,
         are_estimator_features: bool = True,
     ):
-
+        self.match_id_update_column = match_id_update_column
+        self.column_names = column_names
         self.features = features
         self.iterations = iterations
         self._features_out = []
@@ -71,7 +113,6 @@ class BaseLagGenerator:
         self.prefix = prefix
         self._df = None
         self._entity_features = []
-        self.column_names: Optional[ColumnNames] = None
 
         for feature_name in self.features:
             for lag in iterations:
@@ -81,11 +122,11 @@ class BaseLagGenerator:
                     self._features_out.append(f"{prefix}_{feature_name}{lag}_opponent")
 
     @abstractmethod
-    def generate_historical(self, df: FrameT, column_names: ColumnNames) -> IntoFrameT:
+    def transform_historical(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
         pass
 
     @abstractmethod
-    def generate_future(self, df: FrameT) -> IntoFrameT:
+    def transform_future(self, df: FrameT) -> IntoFrameT:
         pass
 
     @property
@@ -98,8 +139,23 @@ class BaseLagGenerator:
     def features_out(self) -> list[str]:
         return self._features_out
 
-    def _concat_df(self, df: FrameT) -> FrameT:
-        df = self._string_convert(df=df)
+    def _concat_with_stored(self, df: FrameT) -> FrameT:
+
+        sort_cols = (
+            [
+                self.column_names.start_date,
+                self.column_names.match_id,
+                self.column_names.team_id,
+                self.column_names.player_id,
+            ]
+            if self.column_names.player_id
+            else [
+                self.column_names.start_date,
+                self.column_names.match_id,
+                self.column_names.team_id,
+            ]
+        )
+
         df = df.with_columns(
             [
                 nw.col(feature).cast(nw.Float64).alias(feature)
@@ -116,20 +172,6 @@ class BaseLagGenerator:
             if col in df.columns and stored_df.schema[col] != df.schema[col]:
                 df = df.with_columns(df[col].cast(stored_df.schema[col]))
 
-        sort_cols = (
-            [
-                self.column_names.start_date,
-                self.column_names.match_id,
-                self.column_names.team_id,
-                self.column_names.player_id,
-            ]
-            if self.column_names.player_id in df.columns
-            else [
-                self.column_names.start_date,
-                self.column_names.match_id,
-                self.column_names.team_id,
-            ]
-        )
         concat_df = (
             nw.concat(
                 [stored_df, df.select(cols)],
@@ -138,10 +180,6 @@ class BaseLagGenerator:
             .sort(sort_cols)
             .unique(subset=sort_cols, maintain_order=True)
         )
-        if concat_df[self.column_names.start_date].dtype in ("str", "object"):
-            concat_df[self.column_names.start_date] = pd.to_datetime(
-                concat_df[self.column_names.start_date]
-            )
 
         unique_cols = (
             [
@@ -149,7 +187,7 @@ class BaseLagGenerator:
                 self.column_names.team_id,
                 self.column_names.player_id,
             ]
-            if self.column_names.player_id in concat_df.columns
+            if self.column_names.player_id
             else [
                 self.column_names.match_id,
                 self.column_names.team_id,
@@ -159,6 +197,7 @@ class BaseLagGenerator:
             subset=unique_cols,
             maintain_order=True,
         )
+
 
     def _store_df(
         self, df: nw.DataFrame, additional_cols_to_use: Optional[list[str]] = None
@@ -171,7 +210,6 @@ class BaseLagGenerator:
             ]
         )
 
-        df = self._string_convert(df)
 
         cols = list(
             {
@@ -181,7 +219,6 @@ class BaseLagGenerator:
                 self.column_names.team_id,
                 self.column_names.player_id,
                 "is_future",
-                self.column_names.parent_team_id,
                 self.column_names.update_match_id,
                 self.column_names.start_date,
             }
@@ -217,7 +254,6 @@ class BaseLagGenerator:
         self._df = (
             self._df.sort(
                 sort_cols
-                #   descending=True
             )
             .unique(
                 subset=sort_cols,
@@ -226,40 +262,28 @@ class BaseLagGenerator:
             .to_native()
         )
 
-    def _string_convert(self, df: FrameT) -> FrameT:
-
-        if df.schema[self.column_names.start_date] == nw.Datetime("ns"):
-            df = df.with_columns(
-                df[self.column_names.start_date].cast(nw.Datetime("us"))
-            )
-        return df
-
     def _create_transformed_df(
         self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
     ) -> IntoFrameT:
 
-        cn = self.column_names
-        match_id_join = match_id_join_on or cn.update_match_id
         if self.add_opponent:
             concat_df = self._add_opponent_features(df=concat_df)
         on_cols = (
-            [match_id_join, cn.team_id, cn.player_id]
-            if cn.player_id in df.columns
+            [match_id_join_on, self.column_names.team_id, self.column_names.player_id]
+            if self.column_names.player_id
             else [
-                match_id_join,
-                cn.team_id,
+                match_id_join_on,
+                self.column_names.team_id,
             ]
         )
         ori_cols = [c for c in df.columns if c not in concat_df.columns] + on_cols
-
-        df = self._string_convert(df)
         unique_cols = (
             [
                 self.column_names.player_id,
                 self.column_names.team_id,
                 self.column_names.match_id,
             ]
-            if self.column_names.player_id in df.columns
+            if self.column_names.player_id
             else [self.column_names.team_id, self.column_names.match_id]
         )
 
@@ -270,7 +294,7 @@ class BaseLagGenerator:
                 self.column_names.team_id,
                 self.column_names.player_id,
             ]
-            if self.column_names.player_id in df.columns
+            if self.column_names.player_id
             else [
                 self.column_names.start_date,
                 self.column_names.match_id,
@@ -485,3 +509,5 @@ class BaseLagGenerator:
     @property
     def historical_df(self) -> FrameT:
         return self._df
+
+

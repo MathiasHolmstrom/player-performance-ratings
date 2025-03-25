@@ -163,10 +163,10 @@ class MinMaxTransformer(BaseTransformer):
         for feature in self.features:
             self._min_values[feature] = df.select(
                 nw.col(feature).quantile(1 - self.quantile, interpolation="linear")
-            ).to_numpy()[0]
+            ).row(0)[0]
             self._max_values[feature] = df.select(
                 nw.col(feature).quantile(self.quantile, interpolation="linear")
-            ).to_numpy()[0]
+            ).row(0)[0]
 
             if self._min_values[feature] == self._max_values[feature]:
                 raise ValueError(
@@ -175,15 +175,15 @@ class MinMaxTransformer(BaseTransformer):
                 )
 
             normalized_feature = (
-                (nw.col(feature) - self._min_values[feature])
-                / (self._max_values[feature] - self._min_values[feature])
+                (nw.col(feature) - nw.lit(self._min_values[feature]))
+                / (self._max_values[feature] - nw.lit(self._min_values[feature]))
             ).clip(0, 1)
 
             df = df.with_columns(normalized_feature.alias(self.prefix + feature))
 
             self._trained_mean_values[feature] = df.select(
                 nw.col(self.prefix + feature).mean()
-            ).to_numpy()[0]
+            ).row(0)[0]
 
             if self.multiply_align:
                 df = df.with_columns(
