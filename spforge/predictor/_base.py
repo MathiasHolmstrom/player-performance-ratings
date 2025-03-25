@@ -223,10 +223,7 @@ class BasePredictor(ABC):
 
     def _transform_pre_transformers(self, df: nw.DataFrame) -> IntoFrameT:
         for pre_transformer in self.pre_transformers:
-            try:
-                values = nw.from_native(pre_transformer.transform(df))
-            except:
-                h = 2
+            values = nw.from_native(pre_transformer.transform(df))
             df = df.with_columns(
                 nw.new_series(
                     name=col,
