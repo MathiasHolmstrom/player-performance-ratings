@@ -2,26 +2,26 @@ import copy
 from unittest import mock
 
 import pandas as pd
-from player_performance_ratings.predictor import SklearnPredictor
+from spforge.predictor import SklearnPredictor
 
-from player_performance_ratings import ColumnNames, PipelineFactory
-from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
-from player_performance_ratings.ratings import (
+from spforge import ColumnNames, PipelineFactory
+from spforge.ratings.rating_calculators import MatchRatingGenerator
+from spforge.ratings import (
     RatingKnownFeatures,
     UpdateRatingGenerator,
 )
-from player_performance_ratings.ratings.match_generator import convert_df_to_matches
-from player_performance_ratings.ratings.rating_calculators.performance_predictor import (
+from spforge.ratings.match_generator import convert_df_to_matches
+from spforge.ratings.rating_calculators.performance_predictor import (
     RatingDifferencePerformancePredictor,
 )
-from player_performance_ratings.ratings.rating_calculators.start_rating_generator import (
+from spforge.ratings.rating_calculators.start_rating_generator import (
     StartRatingGenerator,
 )
 
-from player_performance_ratings.tuner.rating_generator_tuner import (
+from spforge.tuner.rating_generator_tuner import (
     UpdateRatingGeneratorTuner,
 )
-from player_performance_ratings.tuner.utils import ParameterSearchRange
+from spforge.tuner.utils import ParameterSearchRange
 
 
 def test_opponent_adjusted_rating_generator_tuner_team_rating():
@@ -138,7 +138,7 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
     match_predictor_factory = PipelineFactory(
         rating_generators=rating_generators,
         predictor=SklearnPredictor(
-            estimator_features=[
+            features=[
                 f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}0",
                 f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}1",
             ],
@@ -239,7 +239,7 @@ def test_update_rating_generator_tuner_start_rating():
     match_predictor_factory = PipelineFactory(
         rating_generators=rating_generators,
         predictor=SklearnPredictor(
-            estimator_features=[
+            features=[
                 f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}0",
                 f"{RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED}1",
             ],

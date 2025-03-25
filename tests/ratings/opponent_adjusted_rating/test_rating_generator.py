@@ -4,25 +4,20 @@ import polars as pl
 from polars.testing import assert_frame_equal
 import pytest
 
-from player_performance_ratings.data_structures import (
-    Match,
-    MatchPlayer,
-    MatchPerformance,
-    MatchTeam,
-    PlayerRating,
+from spforge.data_structures import (
     ColumnNames,
 )
-from player_performance_ratings.ratings import UpdateRatingGenerator
-from player_performance_ratings.ratings.enums import (
+from spforge.ratings import UpdateRatingGenerator
+from spforge.ratings.enums import (
     RatingKnownFeatures,
     RatingUnknownFeatures,
 )
-from player_performance_ratings.ratings.performance_generator import (
+from spforge.ratings.performance_generator import (
     PerformancesGenerator,
     Performance,
     ColumnWeight,
 )
-from player_performance_ratings.ratings.rating_calculators import (
+from spforge.ratings.rating_calculators import (
     MatchRatingGenerator,
     StartRatingGenerator,
 )

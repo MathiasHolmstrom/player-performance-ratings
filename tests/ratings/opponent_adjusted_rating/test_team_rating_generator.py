@@ -3,7 +3,7 @@ from unittest import mock
 
 import pytest
 
-from player_performance_ratings.data_structures import (
+from spforge.data_structures import (
     MatchTeam,
     PreMatchPlayerRating,
     MatchPerformance,
@@ -13,12 +13,12 @@ from player_performance_ratings.data_structures import (
     TeamRatingChange,
     PlayerRatingChange,
 )
-from player_performance_ratings.ratings.rating_calculators.match_rating_generator import (
+from spforge.ratings.rating_calculators.match_rating_generator import (
     EXPECTED_MEAN_CONFIDENCE_SUM,
     MatchRatingGenerator,
 )
 
-from player_performance_ratings.ratings.rating_calculators.performance_predictor import (
+from spforge.ratings.rating_calculators.performance_predictor import (
     RatingDifferencePerformancePredictor,
     MATCH_CONTRIBUTION_TO_SUM_VALUE,
 )

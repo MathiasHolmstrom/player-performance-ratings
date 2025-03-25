@@ -4,31 +4,31 @@ import pandas as pd
 import polars as pl
 from polars.testing import assert_frame_equal
 import pytest
-from player_performance_ratings.cross_validator import MatchKFoldCrossValidator
+from spforge.cross_validator import MatchKFoldCrossValidator
 
-from player_performance_ratings.predictor import SklearnPredictor, SklearnPredictor
+from spforge.predictor import SklearnPredictor, SklearnPredictor
 from sklearn.linear_model import LinearRegression
 
-from player_performance_ratings.ratings.rating_calculators import MatchRatingGenerator
-from player_performance_ratings.ratings import (
+from spforge.ratings.rating_calculators import MatchRatingGenerator
+from spforge.ratings import (
     RatingKnownFeatures,
     UpdateRatingGenerator,
     RatingUnknownFeatures,
 )
-from player_performance_ratings.ratings.performance_generator import (
+from spforge.ratings.performance_generator import (
     Performance,
     ColumnWeight,
     PerformancesGenerator,
 )
 
-from player_performance_ratings.transformers import (
+from spforge.transformers import (
     LagTransformer,
     RatioTeamPredictorTransformer,
     PredictorTransformer,
 )
 
-from player_performance_ratings import ColumnNames, Pipeline
-from player_performance_ratings.transformers import (
+from spforge import ColumnNames, Pipeline
+from spforge.transformers import (
     RollingMeanTransformer,
 )
 
@@ -59,10 +59,10 @@ def test_pipeline_constructor():
             player_id="player_id",
             start_date="start_date",
         ),
-        lag_generators=lag_generators,
+        lag_transformers=lag_generators,
         post_lag_transformers=post_lag_transformers,
         predictor=SklearnPredictor(
-            estimator=LinearRegression(), estimator_features=["kills"], target="won"
+            estimator=LinearRegression(), features=["kills"], target="won"
         ),
         rating_generators=rating_generator,
     )
@@ -213,7 +213,7 @@ def test_match_predictor_multiple_rating_generators_same_performance(df):
                 prefix="rating_2",
             ),
         ],
-        lag_generators=[],
+        lag_transformers=[],
         predictor=predictor,
         column_names=column_names1,
     )
@@ -225,9 +225,9 @@ def test_match_predictor_multiple_rating_generators_same_performance(df):
         + pipeline.rating_generators[1].features_out
     )
 
-    assert sorted(expected_estimator_features) == sorted(pipeline.estimator_features)
+    assert sorted(expected_estimator_features) == sorted(pipeline.features)
     assert sorted(expected_estimator_features) == sorted(
-        pipeline.predictor.estimator_features
+        pipeline.predictor.features
     )
 
 
@@ -275,7 +275,7 @@ def test_match_predictor_0_rating_generators():
 
     pipeline = Pipeline(
         rating_generators=[],
-        lag_generators=[lag_transformer],
+        lag_transformers=[lag_transformer],
         predictor=predictor_mock,
         column_names=column_names,
     )
@@ -426,7 +426,7 @@ def test_train_predict_post_pre_and_lag_transformers():
             scale_features=True,
             one_hot_encode_cat_features=True,
             estimator=LinearRegression(),
-            estimator_features=rating_generator.features_out,
+            features=rating_generator.features_out,
             target="__target",
         ),
     )
@@ -440,7 +440,7 @@ def test_train_predict_post_pre_and_lag_transformers():
             scale_features=True,
             one_hot_encode_cat_features=True,
             estimator=LinearRegression(),
-            estimator_features=lag_generator.features_out,
+            features=lag_generator.features_out,
             target="__target",
         ),
     )
@@ -449,7 +449,7 @@ def test_train_predict_post_pre_and_lag_transformers():
         predictor=predictor,
         rating_generators=rating_generator,
         pre_lag_transformers=[pre_transformer],
-        lag_generators=[lag_generator],
+        lag_transformers=[lag_generator],
         post_lag_transformers=[post_transformer],
         column_names=column_names,
     )

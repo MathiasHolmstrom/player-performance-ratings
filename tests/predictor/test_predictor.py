@@ -7,7 +7,7 @@ import pytest
 
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
-from player_performance_ratings.predictor import (
+from spforge.predictor import (
     GameTeamPredictor,
     GranularityPredictor,
     SklearnPredictor,
@@ -29,7 +29,7 @@ def test_game_team_predictor_add_prediction_df(df):
 
     mock_predictor = Mock()
     mock_predictor.pred_column.return_value = "pred_col"
-    mock_predictor.estimator_features = ["feature1", "feature2"]
+    mock_predictor.features = ["feature1", "feature2"]
 
     return_pred_values = [1.0, 0.0, 0.7, 0.3]
 
@@ -114,7 +114,7 @@ def test_class_output_as_struct(predictor, df):
         }
     )
 
-    predictor.train(data, estimator_features=["feature1"])
+    predictor.train(data, features=["feature1"])
 
     df_with_predictions = predictor.predict(data)
     assert predictor.pred_column in df_with_predictions.columns
@@ -136,7 +136,7 @@ def test_game_team_predictor_train_input(df):
 
     mock_model = Mock()
     mock_model.target = "__target"
-    mock_model.estimator_features_contain = []
+    mock_model.features_contain_str = []
     predictor = GameTeamPredictor(
         game_id_colum="game_id",
         team_id_column="team_id",
@@ -154,7 +154,7 @@ def test_game_team_predictor_train_input(df):
         }
     )
 
-    predictor.train(data, estimator_features=["feature1"])
+    predictor.train(data, features=["feature1"])
     feature_team1 = (0.1 * 0.5 + 0.5 * 0.5) / (0.5 + 0.5)
     feature_team2 = (0.3 * 0.5 + 0.4 * 0.5) / (0.5 + 0.5)
     import narwhals as nw
@@ -197,7 +197,7 @@ def test_game_team_predictor(target_values, df):
         }
     )
 
-    predictor.train(data, estimator_features=["feature1"])
+    predictor.train(data, features=["feature1"])
     df = predictor.predict(data)
     assert predictor.pred_column in df.columns
 
@@ -220,7 +220,7 @@ def test_predictor_regressor(target_values, df):
         }
     )
 
-    predictor.train(data, estimator_features=["feature1"])
+    predictor.train(data, features=["feature1"])
     df = predictor.predict(data)
     assert predictor.pred_column in df.columns
 
@@ -245,7 +245,7 @@ def test_granularity_predictor(target_values, df):
         }
     )
 
-    predictor.train(data, estimator_features=["feature1"])
+    predictor.train(data, features=["feature1"])
     df = predictor.predict(data)
     assert predictor.pred_column in df.columns
 
@@ -255,7 +255,7 @@ def test_one_hot_encoder_train(df):
     predictor = SklearnPredictor(
         estimator=LinearRegression(),
         target="__target",
-        estimator_features=["feature1", "cat_feature"],
+        features=["feature1", "cat_feature"],
         one_hot_encode_cat_features=True,
         impute_missing_values=True,
     )
@@ -271,7 +271,7 @@ def test_one_hot_encoder_train(df):
 
     predictor.train(data)
     assert len(predictor.pre_transformers) == 2
-    assert predictor.estimator_features == [
+    assert predictor.features == [
         "feature1",
         "cat_feature_cat1",
         "cat_feature_cat2",
@@ -284,21 +284,21 @@ def test_one_hot_encoder_train(df):
         SklearnPredictor(
             estimator=LinearRegression(),
             target="__target",
-            estimator_features=["feature1"],
-            estimator_features_contain=["lag"],
+            features=["feature1"],
+            features_contain_str=["lag"],
         ),
         GranularityPredictor(
             predictor=SklearnPredictor(estimator=LinearRegression(), target="__target"),
-            estimator_features=["feature1"],
+            features=["feature1"],
             granularity_column_name="group",
-            estimator_features_contain=["lag"],
+            features_contain_str=["lag"],
         ),
         GameTeamPredictor(
             predictor=SklearnPredictor(
                 estimator=LinearRegression(),
                 target="__target",
-                estimator_features=["feature1"],
-                estimator_features_contain=["lag"],
+                features=["feature1"],
+                features_contain_str=["lag"],
             ),
             game_id_colum="game_id",
             team_id_column="team_id",
@@ -306,7 +306,7 @@ def test_one_hot_encoder_train(df):
     ],
 )
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
-def test_estimator_features_contain(predictor, df):
+def test_features_contain_str(predictor, df):
     data = df(
         {
             "game_id": [1, 1, 2, 2],
@@ -321,5 +321,5 @@ def test_estimator_features_contain(predictor, df):
     )
 
     predictor.train(data)
-    assert predictor.estimator_features == ["feature1", "lag_feature1", "lag_feature2"]
+    assert predictor.features == ["feature1", "lag_feature1", "lag_feature2"]
     predictor.predict(data)

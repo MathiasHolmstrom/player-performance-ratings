@@ -4,18 +4,18 @@ from unittest import mock
 import pandas as pd
 from skbase.utils import deep_equals
 
-from player_performance_ratings.predictor import SklearnPredictor, SklearnPredictor
-from player_performance_ratings.tuner.performances_generator_tuner import (
+from spforge.predictor import SklearnPredictor, SklearnPredictor
+from spforge.tuner.performances_generator_tuner import (
     PerformancesSearchRange,
 )
-from player_performance_ratings.tuner.utils import ParameterSearchRange
+from spforge.tuner.utils import ParameterSearchRange
 
-from player_performance_ratings import ColumnNames, Pipeline
-from player_performance_ratings.ratings import UpdateRatingGenerator
+from spforge import ColumnNames, Pipeline
+from spforge.ratings import UpdateRatingGenerator
 
-from player_performance_ratings.tuner import PipelineTuner, PerformancesGeneratorTuner
+from spforge.tuner import PipelineTuner, PerformancesGeneratorTuner
 
-from player_performance_ratings.tuner.rating_generator_tuner import (
+from spforge.tuner.rating_generator_tuner import (
     UpdateRatingGeneratorTuner,
 )
 

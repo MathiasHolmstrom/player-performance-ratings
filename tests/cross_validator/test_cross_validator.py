@@ -4,12 +4,12 @@ import pandas as pd
 import polars as pl
 import pytest
 
-from player_performance_ratings import ColumnNames
+from spforge import ColumnNames
 from sklearn.metrics import mean_absolute_error
 
-from player_performance_ratings.scorer.score import SklearnScorer
+from spforge.scorer.score import SklearnScorer
 
-from player_performance_ratings.cross_validator.cross_validator import (
+from spforge.cross_validator.cross_validator import (
     MatchKFoldCrossValidator,
 )
 

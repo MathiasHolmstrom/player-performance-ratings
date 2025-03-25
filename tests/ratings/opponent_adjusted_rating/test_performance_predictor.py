@@ -1,11 +1,11 @@
 import pytest
 
-from player_performance_ratings.data_structures import (
+from spforge.data_structures import (
     PreMatchPlayerRating,
     MatchPerformance,
     PreMatchTeamRating,
 )
-from player_performance_ratings.ratings.rating_calculators.performance_predictor import (
+from spforge.ratings.rating_calculators.performance_predictor import (
     RatingDifferencePerformancePredictor,
 )
 

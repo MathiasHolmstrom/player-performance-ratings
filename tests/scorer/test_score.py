@@ -5,12 +5,12 @@ import polars as pl
 import pytest
 from sklearn.metrics import log_loss, mean_absolute_error
 
-from player_performance_ratings.scorer.score import (
+from spforge.scorer.score import (
     SklearnScorer,
     MeanBiasScorer,
 )
 
-from player_performance_ratings.scorer import OrdinalLossScorer
+from spforge.scorer import OrdinalLossScorer
 
 
 def test_ordinal_loss_scorer_multiclass_rename_class_column_name():

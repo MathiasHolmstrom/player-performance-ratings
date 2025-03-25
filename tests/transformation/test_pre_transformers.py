@@ -4,13 +4,13 @@ from sklearn.linear_model import LinearRegression
 from polars.testing import assert_frame_equal
 import pytest
 
-from player_performance_ratings import ColumnNames
-from player_performance_ratings.predictor import SklearnPredictor, SklearnPredictor
-from player_performance_ratings.predictor_transformer import SkLearnTransformerWrapper
+from spforge import ColumnNames
+from spforge.predictor import SklearnPredictor, SklearnPredictor
+from spforge.predictor_transformer import SkLearnTransformerWrapper
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from player_performance_ratings.transformers import RatioTeamPredictorTransformer
-from player_performance_ratings.transformers.performances_transformers import (
+from spforge.transformers import RatioTeamPredictorTransformer
+from spforge.transformers.performances_transformers import (
     DiminishingValueTransformer,
     GroupByTransformer,
     SymmetricDistributionTransformer,

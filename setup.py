@@ -4,13 +4,13 @@ with open("requirements.txt") as f:
     required = f.read().splitlines()
 
 setup(
-    name="player-performance-ratings",
-    version="0.6.0",
+    name="spforge",
+    version="0.0.0",
     packages=find_packages(),
     install_requires=required,
     author="Mathias Holmstrøm",
     author_email="mathiasholmstom@gmail.com",
-    description="Match Predictions based on Player Ratings",
+    description="A flexible framework for generating features, ratings, and building machine learning or other models for training and inference on sports data.",
     package_data={
         "examples.nba": ["data/*.parquet"],
         "examples.lol": ["data/*.parquet"],

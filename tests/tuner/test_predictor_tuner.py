@@ -3,13 +3,13 @@ from unittest import mock
 import pandas as pd
 from deepdiff import DeepDiff
 
-from player_performance_ratings import PipelineFactory
-from player_performance_ratings.predictor import SklearnPredictor
+from spforge import PipelineFactory
+from spforge.predictor import SklearnPredictor
 from sklearn.linear_model import LogisticRegression
 
 
-from player_performance_ratings.tuner.predictor_tuner import PredictorTuner
-from player_performance_ratings.tuner.utils import ParameterSearchRange
+from spforge.tuner.predictor_tuner import SkLearnPredictorTuner
+from spforge.tuner.utils import ParameterSearchRange
 
 
 def test_predictor_tuner():
@@ -28,7 +28,7 @@ def test_predictor_tuner():
     predictor_factory = PipelineFactory(
         predictor=SklearnPredictor(
             estimator=LogisticRegression(),
-            estimator_features=["rating_difference"],
+            features=["rating_difference"],
             target="__target",
         ),
         column_names=None,
@@ -38,7 +38,7 @@ def test_predictor_tuner():
         ParameterSearchRange(name="C", type="categorical", choices=[1.0, 0.5])
     ]
 
-    predictor_tuner = PredictorTuner(search_ranges=search_ranges, n_trials=2)
+    predictor_tuner = SkLearnPredictorTuner(search_ranges=search_ranges, n_trials=2)
     cross_validator = mock.Mock()
     cross_validator.cross_validation_score.side_effect = [0.5, 0.3]
     best_predictor = predictor_tuner.tune(
@@ -47,7 +47,7 @@ def test_predictor_tuner():
 
     expected_best_predictor = SklearnPredictor(
         estimator=LogisticRegression(C=0.5),
-        estimator_features=["rating_difference"],
+        features=["rating_difference"],
         target="__target",
     )
 
@@ -55,6 +55,6 @@ def test_predictor_tuner():
     assert diff == {}
 
     assert (
-        expected_best_predictor._estimator_features == best_predictor.estimator_features
+            expected_best_predictor._features == best_predictor.features
     )
     assert expected_best_predictor.target == best_predictor.target

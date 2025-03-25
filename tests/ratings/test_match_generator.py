@@ -1,14 +1,14 @@
 import pandas as pd
 
-from player_performance_ratings import ColumnNames
-from player_performance_ratings.data_structures import (
+from spforge import ColumnNames
+from spforge.data_structures import (
     Match,
     MatchTeam,
     MatchPlayer,
     MatchPerformance,
 )
-from player_performance_ratings.ratings.league_identifier import LeagueIdentifier
-from player_performance_ratings.ratings.match_generator import convert_df_to_matches
+from spforge.ratings.league_identifier import LeagueIdentifier
+from spforge.ratings.match_generator import convert_df_to_matches
 
 
 def test_convert_df_to_matches():

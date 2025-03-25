@@ -2,8 +2,8 @@ import pandas as pd
 import polars as pl
 import pytest
 
-from player_performance_ratings import ColumnNames
-from player_performance_ratings.transformers import RollingMeanDaysTransformer
+from spforge import ColumnNames
+from spforge.transformers import RollingMeanDaysTransformer
 
 
 @pytest.fixture

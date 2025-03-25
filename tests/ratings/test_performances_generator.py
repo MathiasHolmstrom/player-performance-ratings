@@ -3,14 +3,14 @@ import polars as pl
 import pytest
 from deepdiff import DeepDiff
 
-from player_performance_ratings import ColumnNames
-from player_performance_ratings.ratings.performance_generator import (
+from spforge import ColumnNames
+from spforge.ratings.performance_generator import (
     ColumnWeight,
     PerformancesGenerator,
     auto_create_pre_performance_transformations,
     Performance,
 )
-from player_performance_ratings.transformers.performances_transformers import (
+from spforge.transformers.performances_transformers import (
     SymmetricDistributionTransformer,
     PartialStandardScaler,
     MinMaxTransformer,

@@ -4,8 +4,8 @@ import pandas as pd
 import pytest
 import polars as pl
 from polars.testing import assert_frame_equal
-from player_performance_ratings import ColumnNames
-from player_performance_ratings.transformers import (
+from spforge import ColumnNames
+from spforge.transformers import (
     LagTransformer,
 
 )

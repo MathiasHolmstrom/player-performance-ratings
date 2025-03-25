@@ -2,7 +2,7 @@ import polars as pl
 import pandas as pd
 import pytest
 
-from player_performance_ratings.predictor_transformer._simple_transformer import (
+from spforge.predictor_transformer._simple_transformer import (
     AggregatorTransformer,
     NormalizerToColumnTransformer,
 )

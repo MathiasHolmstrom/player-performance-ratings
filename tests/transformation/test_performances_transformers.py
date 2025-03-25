@@ -4,7 +4,7 @@ import polars as pl
 from polars.testing import assert_frame_equal
 import pandas as pd
 
-from player_performance_ratings.transformers.performances_transformers import (
+from spforge.transformers.performances_transformers import (
     SklearnEstimatorImputer,
     DiminishingValueTransformer,
     SymmetricDistributionTransformer,

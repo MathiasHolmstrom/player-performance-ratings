@@ -2,18 +2,18 @@ import pandas as pd
 import pytest
 import polars as pl
 
-from player_performance_ratings import ColumnNames
-from player_performance_ratings.pipeline_transformer import PipelineTransformer
-from player_performance_ratings.ratings import (
+from spforge import ColumnNames
+from spforge.pipeline_transformer import PipelineTransformer
+from spforge.ratings import (
     UpdateRatingGenerator,
     RatingKnownFeatures,
 )
-from player_performance_ratings.ratings.performance_generator import (
+from spforge.ratings.performance_generator import (
     ColumnWeight,
     Performance,
     PerformancesGenerator,
 )
-from player_performance_ratings.transformers import LagTransformer
+from spforge.transformers import LagTransformer
 
 
 @pytest.mark.parametrize("to_polars", [True, False])
@@ -57,7 +57,7 @@ def test_pipeline_transformer(to_polars):
 
     pipeline = PipelineTransformer(
         rating_generators=rating_generator,
-        lag_generators=[
+        lag_transformers=[
             LagTransformer(
                 features=["kills", "deaths"], lag_length=1, granularity=["player_id"]
             )
@@ -78,7 +78,7 @@ def test_pipeline_transformer(to_polars):
         historical_df_predictions = historical_df_predictions.to_pandas()
         future_predict = future_predict.to_pandas()
 
-    for lag_generator in pipeline.lag_generators:
+    for lag_generator in pipeline.lag_transformers:
         for feature_out in lag_generator.features_out:
             assert feature_out in historical_df_predictions.columns
             assert feature_out in future_predict.columns

@@ -5,24 +5,24 @@ import pandas as pd
 import pytest
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
-from player_performance_ratings import ColumnNames, PipelineFactory
-from player_performance_ratings.predictor import SklearnPredictor
-from player_performance_ratings.ratings import (
+from spforge import ColumnNames, PipelineFactory
+from spforge.predictor import SklearnPredictor
+from spforge.ratings import (
     RatingKnownFeatures,
     UpdateRatingGenerator,
 )
-from player_performance_ratings.ratings.performance_generator import (
+from spforge.ratings.performance_generator import (
     Performance,
     PerformancesGenerator,
     ColumnWeight,
 )
 
-from player_performance_ratings.tuner import PerformancesGeneratorTuner
-from player_performance_ratings.tuner.performances_generator_tuner import (
+from spforge.tuner import PerformancesGeneratorTuner
+from spforge.tuner.performances_generator_tuner import (
     PerformancesSearchRange,
 )
 
-from player_performance_ratings.tuner.utils import ParameterSearchRange
+from spforge.tuner.utils import ParameterSearchRange
 
 
 def test_transformer_tuner():
@@ -46,7 +46,7 @@ def test_transformer_tuner():
         rating_generators=rating_generator1,
         predictor=SklearnPredictor(
             estimator=LogisticRegression(),
-            estimator_features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+            features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         ),
     )
 
@@ -136,7 +136,7 @@ def test_transformer_tuner_2_performances(estimator):
         rating_generators=rating_generators,
         predictor=SklearnPredictor(
             estimator=estimator,
-            estimator_features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+            features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
             target="won",
         ),
         column_names=column_names1,
