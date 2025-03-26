@@ -139,6 +139,7 @@ class RollingMeanTransformer(BaseLagGenerator):
         transformed_df = self._generate_future_feats(
             transformed_df=transformed_df, ori_df=df
         )
+
         cn = self.column_names
 
         df = df.join(
