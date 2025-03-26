@@ -144,7 +144,9 @@ class NegativeBinomialPredictor(BasePredictor):
             self._best_multiplier = 0
 
     @nw.narwhalify
-    def predict(self, df: FrameT, cross_validation: bool = False, **kwargs) -> IntoFrameT:
+    def predict(
+        self, df: FrameT, cross_validation: bool = False, **kwargs
+    ) -> IntoFrameT:
         input_cols = df.columns
         if self.relative_error_predictor:
             df = nw.from_native(self.relative_error_predictor.predict(df))

@@ -7,7 +7,6 @@ from polars.testing import assert_frame_equal
 from spforge import ColumnNames
 from spforge.transformers import (
     LagTransformer,
-
 )
 
 
@@ -25,7 +24,6 @@ def column_names():
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
 def test_lag_team_transform_historical(df, column_names, use_column_names):
     "Should calculate average point of prior game"
-
 
     data = df(
         {
@@ -71,11 +69,7 @@ def test_lag_team_transform_historical(df, column_names, use_column_names):
             match_id_update_column="game",
         )
 
-
-
-        df_with_lags = lag_transformation.transform_historical(
-            data, column_names=None
-        )
+        df_with_lags = lag_transformation.transform_historical(data, column_names=None)
 
     if isinstance(data, pl.DataFrame):
         expected_df = original_df.with_columns(
@@ -98,6 +92,7 @@ def test_lag_team_transform_historical(df, column_names, use_column_names):
         pd.testing.assert_frame_equal(
             df_with_lags, expected_df[df_with_lags.columns], check_dtype=False
         )
+
 
 @pytest.mark.parametrize("use_column_names", [True, False])
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
@@ -130,7 +125,6 @@ def test_lag_fit_transform_update_match_id(df, column_names, use_column_names):
         original_df = data.copy()
     except:
         original_df = data.clone()
-
 
     if not use_column_names:
         lag_transformation = LagTransformer(
@@ -172,9 +166,12 @@ def test_lag_fit_transform_update_match_id(df, column_names, use_column_names):
             df_with_lags, expected_df[df_with_lags.columns], check_dtype=False
         )
 
+
 @pytest.mark.parametrize("use_column_names", [True, False])
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
-def test_lag_transform_historical_2_features_update_match_id(df, column_names, use_column_names):
+def test_lag_transform_historical_2_features_update_match_id(
+    df, column_names, use_column_names
+):
     data = df(
         {
             "player": ["a", "b", "a"],
@@ -205,7 +202,7 @@ def test_lag_transform_historical_2_features_update_match_id(df, column_names, u
             features=["points", "points_per_minute"],
             lag_length=1,
             granularity=["player"],
-            match_id_update_column=column_names.update_match_id
+            match_id_update_column=column_names.update_match_id,
         )
         column_names = None
 
@@ -336,7 +333,9 @@ def test_lag_transform_historical_and_transform_future(df, column_names):
         granularity=["player"],
     )
 
-    _ = lag_transformation.transform_historical(historical_df, column_names=column_names)
+    _ = lag_transformation.transform_historical(
+        historical_df, column_names=column_names
+    )
     future_transformed_df = lag_transformation.transform_future(future_df)
 
     if isinstance(future_df, pd.DataFrame):
@@ -402,7 +401,9 @@ def test_lag_transformation_transform_2_lags(df, column_names):
         granularity=["player"],
     )
 
-    _ = lag_transformation.transform_historical(historical_df, column_names=column_names)
+    _ = lag_transformation.transform_historical(
+        historical_df, column_names=column_names
+    )
     future_transformed_df = lag_transformation.transform_future(future_df)
 
     if isinstance(future_df, pd.DataFrame):
@@ -539,5 +540,3 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
         pl.testing.assert_frame_equal(
             future_df, expected_future_df.select(future_df.columns), check_dtype=False
         )
-
-

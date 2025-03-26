@@ -121,9 +121,7 @@ def test_match_predictor_auto_pre_transformers(df):
     predictor_mock = mock.Mock()
     predictor_mock.target = "__target"
     predictor_mock.columns_added = ["prediction"]
-    predictor_mock.features = [
-        RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED
-    ]
+    predictor_mock.features = [RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
 
     predictor_mock.add_prediction.return_value = expected_df
     rating_generators = UpdateRatingGenerator(
@@ -194,7 +192,6 @@ def test_match_predictor_multiple_rating_generators_same_performance(df):
             column_names1.player_id,
         )
 
-
     predictor = SklearnPredictor(estimator=LinearRegression(), target="__target")
 
     pipeline = Pipeline(
@@ -225,9 +222,7 @@ def test_match_predictor_multiple_rating_generators_same_performance(df):
     )
 
     assert sorted(expected_estimator_features) == sorted(pipeline.features)
-    assert sorted(expected_estimator_features) == sorted(
-        pipeline.predictor.features
-    )
+    assert sorted(expected_estimator_features) == sorted(pipeline.predictor.features)
 
 
 def test_match_predictor_0_rating_generators():
@@ -254,9 +249,7 @@ def test_match_predictor_0_rating_generators():
     predictor_mock.target = "__target"
     predictor_mock.columns_added = ["prediction"]
     predictor_mock.add_prediction.return_value = expected_df
-    predictor_mock.features = [
-        RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED
-    ]
+    predictor_mock.features = [RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
 
     column_names = ColumnNames(
         match_id="game_id",

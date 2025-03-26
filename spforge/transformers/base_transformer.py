@@ -10,13 +10,17 @@ import narwhals as nw
 
 from spforge import ColumnNames
 
+
 def future_validator(method):
     @wraps(method)
     def wrapper(self, df: FrameT, *args, **kwargs):
-        assert self.column_names is not None, "column names must be passed when calling transform_future"
+        assert (
+            self.column_names is not None
+        ), "column names must be passed when calling transform_future"
         return method(self, df, *args, **kwargs)
 
     return wrapper
+
 
 def row_count_validator(method):
     @wraps(method)
@@ -24,9 +28,9 @@ def row_count_validator(method):
         input_row_count = len(df)
         result = method(self, df, *args, **kwargs)
         output_row_count = len(result)
-        assert input_row_count == output_row_count, (
-            f"Row count mismatch: input had {input_row_count} rows, output had {output_row_count} rows"
-        )
+        assert (
+            input_row_count == output_row_count
+        ), f"Row count mismatch: input had {input_row_count} rows, output had {output_row_count} rows"
         return result
 
     return wrapper
@@ -34,27 +38,34 @@ def row_count_validator(method):
 
 def required_lag_column_names(method):
     @wraps(method)
-    def wrapper(self, df: FrameT, column_names: Optional[ColumnNames] = None, *args, **kwargs):
+    def wrapper(
+        self, df: FrameT, column_names: Optional[ColumnNames] = None, *args, **kwargs
+    ):
         self.column_names = column_names or self.column_names
 
         if not self.column_names:
-            if '__row_index' not in df.columns:
-                df = df.with_row_index(name='__row_index')
+            if "__row_index" not in df.columns:
+                df = df.with_row_index(name="__row_index")
 
             if hasattr(self, "days_between_lags") and self.days_between_lags:
-                raise ValueError("column names must be passed if days_between_lags is set")
+                raise ValueError(
+                    "column names must be passed if days_between_lags is set"
+                )
 
-            assert self.match_id_update_column is not None, (
-                "if column names is not passed. match_id_update_column must be passed"
-            )
+            assert (
+                self.match_id_update_column is not None
+            ), "if column names is not passed. match_id_update_column must be passed"
 
             if self.add_opponent:
-                logging.warning("add_opponent is set but column names must be passed for opponent feats to be created")
+                logging.warning(
+                    "add_opponent is set but column names must be passed for opponent feats to be created"
+                )
         else:
             self.match_id_update_column = self.column_names.update_match_id
         return method(self, df, self.column_names, *args, **kwargs)
 
     return wrapper
+
 
 class BaseTransformer(ABC):
 
@@ -132,7 +143,9 @@ class BaseLagGenerator:
                     self._features_out.append(f"{prefix}_{feature_name}{lag}_opponent")
 
     @abstractmethod
-    def transform_historical(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
+    def transform_historical(
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
+    ) -> IntoFrameT:
         pass
 
     @abstractmethod
@@ -169,13 +182,10 @@ class BaseLagGenerator:
             if col in df.columns and stored_df.schema[col] != df.schema[col]:
                 df = df.with_columns(df[col].cast(stored_df.schema[col]))
 
-        concat_df = (
-            nw.concat(
-                [stored_df, df.select(cols)],
-                how="diagonal",
-            )
-            .sort(sort_cols)
-        )
+        concat_df = nw.concat(
+            [stored_df, df.select(cols)],
+            how="diagonal",
+        ).sort(sort_cols)
         if self.unique_constraint:
             unique_cols = self.unique_constraint
         else:
@@ -196,7 +206,6 @@ class BaseLagGenerator:
             maintain_order=True,
         )
 
-
     def _store_df(
         self, df: nw.DataFrame, additional_cols_to_use: Optional[list[str]] = None
     ):
@@ -207,7 +216,6 @@ class BaseLagGenerator:
                 if feature in df.columns
             ]
         )
-
 
         cols = list(
             {
@@ -249,12 +257,12 @@ class BaseLagGenerator:
             ]
         )
 
+        unique_constraint = self.unique_constraint or sort_cols
+
         self._df = (
-            self._df.sort(
-                sort_cols
-            )
+            self._df.sort(sort_cols)
             .unique(
-                subset=sort_cols,
+                subset=unique_constraint,
                 maintain_order=True,
             )
             .to_native()
@@ -461,10 +469,10 @@ class BaseLagGenerator:
                 .alias(f)
             )
         join_cols = self.unique_constraint or [
-                self.column_names.match_id,
-                self.column_names.team_id,
-                self.column_names.player_id,
-            ]
+            self.column_names.match_id,
+            self.column_names.team_id,
+            self.column_names.player_id,
+        ]
         transformed_df = transformed_df.join(
             new_df.select(
                 [
@@ -503,5 +511,3 @@ class BaseLagGenerator:
     @property
     def historical_df(self) -> FrameT:
         return self._df
-
-

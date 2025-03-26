@@ -5,6 +5,7 @@ from polars.testing import assert_frame_equal
 from spforge import ColumnNames
 from spforge.transformers import RollingMeanTransformer
 
+
 @pytest.fixture
 def column_names():
     return ColumnNames(
@@ -12,13 +13,16 @@ def column_names():
         team_id="team",
         player_id="player",
         start_date="start_date",
-        participation_weight='participation_weight',
+        participation_weight="participation_weight",
     )
+
 
 @pytest.mark.parametrize("add_opponent", [True, False])
 @pytest.mark.parametrize("use_column_names", [True, False])
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
-def test_rolling_mean_transform_historical_game_team(df, column_names, use_column_names, add_opponent):
+def test_rolling_mean_transform_historical_game_team(
+    df, column_names, use_column_names, add_opponent
+):
     column_names.player_id = None
     data = df(
         {
@@ -62,7 +66,6 @@ def test_rolling_mean_transform_historical_game_team(df, column_names, use_colum
             add_opponent=add_opponent,
         )
 
-
     df_with_rolling_mean = rolling_mean_transformation.transform_historical(
         data, column_names=column_names
     )
@@ -88,7 +91,9 @@ def test_rolling_mean_transform_historical_game_team(df, column_names, use_colum
             }
         )
         if not add_opponent:
-            expected_df = expected_df.drop(columns=[f"{rolling_mean_transformation.prefix}_points3_opponent"])
+            expected_df = expected_df.drop(
+                columns=[f"{rolling_mean_transformation.prefix}_points3_opponent"]
+            )
 
         pd.testing.assert_frame_equal(
             df_with_rolling_mean, expected_df, check_like=True, check_dtype=False
@@ -109,13 +114,16 @@ def test_rolling_mean_transform_historical_game_team(df, column_names, use_colum
             ]
         )
         if not add_opponent:
-            expected_df = expected_df.drop(f"{rolling_mean_transformation.prefix}_points3_opponent")
+            expected_df = expected_df.drop(
+                f"{rolling_mean_transformation.prefix}_points3_opponent"
+            )
 
         assert_frame_equal(
             df_with_rolling_mean,
             expected_df.select(df_with_rolling_mean.columns),
             check_dtype=False,
         )
+
 
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_rolling_mean_transform_historical_player(df, column_names):
@@ -178,6 +186,7 @@ def test_rolling_mean_transform_historical_player(df, column_names):
             check_dtype=False,
         )
 
+
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_rolling_mean_historical_participation_weight(df, column_names):
     historical_df = df(
@@ -209,8 +218,10 @@ def test_rolling_mean_historical_participation_weight(df, column_names):
 
     if isinstance(historical_df, pl.DataFrame):
         expected_df = historical_df.with_columns(
-            pl.Series(rolling_mean_transformation.features_out[0], [None, None, 1.0, (1*1+3*0.5)/1.5])
-
+            pl.Series(
+                rolling_mean_transformation.features_out[0],
+                [None, None, 1.0, (1 * 1 + 3 * 0.5) / 1.5],
+            )
         )
         pl.testing.assert_frame_equal(
             transformed_df,
@@ -219,11 +230,15 @@ def test_rolling_mean_historical_participation_weight(df, column_names):
         )
     else:
         expected_df = historical_df.copy()
-        expected_df[rolling_mean_transformation.features_out[0]] = [None, None, 1.0, (1*1+3*0.5)/1.5]
+        expected_df[rolling_mean_transformation.features_out[0]] = [
+            None,
+            None,
+            1.0,
+            (1 * 1 + 3 * 0.5) / 1.5,
+        ]
         pd.testing.assert_frame_equal(
             transformed_df, expected_df, check_like=True, check_dtype=False
         )
-
 
 
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
@@ -301,7 +316,6 @@ def test_rolling_mean_transform_historical_and_transform_future(df, column_names
         )
 
 
-
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_rolling_mean_historical_transform_team_stat(df, column_names):
     historical_df = df(
@@ -366,8 +380,11 @@ def test_rolling_mean_historical_transform_team_stat(df, column_names):
             check_dtype=False,
         )
 
+
 @pytest.mark.parametrize("use_column_names", [True, False])
-def test_rolling_mean_transform_parent_match_id(column_names: ColumnNames, use_column_names):
+def test_rolling_mean_transform_parent_match_id(
+    column_names: ColumnNames, use_column_names
+):
     column_names = column_names
     column_names.update_match_id = "series_id"
     historical_df = pd.DataFrame(

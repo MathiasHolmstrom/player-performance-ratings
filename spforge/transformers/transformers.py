@@ -318,9 +318,11 @@ class RatioTeamPredictorTransformer(BaseTransformer):
                 ]
             )
         for lag_transformer in self.lag_generators:
-            df = lag_transformer.transform_historical(df, column_names=self.column_names)
+            df = lag_transformer.transform_historical(
+                df, column_names=self.column_names
+            )
 
-        return df.select(list(set(input_features +self.features_out)))
+        return df.select(list(set(input_features + self.features_out)))
 
     @property
     def features_out(self) -> list[str]:

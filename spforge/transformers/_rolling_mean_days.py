@@ -6,25 +6,29 @@ import narwhals as nw
 from narwhals.typing import FrameT, IntoFrameT
 
 from spforge import ColumnNames
-from spforge.transformers.base_transformer import BaseLagGenerator, required_lag_column_names, \
-    row_count_validator, future_validator
+from spforge.transformers.base_transformer import (
+    BaseLagGenerator,
+    required_lag_column_names,
+    row_count_validator,
+    future_validator,
+)
 from spforge.utils import validate_sorting
 
 
 class RollingMeanDaysTransformer(BaseLagGenerator):
 
     def __init__(
-            self,
-            features: list[str],
-            days: int,
-            granularity: Union[list[str], str],
-            scale_by_participation_weight: bool = False,
-            add_count: bool = False,
-            add_opponent: bool = False,
-            prefix: str = "rolling_mean_days",
-            column_names: Optional[ColumnNames] = None,
-            date_column: Optional[str] = None,
-            match_id_update_column: Optional[str] = None,
+        self,
+        features: list[str],
+        days: int,
+        granularity: Union[list[str], str],
+        scale_by_participation_weight: bool = False,
+        add_count: bool = False,
+        add_opponent: bool = False,
+        prefix: str = "rolling_mean_days",
+        column_names: Optional[ColumnNames] = None,
+        date_column: Optional[str] = None,
+        match_id_update_column: Optional[str] = None,
     ):
         self.days = days
         self.scale_by_participation_weight = scale_by_participation_weight
@@ -52,23 +56,32 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
 
     @nw.narwhalify
     @row_count_validator
-    def transform_historical(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
+    def transform_historical(
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
+    ) -> IntoFrameT:
 
         ori_cols = df.columns
         self.column_names = column_names or self.column_names
         if not self.column_names and not self.date_column:
             raise ValueError("column_names or date_column must be provided")
-        self.date_column = self.column_names.start_date or self.date_column
 
-        if self.scale_by_participation_weight and not self.column_names or self.scale_by_participation_weight and not self.column_names.participation_weight:
+        if (
+            self.scale_by_participation_weight
+            and not self.column_names
+            or self.scale_by_participation_weight
+            and not self.column_names.participation_weight
+        ):
             raise ValueError(
                 "scale_by_participation_weight requires column_names to be provided"
             )
         if self.column_names:
-            self.match_id_update_column = self.column_names.update_match_id or self.match_id_update_column
+            self.date_column = self.column_names.start_date or self.date_column
+            self.match_id_update_column = (
+                self.column_names.update_match_id or self.match_id_update_column
+            )
         else:
-            if '__row_index' not in df.columns:
-                df = df.with_row_index(name='__row_index')
+            if "__row_index" not in df.columns:
+                df = df.with_row_index(name="__row_index")
 
         if isinstance(df.to_native(), pd.DataFrame):
             ori_type = "pd"
@@ -97,22 +110,42 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                     .alias(f"{self._count_column_name}_opponent")
                 )
 
-            join_cols = [self.column_names.match_id, self.column_names.player_id,
-                         self.column_names.team_id] if self.column_names.player_id else [self.column_names.match_id,
-                                                                                         self.column_names.team_id]
-            sort_cols = [self.column_names.start_date, self.column_names.match_id, self.column_names.team_id,
-                         self.column_names.player_id] if self.column_names.player_id else [self.column_names.start_date,
-                                                                                           self.column_names.match_id,
-                                                                                           self.column_names.team_id]
-            df = df.join(transformed_df.select(
-                [*join_cols,
-                 *self.features_out]),
-                on=join_cols, how='left').sort(sort_cols)
+            join_cols = (
+                [
+                    self.column_names.match_id,
+                    self.column_names.player_id,
+                    self.column_names.team_id,
+                ]
+                if self.column_names.player_id
+                else [self.column_names.match_id, self.column_names.team_id]
+            )
+            sort_cols = (
+                [
+                    self.column_names.start_date,
+                    self.column_names.match_id,
+                    self.column_names.team_id,
+                    self.column_names.player_id,
+                ]
+                if self.column_names.player_id
+                else [
+                    self.column_names.start_date,
+                    self.column_names.match_id,
+                    self.column_names.team_id,
+                ]
+            )
+            df = df.join(
+                transformed_df.select([*join_cols, *self.features_out]),
+                on=join_cols,
+                how="left",
+            ).sort(sort_cols)
 
         else:
             transformed_df = self._concat_with_stored_and_calculate_feats(df)
-            df = df.join(transformed_df.select(['__row_index', *self.features_out]), on='__row_index', how='left').sort(
-                '__row_index')
+            df = df.join(
+                transformed_df.select(["__row_index", *self.features_out]),
+                on="__row_index",
+                how="left",
+            ).sort("__row_index")
 
         df = df.select(ori_cols + self.features_out)
 
@@ -166,37 +199,43 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         days_str = str(self.days + 1) + "d"
         cols = self.features.copy()
 
-        concat_df = concat_df.with_columns(
-            pl.lit(1).alias('__count1')
-        )
-        cols.append('__count1')
+        concat_df = concat_df.with_columns(pl.lit(1).alias("__count1"))
+        cols.append("__count1")
 
         grp_cols = [self.date_column, *self.granularity]
-        grp = concat_df.group_by(
-            grp_cols
-        ).agg([pl.col(self.features).sum(), pl.col('__count1').sum()]).sort(grp_cols)
-        grp = (grp.with_columns(
-            pl.col('__count1').rolling_sum_by(self.date_column, window_size=days_str).over(self.granularity).alias(
-                self._count_column_name)
-        ).with_columns(
-            (pl.col(self._count_column_name) - pl.col('__count1')).alias(self._count_column_name)
+        grp = (
+            concat_df.group_by(grp_cols)
+            .agg([pl.col(self.features).sum(), pl.col("__count1").sum()])
+            .sort(grp_cols)
         )
+        grp = grp.with_columns(
+            pl.col("__count1")
+            .rolling_sum_by(self.date_column, window_size=days_str)
+            .over(self.granularity)
+            .alias(self._count_column_name)
+        ).with_columns(
+            (pl.col(self._count_column_name) - pl.col("__count1")).alias(
+                self._count_column_name
+            )
         )
 
         grp = grp.with_columns(
-            pl.col(col).sum().over([self.date_column, *self.granularity]).alias(f'days_sum_{col}') for col in
-            self.features
+            pl.col(col)
+            .sum()
+            .over([self.date_column, *self.granularity])
+            .alias(f"days_sum_{col}")
+            for col in self.features
         )
 
         rolling_means = [
             (
-                    (
-                            pl.col(col)
-                            .rolling_sum_by(self.date_column, window_size=days_str)
-                            .over(self.granularity)
-                            - pl.col(f'days_sum_{col}')
-                    )
-                    / pl.col(self._count_column_name)
+                (
+                    pl.col(col)
+                    .rolling_sum_by(self.date_column, window_size=days_str)
+                    .over(self.granularity)
+                    - pl.col(f"days_sum_{col}")
+                )
+                / pl.col(self._count_column_name)
             ).alias(f"{self.prefix}_{col}{str(self.days)}")
             for col in self.features
         ]

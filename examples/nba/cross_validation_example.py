@@ -14,7 +14,8 @@ from spforge.predictor.predictor import DistributionPredictor
 from spforge.scorer import SklearnScorer, OrdinalLossScorer
 from spforge.scorer import Filter, Operator
 from spforge.transformers import (
-    RollingMeanTransformer, LagTransformer,
+    RollingMeanTransformer,
+    LagTransformer,
 )
 
 df = get_sub_sample_nba_data(as_polars=True, as_pandas=False)
@@ -51,8 +52,10 @@ predictor = DistributionPredictor(
 
 pipeline = Pipeline(
     lag_transformers=[
-        RollingMeanTransformer(features=["points"], window=15, granularity=["player_id"]),
-        LagTransformer(features=['points'],lag_length=3, granularity=['player_id'])
+        RollingMeanTransformer(
+            features=["points"], window=15, granularity=["player_id"]
+        ),
+        LagTransformer(features=["points"], lag_length=3, granularity=["player_id"]),
     ],
     predictor=predictor,
     column_names=column_names,

@@ -111,7 +111,9 @@ class GameTeamPredictor(BasePredictor):
         self.predictor.train(grouped, features=self._features)
 
     @nw.narwhalify
-    def predict(self, df: FrameT, cross_validation: bool = False, **kwargs) -> IntoFrameT:
+    def predict(
+        self, df: FrameT, cross_validation: bool = False, **kwargs
+    ) -> IntoFrameT:
         """
         Adds prediction to df
 
@@ -143,14 +145,10 @@ class GameTeamPredictor(BasePredictor):
     def _create_grouped(self, df: FrameT) -> FrameT:
 
         numeric_features = [
-            feature
-            for feature in self._features
-            if df[feature].dtype.is_numeric()
+            feature for feature in self._features if df[feature].dtype.is_numeric()
         ]
         cat_feats = [
-            feature
-            for feature in self._features
-            if feature not in numeric_features
+            feature for feature in self._features if feature not in numeric_features
         ]
 
         if self._target in df.columns:
@@ -213,7 +211,9 @@ class DistributionPredictor(BasePredictor):
         self.distribution_predictor.train(df, features)
 
     @nw.narwhalify
-    def predict(self, df: FrameT, cross_validation: bool = False, **kwargs) -> IntoFrameT:
+    def predict(
+        self, df: FrameT, cross_validation: bool = False, **kwargs
+    ) -> IntoFrameT:
         if self.point_predictor.pred_column not in df.columns:
             df = nw.from_native(self.point_predictor.predict(df))
         df = self.distribution_predictor.predict(df)
@@ -263,9 +263,7 @@ class SklearnPredictor(BasePredictor):
 
     @nw.narwhalify
     def train(self, df: FrameT, features: Optional[list[str]] = None) -> None:
-        self._features = (
-                features or self._ori_estimator_features.copy()
-        )
+        self._features = features or self._ori_estimator_features.copy()
         if not self._features:
             raise ValueError(
                 "features not set. Either pass to train or pass when instantiating predictor object"
@@ -309,7 +307,9 @@ class SklearnPredictor(BasePredictor):
         )
 
     @nw.narwhalify
-    def predict(self, df: FrameT, cross_validation: bool = False, **kwargs) -> IntoFrameT:
+    def predict(
+        self, df: FrameT, cross_validation: bool = False, **kwargs
+    ) -> IntoFrameT:
         if self.pred_column in df.columns:
             df = df.drop(self.pred_column)
         df = self._transform_pre_transformers(df=df)
@@ -325,9 +325,7 @@ class SklearnPredictor(BasePredictor):
                 df.select(self._features).to_pandas()
             )
         else:
-            predictions = self.estimator.predict(
-                df.select(self._features).to_pandas()
-            )
+            predictions = self.estimator.predict(df.select(self._features).to_pandas())
 
         df = df.with_columns(
             nw.new_series(
@@ -508,7 +506,9 @@ class GranularityPredictor(BasePredictor):
             self.classes_[granularity].sort()
 
     @nw.narwhalify
-    def predict(self, df: FrameT, cross_validation: bool = False, **kwargs) -> IntoFrameT:
+    def predict(
+        self, df: FrameT, cross_validation: bool = False, **kwargs
+    ) -> IntoFrameT:
 
         if isinstance(df.to_native(), pd.DataFrame):
             df = nw.from_native(pl.DataFrame(df))

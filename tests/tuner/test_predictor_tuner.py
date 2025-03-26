@@ -54,7 +54,5 @@ def test_predictor_tuner():
     diff = DeepDiff(best_predictor.estimator, expected_best_predictor.estimator)
     assert diff == {}
 
-    assert (
-            expected_best_predictor._features == best_predictor.features
-    )
+    assert expected_best_predictor._features == best_predictor.features
     assert expected_best_predictor.target == best_predictor.target

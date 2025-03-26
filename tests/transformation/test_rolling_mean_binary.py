@@ -6,6 +6,7 @@ import pytest
 from spforge import ColumnNames
 from spforge.transformers import BinaryOutcomeRollingMeanTransformer
 
+
 @pytest.fixture
 def column_names():
     return ColumnNames(
@@ -15,10 +16,13 @@ def column_names():
         start_date="start_date",
     )
 
+
 @pytest.mark.parametrize("use_column_names", [True, False])
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 @pytest.mark.parametrize("min_periods", [10, 1])
-def test_binary_granularity_rolling_mean_transformer(df, column_names, min_periods, use_column_names):
+def test_binary_granularity_rolling_mean_transformer(
+    df, column_names, min_periods, use_column_names
+):
     historical_df = df(
         {
             "player": ["a", "b", "c", "d", "a", "b", "c", "d", "c", "d"],
@@ -46,7 +50,6 @@ def test_binary_granularity_rolling_mean_transformer(df, column_names, min_perio
         expected_df = historical_df.copy()
     except:
         expected_df = historical_df.clone()
-
 
     if use_column_names:
         transformer = BinaryOutcomeRollingMeanTransformer(
@@ -190,9 +193,7 @@ def test_binary_granularity_rolling_mean_transformer(df, column_names, min_perio
 
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
 @pytest.mark.parametrize("min_periods", [10, 1])
-def test_binary_granularity_rolling_mean_generate_future(
-    df, column_names, min_periods
-):
+def test_binary_granularity_rolling_mean_generate_future(df, column_names, min_periods):
     historical_df = df(
         {
             "player": ["a", "b", "c", "d", "a", "b", "c", "d", "a", "b", "c", "d"],

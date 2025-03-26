@@ -13,7 +13,7 @@ def column_names():
         team_id="team",
         player_id="player",
         start_date="start_date",
-        participation_weight='participation_weight',
+        participation_weight="participation_weight",
     )
 
 
@@ -40,16 +40,22 @@ def test_rolling_mean_days_transform_historical(column_names, use_column_names):
 
     if use_column_names:
         rolling_mean_transformation = RollingMeanDaysTransformer(
-            features=["points", "points2"], days=2, granularity=["player"], add_count=True,
+            features=["points", "points2"],
+            days=2,
+            granularity=["player"],
+            add_count=True,
         )
         transformed_df = rolling_mean_transformation.transform_historical(
             df, column_names=column_names
         )
     else:
         rolling_mean_transformation = RollingMeanDaysTransformer(
-            features=["points", "points2"], days=2, granularity=["player"], add_count=True,
+            features=["points", "points2"],
+            days=2,
+            granularity=["player"],
+            add_count=True,
             date_column=column_names.start_date,
-            match_id_update_column=column_names.update_match_id
+            match_id_update_column=column_names.update_match_id,
         )
         transformed_df = rolling_mean_transformation.transform_historical(
             df, column_names=None
@@ -93,16 +99,16 @@ def test_rolling_mean_days_series_id(column_names: ColumnNames, use_column_names
         transformer = RollingMeanDaysTransformer(
             features=["points"],
             days=2,
-            granularity=['player'],
-            column_names=column_names
+            granularity=["player"],
+            column_names=column_names,
         )
 
     else:
         transformer = RollingMeanDaysTransformer(
             features=["points"],
             days=2,
-            granularity=['player'],
-            match_id_update_column=column_names.update_match_id
+            granularity=["player"],
+            match_id_update_column=column_names.update_match_id,
         )
 
     transformed_df = transformer.transform_historical(historical_df)
@@ -290,7 +296,7 @@ def test_rolling_mean_days_transformer_future_transform(column_names):
 
 
 def test_rolling_mean_days_tranformer_transform_first_future_beyond_window(
-        column_names,
+    column_names,
 ):
     historical_df = pd.DataFrame(
         {
