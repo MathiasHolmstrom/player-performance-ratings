@@ -7,7 +7,7 @@ from narwhals.typing import FrameT, IntoFrameT
 
 from spforge import ColumnNames
 from spforge.transformers.base_transformer import BaseLagGenerator, required_lag_column_names, \
-    row_count_validator
+    row_count_validator, future_validator
 from spforge.utils import validate_sorting
 
 
@@ -70,7 +70,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
     def transform_historical(self, df: FrameT, column_names: Optional[ColumnNames] = None) -> IntoFrameT:
         input_cols = df.columns
         self.column_names = column_names or self.column_names
-        self.match_id_update_column = self.match_id_update_column or self.column_names.update_match_id
+        self.match_id_update_column = self.column_names.update_match_id or self.match_id_update_column
         native = nw.to_native(df)
         if isinstance(native, pd.DataFrame):
             df = nw.from_native(pl.DataFrame(native))
@@ -106,6 +106,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         return transformed_df
 
     @nw.narwhalify
+    @future_validator
     @row_count_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
         input_cols = df.columns

@@ -7,7 +7,7 @@ from narwhals.typing import FrameT, IntoFrameT
 
 from spforge import ColumnNames
 from spforge.transformers.base_transformer import BaseLagGenerator, required_lag_column_names, \
-    row_count_validator
+    row_count_validator, future_validator
 from spforge.utils import validate_sorting
 
 
@@ -58,14 +58,14 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         self.column_names = column_names or self.column_names
         if not self.column_names and not self.date_column:
             raise ValueError("column_names or date_column must be provided")
-        self.date_column = self.date_column or self.column_names.start_date
+        self.date_column = self.column_names.start_date or self.date_column
 
         if self.scale_by_participation_weight and not self.column_names or self.scale_by_participation_weight and not self.column_names.participation_weight:
             raise ValueError(
                 "scale_by_participation_weight requires column_names to be provided"
             )
         if self.column_names:
-            self.match_id_update_column = self.match_id_update_column or self.column_names.update_match_id
+            self.match_id_update_column = self.column_names.update_match_id or self.match_id_update_column
         else:
             if '__row_index' not in df.columns:
                 df = df.with_row_index(name='__row_index')
@@ -76,9 +76,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         else:
             df = df.to_native()
             ori_type = "pl"
-
         df = df.with_columns(pl.lit(0).alias("is_future"))
-        self.granularity = self.granularity or [self.column_names.player_id]
         if self.column_names:
             validate_sorting(df=df, column_names=self.column_names)
             self._store_df(nw.from_native(df))
@@ -125,6 +123,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         return df
 
     @nw.narwhalify
+    @future_validator
     @row_count_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
         ori_cols = df.columns

@@ -10,6 +10,14 @@ import narwhals as nw
 
 from spforge import ColumnNames
 
+def future_validator(method):
+    @wraps(method)
+    def wrapper(self, df: FrameT, *args, **kwargs):
+        assert self.column_names is not None, "column names must be passed when calling transform_future"
+        return method(self, df, *args, **kwargs)
+
+    return wrapper
+
 def row_count_validator(method):
     @wraps(method)
     def wrapper(self, df: FrameT, *args, **kwargs):
@@ -98,6 +106,7 @@ class BaseLagGenerator:
         match_id_update_column: Optional[str],
         column_names: Optional[ColumnNames] = None,
         are_estimator_features: bool = True,
+        unique_constraint: Optional[list[str]] = None,
     ):
         self.match_id_update_column = match_id_update_column
         self.column_names = column_names
@@ -113,6 +122,7 @@ class BaseLagGenerator:
         self.prefix = prefix
         self._df = None
         self._entity_features = []
+        self.unique_constraint = unique_constraint
 
         for feature_name in self.features:
             for lag in iterations:
@@ -141,20 +151,7 @@ class BaseLagGenerator:
 
     def _concat_with_stored(self, df: FrameT) -> FrameT:
 
-        sort_cols = (
-            [
-                self.column_names.start_date,
-                self.column_names.match_id,
-                self.column_names.team_id,
-                self.column_names.player_id,
-            ]
-            if self.column_names.player_id
-            else [
-                self.column_names.start_date,
-                self.column_names.match_id,
-                self.column_names.team_id,
-            ]
-        )
+        sort_cols = [self.column_names.start_date, self.column_names.update_match_id]
 
         df = df.with_columns(
             [
@@ -178,21 +175,22 @@ class BaseLagGenerator:
                 how="diagonal",
             )
             .sort(sort_cols)
-            .unique(subset=sort_cols, maintain_order=True)
         )
-
-        unique_cols = (
-            [
-                self.column_names.match_id,
-                self.column_names.team_id,
-                self.column_names.player_id,
-            ]
-            if self.column_names.player_id
-            else [
-                self.column_names.match_id,
-                self.column_names.team_id,
-            ]
-        )
+        if self.unique_constraint:
+            unique_cols = self.unique_constraint
+        else:
+            unique_cols = (
+                [
+                    self.column_names.match_id,
+                    self.column_names.team_id,
+                    self.column_names.player_id,
+                ]
+                if self.column_names.player_id
+                else [
+                    self.column_names.match_id,
+                    self.column_names.team_id,
+                ]
+            )
         return concat_df.unique(
             subset=unique_cols,
             maintain_order=True,
@@ -462,35 +460,31 @@ class BaseLagGenerator:
                 .over("__opponent_team_id")
                 .alias(f)
             )
-
-        transformed_df = transformed_df.join(
-            new_df.select(
-                [
-                    self.column_names.match_id,
-                    self.column_names.team_id,
-                    self.column_names.player_id,
-                    *opponent_feat_names,
-                ]
-            ),
-            on=[
+        join_cols = self.unique_constraint or [
                 self.column_names.match_id,
                 self.column_names.team_id,
                 self.column_names.player_id,
-            ],
+            ]
+        transformed_df = transformed_df.join(
+            new_df.select(
+                [
+                    *join_cols,
+                    *opponent_feat_names,
+                ]
+            ),
+            on=join_cols,
             how="left",
         )
 
         ori_feats_to_use = [f for f in ori_cols if f not in self.features_out]
         transformed_feats_to_use = [
-            cn.match_id,
-            cn.team_id,
-            cn.player_id,
+            *join_cols,
             *[f for f in self.features_out if f not in known_future_features],
         ]
 
         transformed_df = ori_df.select(ori_feats_to_use).join(
             transformed_df.select(transformed_feats_to_use),
-            on=[cn.match_id, cn.team_id, cn.player_id],
+            on=join_cols,
         )
 
         return transformed_df.select(
