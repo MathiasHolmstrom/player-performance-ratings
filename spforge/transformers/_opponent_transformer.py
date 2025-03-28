@@ -1,3 +1,4 @@
+import logging
 from typing import Union, Optional, Literal
 import narwhals as nw
 import pandas as pd
@@ -112,12 +113,15 @@ class OpponentTransformer(BaseLagGenerator):
                 self.column_names.update_match_id or self.match_id_update_column
             )
             self.team_column = self.column_names.team_id or self.team_column
-
+        else:
+            assert self.team_column is not None, "team_column must be set if column names is not passed"
+            assert self.match_id_update_column is not None, "match_id_update_column must be set if column names is not passed"
         if self.transformation == "rolling_mean":
             self._transformer = RollingMeanTransformer(
                 granularity=[self.opponent_column, *self.granularity],
                 features=self.features,
                 window=self.window,
+                min_periods=self.min_periods,
                 match_id_update_column=self.match_id_update_column,
                 unique_constraint=[
                     self.opponent_column,
@@ -225,6 +229,9 @@ class OpponentTransformer(BaseLagGenerator):
         self, df: FrameT, is_future: bool
     ) -> FrameT:
 
+        cols_to_drop = [c for c in self.features_out if c in df.columns]
+        df = df.drop(cols_to_drop)
+
         if self.opponent_column not in df.columns:
             gt = df.unique([self.match_id_update_column, self.team_column]).select(
                 [self.match_id_update_column, self.team_column]
@@ -292,18 +299,16 @@ class OpponentTransformer(BaseLagGenerator):
                 )
             )
 
-        game_team_grouped = grouped.group_by(
-            [self.opponent_column, self.team_column, self.match_id_update_column]
-        ).agg(nw.col(self._transformer.features_out).mean())
         df = df.join(
-            game_team_grouped.select(
+            grouped.select(
                 [
                     self.team_column,
                     self.match_id_update_column,
                     *self._transformer.features_out,
+                    *self.granularity
                 ]
             ),
-            on=[self.match_id_update_column, self.team_column],
+            on=[self.match_id_update_column, self.team_column, *self.granularity],
         ).sort(sort_col)
         rename_cols = {
             feature: self.features_out[idx]
