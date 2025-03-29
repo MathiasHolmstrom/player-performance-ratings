@@ -174,8 +174,8 @@ class OpponentTransformer(BaseLagGenerator):
         transformed_df = concat_df.filter(
             nw.col(self.column_names.match_id).is_in(unique_match_ids)
         )
-        transformed_df = self._generate_future_feats(
-            transformed_df=transformed_df, ori_df=df
+        transformed_df = self._forward_fill_future_features(
+            df=transformed_df
         )
 
         cn = self.column_names

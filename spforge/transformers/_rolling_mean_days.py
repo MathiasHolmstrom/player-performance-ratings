@@ -17,18 +17,18 @@ from spforge.transformers.base_transformer import (
 class RollingMeanDaysTransformer(BaseLagGenerator):
 
     def __init__(
-        self,
-        features: list[str],
-        days: int,
-        granularity: Union[list[str], str],
-        scale_by_participation_weight: bool = False,
-        add_count: bool = False,
-        add_opponent: bool = False,
-        prefix: str = "rolling_mean_days",
-        column_names: Optional[ColumnNames] = None,
-        date_column: Optional[str] = None,
-        match_id_update_column: Optional[str] = None,
-        unique_constraint: Optional[list[str]] = None,
+            self,
+            features: list[str],
+            days: int,
+            granularity: Union[list[str], str],
+            scale_by_participation_weight: bool = False,
+            add_count: bool = False,
+            add_opponent: bool = False,
+            prefix: str = "rolling_mean_days",
+            column_names: Optional[ColumnNames] = None,
+            date_column: Optional[str] = None,
+            match_id_update_column: Optional[str] = None,
+            unique_constraint: Optional[list[str]] = None,
     ):
         self.days = days
         self.scale_by_participation_weight = scale_by_participation_weight
@@ -60,9 +60,8 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
     @required_lag_column_names
     @row_count_validator
     def transform_historical(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+            self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
-
 
         if not self.column_names and not self.date_column:
             raise ValueError("column_names or date_column must be provided")
@@ -70,7 +69,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         if self.column_names:
             self.date_column = self.column_names.start_date or self.date_column
             self.match_id_update_column = (
-                self.column_names.update_match_id or self.match_id_update_column
+                    self.column_names.update_match_id or self.match_id_update_column
             )
 
         if self.column_names:
@@ -78,16 +77,18 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
 
             concat_df = self._concat_with_stored_and_calculate_feats(df)
 
-            transformed_df = pl.DataFrame(
-                self._merge_into_input_df(
-                    df=nw.from_native(df),
-                    concat_df=nw.from_native(concat_df),
-                    match_id_join_on=self.match_id_update_column,
-                )
+            transformed_df = self._merge_into_input_df(
+                df=nw.from_native(df),
+                concat_df=nw.from_native(concat_df),
+                match_id_join_on=self.match_id_update_column,
             )
+
+            if self.add_opponent:
+                transformed_df = self._add_opponent_features(transformed_df)
+
             if self.add_opponent and self.add_count:
                 transformed_df = transformed_df.with_columns(
-                    pl.col(f"{self._count_column_name}_opponent")
+                    nw.col(f"{self._count_column_name}_opponent")
                     .fill_null(0)
                     .alias(f"{self._count_column_name}_opponent")
                 )
@@ -101,7 +102,6 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                 on="__row_index",
                 how="left",
             ).sort("__row_index")
-
 
     @nw.narwhalify
     @future_validator
@@ -122,11 +122,13 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                 df[self.column_names.match_id].unique().to_list()
             )
         )
-        transformed_future = pl.DataFrame(
-            self._generate_future_feats(
-                transformed_df=nw.from_native(concat_df), ori_df=nw.from_native(df)
-            )
+        transformed_future = self._forward_fill_future_features(
+            df=nw.from_native(concat_df)
         )
+
+        if self.add_opponent:
+            transformed_future = self._add_opponent_features(transformed_future)
+
         if "is_future" in transformed_future.columns:
             transformed_future = transformed_future.drop("is_future")
 
@@ -177,13 +179,13 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
 
         rolling_means = [
             (
-                (
-                    pl.col(col)
-                    .rolling_sum_by(self.date_column, window_size=days_str)
-                    .over(self.granularity)
-                    - pl.col(f"days_sum_{col}")
-                )
-                / pl.col(self._count_column_name)
+                    (
+                            pl.col(col)
+                            .rolling_sum_by(self.date_column, window_size=days_str)
+                            .over(self.granularity)
+                            - pl.col(f"days_sum_{col}")
+                    )
+                    / pl.col(self._count_column_name)
             ).alias(f"{self.prefix}_{col}{str(self.days)}")
             for col in self.features
         ]

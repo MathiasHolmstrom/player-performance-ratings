@@ -9,7 +9,7 @@ from spforge.transformers.base_transformer import (
     BaseLagGenerator,
     required_lag_column_names,
     row_count_validator,
-    future_validator, historical_lag_transformations_wrapper,
+    future_validator, historical_lag_transformations_wrapper, future_lag_transformations_wrapper,
 )
 from spforge.utils import validate_sorting
 
@@ -82,71 +82,51 @@ class RollingMeanTransformer(BaseLagGenerator):
 
         if self.column_names:
             self._store_df(df)
-            concat_df = self._concat_with_stored_and_calculate_feats(df)
-            return self._merge_into_input_df(
-                df=df, concat_df=concat_df, match_id_join_on=self.match_id_update_column
+            df_with_feats = self._generate_features(df)
+            df = self._merge_into_input_df(
+                df=df, concat_df=df_with_feats, match_id_join_on=self.match_id_update_column
             )
 
         else:
-            concat_df = self._concat_with_stored_and_calculate_feats(df).sort(
+            df_with_feats = self._generate_features(df).sort(
                 "__row_index"
             )
-            return df.join(
-                concat_df.select(["__row_index", *self.features_out]),
-                on="__row_index",
+            df = df.join(
+                df_with_feats.select([*self.granularity, self.match_id_update_column, *self.features_out]),
+                on=[*self.granularity, self.match_id_update_column],
                 how="left",
-            )
+            ).unique('__row_index')
+        if self.add_opponent:
+            return self._add_opponent_features(df).sort("__row_index")
+        return df
 
     @nw.narwhalify
+    @future_lag_transformations_wrapper
     @future_validator
     @row_count_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
         """
         Generates rolling mean for future data
         Assumes that .generate_historical() has been called before
-        The calculation is done using Polars.
-         However, Pandas Dataframe can be used as input and it will also output a pandas dataframe in that case.
-
         Regardless of the scheduled data of the future match, all future matches are perceived as being played in the same date.
         That is to ensure that a team's 2nd future match has the same rolling means as the 1st future match.
         :param df: Future data
         """
 
-        if isinstance(nw.to_native(df), pd.DataFrame):
-            ori_type = "pd"
-            df = nw.from_native(pl.DataFrame(nw.to_native(df)))
-        else:
-            ori_type = "pl"
-
-        df = df.with_columns(nw.lit(1).alias("is_future"))
-        concat_df = self._concat_with_stored_and_calculate_feats(df=df)
-        unique_match_ids = df.select(nw.col(self.column_names.match_id).unique())[
-            self.column_names.match_id
-        ].to_list()
-        transformed_df = concat_df.filter(
-            nw.col(self.column_names.match_id).is_in(unique_match_ids)
+        df_with_feats = self._generate_features(df=df)
+        df_with_feats = self._merge_into_input_df(
+            df=df, concat_df=df_with_feats
         )
-        transformed_df = self._generate_future_feats(
-            transformed_df=transformed_df, ori_df=df
+        if self.add_opponent:
+            df_with_feats = self._add_opponent_features(df_with_feats).sort("__row_index")
+
+        df_with_feats = self._forward_fill_future_features(
+            df=df_with_feats
         )
 
-        cn = self.column_names
-        join_cols = self.unique_constraint or [cn.match_id, cn.player_id, cn.team_id]
+        return df_with_feats
 
-        df = df.join(
-            transformed_df.select(*join_cols, *self.features_out),
-            on=join_cols,
-            how="left",
-        )
-        if "is_future" in df.columns:
-            df = df.drop("is_future")
-
-        if ori_type == "pd":
-            return df.to_pandas()
-
-        return df.to_native()
-
-    def _concat_with_stored_and_calculate_feats(self, df: FrameT) -> FrameT:
+    def _generate_features(self, df: FrameT) -> FrameT:
 
         if self.column_names and self._df is not None:
             sort_col = self.column_names.start_date
@@ -215,23 +195,9 @@ class RollingMeanTransformer(BaseLagGenerator):
             ]
             grp = grp.with_columns(rolling_means)
 
-        selection_columns = (
-                self.granularity
-                + [self.match_id_update_column]
-                + [f"{self.prefix}_{feature}{self.window}" for feature in self.features]
-        )
-        concat_df = concat_df.join(
-            grp.select(selection_columns),
-            on=self.granularity + [self.match_id_update_column],
-            how="left",
-        ).sort(sort_col)
-
-        feats_added = [f for f in self.features_out if f in concat_df.columns]
-
-        concat_df = concat_df.with_columns(
+        return grp.with_columns(
             [
                 nw.col(f).fill_null(strategy="forward").over(self.granularity).alias(f)
-                for f in feats_added
+                for f in self._entity_features_out
             ]
         )
-        return concat_df

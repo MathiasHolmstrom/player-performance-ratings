@@ -10,7 +10,7 @@ from spforge import ColumnNames
 from spforge.transformers.base_transformer import (
     BaseLagGenerator,
     required_lag_column_names,
-    row_count_validator, historical_lag_transformations_wrapper,
+    row_count_validator, historical_lag_transformations_wrapper, future_lag_transformations_wrapper, future_validator,
 )
 from spforge.utils import validate_sorting
 
@@ -69,51 +69,30 @@ class LagTransformer(BaseLagGenerator):
 
         if self.column_names:
             self._store_df(df)
-            df = self._concat_with_stored_and_calculate_feats(df)
+            df = self._generate_features(df)
         else:
-            df = self._concat_with_stored_and_calculate_feats(df)
+            df = self._generate_features(df)
         if self.add_opponent:
             return self._add_opponent_features(df).sort("__row_index")
         return df
 
     @nw.narwhalify
+    @future_lag_transformations_wrapper
+    @future_validator
     @row_count_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
-        df = df.drop([f for f in self.features_out if f in df.columns])
-        native = nw.to_native(df)
-        if isinstance(native, pd.DataFrame):
-            df = nw.from_native(pl.DataFrame(native))
-            ori_native = "pd"
-        else:
-            ori_native = "pl"
-        df = df.with_columns(nw.lit(1).alias("is_future"))
-        if '__row_index' not in df.columns:
-            df = df.with_row_index('__row_index')
 
-        concat_df = self._concat_with_stored_and_calculate_feats(df=df)
+        df_with_feats = self._generate_features(df=df)
+        if self.add_opponent:
+            df_with_feats = self._add_opponent_features(df_with_feats).sort("__row_index")
 
-        transformed_df = concat_df.filter(
-            nw.col(self.match_id_update_column).is_in(
-                df.select(
-                    nw.col(self.match_id_update_column)
-                )
-                .unique()[self.match_id_update_column]
-                .to_list()
-            )
+        df_with_feats = self._forward_fill_future_features(
+            df=df_with_feats
         )
 
-        transformed_future = self._generate_future_feats(
-            transformed_df=transformed_df, ori_df=df
-        )
-        if '__row_index' in transformed_future.columns:
-            transformed_future = transformed_future.drop('__row_index')
-        if "is_future" in transformed_future.columns:
-            transformed_future = transformed_future.drop("is_future")
-        if ori_native == "pd":
-            return transformed_future.to_pandas()
-        return transformed_future
+        return df_with_feats
 
-    def _concat_with_stored_and_calculate_feats(self, df: FrameT) -> FrameT:
+    def _generate_features(self, df: FrameT) -> FrameT:
         grp_cols = self.granularity + [self.match_id_update_column]
         if self.column_names and self._df is not None:
             concat_df = self._concat_with_stored(df=df)

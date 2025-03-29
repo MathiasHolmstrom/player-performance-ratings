@@ -22,6 +22,38 @@ def future_validator(method):
     return wrapper
 
 
+def future_lag_transformations_wrapper(method):
+    @wraps(method)
+    def wrapper(self, df: FrameT,*args, **kwargs):
+        df = df.drop([f for f in self.features_out if f in df.columns])
+        input_cols = df.columns
+        if '__row_index' not in df.columns:
+            df = df.with_row_index('__row_index')
+
+        if isinstance(nw.to_native(df), pd.DataFrame):
+            ori_native = "pd"
+            df = nw.from_native(pl.DataFrame(nw.to_native(df)))
+        else:
+            ori_native = "pl"
+
+        df = df.with_columns(nw.lit(1).alias("is_future"))
+        if self.unique_constraint:
+            assert len(df.select(self.unique_constraint)) == len(
+                df), f"Specified unique constraint {self.unique_constraint} is not unique on the input dataframe"
+
+
+        result = method(self=self, df=df, *args, **kwargs).sort("__row_index")
+
+        if "is_future" in result.columns:
+            result = result.drop("is_future")
+        input_cols = [c for c in input_cols if c not in ('is_future')]
+        if ori_native == "pd":
+            return result.select(list(set(input_cols + self.features_out))).to_pandas()
+        return result.select(list(set(input_cols + self.features_out)))
+
+    return wrapper
+
+
 def historical_lag_transformations_wrapper(method):
     @wraps(method)
     def wrapper(self, df: FrameT, column_names: Optional[ColumnNames] = None, *args, **kwargs):
@@ -241,7 +273,7 @@ class BaseLagGenerator:
         )
 
     def _store_df(
-            self, df: nw.DataFrame, additional_cols_to_use: Optional[list[str]] = None
+            self, df: nw.DataFrame, additional_cols: Optional[list[str]] = None
     ):
         df = df.with_columns(
             [
@@ -270,8 +302,8 @@ class BaseLagGenerator:
         if self.column_names.projected_participation_weight in df.columns:
             cols += [self.column_names.projected_participation_weight]
 
-        if additional_cols_to_use:
-            cols += additional_cols_to_use
+        if additional_cols:
+            cols += additional_cols
 
         if self._df is None:
             self._df = df.select(cols)
@@ -304,9 +336,6 @@ class BaseLagGenerator:
             self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
     ) -> IntoFrameT:
 
-        if self.add_opponent:
-            concat_df = self._add_opponent_features(df=concat_df)
-
         ori_cols = [c for c in df.columns if c not in self.features_out]
 
         sort_cols = (
@@ -325,15 +354,15 @@ class BaseLagGenerator:
         )
         join_cols = [*self.granularity, self.column_names.update_match_id]
 
-        transformed_df = df.select(ori_cols).join(concat_df.select([*join_cols, *self.features_out]),
+        transformed_df = df.select(ori_cols).join(concat_df.select([*join_cols, *self._entity_features_out]),
                                                   on=join_cols, how='inner').unique(self.unique_constraint).sort(
             sort_cols)
-        return transformed_df.select(list(set(df.columns + self.features_out)))
+        return transformed_df.select(list(set(df.columns + self._entity_features_out)))
 
     def _add_opponent_features(self, df: FrameT) -> FrameT:
         team_features = df.group_by(
             [self.column_names.team_id, self.column_names.update_match_id]
-        ).agg(**{col: nw.mean(col) for col in self._entity_features_out})
+        ).agg(nw.col(self._entity_features_out).mean())
 
         df_opponent_feature = team_features.with_columns(
             [
@@ -376,45 +405,42 @@ class BaseLagGenerator:
             how="left",
         )
 
-    def _generate_future_feats(
+    def _forward_fill_future_features(
             self,
-            transformed_df: FrameT,
-            ori_df: FrameT,
+            df: FrameT,
             known_future_features: Optional[list[str]] = None,
     ) -> FrameT:
-        known_future_features = known_future_features or []
-        ori_cols = ori_df.columns
         cn = self.column_names
 
-        transformed_df = transformed_df.with_columns(
+        df = df.with_columns(
             [nw.col(f).fill_null(-999.21345).alias(f) for f in self._entity_features_out]
         )
-        transformed_df = transformed_df.sort([cn.start_date, cn.match_id, cn.team_id])
+        df = df.sort([cn.start_date])
         first_grp = (
-            transformed_df.with_columns(
+            df.with_columns(
                 nw.col(self.column_names.match_id)
                 .cum_count()
                 .over(self.granularity)
-                .alias("_row_index")
+                .alias("__entity_row_index")
             )
-            .filter(nw.col("_row_index") == 1)
-            .drop("_row_index")
+            .filter(nw.col("__entity_row_index") == 1)
+            .drop("__entity_row_index")
         ).select([*self.granularity, *self._entity_features_out])
 
-        transformed_df = transformed_df.select(
-            [c for c in transformed_df.columns if c not in self._entity_features_out]
+        df = df.select(
+            [c for c in df.columns if c not in self._entity_features_out]
         ).join(first_grp, on=self.granularity, how="left")
 
-        transformed_df = transformed_df.sort([cn.start_date, cn.match_id, cn.team_id])
+        df = df.sort([cn.start_date, cn.match_id, cn.team_id])
         for f in self._entity_features_out:
-            transformed_df = transformed_df.with_columns(
+            df = df.with_columns(
                 nw.when(nw.col(f) == -999.21345)
                 .then(nw.lit(None))
                 .otherwise(nw.col(f))
                 .alias(f)
             )
-            if transformed_df[f].is_null().sum() == len(transformed_df):
-                transformed_df = transformed_df.with_columns(
+            if df[f].is_null().sum() == len(df):
+                df = df.with_columns(
                     nw.col(f)
                     .fill_null(strategy="forward")
                     .over(self.granularity)
@@ -422,7 +448,8 @@ class BaseLagGenerator:
                     for f in self._entity_features_out
                 )
 
-        team_features = transformed_df.group_by(
+
+        team_features = df.group_by(
             [self.column_names.team_id, self.column_names.match_id]
         ).agg([nw.col(f).mean().alias(f) for f in self._entity_features_out])
 
@@ -438,7 +465,7 @@ class BaseLagGenerator:
             ]
         )
         opponent_feat_names = [f"{f}_opponent" for f in self._entity_features_out]
-        new_df = transformed_df.join(
+        new_df = df.join(
             df_opponent_feature, on=[self.column_names.match_id], suffix="_team_sum"
         )
         new_df = new_df.filter(
@@ -456,10 +483,10 @@ class BaseLagGenerator:
                 nw.col(self.column_names.match_id)
                 .cum_count()
                 .over("__opponent_team_id")
-                .alias("_row_index")
+                .alias("__opp_row_index")
             )
-            .filter(nw.col("_row_index") == 1)
-            .drop("_row_index")
+            .filter(nw.col("__opp_row_index") == 1)
+            .drop("__opp_row_index")
         ).select(["__opponent_team_id", *opponent_feat_names])
 
         new_df = new_df.select(
@@ -488,7 +515,8 @@ class BaseLagGenerator:
             self.column_names.team_id,
             self.column_names.player_id,
         ]
-        transformed_df = transformed_df.join(
+        cols_to_drop = [c for c in opponent_feat_names if c in df.columns]
+        return  df.drop(cols_to_drop).join(
             new_df.select(
                 [
                     *join_cols,
@@ -497,26 +525,6 @@ class BaseLagGenerator:
             ),
             on=join_cols,
             how="left",
-        )
-
-        ori_feats_to_use = [f for f in ori_cols if f not in self.features_out]
-        transformed_feats_to_use = [
-            *join_cols,
-            *[f for f in self.features_out if f not in known_future_features],
-        ]
-
-        transformed_df = ori_df.select(ori_feats_to_use).join(
-            transformed_df.select(transformed_feats_to_use),
-            on=join_cols,
-        )
-
-        return transformed_df.select(
-            list(
-                set(
-                    ori_cols
-                    + [f for f in self.features_out if f not in known_future_features]
-                )
-            )
         )
 
     def reset(self) -> "BaseLagGenerator":

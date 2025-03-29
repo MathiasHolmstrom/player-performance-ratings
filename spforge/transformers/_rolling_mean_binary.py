@@ -65,6 +65,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
                     f"{self.prefix}_{feature_name}_{self.prob_column}{self.window}"
                 )
                 self._features_out.append(prob_feature)
+                self._entity_features_out.append(prob_feature)
 
         self._estimator_features_out = self._features_out.copy()
 
@@ -79,31 +80,30 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
             df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
 
-        df = df.with_columns(nw.lit(0).alias("is_future"))
+
         if self.column_names:
             self.match_id_update_column = (
                     self.column_names.update_match_id or self.match_id_update_column
             )
-            additional_cols_to_use = [self.binary_column] + (
+            additional_cols = [self.binary_column] + (
                 [self.prob_column] if self.prob_column else []
             )
-            self._store_df(df, additional_cols_to_use=additional_cols_to_use)
-            concat_df = self._concat_with_stored(df)
-            concat_df = self._concat_with_stored_and_calculate_feats(concat_df)
-            return self._merge_into_input_df(
+            self._store_df(df, additional_cols=additional_cols)
+            df_with_feats = self._concat_with_stored(df)
+            df_with_feats = self._generate_features(df_with_feats)
+            df = self._merge_into_input_df(
                 df=df,
-                concat_df=concat_df,
+                concat_df=df_with_feats,
                 match_id_join_on=self.column_names.update_match_id,
             )
         else:
-            transformed_df = self._concat_with_stored_and_calculate_feats(df).sort(
+            df = self._generate_features(df).sort(
                 "__row_index"
             )
-            return df.join(
-                transformed_df.select(["__row_index", *self.features_out]),
-                on="__row_index",
-                how="left",
-            )
+
+        if self.add_opponent:
+            return self._add_opponent_features(df=df)
+        return df
 
 
     @nw.narwhalify
@@ -127,7 +127,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
             if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
                 df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
         df = df.with_columns(nw.lit(1).alias("is_future"))
-        concat_df = self._concat_with_stored_and_calculate_feats(df=df)
+        concat_df = self._generate_features(df=df)
         unique_match_ids = (
             df.select(nw.col(self.column_names.match_id))
             .unique()[self.column_names.match_id]
@@ -136,11 +136,13 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         transformed_df = concat_df.filter(
             nw.col(self.column_names.match_id).is_in(unique_match_ids)
         )
-        transformed_future = self._generate_future_feats(
-            transformed_df=transformed_df,
-            ori_df=df,
+        transformed_future = self._forward_fill_future_features(
+            df=transformed_df,
             known_future_features=self._get_known_future_features(),
         )
+        if self.add_opponent:
+            transformed_future = self._add_opponent_features(df=transformed_future)
+
         if "is_future" in transformed_future.columns:
             transformed_future = transformed_future.drop("is_future")
         transformed_future = self._add_weighted_prob(transformed_df=transformed_future)
@@ -164,7 +166,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
         return known_future_features
 
-    def _concat_with_stored_and_calculate_feats(self, df: FrameT) -> FrameT:
+    def _generate_features(self, df: FrameT) -> FrameT:
         if self.column_names and self._df is not None:
             sort_col = self.column_names.start_date
             concat_df = self._concat_with_stored(df)
@@ -178,8 +180,6 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         groupby_cols = [
             self.match_id_update_column,
             *self.granularity,
-            #   self.column_names.start_date,
-            #   "is_future",
         ]
 
         aggregation = {f: nw.mean(f).alias(f) for f in self.features}
@@ -190,7 +190,6 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         grouped = grouped.sort(
             by=[
                 sort_col,
-                # "is_future",
                 self.match_id_update_column,
             ]
         )
