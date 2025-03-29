@@ -355,7 +355,7 @@ class BaseLagGenerator:
         join_cols = [*self.granularity, self.column_names.update_match_id]
 
         transformed_df = df.select(ori_cols).join(concat_df.select([*join_cols, *self._entity_features_out]),
-                                                  on=join_cols, how='inner').unique(self.unique_constraint).sort(
+                                                  on=join_cols, how='left').unique(self.unique_constraint).sort(
             sort_cols)
         return transformed_df.select(list(set(df.columns + self._entity_features_out)))
 
