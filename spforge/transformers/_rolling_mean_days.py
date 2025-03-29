@@ -12,7 +12,6 @@ from spforge.transformers.base_transformer import (
     row_count_validator,
     future_validator, historical_lag_transformations_wrapper,
 )
-from spforge.utils import validate_sorting
 
 
 class RollingMeanDaysTransformer(BaseLagGenerator):
@@ -51,7 +50,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         self._count_column_name = f"{self.prefix}_count{str(self.days)}"
         if self.add_count:
             self._features_out.append(self._count_column_name)
-            self._entity_features.append(self._count_column_name)
+            self._entity_features_out.append(self._count_column_name)
 
             if self.add_opponent:
                 self._features_out.append(f"{self._count_column_name}_opponent")
@@ -92,25 +91,11 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                     .fill_null(0)
                     .alias(f"{self._count_column_name}_opponent")
                 )
+            return transformed_df
 
-            join_cols = (
-                [
-                    self.column_names.match_id,
-                    self.column_names.player_id,
-                    self.column_names.team_id,
-                ]
-                if self.column_names.player_id
-                else [self.column_names.match_id, self.column_names.team_id]
-            )
-
-            df = df.join(
-                transformed_df.select([*join_cols, *self.features_out]),
-                on=join_cols,
-                how="left",
-            ).sort(sort_cols)
 
         else:
-            concat_df = self._concat_with_stored_and_calculate_feats(df)
+            concat_df = nw.from_native(self._concat_with_stored_and_calculate_feats(df.to_polars()))
             return df.join(
                 concat_df.select(["__row_index", *self.features_out]),
                 on="__row_index",

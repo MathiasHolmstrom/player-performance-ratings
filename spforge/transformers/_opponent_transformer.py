@@ -12,7 +12,7 @@ from spforge.transformers.base_transformer import (
     required_lag_column_names,
     row_count_validator,
     BaseTransformer,
-    future_validator,
+    future_validator, historical_lag_transformations_wrapper,
 )
 
 
@@ -43,17 +43,17 @@ class OpponentTransformer(BaseLagGenerator):
     """
 
     def __init__(
-        self,
-        features: list[str],
-        window: int,
-        granularity: Union[list[str], str],
-        min_periods: int = 1,
-        are_estimator_features=True,
-        prefix: str = "opponent_rolling_mean",
-        match_id_update_column: Optional[str] = None,
-        team_column: Optional[str] = None,
-        opponent_column: str = "__opponent",
-        transformation: Literal["rolling_mean"] = "rolling_mean",
+            self,
+            features: list[str],
+            window: int,
+            granularity: Union[list[str], str],
+            min_periods: int = 1,
+            are_estimator_features=True,
+            prefix: str = "opponent_rolling_mean",
+            match_id_update_column: Optional[str] = None,
+            team_column: Optional[str] = None,
+            opponent_column: str = "__opponent",
+            transformation: Literal["rolling_mean"] = "rolling_mean",
     ):
         """
         :param features:   Features to create rolling mean for
@@ -87,10 +87,11 @@ class OpponentTransformer(BaseLagGenerator):
         self._transformer: BaseTransformer
 
     @nw.narwhalify
+    @historical_lag_transformations_wrapper
     @required_lag_column_names
     @row_count_validator
     def transform_historical(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+            self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """
         Generates rolling mean for historical data
@@ -98,18 +99,10 @@ class OpponentTransformer(BaseLagGenerator):
         :param df: Historical data
         :param column_names: Column names
         """
-        self.column_names = column_names or self.column_names
-        input_cols = df.columns
-        native = nw.to_native(df)
-        if isinstance(native, pd.DataFrame):
-            ori_native = "pd"
-            df = nw.from_native(pl.DataFrame(native))
-        else:
-            ori_native = "pl"
 
         if self.column_names:
             self.match_id_update_column = (
-                self.column_names.update_match_id or self.match_id_update_column
+                    self.column_names.update_match_id or self.match_id_update_column
             )
             self.team_column = self.column_names.team_id or self.team_column
         else:
@@ -132,60 +125,36 @@ class OpponentTransformer(BaseLagGenerator):
             raise NotImplementedError("Only rolling_mean transformation is supported")
 
         if self.column_names:
-            df = df.with_columns(nw.lit(0).alias("is_future"))
             self._store_df(df)
             concat_df = self._concat_with_stored_and_calculate_feats(
                 df, is_future=False
             )
-            transformed_df = self._merge_into_input_df(
+            concat_df = self._rename_features(concat_df)
+            return self._merge_into_input_df(
                 df=df, concat_df=concat_df, match_id_join_on=self.match_id_update_column
             )
 
-            join_cols = (
-                [
-                    self.column_names.match_id,
-                    self.column_names.player_id,
-                    self.column_names.team_id,
-                ]
-                if self.column_names.player_id
-                else [self.column_names.match_id, self.column_names.team_id]
-            )
-            df = df.join(
-                transformed_df.select([*join_cols, *self.features_out]),
-                on=join_cols,
-                how="left",
-            )
+
         else:
-            transformed_df = self._concat_with_stored_and_calculate_feats(
+            concat_df = self._concat_with_stored_and_calculate_feats(
                 df, is_future=False
             ).sort("__row_index")
-            df = df.join(
-                transformed_df.select(["__row_index", *self.features_out]),
-                on="__row_index",
+            concat_df = self._rename_features(concat_df)
+            return df.join(
+                concat_df.select(
+                    [*self.granularity, self.team_column, self.match_id_update_column, *self.features_out]),
+                on=[*self.granularity, self.match_id_update_column, self.team_column],
                 how="left",
-            )
-
-        if "is_future" in df.columns:
-            df = df.drop("is_future")
-        if "__row_index" in df.columns:
-            df = df.drop("__row_index")
-            input_cols = [c for c in input_cols if c != "__row_index"]
-        if ori_native == "pd":
-            return df.select(list(set(input_cols + self.features_out))).to_pandas()
-        return df.select(list(set(input_cols + self.features_out)))
+            ).unique('__row_index').sort("__row_index")
 
     @nw.narwhalify
     @future_validator
     @row_count_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
         """
-        Generates rolling mean for future data
+        Generates rolling mean opponent for future data
         Assumes that .generate_historical() has been called before
-        The calculation is done using Polars.
-         However, Pandas Dataframe can be used as input and it will also output a pandas dataframe in that case.
-
-        Regardless of the scheduled data of the future match, all future matches are perceived as being played in the same date.
-        That is to ensure that a team's 2nd future match has the same rolling means as the 1st future match.
+        Ensure that a team's 2nd future match has the same rolling means as the 1st future match.
         :param df: Future data
         """
 
@@ -197,6 +166,8 @@ class OpponentTransformer(BaseLagGenerator):
 
         df = df.with_columns(nw.lit(1).alias("is_future"))
         concat_df = self._concat_with_stored_and_calculate_feats(df=df, is_future=True)
+        concat_df = self._rename_features(concat_df)
+
         unique_match_ids = df.select(nw.col(self.column_names.match_id).unique())[
             self.column_names.match_id
         ].to_list()
@@ -225,14 +196,15 @@ class OpponentTransformer(BaseLagGenerator):
         return df.to_native()
 
     def _concat_with_stored_and_calculate_feats(
-        self, df: FrameT, is_future: bool
+            self, df: FrameT, is_future: bool
     ) -> FrameT:
 
         cols_to_drop = [c for c in self.features_out if c in df.columns]
         df = df.drop(cols_to_drop)
+        concat_df = df.clone()
 
-        if self.opponent_column not in df.columns:
-            gt = df.unique([self.match_id_update_column, self.team_column]).select(
+        if self.opponent_column not in concat_df.columns:
+            gt = concat_df.unique([self.match_id_update_column, self.team_column]).select(
                 [self.match_id_update_column, self.team_column]
             )
             gt_opponent = gt.join(
@@ -244,7 +216,7 @@ class OpponentTransformer(BaseLagGenerator):
             gt_opponent = gt_opponent.with_columns(
                 nw.col(f"{self.team_column}__opp").alias(self.opponent_column)
             ).drop(f"{self.team_column}__opp")
-            df = df.join(
+            concat_df = concat_df.join(
                 gt_opponent,
                 on=[self.match_id_update_column, self.team_column],
                 how="left",
@@ -253,7 +225,7 @@ class OpponentTransformer(BaseLagGenerator):
         if self.column_names and self._df is not None:
             sort_col = self.column_names.start_date
             grouped = (
-                df.group_by(
+                concat_df.group_by(
                     [
                         self.match_id_update_column,
                         self.team_column,
@@ -266,13 +238,8 @@ class OpponentTransformer(BaseLagGenerator):
                 .sort(sort_col)
             )
         else:
-            sort_col = "__row_index"
-
-            if "__row_index" not in df.columns:
-                df = df.with_row_index(name="__row_index")
-
             grouped = (
-                df.group_by(
+                concat_df.group_by(
                     [
                         self.match_id_update_column,
                         self.team_column,
@@ -297,18 +264,39 @@ class OpponentTransformer(BaseLagGenerator):
                     grouped, column_names=column_names_transformer
                 )
             )
+        on_cols = [self.match_id_update_column, *self.granularity, self.opponent_column]
+        return concat_df.join(grouped.select([*on_cols, *self._transformer.features_out]), on=on_cols, how="left").unique(self.unique_constraint)
 
-        df = df.join(
-            grouped.select(
+    def _merge_into_input_df(
+            self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
+    ) -> IntoFrameT:
+        sort_cols = (
+            [
+                self.column_names.start_date,
+                self.column_names.match_id,
+                self.column_names.team_id,
+                self.column_names.player_id,
+            ]
+            if self.column_names.player_id
+            else [
+                self.column_names.start_date,
+                self.column_names.match_id,
+                self.column_names.team_id,
+            ]
+        )
+        return df.join(
+            concat_df.select(
                 [
                     self.team_column,
                     self.match_id_update_column,
-                    *self._transformer.features_out,
+                    *self.features_out,
                     *self.granularity
                 ]
             ),
             on=[self.match_id_update_column, self.team_column, *self.granularity],
-        ).sort(sort_col)
+        ).unique(self.unique_constraint).sort(sort_cols)
+
+    def _rename_features(self, df: FrameT) -> FrameT:
         rename_cols = {
             feature: self.features_out[idx]
             for idx, feature in enumerate(self._transformer.features_out)

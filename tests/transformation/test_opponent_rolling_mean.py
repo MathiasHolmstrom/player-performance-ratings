@@ -42,10 +42,11 @@ def test_rolling_mean_transform_historical(column_names, df, use_column_names):
                 pd.to_datetime("2023-01-04"),
             ],
             "team": [1, 1, 1, 2, 2, 2, 1, 3, 1, 1, 1, 2, 2, 2],
-            "player": [1, 2, 5, 7, 3, 4, 1, 6, 1, 2, 5, 7, 3, 4],
+            "player": [1, 2, 3, 4, 5, 6, 1, 7, 1, 2, 3, 4, 5, 6],
             "position": ["G", "G", "F", "G", "G", "F", "G", "F", "G", "G", "F", "G", "G", "F"],
         }
     )
+
     if use_column_names:
         rolling_mean = OpponentTransformer(
             granularity=["position"],

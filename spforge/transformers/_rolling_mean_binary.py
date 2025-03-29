@@ -18,17 +18,17 @@ from spforge.utils import validate_sorting
 class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
     def __init__(
-        self,
-        features: list[str],
-        window: int,
-        binary_column: str,
-        granularity: list[str] = None,
-        prob_column: Optional[str] = None,
-        min_periods: int = 1,
-        add_opponent: bool = False,
-        prefix: str = "rolling_mean_binary",
-        match_id_update_column: Optional[str] = None,
-        column_names: Optional[ColumnNames] = None,
+            self,
+            features: list[str],
+            window: int,
+            binary_column: str,
+            granularity: list[str] = None,
+            prob_column: Optional[str] = None,
+            min_periods: int = 1,
+            add_opponent: bool = False,
+            prefix: str = "rolling_mean_binary",
+            match_id_update_column: Optional[str] = None,
+            column_names: Optional[ColumnNames] = None,
     ):
         super().__init__(
             features=features,
@@ -48,8 +48,8 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
             feature2 = f"{self.prefix}_{feature_name}{self.window}_0"
             self._features_out.append(feature1)
             self._features_out.append(feature2)
-            self._entity_features.append(feature1)
-            self._entity_features.append(feature2)
+            self._entity_features_out.append(feature1)
+            self._entity_features_out.append(feature2)
 
             if self.add_opponent:
                 self._features_out.append(
@@ -73,12 +73,8 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
     @required_lag_column_names
     @row_count_validator
     def transform_historical(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+            self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
-        input_cols = df.columns
-        self.column_names = column_names or self.column_names
-
-
 
         if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
             df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
@@ -86,16 +82,15 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         df = df.with_columns(nw.lit(0).alias("is_future"))
         if self.column_names:
             self.match_id_update_column = (
-                self.column_names.update_match_id or self.match_id_update_column
+                    self.column_names.update_match_id or self.match_id_update_column
             )
-            validate_sorting(df=df, column_names=self.column_names)
             additional_cols_to_use = [self.binary_column] + (
                 [self.prob_column] if self.prob_column else []
             )
             self._store_df(df, additional_cols_to_use=additional_cols_to_use)
             concat_df = self._concat_with_stored(df)
             concat_df = self._concat_with_stored_and_calculate_feats(concat_df)
-            transformed_df = self._merge_into_input_df(
+            return self._merge_into_input_df(
                 df=df,
                 concat_df=concat_df,
                 match_id_join_on=self.column_names.update_match_id,
@@ -104,20 +99,12 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
             transformed_df = self._concat_with_stored_and_calculate_feats(df).sort(
                 "__row_index"
             )
-            transformed_df = df.join(
+            return df.join(
                 transformed_df.select(["__row_index", *self.features_out]),
                 on="__row_index",
                 how="left",
             )
 
-        # transformed_df = self._add_weighted_prob(transformed_df=transformed_df)
-
-        transformed_df = transformed_df.select([*input_cols, *self.features_out])
-        if "__row_index" in transformed_df.columns:
-            transformed_df = transformed_df.drop("__row_index")
-        if ori_native == "pd":
-            return transformed_df.to_pandas()
-        return transformed_df
 
     @nw.narwhalify
     @future_validator
@@ -280,10 +267,10 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
                 )
                 transformed_df = transformed_df.with_columns(
                     (
-                        nw.col(f"{self.prefix}_{feature_name}{self.window}_1")
-                        * nw.col(self.prob_column)
-                        + nw.col(f"{self.prefix}_{feature_name}{self.window}_0")
-                        * (1 - nw.col(self.prob_column))
+                            nw.col(f"{self.prefix}_{feature_name}{self.window}_1")
+                            * nw.col(self.prob_column)
+                            + nw.col(f"{self.prefix}_{feature_name}{self.window}_0")
+                            * (1 - nw.col(self.prob_column))
                     ).alias(weighted_prob_feat_name)
                 )
         return transformed_df

@@ -22,7 +22,7 @@ def column_names():
 
 @pytest.mark.parametrize("use_column_names", [True, False])
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
-def test_lag_team_transform_historical(df, column_names, use_column_names):
+def team_lag_transform_historical_team_granularity(df, column_names, use_column_names):
     "Should calculate average point of prior game"
 
     data = df(
