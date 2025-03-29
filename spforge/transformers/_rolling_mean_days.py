@@ -10,7 +10,7 @@ from spforge.transformers.base_transformer import (
     BaseLagGenerator,
     required_lag_column_names,
     row_count_validator,
-    future_validator,
+    future_validator, historical_lag_transformations_wrapper,
 )
 from spforge.utils import validate_sorting
 
@@ -29,6 +29,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
         column_names: Optional[ColumnNames] = None,
         date_column: Optional[str] = None,
         match_id_update_column: Optional[str] = None,
+        unique_constraint: Optional[list[str]] = None,
     ):
         self.days = days
         self.scale_by_participation_weight = scale_by_participation_weight
@@ -40,6 +41,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
             add_opponent=add_opponent,
             granularity=granularity,
             match_id_update_column=match_id_update_column,
+            unique_constraint=unique_constraint,
         )
 
         self.add_count = add_count
@@ -55,49 +57,30 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                 self._features_out.append(f"{self._count_column_name}_opponent")
 
     @nw.narwhalify
+    @historical_lag_transformations_wrapper
+    @required_lag_column_names
     @row_count_validator
     def transform_historical(
         self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
 
-        ori_cols = df.columns
-        self.column_names = column_names or self.column_names
+
         if not self.column_names and not self.date_column:
             raise ValueError("column_names or date_column must be provided")
 
-        if (
-            self.scale_by_participation_weight
-            and not self.column_names
-            or self.scale_by_participation_weight
-            and not self.column_names.participation_weight
-        ):
-            raise ValueError(
-                "scale_by_participation_weight requires column_names to be provided"
-            )
         if self.column_names:
             self.date_column = self.column_names.start_date or self.date_column
             self.match_id_update_column = (
                 self.column_names.update_match_id or self.match_id_update_column
             )
-        else:
-            if "__row_index" not in df.columns:
-                df = df.with_row_index(name="__row_index")
 
-        if isinstance(df.to_native(), pd.DataFrame):
-            ori_type = "pd"
-            df = pl.DataFrame(df.to_native())
-        else:
-            df = df.to_native()
-            ori_type = "pl"
-        df = df.with_columns(pl.lit(0).alias("is_future"))
         if self.column_names:
-            validate_sorting(df=df, column_names=self.column_names)
             self._store_df(nw.from_native(df))
 
             concat_df = self._concat_with_stored_and_calculate_feats(df)
 
             transformed_df = pl.DataFrame(
-                self._create_transformed_df(
+                self._merge_into_input_df(
                     df=nw.from_native(df),
                     concat_df=nw.from_native(concat_df),
                     match_id_join_on=self.match_id_update_column,
@@ -119,20 +102,7 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
                 if self.column_names.player_id
                 else [self.column_names.match_id, self.column_names.team_id]
             )
-            sort_cols = (
-                [
-                    self.column_names.start_date,
-                    self.column_names.match_id,
-                    self.column_names.team_id,
-                    self.column_names.player_id,
-                ]
-                if self.column_names.player_id
-                else [
-                    self.column_names.start_date,
-                    self.column_names.match_id,
-                    self.column_names.team_id,
-                ]
-            )
+
             df = df.join(
                 transformed_df.select([*join_cols, *self.features_out]),
                 on=join_cols,
@@ -140,20 +110,13 @@ class RollingMeanDaysTransformer(BaseLagGenerator):
             ).sort(sort_cols)
 
         else:
-            transformed_df = self._concat_with_stored_and_calculate_feats(df)
-            df = df.join(
-                transformed_df.select(["__row_index", *self.features_out]),
+            concat_df = self._concat_with_stored_and_calculate_feats(df)
+            return df.join(
+                concat_df.select(["__row_index", *self.features_out]),
                 on="__row_index",
                 how="left",
             ).sort("__row_index")
 
-        df = df.select(ori_cols + self.features_out)
-
-        if "is_future" in df.schema:
-            df = df.drop("is_future")
-        if ori_type == "pd":
-            df = nw.from_native(df.to_pandas())
-        return df
 
     @nw.narwhalify
     @future_validator

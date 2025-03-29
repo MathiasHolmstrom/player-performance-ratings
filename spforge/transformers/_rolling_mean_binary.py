@@ -10,7 +10,7 @@ from spforge.transformers.base_transformer import (
     BaseLagGenerator,
     required_lag_column_names,
     row_count_validator,
-    future_validator,
+    future_validator, historical_lag_transformations_wrapper,
 )
 from spforge.utils import validate_sorting
 
@@ -69,6 +69,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         self._estimator_features_out = self._features_out.copy()
 
     @nw.narwhalify
+    @historical_lag_transformations_wrapper
     @required_lag_column_names
     @row_count_validator
     def transform_historical(
@@ -77,12 +78,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         input_cols = df.columns
         self.column_names = column_names or self.column_names
 
-        native = nw.to_native(df)
-        if isinstance(native, pd.DataFrame):
-            df = nw.from_native(pl.DataFrame(native))
-            ori_native = "pd"
-        else:
-            ori_native = "pl"
+
 
         if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
             df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
@@ -99,7 +95,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
             self._store_df(df, additional_cols_to_use=additional_cols_to_use)
             concat_df = self._concat_with_stored(df)
             concat_df = self._concat_with_stored_and_calculate_feats(concat_df)
-            transformed_df = self._create_transformed_df(
+            transformed_df = self._merge_into_input_df(
                 df=df,
                 concat_df=concat_df,
                 match_id_join_on=self.column_names.update_match_id,

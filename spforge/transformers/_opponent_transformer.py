@@ -14,7 +14,6 @@ from spforge.transformers.base_transformer import (
     BaseTransformer,
     future_validator,
 )
-from spforge.utils import validate_sorting
 
 
 class OpponentTransformer(BaseLagGenerator):
@@ -138,7 +137,7 @@ class OpponentTransformer(BaseLagGenerator):
             concat_df = self._concat_with_stored_and_calculate_feats(
                 df, is_future=False
             )
-            transformed_df = self._create_transformed_df(
+            transformed_df = self._merge_into_input_df(
                 df=df, concat_df=concat_df, match_id_join_on=self.match_id_update_column
             )
 

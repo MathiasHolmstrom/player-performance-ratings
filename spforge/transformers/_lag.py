@@ -81,7 +81,7 @@ class LagTransformer(BaseLagGenerator):
             validate_sorting(df=df, column_names=self.column_names)
             self._store_df(df)
             concat_df = self._concat_with_stored_and_calculate_feats(df)
-            df = self._create_transformed_df(
+            df = self._merge_into_input_df(
                 df=df, concat_df=concat_df, match_id_join_on=self.column_names.match_id
             )
         else:

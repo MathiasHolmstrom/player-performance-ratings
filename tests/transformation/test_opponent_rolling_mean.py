@@ -23,8 +23,8 @@ def column_names():
 def test_rolling_mean_transform_historical(column_names, df, use_column_names):
     data = df(
         {
-            "game": [1, 1, 1, 1, 1, 1, 2, 2, 3, 3],
-            "points": [1, 2, 2, 4, 3, 2, 4, 5, 6, 2],
+            "game": [1, 1, 1, 1, 1, 1, 2, 2, 3, 3, 3, 3, 3, 3],
+            "points": [1, 2, 2, 4, 3, 2, 4, 6, 6, 2, 6, 1, 2, 0],
             "start_date": [
                 pd.to_datetime("2023-01-01"),
                 pd.to_datetime("2023-01-01"),
@@ -36,10 +36,14 @@ def test_rolling_mean_transform_historical(column_names, df, use_column_names):
                 pd.to_datetime("2023-01-03"),
                 pd.to_datetime("2023-01-04"),
                 pd.to_datetime("2023-01-04"),
+                pd.to_datetime("2023-01-04"),
+                pd.to_datetime("2023-01-04"),
+                pd.to_datetime("2023-01-04"),
+                pd.to_datetime("2023-01-04"),
             ],
-            "team": [1, 1, 1, 2, 2, 2, 1, 3, 1, 2],
-            "player": [1, 2, 5, 7, 3, 4, 1, 6, 2, 4],
-            "position": ["G", "G", "F", "G", "G", "F", "G", "F", "G", "F"],
+            "team": [1, 1, 1, 2, 2, 2, 1, 3, 1, 1, 1, 2, 2, 2],
+            "player": [1, 2, 5, 7, 3, 4, 1, 6, 1, 2, 5, 7, 3, 4],
+            "position": ["G", "G", "F", "G", "G", "F", "G", "F", "G", "G", "F", "G", "G", "F"],
         }
     )
     if use_column_names:
@@ -61,22 +65,26 @@ def test_rolling_mean_transform_historical(column_names, df, use_column_names):
             team_column="team",
         )
         transformed_data = rolling_mean.transform_historical(data)
+    expected_values = [None,
+                       None,
+                       None,
+                       None,
+                       None,
+                       None,
+                       None,
+                       2.0,
+                       1.5,
+                       1.5,
+                       2.0,
+                       3.5,
+                       3.5,
+                       4.0
+                       ]
     if isinstance(transformed_data, pd.DataFrame):
         expected_data = data.copy()
         expected_data = expected_data.assign(
             **{
-                rolling_mean.features_out[0]: [
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    2.0,
-                    1.5,
-                    3.5,
-                ]
+                rolling_mean.features_out[0]: expected_values
             }
         )
         pd.testing.assert_frame_equal(
@@ -87,7 +95,7 @@ def test_rolling_mean_transform_historical(column_names, df, use_column_names):
         expected_data = expected_data.with_columns(
             pl.Series(
                 rolling_mean.features_out[0],
-                [None, None, None, None, None, None, None, 2.0, 1.5, 3.5],
+                expected_values,
             )
         )
 

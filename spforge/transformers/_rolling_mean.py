@@ -9,7 +9,7 @@ from spforge.transformers.base_transformer import (
     BaseLagGenerator,
     required_lag_column_names,
     row_count_validator,
-    future_validator,
+    future_validator, historical_lag_transformations_wrapper,
 )
 from spforge.utils import validate_sorting
 
@@ -25,17 +25,17 @@ class RollingMeanTransformer(BaseLagGenerator):
     """
 
     def __init__(
-        self,
-        features: list[str],
-        window: int,
-        granularity: Union[list[str], str],
-        add_opponent: bool = False,
-        scale_by_participation_weight: bool = False,
-        min_periods: int = 1,
-        are_estimator_features=True,
-        prefix: str = "rolling_mean",
-        match_id_update_column: Optional[str] = None,
-        unique_constraint: Optional[list[str]] = None,
+            self,
+            features: list[str],
+            window: int,
+            granularity: Union[list[str], str],
+            add_opponent: bool = False,
+            scale_by_participation_weight: bool = False,
+            min_periods: int = 1,
+            are_estimator_features=True,
+            prefix: str = "rolling_mean",
+            match_id_update_column: Optional[str] = None,
+            unique_constraint: Optional[list[str]] = None,
     ):
         """
         :param features:   Features to create rolling mean for
@@ -59,17 +59,18 @@ class RollingMeanTransformer(BaseLagGenerator):
             granularity=granularity,
             are_estimator_features=are_estimator_features,
             match_id_update_column=match_id_update_column,
-            unique_constraint=unique_constraint,
+            unique_constraint=unique_constraint
         )
         self.scale_by_participation_weight = scale_by_participation_weight
         self.window = window
         self.min_periods = min_periods
 
     @nw.narwhalify
+    @historical_lag_transformations_wrapper
     @required_lag_column_names
     @row_count_validator
     def transform_historical(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+            self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """
         Generates rolling mean for historical data
@@ -78,55 +79,23 @@ class RollingMeanTransformer(BaseLagGenerator):
         :param df: Historical data
         :param column_names: Column names
         """
-        self.column_names = column_names or self.column_names
-        input_cols = df.columns
-        native = nw.to_native(df)
-        if isinstance(native, pd.DataFrame):
-            ori_native = "pd"
-            df = nw.from_native(pl.DataFrame(native))
-        else:
-            ori_native = "pl"
 
         if self.column_names:
-            df = df.with_columns(nw.lit(0).alias("is_future"))
             self._store_df(df)
             concat_df = self._concat_with_stored_and_calculate_feats(df)
-            transformed_df = self._create_transformed_df(
+            return self._merge_into_input_df(
                 df=df, concat_df=concat_df, match_id_join_on=self.match_id_update_column
             )
 
-            join_cols = (
-                [
-                    self.column_names.match_id,
-                    self.column_names.player_id,
-                    self.column_names.team_id,
-                ]
-                if self.column_names.player_id
-                else [self.column_names.match_id, self.column_names.team_id]
-            )
-            df = df.join(
-                transformed_df.select([*join_cols, *self.features_out]),
-                on=join_cols,
-                how="left",
-            )
         else:
-            transformed_df = self._concat_with_stored_and_calculate_feats(df).sort(
+            concat_df = self._concat_with_stored_and_calculate_feats(df).sort(
                 "__row_index"
             )
-            df = df.join(
-                transformed_df.select(["__row_index", *self.features_out]),
+            return df.join(
+                concat_df.select(["__row_index", *self.features_out]),
                 on="__row_index",
                 how="left",
             )
-
-        if "is_future" in df.columns:
-            df = df.drop("is_future")
-        if "__row_index" in df.columns:
-            df = df.drop("__row_index")
-            input_cols = [c for c in input_cols if c != "__row_index"]
-        if ori_native == "pd":
-            return df.select(list(set(input_cols + self.features_out))).to_pandas()
-        return df.select(list(set(input_cols + self.features_out)))
 
     @nw.narwhalify
     @future_validator
@@ -205,7 +174,7 @@ class RollingMeanTransformer(BaseLagGenerator):
 
             grp = grp.with_columns(
                 (
-                    nw.col(feature) * nw.col(self.column_names.participation_weight)
+                        nw.col(feature) * nw.col(self.column_names.participation_weight)
                 ).alias(f"__scaled_{feature}")
                 for feature in self.features
             )
@@ -225,10 +194,10 @@ class RollingMeanTransformer(BaseLagGenerator):
             grp = grp.with_columns(rolling_sums)
             rolling_means = [
                 (
-                    nw.col(f"{self.prefix}___scaled_{feature}{self.window}__sum")
-                    / nw.col(
-                        f"{self.prefix}_{self.column_names.participation_weight}{self.window}__sum"
-                    )
+                        nw.col(f"{self.prefix}___scaled_{feature}{self.window}__sum")
+                        / nw.col(
+                    f"{self.prefix}_{self.column_names.participation_weight}{self.window}__sum"
+                )
                 ).alias(f"{self.prefix}_{feature}{self.window}")
                 for feature in self.features
             ]
@@ -247,9 +216,9 @@ class RollingMeanTransformer(BaseLagGenerator):
             grp = grp.with_columns(rolling_means)
 
         selection_columns = (
-            self.granularity
-            + [self.match_id_update_column]
-            + [f"{self.prefix}_{feature}{self.window}" for feature in self.features]
+                self.granularity
+                + [self.match_id_update_column]
+                + [f"{self.prefix}_{feature}{self.window}" for feature in self.features]
         )
         concat_df = concat_df.join(
             grp.select(selection_columns),
