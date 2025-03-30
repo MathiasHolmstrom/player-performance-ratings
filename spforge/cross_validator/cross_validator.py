@@ -19,13 +19,13 @@ class MatchKFoldCrossValidator(CrossValidator):
     """
 
     def __init__(
-        self,
-        match_id_column_name: str,
-        date_column_name: str,
-        predictor: BasePredictor,
-        scorer: Optional[BaseScorer] = None,
-        min_validation_date: Optional[str] = None,
-        n_splits: int = 3,
+            self,
+            match_id_column_name: str,
+            date_column_name: str,
+            predictor: BasePredictor,
+            scorer: Optional[BaseScorer] = None,
+            min_validation_date: Optional[str] = None,
+            n_splits: int = 3,
     ):
         """
         :param match_id_column_name: The column name of the match_id
@@ -44,10 +44,10 @@ class MatchKFoldCrossValidator(CrossValidator):
 
     @nw.narwhalify
     def generate_validation_df(
-        self,
-        df: FrameT,
-        return_features: bool = False,
-        add_train_prediction: bool = True,
+            self,
+            df: FrameT,
+            return_features: bool = False,
+            add_train_prediction: bool = True,
     ) -> IntoFrameT:
         """
         Generate predictions on validation dataset.
@@ -67,7 +67,8 @@ class MatchKFoldCrossValidator(CrossValidator):
 
             If set to false it will only return the predictions for the validation dataset
         """
-        df = df.with_row_index("__cv_row_index")
+        if '__cv_row_index' not in df.columns:
+            df = df.with_row_index("__cv_row_index")
         if self.predictor.pred_column in df.columns:
             df = df.drop(self.predictor.pred_column)
 
@@ -87,8 +88,8 @@ class MatchKFoldCrossValidator(CrossValidator):
 
         df = df.with_columns(
             (
-                nw.col(self.match_id_column_name)
-                != nw.col(self.match_id_column_name).shift(1)
+                    nw.col(self.match_id_column_name)
+                    != nw.col(self.match_id_column_name).shift(1)
             )
             .cum_sum()
             .fill_null(0)
@@ -98,7 +99,7 @@ class MatchKFoldCrossValidator(CrossValidator):
             df = df.with_columns(nw.col("__cv_match_number") + 1)
 
         if isinstance(self.min_validation_date, str) and df.schema.get(
-            self.date_column_name
+                self.date_column_name
         ) in (nw.Date, nw.Datetime):
             min_validation_date = datetime.strptime(
                 self.min_validation_date, "%Y-%m-%d"
@@ -179,30 +180,23 @@ class MatchKFoldCrossValidator(CrossValidator):
                 validation_df = df.filter(
                     (nw.col("__cv_match_number") >= train_cut_off_match_number)
                     & (
-                        nw.col("__cv_match_number")
-                        < train_cut_off_match_number + step_matches
+                            nw.col("__cv_match_number")
+                            < train_cut_off_match_number + step_matches
                     )
                 )
 
         concat_validation_df = nw.concat(validation_dfs).drop("__cv_match_number")
+        return_feats = list(set([*ori_cols, *predictor.columns_added,
+                        self.validation_column_name] + predictor.features if return_features else [*ori_cols,
+                                                                                                   *predictor.columns_added]))
 
-        if not return_features:
-            return (
-                concat_validation_df.unique(
-                    subset=["__cv_row_index"],
-                    keep="first",
-                )
-                .sort("__cv_row_index")
-                .select(
-                    [*ori_cols, *predictor.columns_added, self.validation_column_name]
-                )
+
+        return (
+            concat_validation_df.unique(
+                subset=["__cv_row_index"],
+                keep="first",
             )
-        else:
-            return (
-                concat_validation_df.unique(
-                    subset=["__cv_row_index"],
-                    keep="first",
-                )
-                .sort("__cv_row_index")
-                .drop(["__cv_row_index"])
+            .sort("__cv_row_index")
+            .select(return_feats
             )
+        )
