@@ -9,7 +9,9 @@ from spforge.transformers.base_transformer import (
     BaseLagGenerator,
     required_lag_column_names,
     transformation_validator,
-    future_validator, historical_lag_transformations_wrapper, future_lag_transformations_wrapper,
+    future_validator,
+    historical_lag_transformations_wrapper,
+    future_lag_transformations_wrapper,
 )
 from spforge.utils import validate_sorting
 
@@ -25,17 +27,17 @@ class RollingMeanTransformer(BaseLagGenerator):
     """
 
     def __init__(
-            self,
-            features: list[str],
-            window: int,
-            granularity: Union[list[str], str],
-            add_opponent: bool = False,
-            scale_by_participation_weight: bool = False,
-            min_periods: int = 1,
-            are_estimator_features=True,
-            prefix: str = "rolling_mean",
-            match_id_update_column: Optional[str] = None,
-            unique_constraint: Optional[list[str]] = None,
+        self,
+        features: list[str],
+        window: int,
+        granularity: Union[list[str], str],
+        add_opponent: bool = False,
+        scale_by_participation_weight: bool = False,
+        min_periods: int = 1,
+        are_estimator_features=True,
+        prefix: str = "rolling_mean",
+        match_id_update_column: Optional[str] = None,
+        unique_constraint: Optional[list[str]] = None,
     ):
         """
         :param features:   Features to create rolling mean for
@@ -59,7 +61,7 @@ class RollingMeanTransformer(BaseLagGenerator):
             granularity=granularity,
             are_estimator_features=are_estimator_features,
             match_id_update_column=match_id_update_column,
-            unique_constraint=unique_constraint
+            unique_constraint=unique_constraint,
         )
         self.scale_by_participation_weight = scale_by_participation_weight
         self.window = window
@@ -70,7 +72,7 @@ class RollingMeanTransformer(BaseLagGenerator):
     @required_lag_column_names
     @transformation_validator
     def transform_historical(
-            self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """
         Generates rolling mean for historical data
@@ -84,18 +86,20 @@ class RollingMeanTransformer(BaseLagGenerator):
             self._store_df(df)
             df_with_feats = self._generate_features(df)
             df = self._merge_into_input_df(
-                df=df, concat_df=df_with_feats, match_id_join_on=self.match_id_update_column
+                df=df,
+                concat_df=df_with_feats,
+                match_id_join_on=self.match_id_update_column,
             )
 
         else:
-            df_with_feats = self._generate_features(df).sort(
-                "__row_index"
-            )
+            df_with_feats = self._generate_features(df).sort("__row_index")
             df = df.join(
-                df_with_feats.select([*self.granularity, self.match_id_update_column, *self.features_out]),
+                df_with_feats.select(
+                    [*self.granularity, self.match_id_update_column, *self.features_out]
+                ),
                 on=[*self.granularity, self.match_id_update_column],
                 how="left",
-            ).unique('__row_index')
+            ).unique("__row_index")
         if self.add_opponent:
             return self._add_opponent_features(df).sort("__row_index")
         return df
@@ -114,15 +118,13 @@ class RollingMeanTransformer(BaseLagGenerator):
         """
 
         df_with_feats = self._generate_features(df=df)
-        df_with_feats = self._merge_into_input_df(
-            df=df, concat_df=df_with_feats
-        )
+        df_with_feats = self._merge_into_input_df(df=df, concat_df=df_with_feats)
         if self.add_opponent:
-            df_with_feats = self._add_opponent_features(df_with_feats).sort("__row_index")
+            df_with_feats = self._add_opponent_features(df_with_feats).sort(
+                "__row_index"
+            )
 
-        df_with_feats = self._forward_fill_future_features(
-            df=df_with_feats
-        )
+        df_with_feats = self._forward_fill_future_features(df=df_with_feats)
 
         return df_with_feats
 
@@ -154,7 +156,7 @@ class RollingMeanTransformer(BaseLagGenerator):
 
             grp = grp.with_columns(
                 (
-                        nw.col(feature) * nw.col(self.column_names.participation_weight)
+                    nw.col(feature) * nw.col(self.column_names.participation_weight)
                 ).alias(f"__scaled_{feature}")
                 for feature in self.features
             )
@@ -174,10 +176,10 @@ class RollingMeanTransformer(BaseLagGenerator):
             grp = grp.with_columns(rolling_sums)
             rolling_means = [
                 (
-                        nw.col(f"{self.prefix}___scaled_{feature}{self.window}__sum")
-                        / nw.col(
-                    f"{self.prefix}_{self.column_names.participation_weight}{self.window}__sum"
-                )
+                    nw.col(f"{self.prefix}___scaled_{feature}{self.window}__sum")
+                    / nw.col(
+                        f"{self.prefix}_{self.column_names.participation_weight}{self.window}__sum"
+                    )
                 ).alias(f"{self.prefix}_{feature}{self.window}")
                 for feature in self.features
             ]

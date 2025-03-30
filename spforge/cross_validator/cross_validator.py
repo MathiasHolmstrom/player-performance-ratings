@@ -67,7 +67,7 @@ class MatchKFoldCrossValidator(CrossValidator):
 
             If set to false it will only return the predictions for the validation dataset
         """
-        df = df.with_row_index('__cv_row_index')
+        df = df.with_row_index("__cv_row_index")
         if self.predictor.pred_column in df.columns:
             df = df.drop(self.predictor.pred_column)
 
@@ -187,19 +187,22 @@ class MatchKFoldCrossValidator(CrossValidator):
         concat_validation_df = nw.concat(validation_dfs).drop("__cv_match_number")
 
         if not return_features:
-            return concat_validation_df.unique(
-            subset=[
-                '__cv_row_index'
-            ],
-            keep="first",
-        ).sort('__cv_row_index').select(
-                [*ori_cols, *predictor.columns_added, self.validation_column_name]
+            return (
+                concat_validation_df.unique(
+                    subset=["__cv_row_index"],
+                    keep="first",
+                )
+                .sort("__cv_row_index")
+                .select(
+                    [*ori_cols, *predictor.columns_added, self.validation_column_name]
+                )
             )
         else:
-            return concat_validation_df.unique(
-                subset=[
-                    '__cv_row_index'
-                ],
-                keep="first",
-            ).sort('__cv_row_index').drop(['__cv_row_index'])
-
+            return (
+                concat_validation_df.unique(
+                    subset=["__cv_row_index"],
+                    keep="first",
+                )
+                .sort("__cv_row_index")
+                .drop(["__cv_row_index"])
+            )

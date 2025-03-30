@@ -10,7 +10,10 @@ from spforge import ColumnNames
 from spforge.transformers.base_transformer import (
     BaseLagGenerator,
     required_lag_column_names,
-    transformation_validator, historical_lag_transformations_wrapper, future_lag_transformations_wrapper, future_validator,
+    transformation_validator,
+    historical_lag_transformations_wrapper,
+    future_lag_transformations_wrapper,
+    future_validator,
 )
 from spforge.utils import validate_sorting
 
@@ -18,16 +21,16 @@ from spforge.utils import validate_sorting
 class LagTransformer(BaseLagGenerator):
 
     def __init__(
-            self,
-            features: list[str],
-            lag_length: int,
-            granularity: list[str],
-            days_between_lags: Optional[list[int]] = None,
-            future_lag: bool = False,
-            prefix: str = "lag",
-            add_opponent: bool = False,
-            match_id_update_column: Optional[str] = None,
-            column_names: Optional[ColumnNames] = None,
+        self,
+        features: list[str],
+        lag_length: int,
+        granularity: list[str],
+        days_between_lags: Optional[list[int]] = None,
+        future_lag: bool = False,
+        prefix: str = "lag",
+        add_opponent: bool = False,
+        match_id_update_column: Optional[str] = None,
+        column_names: Optional[ColumnNames] = None,
     ):
         """
         :param features. List of features to create lags for
@@ -63,7 +66,7 @@ class LagTransformer(BaseLagGenerator):
     @required_lag_column_names
     @transformation_validator
     def transform_historical(
-            self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """ """
 
@@ -84,11 +87,11 @@ class LagTransformer(BaseLagGenerator):
 
         df_with_feats = self._generate_features(df=df)
         if self.add_opponent:
-            df_with_feats = self._add_opponent_features(df_with_feats).sort("__row_index")
+            df_with_feats = self._add_opponent_features(df_with_feats).sort(
+                "__row_index"
+            )
 
-        df_with_feats = self._forward_fill_future_features(
-            df=df_with_feats
-        )
+        df_with_feats = self._forward_fill_future_features(df=df_with_feats)
 
         return df_with_feats
 
@@ -121,12 +124,12 @@ class LagTransformer(BaseLagGenerator):
                 )
                 grouped = grouped.with_columns(
                     (
-                            (
-                                    nw.col("shifted_days").cast(nw.Date)
-                                    - nw.col(self.column_names.start_date).cast(nw.Date)
-                            ).dt.total_minutes()
-                            / 60
-                            / 24
+                        (
+                            nw.col("shifted_days").cast(nw.Date)
+                            - nw.col(self.column_names.start_date).cast(nw.Date)
+                        ).dt.total_minutes()
+                        / 60
+                        / 24
                     ).alias(f"{self.prefix}{days_lag}_days_ago")
                 )
             else:
@@ -138,12 +141,12 @@ class LagTransformer(BaseLagGenerator):
                 )
                 grouped = grouped.with_columns(
                     (
-                            (
-                                    nw.col(self.column_names.start_date).cast(nw.Date)
-                                    - nw.col("shifted_days").cast(nw.Date)
-                            ).dt.total_minutes()
-                            / 60
-                            / 24
+                        (
+                            nw.col(self.column_names.start_date).cast(nw.Date)
+                            - nw.col("shifted_days").cast(nw.Date)
+                        ).dt.total_minutes()
+                        / 60
+                        / 24
                     ).alias(f"{self.prefix}{days_lag}_days_ago")
                 )
             grouped = grouped.drop("shifted_days")
@@ -175,7 +178,13 @@ class LagTransformer(BaseLagGenerator):
             feats_out.append(f"{self.prefix}{days_lag}_days_ago")
 
         return df.join(
-            grouped.select([*self.granularity, self.match_id_update_column, *self._entity_features_out]),
+            grouped.select(
+                [
+                    *self.granularity,
+                    self.match_id_update_column,
+                    *self._entity_features_out,
+                ]
+            ),
             on=[*self.granularity, self.match_id_update_column],
             how="left",
         ).sort("__row_index")

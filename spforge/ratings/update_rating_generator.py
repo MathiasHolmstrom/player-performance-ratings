@@ -173,10 +173,21 @@ class UpdateRatingGenerator(RatingGenerator):
                         *self.all_rating_features_out,
                     ]
                 ),
-                on=[self.column_names.match_id, column_names.team_id ,self.column_names.player_id],
+                on=[
+                    self.column_names.match_id,
+                    column_names.team_id,
+                    self.column_names.player_id,
+                ],
                 how="left",
             )
-            .unique(subset=[column_names.match_id, column_names.team_id ,column_names.player_id], keep="last")
+            .unique(
+                subset=[
+                    column_names.match_id,
+                    column_names.team_id,
+                    column_names.player_id,
+                ],
+                keep="last",
+            )
         )
 
         df = df.sort(

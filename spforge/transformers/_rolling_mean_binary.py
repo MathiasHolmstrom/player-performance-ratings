@@ -10,7 +10,8 @@ from spforge.transformers.base_transformer import (
     BaseLagGenerator,
     required_lag_column_names,
     transformation_validator,
-    future_validator, historical_lag_transformations_wrapper,
+    future_validator,
+    historical_lag_transformations_wrapper,
 )
 from spforge.utils import validate_sorting
 
@@ -18,17 +19,17 @@ from spforge.utils import validate_sorting
 class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
     def __init__(
-            self,
-            features: list[str],
-            window: int,
-            binary_column: str,
-            granularity: list[str] = None,
-            prob_column: Optional[str] = None,
-            min_periods: int = 1,
-            add_opponent: bool = False,
-            prefix: str = "rolling_mean_binary",
-            match_id_update_column: Optional[str] = None,
-            column_names: Optional[ColumnNames] = None,
+        self,
+        features: list[str],
+        window: int,
+        binary_column: str,
+        granularity: list[str] = None,
+        prob_column: Optional[str] = None,
+        min_periods: int = 1,
+        add_opponent: bool = False,
+        prefix: str = "rolling_mean_binary",
+        match_id_update_column: Optional[str] = None,
+        column_names: Optional[ColumnNames] = None,
     ):
         super().__init__(
             features=features,
@@ -74,16 +75,15 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
     @required_lag_column_names
     @transformation_validator
     def transform_historical(
-            self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
 
         if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
             df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
 
-
         if self.column_names:
             self.match_id_update_column = (
-                    self.column_names.update_match_id or self.match_id_update_column
+                self.column_names.update_match_id or self.match_id_update_column
             )
             additional_cols = [self.binary_column] + (
                 [self.prob_column] if self.prob_column else []
@@ -97,14 +97,11 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
                 match_id_join_on=self.column_names.update_match_id,
             )
         else:
-            df = self._generate_features(df).sort(
-                "__row_index"
-            )
+            df = self._generate_features(df).sort("__row_index")
 
         if self.add_opponent:
             return self._add_opponent_features(df=df)
         return df
-
 
     @nw.narwhalify
     @future_validator
@@ -167,31 +164,28 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         return known_future_features
 
     def _generate_features(self, df: FrameT) -> FrameT:
+        aggregation = {f: nw.mean(f).alias(f) for f in self.features}
+        aggregation[self.binary_column] = nw.median(self.binary_column)
         if self.column_names and self._df is not None:
             sort_col = self.column_names.start_date
             concat_df = self._concat_with_stored(df)
-
+            aggregation[sort_col] = nw.min(sort_col)
         else:
             concat_df = df
             if "__row_index" not in concat_df.columns:
                 concat_df = concat_df.with_row_index(name="__row_index")
             sort_col = "__row_index"
+            aggregation[sort_col] = nw.mean(sort_col)
 
         groupby_cols = [
             self.match_id_update_column,
             *self.granularity,
         ]
 
-        aggregation = {f: nw.mean(f).alias(f) for f in self.features}
-        aggregation[self.binary_column] = nw.median(self.binary_column)
-        aggregation[sort_col] = nw.mean(sort_col)
-        grouped = concat_df.group_by(groupby_cols).agg(list(aggregation.values()))
-
-        grouped = grouped.sort(
-            by=[
-                sort_col,
-                self.match_id_update_column,
-            ]
+        grouped = (
+            concat_df.group_by(groupby_cols)
+            .agg(list(aggregation.values()))
+            .sort([sort_col, self.match_id_update_column])
         )
 
         feats_added = []
@@ -254,8 +248,15 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
         concat_df = concat_df.with_columns(
             [nw.col(feats_added).fill_null(strategy="forward").over(self.granularity)]
         )
+        df = df.join(
+            concat_df.select(
+                [*self.granularity, self.match_id_update_column, *feats_added]
+            ),
+            on=[*self.granularity, self.match_id_update_column],
+            how="left",
+        )
 
-        return self._add_weighted_prob(transformed_df=concat_df)
+        return self._add_weighted_prob(transformed_df=df)
 
     def _add_weighted_prob(self, transformed_df: FrameT) -> FrameT:
 
@@ -266,10 +267,10 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
                 )
                 transformed_df = transformed_df.with_columns(
                     (
-                            nw.col(f"{self.prefix}_{feature_name}{self.window}_1")
-                            * nw.col(self.prob_column)
-                            + nw.col(f"{self.prefix}_{feature_name}{self.window}_0")
-                            * (1 - nw.col(self.prob_column))
+                        nw.col(f"{self.prefix}_{feature_name}{self.window}_1")
+                        * nw.col(self.prob_column)
+                        + nw.col(f"{self.prefix}_{feature_name}{self.window}_0")
+                        * (1 - nw.col(self.prob_column))
                     ).alias(weighted_prob_feat_name)
                 )
         return transformed_df

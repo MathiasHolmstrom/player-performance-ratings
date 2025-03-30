@@ -15,7 +15,7 @@ def future_validator(method):
     @wraps(method)
     def wrapper(self, df: FrameT, *args, **kwargs):
         assert (
-                self.column_names is not None
+            self.column_names is not None
         ), "column names must be passed when calling transform_future"
         return method(self, df, *args, **kwargs)
 
@@ -24,11 +24,11 @@ def future_validator(method):
 
 def future_lag_transformations_wrapper(method):
     @wraps(method)
-    def wrapper(self, df: FrameT,*args, **kwargs):
+    def wrapper(self, df: FrameT, *args, **kwargs):
         df = df.drop([f for f in self.features_out if f in df.columns])
         input_cols = df.columns
-        if '__row_index' not in df.columns:
-            df = df.with_row_index('__row_index')
+        if "__row_index" not in df.columns:
+            df = df.with_row_index("__row_index")
 
         if isinstance(nw.to_native(df), pd.DataFrame):
             ori_native = "pd"
@@ -39,14 +39,14 @@ def future_lag_transformations_wrapper(method):
         df = df.with_columns(nw.lit(1).alias("is_future"))
         if self.unique_constraint:
             assert len(df.select(self.unique_constraint)) == len(
-                df), f"Specified unique constraint {self.unique_constraint} is not unique on the input dataframe"
-
+                df
+            ), f"Specified unique constraint {self.unique_constraint} is not unique on the input dataframe"
 
         result = method(self=self, df=df, *args, **kwargs).sort("__row_index")
 
         if "is_future" in result.columns:
             result = result.drop("is_future")
-        input_cols = [c for c in input_cols if c not in ('is_future')]
+        input_cols = [c for c in input_cols if c not in ("is_future")]
         if ori_native == "pd":
             return result.select(list(set(input_cols + self.features_out))).to_pandas()
         return result.select(list(set(input_cols + self.features_out)))
@@ -56,24 +56,33 @@ def future_lag_transformations_wrapper(method):
 
 def historical_lag_transformations_wrapper(method):
     @wraps(method)
-    def wrapper(self, df: FrameT, column_names: Optional[ColumnNames] = None, *args, **kwargs):
+    def wrapper(
+        self, df: FrameT, column_names: Optional[ColumnNames] = None, *args, **kwargs
+    ):
         input_cols = df.columns
         if "__row_index" not in df.columns:
             df = df.with_row_index(name="__row_index")
         self.column_names = column_names or self.column_names
         if self.column_names and not self.unique_constraint:
-            self.unique_constraint = [self.column_names.match_id, self.column_names.player_id,
-                                      self.column_names.team_id] if self.column_names.player_id else [
-                self.column_names.match_id, self.column_names.team_id]
+            self.unique_constraint = (
+                [
+                    self.column_names.match_id,
+                    self.column_names.player_id,
+                    self.column_names.team_id,
+                ]
+                if self.column_names.player_id
+                else [self.column_names.match_id, self.column_names.team_id]
+            )
 
         if self.unique_constraint:
             assert len(df.select(self.unique_constraint)) == len(
-                df), f"Specified unique constraint {self.unique_constraint} is not unique on the input dataframe"
+                df
+            ), f"Specified unique constraint {self.unique_constraint} is not unique on the input dataframe"
         if (
-                self.scale_by_participation_weight
-                and not self.column_names
-                or self.scale_by_participation_weight
-                and not self.column_names.participation_weight
+            self.scale_by_participation_weight
+            and not self.column_names
+            or self.scale_by_participation_weight
+            and not self.column_names.participation_weight
         ):
             raise ValueError(
                 "scale_by_participation_weight requires column_names to be provided"
@@ -89,7 +98,7 @@ def historical_lag_transformations_wrapper(method):
 
         if "is_future" in result.columns:
             result = result.drop("is_future")
-        input_cols = [c for c in input_cols if c not in ('is_future')]
+        input_cols = [c for c in input_cols if c not in ("is_future")]
         if ori_native == "pd":
             return result.select(list(set(input_cols + self.features_out))).to_pandas()
         return result.select(list(set(input_cols + self.features_out)))
@@ -105,10 +114,10 @@ def transformation_validator(method):
         result = method(self, df, *args, **kwargs)
         output_row_count = len(result)
         assert (
-                input_row_count == output_row_count
+            input_row_count == output_row_count
         ), f"Row count mismatch: input had {input_row_count} rows, output had {output_row_count} rows"
         for col in input_cols:
-            if col == '__row_index':
+            if col == "__row_index":
                 continue
             assert col in result.columns, f"Column {col} not found in output"
 
@@ -120,7 +129,7 @@ def transformation_validator(method):
 def required_lag_column_names(method):
     @wraps(method)
     def wrapper(
-            self, df: FrameT, column_names: Optional[ColumnNames] = None, *args, **kwargs
+        self, df: FrameT, column_names: Optional[ColumnNames] = None, *args, **kwargs
     ):
         self.column_names = column_names or self.column_names
 
@@ -134,7 +143,7 @@ def required_lag_column_names(method):
                 )
 
             assert (
-                    self.match_id_update_column is not None
+                self.match_id_update_column is not None
             ), "if column names is not passed. match_id_update_column must be passed"
 
             if self.add_opponent:
@@ -151,10 +160,10 @@ def required_lag_column_names(method):
 class BaseTransformer(ABC):
 
     def __init__(
-            self,
-            features: list[str],
-            features_out: list[str],
-            are_estimator_features: bool = True,
+        self,
+        features: list[str],
+        features_out: list[str],
+        are_estimator_features: bool = True,
     ):
         self._features_out = features_out
         self.features = features
@@ -166,7 +175,7 @@ class BaseTransformer(ABC):
 
     @abstractmethod
     def fit_transform(
-            self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         pass
 
@@ -189,17 +198,17 @@ class BaseTransformer(ABC):
 class BaseLagGenerator:
 
     def __init__(
-            self,
-            granularity: list[str],
-            features: list[str],
-            add_opponent: bool,
-            iterations: list[int],
-            prefix: str,
-            match_id_update_column: Optional[str],
-            column_names: Optional[ColumnNames] = None,
-            are_estimator_features: bool = True,
-            unique_constraint: Optional[list[str]] = None,
-            scale_by_participation_weight: bool = False
+        self,
+        granularity: list[str],
+        features: list[str],
+        add_opponent: bool,
+        iterations: list[int],
+        prefix: str,
+        match_id_update_column: Optional[str],
+        column_names: Optional[ColumnNames] = None,
+        are_estimator_features: bool = True,
+        unique_constraint: Optional[list[str]] = None,
+        scale_by_participation_weight: bool = False,
     ):
         self.match_id_update_column = match_id_update_column
         self.column_names = column_names
@@ -217,9 +226,15 @@ class BaseLagGenerator:
         self._entity_features_out = []
         cn = self.column_names
         self.scale_by_participation_weight = scale_by_participation_weight
-        self.unique_constraint = unique_constraint if unique_constraint else [cn.player_id, cn.match_id,
-                                                                              cn.team_id] if cn and cn.player_id else [
-            cn.match_id, cn.team_id] if cn else None
+        self.unique_constraint = (
+            unique_constraint
+            if unique_constraint
+            else (
+                [cn.player_id, cn.match_id, cn.team_id]
+                if cn and cn.player_id
+                else [cn.match_id, cn.team_id] if cn else None
+            )
+        )
 
         for feature_name in self.features:
             for lag in iterations:
@@ -230,7 +245,7 @@ class BaseLagGenerator:
 
     @abstractmethod
     def transform_historical(
-            self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         pass
 
@@ -278,9 +293,7 @@ class BaseLagGenerator:
             maintain_order=True,
         )
 
-    def _store_df(
-            self, df: nw.DataFrame, additional_cols: Optional[list[str]] = None
-    ):
+    def _store_df(self, df: nw.DataFrame, additional_cols: Optional[list[str]] = None):
         df = df.with_columns(
             [
                 nw.col(feature).cast(nw.Float64).alias(feature)
@@ -339,7 +352,7 @@ class BaseLagGenerator:
         )
 
     def _merge_into_input_df(
-            self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
+        self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
     ) -> IntoFrameT:
 
         ori_cols = [c for c in df.columns if c not in self.features_out]
@@ -361,11 +374,20 @@ class BaseLagGenerator:
         join_cols = [*self.granularity, self.column_names.update_match_id]
         for column in join_cols:
             if concat_df[column].dtype != df[column].dtype:
-                concat_df = concat_df.with_columns(concat_df[column].cast(df[column].dtype))
+                concat_df = concat_df.with_columns(
+                    concat_df[column].cast(df[column].dtype)
+                )
 
-        transformed_df = df.select(ori_cols).join(concat_df.select([*join_cols, *self._entity_features_out]),
-                                                  on=join_cols, how='left').unique(self.unique_constraint).sort(
-            sort_cols)
+        transformed_df = (
+            df.select(ori_cols)
+            .join(
+                concat_df.select([*join_cols, *self._entity_features_out]),
+                on=join_cols,
+                how="left",
+            )
+            .unique(self.unique_constraint)
+            .sort(sort_cols)
+        )
         return transformed_df.select(list(set(df.columns + self._entity_features_out)))
 
     def _add_opponent_features(self, df: FrameT) -> FrameT:
@@ -415,14 +437,17 @@ class BaseLagGenerator:
         )
 
     def _forward_fill_future_features(
-            self,
-            df: FrameT,
-            known_future_features: Optional[list[str]] = None,
+        self,
+        df: FrameT,
+        known_future_features: Optional[list[str]] = None,
     ) -> FrameT:
         cn = self.column_names
 
         df = df.with_columns(
-            [nw.col(f).fill_null(-999.21345).alias(f) for f in self._entity_features_out]
+            [
+                nw.col(f).fill_null(-999.21345).alias(f)
+                for f in self._entity_features_out
+            ]
         )
         df = df.sort([cn.start_date])
         first_grp = (
@@ -456,7 +481,6 @@ class BaseLagGenerator:
                     .alias(f)
                     for f in self._entity_features_out
                 )
-
 
         team_features = df.group_by(
             [self.column_names.team_id, self.column_names.match_id]
@@ -525,7 +549,7 @@ class BaseLagGenerator:
             self.column_names.player_id,
         ]
         cols_to_drop = [c for c in opponent_feat_names if c in df.columns]
-        return  df.drop(cols_to_drop).join(
+        return df.drop(cols_to_drop).join(
             new_df.select(
                 [
                     *join_cols,

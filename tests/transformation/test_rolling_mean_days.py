@@ -369,8 +369,11 @@ def test_rolling_mean_days_tranformer_transform_first_future_beyond_window(
         transformed_future_df, expected_df, check_like=True, check_dtype=False
     )
 
+
 @pytest.mark.parametrize("use_column_names", [True, False])
-def test_rolling_mean_days_transform_historical_granularity_differs_from_input_granularity(column_names: ColumnNames, use_column_names):
+def test_rolling_mean_days_transform_historical_granularity_differs_from_input_granularity(
+    column_names: ColumnNames, use_column_names
+):
     column_names.player_id = None
     data = pd.DataFrame(
         {
@@ -386,12 +389,25 @@ def test_rolling_mean_days_transform_historical_granularity_differs_from_input_g
                 pd.to_datetime("2023-01-03"),
                 pd.to_datetime("2023-01-03"),
                 pd.to_datetime("2023-01-03"),
-                pd.to_datetime("2023-01-03")
+                pd.to_datetime("2023-01-03"),
             ],
             column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3],
             column_names.team_id: [1, 1, 2, 2, 3, 3, 4, 4, 1, 1, 5, 5],
             "points": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-            "position": ["pg", "sg", "pg", "sg", "pg", "sg", "pg", "sg", "pg", "sg", "pg", "sg"],
+            "position": [
+                "pg",
+                "sg",
+                "pg",
+                "sg",
+                "pg",
+                "sg",
+                "pg",
+                "sg",
+                "pg",
+                "sg",
+                "pg",
+                "sg",
+            ],
             "league": ["a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a"],
         }
     )
@@ -401,7 +417,7 @@ def test_rolling_mean_days_transform_historical_granularity_differs_from_input_g
             features=["points"],
             days=10,
             granularity=["league", "position"],
-            unique_constraint=[column_names.match_id, column_names.team_id, 'position']
+            unique_constraint=[column_names.match_id, column_names.team_id, "position"],
         )
     else:
         transformer = RollingMeanDaysTransformer(
@@ -414,15 +430,36 @@ def test_rolling_mean_days_transform_historical_granularity_differs_from_input_g
         column_names = None
 
     expected_df = data.copy()
-    transformed_df = transformer.transform_historical(df=data, column_names=column_names)
+    transformed_df = transformer.transform_historical(
+        df=data, column_names=column_names
+    )
 
     expected_df = expected_df.assign(
-        **{transformer.features_out[0]: [None, None, None, None, 2,3, 2, 3, (1+3+5+7) / 4, (2+4+6+8 ) / 4, (1+3+5+7)/4,
-                                         (2+4+6+8 ) / 4]}
+        **{
+            transformer.features_out[0]: [
+                None,
+                None,
+                None,
+                None,
+                2,
+                3,
+                2,
+                3,
+                (1 + 3 + 5 + 7) / 4,
+                (2 + 4 + 6 + 8) / 4,
+                (1 + 3 + 5 + 7) / 4,
+                (2 + 4 + 6 + 8) / 4,
+            ]
+        }
     )
-    pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
+    pd.testing.assert_frame_equal(
+        transformed_df, expected_df, check_like=True, check_dtype=False
+    )
 
-def test_rolling_mean__days_transform_future_granularity_differs_from_input_granularity(column_names: ColumnNames):
+
+def test_rolling_mean__days_transform_future_granularity_differs_from_input_granularity(
+    column_names: ColumnNames,
+):
 
     column_names.player_id = None
     historical_df = pd.DataFrame(
@@ -450,13 +487,13 @@ def test_rolling_mean__days_transform_future_granularity_differs_from_input_gran
                 pd.to_datetime("2023-01-03"),
                 pd.to_datetime("2023-01-03"),
                 pd.to_datetime("2023-01-03"),
-                pd.to_datetime("2023-01-03")
+                pd.to_datetime("2023-01-03"),
             ],
             column_names.match_id: [3, 3, 3, 3],
-            column_names.team_id: [ 1, 1, 5, 5],
+            column_names.team_id: [1, 1, 5, 5],
             "points": [9, 10, 11, 12],
             "position": ["pg", "sg", "pg", "sg"],
-            "league": [ "a", "a", "a", "a"],
+            "league": ["a", "a", "a", "a"],
         }
     )
 
@@ -464,7 +501,7 @@ def test_rolling_mean__days_transform_future_granularity_differs_from_input_gran
         features=["points"],
         days=10,
         granularity=["league", "position"],
-        unique_constraint=[column_names.match_id, column_names.team_id, 'position']
+        unique_constraint=[column_names.match_id, column_names.team_id, "position"],
     )
 
     expected_df = future_df.copy()
@@ -473,8 +510,15 @@ def test_rolling_mean__days_transform_future_granularity_differs_from_input_gran
     transformed_future_df = transformer.transform_future(future_df)
 
     expected_df = expected_df.assign(
-        **{transformer.features_out[0]: [(1+3+5+7) / 4, (2+4+6+8 ) / 4, (1+3+5+7)/4,
-                                         (2+4+6+8 ) / 4]}
+        **{
+            transformer.features_out[0]: [
+                (1 + 3 + 5 + 7) / 4,
+                (2 + 4 + 6 + 8) / 4,
+                (1 + 3 + 5 + 7) / 4,
+                (2 + 4 + 6 + 8) / 4,
+            ]
+        }
     )
-    pd.testing.assert_frame_equal(transformed_future_df, expected_df, check_like=True, check_dtype=False)
-
+    pd.testing.assert_frame_equal(
+        transformed_future_df, expected_df, check_like=True, check_dtype=False
+    )

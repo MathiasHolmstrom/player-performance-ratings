@@ -69,7 +69,7 @@ def test_match_k_fold_cross_validator(df, column_names):
             [
                 pl.lit(1.0).alias("__target_prediction"),
                 pl.Series("__cv_match_number", [0, 1, 2, 3, 4]),
-                pl.Series('__cv_row_index', [0, 1, 2, 3, 4])
+                pl.Series("__cv_row_index", [0, 1, 2, 3, 4]),
             ]
         )
 
@@ -77,7 +77,7 @@ def test_match_k_fold_cross_validator(df, column_names):
             [
                 pl.Series("__target_prediction", [0.0, 0.0, 0.0, 0.0, 1.0]),
                 pl.Series("__cv_match_number", [5, 6, 7, 8, 9]),
-                pl.Series('__cv_row_index', [5, 6, 7, 8, 9])
+                pl.Series("__cv_row_index", [5, 6, 7, 8, 9]),
             ]
         )
 
@@ -97,9 +97,7 @@ def test_match_k_fold_cross_validator(df, column_names):
         predictor=predictor,
     )
 
-    validation_df = cv.generate_validation_df(
-        df=data,  add_train_prediction=False
-    )
+    validation_df = cv.generate_validation_df(df=data, add_train_prediction=False)
 
     score = cv.cross_validation_score(validation_df=validation_df)
     assert score == 0.1
@@ -150,9 +148,7 @@ def test_match_k_fold_cross_validator_add_train_prediction(column_names):
         predictor=predictor,
     )
 
-    validation_df = cv.generate_validation_df(
-        df=df, add_train_prediction=True
-    )
+    validation_df = cv.generate_validation_df(df=df, add_train_prediction=True)
 
     assert validation_df["__target_prediction"].unique()[0] == 3.2
     assert len(validation_df["__target_prediction"].unique()) == 1
