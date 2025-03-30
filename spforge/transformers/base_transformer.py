@@ -353,6 +353,9 @@ class BaseLagGenerator:
             ]
         )
         join_cols = [*self.granularity, self.column_names.update_match_id]
+        for column in join_cols:
+            if concat_df[column].dtype != df[column].dtype:
+                concat_df = concat_df.with_columns(concat_df[column].cast(df[column].dtype))
 
         transformed_df = df.select(ori_cols).join(concat_df.select([*join_cols, *self._entity_features_out]),
                                                   on=join_cols, how='left').unique(self.unique_constraint).sort(

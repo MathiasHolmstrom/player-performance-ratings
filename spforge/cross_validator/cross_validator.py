@@ -46,7 +46,6 @@ class MatchKFoldCrossValidator(CrossValidator):
     def generate_validation_df(
         self,
         df: FrameT,
-        column_names: ColumnNames,
         return_features: bool = False,
         add_train_prediction: bool = True,
     ) -> IntoFrameT:
@@ -68,21 +67,11 @@ class MatchKFoldCrossValidator(CrossValidator):
 
             If set to false it will only return the predictions for the validation dataset
         """
+        df = df.with_row_index('__cv_row_index')
         if self.predictor.pred_column in df.columns:
             df = df.drop(self.predictor.pred_column)
-        if "__row_index" in df.columns:
-            df = df.drop("__row_index")
-        sort_cols = (
-            [
-                column_names.start_date,
-                column_names.match_id,
-                column_names.team_id,
-                column_names.player_id,
-            ]
-            if column_names.player_id
-            else [column_names.start_date, column_names.match_id, column_names.team_id]
-        )
-        df = df.sort(sort_cols)
+
+        df = df.sort(self.date_column_name)
 
         if self.validation_column_name in df.columns:
             df = df.drop(self.validation_column_name)
@@ -124,7 +113,7 @@ class MatchKFoldCrossValidator(CrossValidator):
             .item()
         )
 
-        max_match_number = df.select(nw.col("__cv_match_number").max()).to_numpy()[0][0]
+        max_match_number = df.select(nw.col("__cv_match_number").max()).row(0)[0]
         train_cut_off_match_number = min_validation_match_number
         step_matches = (max_match_number - min_validation_match_number) / self.n_splits
 
@@ -198,18 +187,19 @@ class MatchKFoldCrossValidator(CrossValidator):
         concat_validation_df = nw.concat(validation_dfs).drop("__cv_match_number")
 
         if not return_features:
-            concat_validation_df = concat_validation_df.select(
-                [*ori_cols, *predictor.columns_added, self.validation_column_name]
-            )
-
-        concat_validation_df = concat_validation_df.unique(
+            return concat_validation_df.unique(
             subset=[
-                column_names.match_id,
-                column_names.team_id,
-                column_names.player_id,
+                '__cv_row_index'
             ],
             keep="first",
-            maintain_order=True,
-        )
-        validate_sorting(df=concat_validation_df, column_names=column_names)
-        return concat_validation_df
+        ).sort('__cv_row_index').select(
+                [*ori_cols, *predictor.columns_added, self.validation_column_name]
+            )
+        else:
+            return concat_validation_df.unique(
+                subset=[
+                    '__cv_row_index'
+                ],
+                keep="first",
+            ).sort('__cv_row_index').drop(['__cv_row_index'])
+
