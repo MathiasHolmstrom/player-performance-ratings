@@ -55,7 +55,7 @@ class RatingGenerator(ABC):
         self._calculated_match_ids = []
 
     @abstractmethod
-    def generate_historical(
+    def transform_historical(
         self,
         df: FrameT,
         column_names: ColumnNames,
@@ -63,7 +63,7 @@ class RatingGenerator(ABC):
         pass
 
     @abstractmethod
-    def generate_future(
+    def transform_future(
         self,
         df: Optional[FrameT],
         matches: Optional[list[Match]] = None,

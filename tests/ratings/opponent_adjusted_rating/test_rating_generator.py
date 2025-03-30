@@ -92,7 +92,7 @@ def test_opponent_adjusted_rating_generator_with_projected_performance(df):
         }
     )
 
-    df_with_ratings = rating_generator.generate_historical(
+    df_with_ratings = rating_generator.transform_historical(
         df=data,
         column_names=column_names,
     )
@@ -177,7 +177,7 @@ def test_update_rating_generator_generate_historical(df):
         }
     )
 
-    ratings_df = rating_generator.generate_historical(
+    ratings_df = rating_generator.transform_historical(
         df=data, column_names=column_names
     )
     cols = [
@@ -269,11 +269,11 @@ def test_update_rating_generator_historical_and_future(df):
         }
     )
 
-    _ = rating_generator.generate_historical(
+    _ = rating_generator.transform_historical(
         df=historical_df, column_names=column_names
     )
     player_ratings = rating_generator.player_ratings
-    future_df_with_ratings = rating_generator.generate_future(df=future_df)
+    future_df_with_ratings = rating_generator.transform_future(df=future_df)
 
     player_rating_1 = player_ratings[1].rating_value
     player_rating_2 = player_ratings[2].rating_value
@@ -380,7 +380,7 @@ def test_update_rating_generator_stores_correct(df):
         }
     )
 
-    hist_ratings1 = rating_generator.generate_historical(
+    hist_ratings1 = rating_generator.transform_historical(
         historical_df1, column_names=column_names
     )
 
@@ -397,7 +397,7 @@ def test_update_rating_generator_stores_correct(df):
             hist_ratings1[column_names.match_id] == 2
         ][rating_generator.features_out[0]].iloc[0]
 
-    hist_ratings2 = rating_generator.generate_historical(
+    hist_ratings2 = rating_generator.transform_historical(
         historical_df2, column_names=column_names
     )
     if isinstance(hist_ratings1, pl.DataFrame):
@@ -496,7 +496,7 @@ def test_rating_generator_prefix_suffix(df):
         }
     )
 
-    historical_df1_with_ratings = rating_generator.generate_historical(
+    historical_df1_with_ratings = rating_generator.transform_historical(
         historical_df1, column_names=column_names
     )
     for (
@@ -534,7 +534,7 @@ def test_rating_generator_prefix_suffix(df):
         }
     )
 
-    future_df_ratings = rating_generator.generate_future(future_df)
+    future_df_ratings = rating_generator.transform_future(future_df)
     for (
         non_estimator_known_features_out
     ) in rating_generator._non_estimator_known_features_out:
@@ -612,7 +612,7 @@ def test_update_rating_generator_with_performances_generator(df):
         }
     )
 
-    historical_df_with_ratings = rating_generator.generate_historical(
+    historical_df_with_ratings = rating_generator.transform_historical(
         historical_df, column_names=column_names
     )
     assert rating_generator.performance_column == "performance_weighted"

@@ -97,15 +97,21 @@ def historical_lag_transformations_wrapper(method):
     return wrapper
 
 
-def row_count_validator(method):
+def transformation_validator(method):
     @wraps(method)
     def wrapper(self, df: FrameT, *args, **kwargs):
         input_row_count = len(df)
+        input_cols = df.columns
         result = method(self, df, *args, **kwargs)
         output_row_count = len(result)
         assert (
                 input_row_count == output_row_count
         ), f"Row count mismatch: input had {input_row_count} rows, output had {output_row_count} rows"
+        for col in input_cols:
+            if col == '__row_index':
+                continue
+            assert col in result.columns, f"Column {col} not found in output"
+
         return result
 
     return wrapper

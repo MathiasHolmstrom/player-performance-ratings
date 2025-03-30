@@ -29,6 +29,7 @@ from spforge.data_structures import (
     TeamRatingChange,
 )
 from spforge.ratings.rating_generator import RatingGenerator
+from spforge.transformers.base_transformer import transformation_validator
 
 
 class UpdateRatingGenerator(RatingGenerator):
@@ -93,8 +94,9 @@ class UpdateRatingGenerator(RatingGenerator):
         self.match_rating_generator.start_rating_generator.reset()
         self.match_rating_generator.performance_predictor.reset()
 
+    @transformation_validator
     @nw.narwhalify
-    def generate_historical(
+    def transform_historical(
         self,
         df: FrameT,
         column_names: ColumnNames,
@@ -167,13 +169,14 @@ class UpdateRatingGenerator(RatingGenerator):
                     [
                         self.column_names.match_id,
                         self.column_names.player_id,
+                        self.column_names.team_id,
                         *self.all_rating_features_out,
                     ]
                 ),
-                on=[self.column_names.match_id, self.column_names.player_id],
+                on=[self.column_names.match_id, column_names.team_id ,self.column_names.player_id],
                 how="left",
             )
-            .unique(subset=[column_names.match_id, column_names.player_id], keep="last")
+            .unique(subset=[column_names.match_id, column_names.team_id ,column_names.player_id], keep="last")
         )
 
         df = df.sort(
@@ -378,8 +381,9 @@ class UpdateRatingGenerator(RatingGenerator):
 
         return potential_feature_values
 
+    @transformation_validator
     @nw.narwhalify
-    def generate_future(
+    def transform_future(
         self,
         df: FrameT,
         matches: Optional[list[Match]] = None,

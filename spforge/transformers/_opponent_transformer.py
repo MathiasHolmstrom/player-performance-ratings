@@ -10,7 +10,7 @@ from spforge.transformers import RollingMeanTransformer
 from spforge.transformers.base_transformer import (
     BaseLagGenerator,
     required_lag_column_names,
-    row_count_validator,
+    transformation_validator,
     BaseTransformer,
     future_validator, historical_lag_transformations_wrapper,
 )
@@ -89,7 +89,7 @@ class OpponentTransformer(BaseLagGenerator):
     @nw.narwhalify
     @historical_lag_transformations_wrapper
     @required_lag_column_names
-    @row_count_validator
+    @transformation_validator
     def transform_historical(
             self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
@@ -149,7 +149,7 @@ class OpponentTransformer(BaseLagGenerator):
 
     @nw.narwhalify
     @future_validator
-    @row_count_validator
+    @transformation_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
         """
         Generates rolling mean opponent for future data

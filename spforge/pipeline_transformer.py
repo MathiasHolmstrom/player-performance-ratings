@@ -79,7 +79,7 @@ class PipelineTransformer:
         ), "Dataframe contains duplicates"
         for rating_generator in self.rating_generators:
             df = nw.from_native(
-                rating_generator.generate_historical(
+                rating_generator.transform_historical(
                     df=df, column_names=self.column_names
                 )
             )
@@ -162,7 +162,7 @@ class PipelineTransformer:
 
         for rating_idx, rating_generator in enumerate(self.rating_generators):
             df = nw.from_native(
-                rating_generator.generate_future(df=df, matches=matches)
+                rating_generator.transform_future(df=df, matches=matches)
             )
             df = df.sort(sort_columns)
             assert len(df.unique(unique_constraint)) == len(

@@ -9,7 +9,7 @@ from spforge import ColumnNames
 from spforge.transformers.base_transformer import (
     BaseLagGenerator,
     required_lag_column_names,
-    row_count_validator,
+    transformation_validator,
     future_validator, historical_lag_transformations_wrapper,
 )
 from spforge.utils import validate_sorting
@@ -72,7 +72,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
     @nw.narwhalify
     @historical_lag_transformations_wrapper
     @required_lag_column_names
-    @row_count_validator
+    @transformation_validator
     def transform_historical(
             self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
@@ -108,7 +108,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
 
     @nw.narwhalify
     @future_validator
-    @row_count_validator
+    @transformation_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
         input_cols = df.columns
         native = nw.to_native(df)

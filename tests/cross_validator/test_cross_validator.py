@@ -59,14 +59,17 @@ def test_match_k_fold_cross_validator(df, column_names):
         return_add_prediction1 = data.head(5)
         return_add_prediction1["__target_prediction"] = [1, 1, 1, 1, 1]
         return_add_prediction1["__cv_match_number"] = [0, 1, 2, 3, 4]
+        return_add_prediction1["__cv_row_index"] = [0, 1, 2, 3, 4]
         return_add_prediction2 = data.tail(5)
         return_add_prediction2["__target_prediction"] = [0, 0, 0, 0, 1]
         return_add_prediction2["__cv_match_number"] = [5, 6, 7, 8, 9]
+        return_add_prediction2["__cv_row_index"] = [5, 6, 7, 8, 9]
     else:
         return_add_prediction1 = data.head(5).with_columns(
             [
                 pl.lit(1.0).alias("__target_prediction"),
                 pl.Series("__cv_match_number", [0, 1, 2, 3, 4]),
+                pl.Series('__cv_row_index', [0, 1, 2, 3, 4])
             ]
         )
 
@@ -74,6 +77,7 @@ def test_match_k_fold_cross_validator(df, column_names):
             [
                 pl.Series("__target_prediction", [0.0, 0.0, 0.0, 0.0, 1.0]),
                 pl.Series("__cv_match_number", [5, 6, 7, 8, 9]),
+                pl.Series('__cv_row_index', [5, 6, 7, 8, 9])
             ]
         )
 
@@ -94,7 +98,7 @@ def test_match_k_fold_cross_validator(df, column_names):
     )
 
     validation_df = cv.generate_validation_df(
-        df=data, column_names=column_names, add_train_prediction=False
+        df=data,  add_train_prediction=False
     )
 
     score = cv.cross_validation_score(validation_df=validation_df)
@@ -134,6 +138,7 @@ def test_match_k_fold_cross_validator_add_train_prediction(column_names):
     return_value = df.copy()
     return_value["__target_prediction"] = 3.2
     return_value["__cv_match_number"] = list(range(len(df)))
+    return_value["__cv_row_index"] = list(range(len(df)))
     predictor.predict.return_value = return_value
 
     cv = MatchKFoldCrossValidator(
@@ -146,7 +151,7 @@ def test_match_k_fold_cross_validator_add_train_prediction(column_names):
     )
 
     validation_df = cv.generate_validation_df(
-        df=df, add_train_prediction=True, column_names=column_names
+        df=df, add_train_prediction=True
     )
 
     assert validation_df["__target_prediction"].unique()[0] == 3.2

@@ -200,7 +200,7 @@ class Pipeline(BasePredictor):
 
         for idx in range(len(self.rating_generators)):
             df = nw.from_native(
-                self.rating_generators[idx].generate_historical(
+                self.rating_generators[idx].transform_historical(
                     df, column_names=self.column_names
                 )
             )
@@ -295,7 +295,7 @@ class Pipeline(BasePredictor):
             if cross_validation:
 
                 df_with_predict = nw.from_native(
-                    rating_generator.generate_historical(
+                    rating_generator.transform_historical(
                         df_with_predict, column_names=self.column_names
                     )
                 )
@@ -310,7 +310,7 @@ class Pipeline(BasePredictor):
                         [rating_generator.performance_column]
                     )
                 df_with_predict = nw.from_native(
-                    rating_generator.generate_future(df=df_with_predict)
+                    rating_generator.transform_future(df=df_with_predict)
                 )
                 df_with_predict = df_with_predict.sort(sort_cols)
                 assert len(df_with_predict.unique(unique_constraint)) == len(
