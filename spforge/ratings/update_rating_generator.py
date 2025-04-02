@@ -29,7 +29,7 @@ from spforge.data_structures import (
     TeamRatingChange,
 )
 from spforge.ratings.rating_generator import RatingGenerator
-from spforge.transformers.base_transformer import transformation_validator
+from spforge.transformers.lag_transformers._utils import transformation_validator
 
 
 class UpdateRatingGenerator(RatingGenerator):

@@ -29,7 +29,6 @@ class CrossValidator(ABC):
     def generate_validation_df(
         self,
         df: FrameT,
-        column_names: ColumnNames,
         return_features: bool = False,
         add_train_prediction: bool = False,
     ) -> IntoFrameT:

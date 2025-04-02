@@ -9,9 +9,9 @@ from spforge.ratings import convert_df_to_matches, LeagueIdentifier
 
 from spforge.ratings.rating_generator import RatingGenerator
 from spforge.transformers.base_transformer import (
-    BaseLagGenerator,
     BaseTransformer,
 )
+from spforge.transformers.lag_transformers import BaseLagTransformer
 
 
 class PipelineTransformer:
@@ -28,9 +28,7 @@ class PipelineTransformer:
             Union[RatingGenerator, list[RatingGenerator]]
         ] = None,
         pre_lag_transformers: Optional[list[BaseTransformer]] = None,
-        lag_transformers: Optional[
-            List[Union[BaseLagGenerator, BaseLagGenerator]]
-        ] = None,
+        lag_transformers: Optional[List[BaseLagTransformer]] = None,
         post_lag_transformers: Optional[list[BaseTransformer]] = None,
     ):
         self.column_names = column_names

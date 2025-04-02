@@ -1,22 +1,20 @@
 from typing import Union, Optional
 import narwhals as nw
-import pandas as pd
-import polars as pl
+
 from narwhals.typing import FrameT, IntoFrameT
 
 from spforge import ColumnNames
-from spforge.transformers.base_transformer import (
-    BaseLagGenerator,
+from spforge.transformers.lag_transformers._utils import (
     required_lag_column_names,
+    historical_lag_transformations_wrapper,
     transformation_validator,
     future_validator,
-    historical_lag_transformations_wrapper,
     future_lag_transformations_wrapper,
 )
-from spforge.utils import validate_sorting
+from spforge.transformers.lag_transformers import BaseLagTransformer
 
 
-class RollingMeanTransformer(BaseLagGenerator):
+class RollingMeanTransformer(BaseLagTransformer):
     """
     Calculates the rolling mean for a list of features over a window of matches.
     Rolling Mean Values are also shifted by one match to avoid data leakage.

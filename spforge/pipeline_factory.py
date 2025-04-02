@@ -10,8 +10,8 @@ from spforge.predictor._base import BasePredictor
 from spforge.ratings.rating_generator import RatingGenerator
 from spforge.transformers.base_transformer import (
     BaseTransformer,
-    BaseLagGenerator,
 )
+from spforge.transformers.lag_transformers import BaseLagTransformer
 
 
 class PipelineFactory:
@@ -25,7 +25,7 @@ class PipelineFactory:
         ] = None,
         performances_generator: Optional[PerformancesGenerator] = None,
         pre_lag_transformers: Optional[List[BaseTransformer]] = None,
-        lag_generators: Optional[List[BaseLagGenerator]] = None,
+        lag_generators: Optional[List[BaseLagTransformer]] = None,
         post_lag_transformers: Optional[List[BaseTransformer]] = None,
     ):
         self.post_lag_transformers = post_lag_transformers or []
@@ -43,7 +43,7 @@ class PipelineFactory:
         self,
         performances_generator: Optional[PerformancesGenerator] = None,
         rating_generators: Optional[list[RatingGenerator]] = None,
-        lag_generators: Optional[List[BaseLagGenerator]] = None,
+        lag_generators: Optional[List[BaseLagTransformer]] = None,
         pre_lag_transformers: Optional[List[BaseTransformer]] = None,
         post_lag_transformers: Optional[List[BaseTransformer]] = None,
         predictor: Optional[BasePredictor] = None,

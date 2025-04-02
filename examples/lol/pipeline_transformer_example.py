@@ -120,9 +120,7 @@ cross_validator_game_winner = MatchKFoldCrossValidator(
 )
 
 game_winner_predictor.train(historical_df)
-historical_df = cross_validator_game_winner.generate_validation_df(
-    historical_df
-)
+historical_df = cross_validator_game_winner.generate_validation_df(historical_df)
 
 cross_validator_player_kills = MatchKFoldCrossValidator(
     date_column_name=column_names.start_date,
@@ -132,9 +130,7 @@ cross_validator_player_kills = MatchKFoldCrossValidator(
 
 player_kills_predictor.train(historical_df)
 print(player_kills_predictor.features)
-historical_df = cross_validator_player_kills.generate_validation_df(
-    historical_df, column_names
-)
+historical_df = cross_validator_player_kills.generate_validation_df(historical_df)
 
 future_df = transformer.transform(future_df)
 future_df = game_winner_predictor.predict(future_df)

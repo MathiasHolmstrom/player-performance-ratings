@@ -6,7 +6,7 @@ from typing import Optional, Union
 from narwhals.typing import FrameT, IntoFrameT
 import narwhals as nw
 from spforge.transformers.base_transformer import BaseTransformer
-from spforge.transformers.performances_transformers import (
+from spforge.transformers.fit_transformers import (
     PartialStandardScaler,
     MinMaxTransformer,
     SymmetricDistributionTransformer,

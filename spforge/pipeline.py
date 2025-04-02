@@ -13,8 +13,8 @@ from spforge.scorer import Filter, apply_filters
 
 from spforge.transformers.base_transformer import (
     BaseTransformer,
-    BaseLagGenerator,
 )
+from spforge.transformers.lag_transformers import BaseLagTransformer
 
 
 class Pipeline(BasePredictor):
@@ -45,9 +45,7 @@ class Pipeline(BasePredictor):
             Union[RatingGenerator, list[RatingGenerator]]
         ] = None,
         pre_lag_transformers: Optional[list[BaseTransformer]] = None,
-        lag_transformers: Optional[
-            List[Union[BaseLagGenerator, BaseLagGenerator]]
-        ] = None,
+        lag_transformers: Optional[List[BaseLagTransformer]] = None,
         post_lag_transformers: Optional[list[BaseTransformer]] = None,
     ):
         """
