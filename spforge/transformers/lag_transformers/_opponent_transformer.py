@@ -6,18 +6,20 @@ import polars as pl
 from narwhals.typing import FrameT, IntoFrameT
 
 from spforge import ColumnNames
-from spforge.transformers import RollingMeanTransformer
-from spforge.transformers.base_transformer import (
-    BaseLagGenerator,
+from spforge.transformers.lag_transformers import RollingMeanTransformer
+from spforge.transformers.lag_transformers._utils import (
+    historical_lag_transformations_wrapper,
     required_lag_column_names,
     transformation_validator,
-    BaseTransformer,
     future_validator,
-    historical_lag_transformations_wrapper,
 )
+from spforge.transformers.base_transformer import (
+    BaseTransformer,
+)
+from spforge.transformers.lag_transformers import BaseLagTransformer
 
 
-class OpponentTransformer(BaseLagGenerator):
+class OpponentTransformer(BaseLagTransformer):
     """
     Calculates the rolling mean of a list of features from the opponents perspective.
     In contrast to RollingMeanTransformer and setting add_opponent = True, the OpponentRollingMeanTransformer does not calculate the mean of the rolling mean for the team itself.

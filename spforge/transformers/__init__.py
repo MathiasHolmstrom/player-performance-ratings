@@ -1,13 +1,14 @@
-from ._lag import LagTransformer
-from ._rolling_mean import RollingMeanTransformer
-from ._rolling_mean_days import RollingMeanDaysTransformer
-from ._rolling_mean_binary import BinaryOutcomeRollingMeanTransformer
-from ._opponent_transformer import OpponentTransformer
+from .lag_transformers import (
+    LagTransformer,
+    RollingMeanTransformer,
+    RollingMeanDaysTransformer,
+    BinaryOutcomeRollingMeanTransformer,
+    OpponentTransformer,
+)
 
-from .transformers import (
+from .fit_transformers import (
     RatioTeamPredictorTransformer,
     PredictorTransformer,
-    NetOverPredictedPostTransformer,
-    ModifyOperation,
-    Operation,
+    NetOverPredictedTransformer,
 )
+from .simple_transformer import OperatorTransformer, Operation

@@ -6,17 +6,16 @@ import narwhals as nw
 from narwhals.typing import FrameT, IntoFrameT
 
 from spforge import ColumnNames
-from spforge.transformers.base_transformer import (
-    BaseLagGenerator,
+from spforge.transformers.lag_transformers._utils import (
+    historical_lag_transformations_wrapper,
     required_lag_column_names,
     transformation_validator,
     future_validator,
-    historical_lag_transformations_wrapper,
 )
-from spforge.utils import validate_sorting
+from spforge.transformers.lag_transformers import BaseLagTransformer
 
 
-class BinaryOutcomeRollingMeanTransformer(BaseLagGenerator):
+class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
 
     def __init__(
         self,

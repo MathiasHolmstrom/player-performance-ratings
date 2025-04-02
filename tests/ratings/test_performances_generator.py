@@ -10,7 +10,7 @@ from spforge.ratings.performance_generator import (
     auto_create_pre_performance_transformations,
     Performance,
 )
-from spforge.transformers.performances_transformers import (
+from spforge.transformers.fit_transformers import (
     SymmetricDistributionTransformer,
     PartialStandardScaler,
     MinMaxTransformer,

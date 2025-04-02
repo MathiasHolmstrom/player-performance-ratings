@@ -123,7 +123,6 @@ def test_match_predictor_auto_pre_transformers(df):
     predictor_mock.columns_added = ["prediction"]
     predictor_mock.features = [RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
 
-    predictor_mock.add_prediction.return_value = expected_df
     rating_generators = UpdateRatingGenerator(
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         performance_column="weighted_performance",
