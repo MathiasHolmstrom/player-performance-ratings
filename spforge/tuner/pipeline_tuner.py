@@ -193,7 +193,7 @@ class PipelineTuner:
                 best_performances_generator
             )
         if best_performances_generator:
-            df = best_performances_generator.generate(df)
+            df = best_performances_generator.fit_transform(df)
 
         best_rating_generators = copy.deepcopy(self._pipeline_factory.rating_generators)
 

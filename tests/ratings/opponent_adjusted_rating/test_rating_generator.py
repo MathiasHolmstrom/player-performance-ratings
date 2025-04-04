@@ -12,15 +12,13 @@ from spforge.ratings.enums import (
     RatingKnownFeatures,
     RatingUnknownFeatures,
 )
-from spforge.ratings.performance_generator import (
-    PerformancesGenerator,
-    Performance,
-    ColumnWeight,
-)
+
 from spforge.ratings.rating_calculators import (
     MatchRatingGenerator,
     StartRatingGenerator,
 )
+from spforge.transformers.fit_transformers import PerformanceWeightsManager
+from spforge.transformers.fit_transformers._performance_manager import Performance, ColumnWeight
 
 
 @pytest.fixture
@@ -92,7 +90,7 @@ def test_opponent_adjusted_rating_generator_with_projected_performance(df):
         }
     )
 
-    df_with_ratings = rating_generator.transform_historical(
+    df_with_ratings = rating_generator.fit_transform(
         df=data,
         column_names=column_names,
     )
@@ -177,7 +175,7 @@ def test_update_rating_generator_generate_historical(df):
         }
     )
 
-    ratings_df = rating_generator.transform_historical(
+    ratings_df = rating_generator.fit_transform(
         df=data, column_names=column_names
     )
     cols = [
@@ -269,7 +267,7 @@ def test_update_rating_generator_historical_and_future(df):
         }
     )
 
-    _ = rating_generator.transform_historical(
+    _ = rating_generator.fit_transform(
         df=historical_df, column_names=column_names
     )
     player_ratings = rating_generator.player_ratings
@@ -380,7 +378,7 @@ def test_update_rating_generator_stores_correct(df):
         }
     )
 
-    hist_ratings1 = rating_generator.transform_historical(
+    hist_ratings1 = rating_generator.fit_transform(
         historical_df1, column_names=column_names
     )
 
@@ -397,7 +395,7 @@ def test_update_rating_generator_stores_correct(df):
             hist_ratings1[column_names.match_id] == 2
         ][rating_generator.features_out[0]].iloc[0]
 
-    hist_ratings2 = rating_generator.transform_historical(
+    hist_ratings2 = rating_generator.fit_transform(
         historical_df2, column_names=column_names
     )
     if isinstance(hist_ratings1, pl.DataFrame):
@@ -465,7 +463,7 @@ def test_rating_generator_prefix_suffix(df):
             RatingUnknownFeatures.OPPONENT_RATING,
             RatingUnknownFeatures.RATING_MEAN,
         ],
-        non_estimator_known_features_out=[
+        non_predictor_known_features_out=[
             RatingKnownFeatures.TEAM_RATING_PROJECTED,
             RatingKnownFeatures.PLAYER_RATING,
             RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
@@ -496,7 +494,7 @@ def test_rating_generator_prefix_suffix(df):
         }
     )
 
-    historical_df1_with_ratings = rating_generator.transform_historical(
+    historical_df1_with_ratings = rating_generator.fit_transform(
         historical_df1, column_names=column_names
     )
     for (
@@ -560,7 +558,7 @@ def test_update_rating_generator_with_performances_generator(df):
         league="league",
     )
     rating_generator = UpdateRatingGenerator(
-        performances_generator=PerformancesGenerator(
+        performances_generator=PerformanceWeightsManager(
             performances=[
                 Performance(
                     name="performance_weighted",
@@ -580,7 +578,7 @@ def test_update_rating_generator_with_performances_generator(df):
             RatingUnknownFeatures.OPPONENT_RATING,
             RatingUnknownFeatures.RATING_MEAN,
         ],
-        non_estimator_known_features_out=[
+        non_predictor_known_features_out=[
             RatingKnownFeatures.TEAM_RATING_PROJECTED,
             RatingKnownFeatures.PLAYER_RATING,
             RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
@@ -612,7 +610,7 @@ def test_update_rating_generator_with_performances_generator(df):
         }
     )
 
-    historical_df_with_ratings = rating_generator.transform_historical(
+    historical_df_with_ratings = rating_generator.fit_transform(
         historical_df, column_names=column_names
     )
     assert rating_generator.performance_column == "performance_weighted"

@@ -2,15 +2,14 @@ import copy
 from typing import Optional, List, Union
 
 from spforge import Pipeline, ColumnNames
-from spforge.ratings.performance_generator import (
-    PerformancesGenerator,
-)
+
 
 from spforge.predictor._base import BasePredictor
 from spforge.ratings.rating_generator import RatingGenerator
 from spforge.transformers.base_transformer import (
     BaseTransformer,
 )
+from spforge.transformers.fit_transformers import PerformanceWeightsManager
 from spforge.transformers.lag_transformers import BaseLagTransformer
 
 
@@ -23,7 +22,7 @@ class PipelineFactory:
         rating_generators: Optional[
             Union[RatingGenerator, list[RatingGenerator]]
         ] = None,
-        performances_generator: Optional[PerformancesGenerator] = None,
+        performances_generator: Optional[PerformanceWeightsManager] = None,
         pre_lag_transformers: Optional[List[BaseTransformer]] = None,
         lag_generators: Optional[List[BaseLagTransformer]] = None,
         post_lag_transformers: Optional[List[BaseTransformer]] = None,
@@ -41,7 +40,7 @@ class PipelineFactory:
 
     def create(
         self,
-        performances_generator: Optional[PerformancesGenerator] = None,
+        performances_generator: Optional[PerformanceWeightsManager] = None,
         rating_generators: Optional[list[RatingGenerator]] = None,
         lag_generators: Optional[List[BaseLagTransformer]] = None,
         pre_lag_transformers: Optional[List[BaseTransformer]] = None,
@@ -78,7 +77,6 @@ class PipelineFactory:
 
         return Pipeline(
             rating_generators=rating_generators,
-            performances_generator=performances_generator,
             lag_transformers=copy.deepcopy(lag_generators),
             pre_lag_transformers=copy.deepcopy(pre_lag_transformers),
             post_lag_transformers=copy.deepcopy(post_lag_transformers),

@@ -66,9 +66,7 @@ cross_validator = MatchKFoldCrossValidator(
     match_id_column_name=column_names.match_id,
     predictor=pipeline,
 )
-validation_df = cross_validator.generate_validation_df(
-    df=df, return_features=True
-)
+validation_df = cross_validator.generate_validation_df(df=df, return_features=True)
 
 mean_absolute_scorer = SklearnScorer(
     pred_column=predictor.point_predictor.pred_column,
@@ -114,9 +112,7 @@ lgbm_classifier_cross_validator = MatchKFoldCrossValidator(
     predictor=lgbm_classifier_predictor,
 )
 
-validation_df = lgbm_classifier_cross_validator.generate_validation_df(
-    df=validation_df
-)
+validation_df = lgbm_classifier_cross_validator.generate_validation_df(df=validation_df)
 
 ordinal_scorer_lgbm_classifier = OrdinalLossScorer(
     pred_column=lgbm_classifier_predictor.pred_column,

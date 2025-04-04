@@ -192,7 +192,7 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
 
         return UpdateRatingGenerator(
             match_rating_generator=best_rating_generator.match_rating_generator,
-            non_estimator_known_features_out=best_rating_generator.non_estimator_known_features_out,
+            non_predictor_known_features_out=best_rating_generator.non_estimator_known_features_out,
             features_out=best_rating_generator._known_features_out,
             performance_column=best_rating_generator.performance_column,
         )

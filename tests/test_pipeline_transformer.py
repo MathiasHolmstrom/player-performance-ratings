@@ -8,12 +8,10 @@ from spforge.ratings import (
     UpdateRatingGenerator,
     RatingKnownFeatures,
 )
-from spforge.ratings.performance_generator import (
-    ColumnWeight,
-    Performance,
-    PerformancesGenerator,
-)
+
 from spforge.transformers import LagTransformer
+from spforge.transformers.fit_transformers._performance_manager import ColumnWeight, PerformanceWeightsManager, \
+    Performance
 
 
 @pytest.mark.parametrize("to_polars", [True, False])
@@ -50,7 +48,7 @@ def test_pipeline_transformer(to_polars):
     )
     rating_generator = UpdateRatingGenerator(
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
-        performances_generator=PerformancesGenerator(
+        performances_generator=PerformanceWeightsManager(
             Performance(weights=column_weights)
         ),
     )

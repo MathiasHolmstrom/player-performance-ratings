@@ -15,11 +15,6 @@ from spforge.ratings import (
     UpdateRatingGenerator,
     RatingUnknownFeatures,
 )
-from spforge.ratings.performance_generator import (
-    Performance,
-    ColumnWeight,
-    PerformancesGenerator,
-)
 
 from spforge.transformers import (
     LagTransformer,
@@ -31,6 +26,8 @@ from spforge import ColumnNames, Pipeline
 from spforge.transformers import (
     RollingMeanTransformer,
 )
+from spforge.transformers.fit_transformers._performance_manager import ColumnWeight, Performance, \
+    PerformanceWeightsManager
 
 
 def test_pipeline_constructor():
@@ -126,7 +123,7 @@ def test_match_predictor_auto_pre_transformers(df):
     rating_generators = UpdateRatingGenerator(
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         performance_column="weighted_performance",
-        performances_generator=PerformancesGenerator(
+        performances_generator=PerformanceWeightsManager(
             performances=Performance(
                 name="weighted_performance", weights=column_weights
             )
@@ -341,7 +338,7 @@ def test_match_predictor_generate_and_predict(df):
     )
     rating_generator = UpdateRatingGenerator(
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
-        performances_generator=PerformancesGenerator(
+        performances_generator=PerformanceWeightsManager(
             Performance(weights=column_weights)
         ),
     )
@@ -405,10 +402,10 @@ def test_train_predict_post_pre_and_lag_transformers():
         start_date="start_date",
     )
     rating_generator = UpdateRatingGenerator(
-        non_estimator_known_features_out=[RatingKnownFeatures.PLAYER_RATING],
+        non_predictor_known_features_out=[RatingKnownFeatures.PLAYER_RATING],
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         unknown_features_out=[RatingUnknownFeatures.TEAM_RATING],
-        performances_generator=PerformancesGenerator(
+        performances_generator=PerformanceWeightsManager(
             Performance(weights=column_weights)
         ),
     )

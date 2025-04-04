@@ -115,7 +115,7 @@ class PerformancesGeneratorTuner:
             performances_generator = PerformancesGenerator(
                 performances=performances,
                 transformers=best_pre_transformers,
-                auto_transform_performance=pipeline_factory.performances_generator.auto_transform_performance,
+                auto_transform_performance=pipeline_factory.performances_generator.scale_performance,
             )
             pipeline = pipeline_factory.create(
                 performances_generator=performances_generator

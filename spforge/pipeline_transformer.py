@@ -77,7 +77,7 @@ class PipelineTransformer:
         ), "Dataframe contains duplicates"
         for rating_generator in self.rating_generators:
             df = nw.from_native(
-                rating_generator.transform_historical(
+                rating_generator.fit_transform(
                     df=df, column_names=self.column_names
                 )
             )
