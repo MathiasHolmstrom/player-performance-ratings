@@ -7,20 +7,18 @@ import pytest
 from spforge.data_structures import (
     ColumnNames,
 )
-from spforge.ratings import UpdateRatingGenerator
+from spforge.ratings import PlayerRatingGenerator
 from spforge.ratings.enums import (
     RatingKnownFeatures,
     RatingUnknownFeatures,
 )
-from spforge.ratings.performance_generator import (
-    PerformancesGenerator,
-    Performance,
-    ColumnWeight,
-)
+
 from spforge.ratings.rating_calculators import (
     MatchRatingGenerator,
     StartRatingGenerator,
 )
+from spforge.transformers.fit_transformers import PerformanceWeightsManager
+from spforge.transformers.fit_transformers._performance_manager import ColumnWeight
 
 
 @pytest.fixture
@@ -44,7 +42,7 @@ def test_opponent_adjusted_rating_generator_with_projected_performance(df):
         participation_weight="participation_weight",
     )
 
-    rating_generator = UpdateRatingGenerator(
+    rating_generator = PlayerRatingGenerator(
         unknown_features_out=[RatingUnknownFeatures.TEAM_RATING],
         features_out=[RatingKnownFeatures.TEAM_RATING_PROJECTED],
         match_rating_generator=MatchRatingGenerator(
@@ -92,7 +90,7 @@ def test_opponent_adjusted_rating_generator_with_projected_performance(df):
         }
     )
 
-    df_with_ratings = rating_generator.transform_historical(
+    df_with_ratings = rating_generator.fit_transform(
         df=data,
         column_names=column_names,
     )
@@ -124,7 +122,7 @@ def test_update_rating_generator_generate_historical(df):
         projected_participation_weight="projected_participation_weight",
         participation_weight="participation_weight",
     )
-    rating_generator = UpdateRatingGenerator(
+    rating_generator = PlayerRatingGenerator(
         features_out=[
             RatingKnownFeatures.TEAM_RATING_PROJECTED,
             RatingKnownFeatures.PLAYER_RATING,
@@ -177,9 +175,7 @@ def test_update_rating_generator_generate_historical(df):
         }
     )
 
-    ratings_df = rating_generator.transform_historical(
-        df=data, column_names=column_names
-    )
+    ratings_df = rating_generator.fit_transform(df=data, column_names=column_names)
     cols = [
         *data.columns,
         *rating_generator.unknown_features_out,
@@ -201,7 +197,7 @@ def test_update_rating_generator_historical_and_future(df):
         projected_participation_weight="projected_participation_weight",
         participation_weight="participation_weight",
     )
-    rating_generator = UpdateRatingGenerator(
+    rating_generator = PlayerRatingGenerator(
         features_out=[
             RatingKnownFeatures.TEAM_RATING_PROJECTED,
             RatingKnownFeatures.PLAYER_RATING,
@@ -269,9 +265,7 @@ def test_update_rating_generator_historical_and_future(df):
         }
     )
 
-    _ = rating_generator.transform_historical(
-        df=historical_df, column_names=column_names
-    )
+    _ = rating_generator.fit_transform(df=historical_df, column_names=column_names)
     player_ratings = rating_generator.player_ratings
     future_df_with_ratings = rating_generator.transform_future(df=future_df)
 
@@ -341,7 +335,7 @@ def test_update_rating_generator_stores_correct(df):
         player_id="player_id",
         start_date="start_date",
     )
-    rating_generator = UpdateRatingGenerator()
+    rating_generator = PlayerRatingGenerator()
     historical_df1 = df(
         {
             column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2],
@@ -380,7 +374,7 @@ def test_update_rating_generator_stores_correct(df):
         }
     )
 
-    hist_ratings1 = rating_generator.transform_historical(
+    hist_ratings1 = rating_generator.fit_transform(
         historical_df1, column_names=column_names
     )
 
@@ -397,7 +391,7 @@ def test_update_rating_generator_stores_correct(df):
             hist_ratings1[column_names.match_id] == 2
         ][rating_generator.features_out[0]].iloc[0]
 
-    hist_ratings2 = rating_generator.transform_historical(
+    hist_ratings2 = rating_generator.fit_transform(
         historical_df2, column_names=column_names
     )
     if isinstance(hist_ratings1, pl.DataFrame):
@@ -455,7 +449,7 @@ def test_rating_generator_prefix_suffix(df):
         start_date="start_date",
         league="league",
     )
-    rating_generator = UpdateRatingGenerator(
+    rating_generator = PlayerRatingGenerator(
         prefix="prefix_",
         suffix="_suffix",
         unknown_features_out=[
@@ -465,7 +459,7 @@ def test_rating_generator_prefix_suffix(df):
             RatingUnknownFeatures.OPPONENT_RATING,
             RatingUnknownFeatures.RATING_MEAN,
         ],
-        non_estimator_known_features_out=[
+        non_predictor_known_features_out=[
             RatingKnownFeatures.TEAM_RATING_PROJECTED,
             RatingKnownFeatures.PLAYER_RATING,
             RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
@@ -496,7 +490,7 @@ def test_rating_generator_prefix_suffix(df):
         }
     )
 
-    historical_df1_with_ratings = rating_generator.transform_historical(
+    historical_df1_with_ratings = rating_generator.fit_transform(
         historical_df1, column_names=column_names
     )
     for (
@@ -550,8 +544,9 @@ def test_rating_generator_prefix_suffix(df):
         assert expected_feature_out in future_df_ratings.columns
 
 
+@pytest.mark.parametrize("as_dict", [True, False])
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
-def test_update_rating_generator_with_performances_generator(df):
+def test_update_rating_generator_with_performances_generator(df, as_dict):
     column_names = ColumnNames(
         match_id="game_id",
         team_id="team_id",
@@ -559,18 +554,32 @@ def test_update_rating_generator_with_performances_generator(df):
         start_date="start_date",
         league="league",
     )
-    rating_generator = UpdateRatingGenerator(
-        performances_generator=PerformancesGenerator(
-            performances=[
-                Performance(
-                    name="performance_weighted",
-                    weights=[
-                        ColumnWeight(name="points_difference", weight=0.5),
-                        ColumnWeight(name="won", weight=0.5),
-                    ],
-                )
-            ]
-        ),
+    if as_dict:
+        performances_generator = None
+        performance_weights = [
+            {
+                "name": "points_difference",
+                "weight": 0.5,
+            },
+            {
+                "name": "won",
+                "weight": 0.5,
+            },
+        ]
+
+    else:
+        performances_generator = PerformanceWeightsManager(
+            weights=[
+                ColumnWeight(name="points_difference", weight=0.5),
+                ColumnWeight(name="won", weight=0.5),
+            ],
+            prefix="performance__",
+        )
+        performance_weights = None
+
+    rating_generator = PlayerRatingGenerator(
+        performances_generator=performances_generator,
+        performance_weights=performance_weights,
         prefix="prefix_",
         suffix="_suffix",
         unknown_features_out=[
@@ -580,7 +589,7 @@ def test_update_rating_generator_with_performances_generator(df):
             RatingUnknownFeatures.OPPONENT_RATING,
             RatingUnknownFeatures.RATING_MEAN,
         ],
-        non_estimator_known_features_out=[
+        non_predictor_known_features_out=[
             RatingKnownFeatures.TEAM_RATING_PROJECTED,
             RatingKnownFeatures.PLAYER_RATING,
             RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
@@ -612,10 +621,10 @@ def test_update_rating_generator_with_performances_generator(df):
         }
     )
 
-    historical_df_with_ratings = rating_generator.transform_historical(
+    historical_df_with_ratings = rating_generator.fit_transform(
         historical_df, column_names=column_names
     )
-    assert rating_generator.performance_column == "performance_weighted"
+    assert rating_generator.performance_column == "performance__weighted"
     if isinstance(historical_df, pl.DataFrame):
         assert historical_df_with_ratings[
             rating_generator.prefix + "performance" + rating_generator.suffix

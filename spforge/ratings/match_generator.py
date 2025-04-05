@@ -32,6 +32,8 @@ def convert_df_to_matches(
     performance_column_name: str,
     separate_player_by_position: bool = False,
     league_identifier: Optional[LeagueIdentifier] = LeagueIdentifier(),
+    max_value_allowed: float = 1.05,
+    min_value_allowed: float = -0.05,
 ) -> list[Match]:
     """
     Converts a dataframe to a list of matches.
@@ -62,8 +64,8 @@ def convert_df_to_matches(
         )
     if performance_column_name in df.columns:
         if (
-            max(df[performance_column_name]) > 1.001
-            or min(df[performance_column_name]) < -0.001
+            max(df[performance_column_name]) > max_value_allowed
+            or min(df[performance_column_name]) < min_value_allowed
         ):
             raise ValueError("performance column must be between 0 and 1")
 

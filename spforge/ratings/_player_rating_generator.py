@@ -1,3 +1,4 @@
+import logging
 from typing import Optional, Any, Union
 
 import numpy as np
@@ -6,9 +7,7 @@ import narwhals as nw
 from narwhals.typing import FrameT, IntoFrameT
 
 from spforge.ratings import convert_df_to_matches
-from spforge.ratings.performance_generator import (
-    PerformancesGenerator,
-)
+
 from spforge.ratings.rating_calculators import (
     RatingMeanPerformancePredictor,
 )
@@ -29,10 +28,15 @@ from spforge.data_structures import (
     TeamRatingChange,
 )
 from spforge.ratings.rating_generator import RatingGenerator
+from spforge.transformers.fit_transformers import PerformanceWeightsManager
+from spforge.transformers.fit_transformers._performance_manager import (
+    ColumnWeight,
+    PerformanceManager,
+)
 from spforge.transformers.lag_transformers._utils import transformation_validator
 
 
-class UpdateRatingGenerator(RatingGenerator):
+class PlayerRatingGenerator(RatingGenerator):
     """
     Generates ratings for players and teams based on the match-performance of the player and the ratings of the players and teams.
     Ratings are updated after a match is finished
@@ -41,13 +45,18 @@ class UpdateRatingGenerator(RatingGenerator):
     def __init__(
         self,
         performance_column: str = "performance",
-        performances_generator: Optional[PerformancesGenerator] = None,
+        performance_weights: Optional[
+            list[Union[ColumnWeight, dict[str, float]]]
+        ] = None,
+        auto_scale_performance: bool = False,
+        performances_generator: Optional[PerformanceWeightsManager] = None,
         match_rating_generator: Optional[MatchRatingGenerator] = None,
         features_out: Optional[list[RatingKnownFeatures]] = None,
         unknown_features_out: Optional[list[RatingUnknownFeatures]] = None,
-        non_estimator_known_features_out: Optional[list[RatingKnownFeatures]] = None,
+        non_predictor_known_features_out: Optional[list[RatingKnownFeatures]] = None,
         distinct_positions: Optional[list[str]] = None,
         seperate_player_by_position: bool = False,
+        column_names: Optional[ColumnNames] = None,
         prefix: str = "",
         suffix: str = "",
     ):
@@ -59,12 +68,13 @@ class UpdateRatingGenerator(RatingGenerator):
             If none, default logic is generated based on the performance predictor used in the match_rating_generator
         :param unknown_features_out: The types of historical rating-features the rating-generator should return.
             The historical_features cannot be used as estimator features as they contain leakage, however can be interesting for exploration
-        :param non_estimator_known_features_out: Rating Features to return but which are not intended to be used as estimator_features for the predictor
+        :param non_predictor_known_features_out: Rating Features to return but which are not intended to be used as estimator_features for the predictor
         :param distinct_positions: If true, the rating_difference for each player relative to the opponent player by the same position will be generated and returned.
         :param seperate_player_by_position: Creates a unique identifier for each player based on the player_id and position.
             Set to true if a players skill-level is dependent on the position they play.
         """
         match_rating_generator = match_rating_generator or MatchRatingGenerator()
+        self.auto_scale_performance = auto_scale_performance
         if not features_out:
             if (
                 match_rating_generator.performance_predictor.__class__
@@ -74,9 +84,42 @@ class UpdateRatingGenerator(RatingGenerator):
             else:
                 features_out = [RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
 
+        if performance_weights and not performances_generator:
+            if isinstance(performance_weights[0], dict):
+                performance_weights = [
+                    ColumnWeight(**weight) for weight in performance_weights
+                ]
+
+            self.performances_generator = PerformanceWeightsManager(
+                weights=performance_weights,
+            )
+        else:
+            self.performances_generator = performances_generator
+
+        if self.auto_scale_performance and self.performances_generator:
+            self.performances_generator.scale_performance = True
+
+        if self.auto_scale_performance and not self.performances_generator:
+            assert (
+                performance_column
+            ), "performance_column must be set if auto_scale_performance is True"
+            if not performance_weights:
+                self.performances_generator = PerformanceManager(
+                    features=[performance_column],
+                    scale_performance=True,
+                )
+            else:
+                self.performances_generator = PerformanceWeightsManager(
+                    weights=performance_weights,
+                    scale_performance=True,
+                )
+            logging.info(
+                f"Renamed performance column to performance_{performance_column}"
+            )
+
         super().__init__(
-            performances_generator=performances_generator,
-            non_estimator_known_features_out=non_estimator_known_features_out,
+            column_names=column_names,
+            non_estimator_known_features_out=non_predictor_known_features_out,
             unknown_features_out=unknown_features_out,
             performance_column=performance_column,
             seperate_player_by_position=seperate_player_by_position,
@@ -85,6 +128,9 @@ class UpdateRatingGenerator(RatingGenerator):
             features_out=features_out,
             suffix=suffix,
         )
+        if self.performances_generator:
+            self.performance_column = self.performances_generator.performance_column
+        self.auto_scale_performance = auto_scale_performance
         self.distinct_positions = distinct_positions
 
     def reset_ratings(self):
@@ -96,12 +142,13 @@ class UpdateRatingGenerator(RatingGenerator):
 
     @transformation_validator
     @nw.narwhalify
-    def transform_historical(
+    def fit_transform(
         self,
         df: FrameT,
-        column_names: ColumnNames,
+        column_names: Optional[ColumnNames] = None,
     ) -> IntoFrameT:
         """
+        If performances_generator is defined. It will fit the performances_generator and transform the dataframe  before calculating ratings.
         Generate ratings by iterating over the dataframe, calculate predicted performance and update ratings after the match is finished.
 
         :param df: The dataframe from which the matches were generated. Only needed if you want to store the ratings in the class object in which case the column names must also be passed.
@@ -109,9 +156,11 @@ class UpdateRatingGenerator(RatingGenerator):
 
         :return: A dataframe with the original columns + estimator_features_out, historical_features_out and non_estimator_rating_features_out
         """
-
-        input_cols = df.columns
-        self.column_names = column_names
+        self.column_names = column_names or self.column_names
+        if not self.column_names:
+            raise ValueError(
+                "column_names must be passed into as method arguments or during RatingGenerator initialisation"
+            )
         if (
             self.column_names.participation_weight is not None
             and self.column_names.participation_weight not in df.columns
@@ -121,9 +170,47 @@ class UpdateRatingGenerator(RatingGenerator):
             )
 
         if self.performances_generator:
-            df = nw.from_native(self.performances_generator.generate(df))
+            df = nw.from_native(self.performances_generator.fit_transform(df))
 
+        return self._transform_historical(df, column_names=column_names)
+
+    @transformation_validator
+    @nw.narwhalify
+    def transform_historical(
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
+    ) -> IntoFrameT:
+        """
+        Generate ratings by iterating over the dataframe, calculate predicted performance and update ratings after the match is finished.
+
+        :param df: The dataframe from which the matches were generated. Only needed if you want to store the ratings in the class object in which case the column names must also be passed.
+        :param column_names: The column names of the dataframe. Only needed if you want to store the ratings in the class object in which case the df must also be passed.
+
+        :return: A dataframe with the original columns + estimator_features_out, historical_features_out and non_estimator_rating_features_out
+        """
+        if self.performances_generator:
+            df = nw.from_native(self.performances_generator.transform(df))
+        return self._transform_historical(df, column_names=column_names)
+
+    def _transform_historical(
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
+    ) -> FrameT:
+
+        self.column_names = column_names or self.column_names
+        if not self.column_names:
+            raise ValueError(
+                "column_names must be passed into as method arguments or during RatingGenerator initialisation"
+            )
+        df = df.sort(
+            [
+                self.column_names.start_date,
+                self.column_names.match_id,
+                self.column_names.team_id,
+                self.column_names.player_id,
+            ]
+        )
+        input_cols = df.columns
         ori_game_ids = df[self.column_names.match_id].unique().to_list()
+
         if self.historical_df is not None:
             df_with_new_matches = df.filter(
                 ~nw.col(self.column_names.match_id).is_in(
@@ -145,16 +232,45 @@ class UpdateRatingGenerator(RatingGenerator):
             potential_feature_values = self._generate_potential_feature_values(
                 matches=matches, ori_df=pl.DataFrame()
             )
-
-            df_with_new_matches = df_with_new_matches.join(
+            exclude_cols = [
+                k
+                for k in potential_feature_values.keys()
+                if k
+                not in [
+                    self.column_names.match_id,
+                    self.column_names.player_id,
+                    self.column_names.team_id,
+                ]
+            ]
+            df_with_new_matches = df_with_new_matches.select(
+                [c for c in df_with_new_matches.columns if c not in exclude_cols]
+            ).join(
                 nw.from_dict(
                     potential_feature_values,
                     native_namespace=nw.get_native_namespace(df_with_new_matches),
                 ),
-                on=[self.column_names.match_id, self.column_names.player_id],
+                on=[
+                    self.column_names.match_id,
+                    self.column_names.player_id,
+                    self.column_names.team_id,
+                ],
                 how="left",
             )
-
+            if self.suffix or self.prefix:
+                if (
+                    self.prefix + self.performance_column + self.suffix
+                    in df_with_new_matches.columns
+                ):
+                    df_with_new_matches = df_with_new_matches.drop(
+                        self.prefix + self.performance_column + self.suffix
+                    )
+                df_with_new_matches = df_with_new_matches.rename(
+                    {
+                        self.performance_column: self.prefix
+                        + self.performance_column
+                        + self.suffix
+                    }
+                )
             self._store_df(df_with_new_matches)
             self._calculated_match_ids = (
                 nw.from_native(self.historical_df)[self.column_names.match_id]
@@ -175,16 +291,16 @@ class UpdateRatingGenerator(RatingGenerator):
                 ),
                 on=[
                     self.column_names.match_id,
-                    column_names.team_id,
+                    self.column_names.team_id,
                     self.column_names.player_id,
                 ],
                 how="left",
             )
             .unique(
                 subset=[
-                    column_names.match_id,
-                    column_names.team_id,
-                    column_names.player_id,
+                    self.column_names.match_id,
+                    self.column_names.team_id,
+                    self.column_names.player_id,
                 ],
                 keep="last",
             )
@@ -198,16 +314,29 @@ class UpdateRatingGenerator(RatingGenerator):
                 self.column_names.player_id,
             ]
         )
-        feats_out = (
-            input_cols
-            + self.all_rating_features_out
-            + self.performances_generator.features_out
-            if self.performances_generator
-            else input_cols + self.all_rating_features_out
+        feats_out = list(
+            set(
+                (
+                    input_cols
+                    + self.all_rating_features_out
+                    + [
+                        self.prefix
+                        + self.performances_generator.performance_column
+                        + self.suffix
+                    ]
+                    if self.performances_generator
+                    else input_cols + self.all_rating_features_out
+                )
+            )
         )
-        out_df = df[list(set(feats_out))]
-
-        return out_df.filter(nw.col(self.column_names.match_id).is_in(ori_game_ids))
+        df = df.with_columns(
+            nw.col(self.performance_column).alias(
+                self.prefix + self.performance_column + self.suffix
+            )
+        )
+        return df.filter(nw.col(self.column_names.match_id).is_in(ori_game_ids)).select(
+            list(set(feats_out))
+        )
 
     def _generate_potential_feature_values(self, matches: list[Match], ori_df: FrameT):
         pre_match_player_rating_values = []
@@ -399,8 +528,18 @@ class UpdateRatingGenerator(RatingGenerator):
         df: FrameT,
         matches: Optional[list[Match]] = None,
     ) -> IntoFrameT:
+
         if "__row_index" not in df.columns:
             df = df.with_row_index(name="__row_index")
+        df = df.sort(
+            [
+                self.column_names.start_date,
+                self.column_names.match_id,
+                self.column_names.team_id,
+                self.column_names.player_id,
+            ]
+        )
+
         input_cols = df.columns
 
         if (
@@ -532,7 +671,7 @@ class UpdateRatingGenerator(RatingGenerator):
             how="left",
         )
 
-        out_df = df[list(set(input_cols + self.all_rating_features_out))]
+        out_df = df.select(list(set(input_cols + self.all_rating_features_out)))
 
         return out_df.sort("__row_index").drop("__row_index")
 

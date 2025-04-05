@@ -10,3 +10,5 @@ from .performances_transformers import (
     DiminishingValueTransformer,
     GroupByTransformer,
 )
+
+from ._performance_manager import PerformanceWeightsManager, PerformanceManager

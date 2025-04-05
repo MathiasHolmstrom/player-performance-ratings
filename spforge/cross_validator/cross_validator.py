@@ -73,7 +73,7 @@ class MatchKFoldCrossValidator(CrossValidator):
         if self.predictor.pred_column in df.columns:
             df = df.drop(self.predictor.pred_column)
 
-        df = df.sort(self.date_column_name)
+        df = df.sort([self.date_column_name, self.match_id_column_name])
 
         if self.validation_column_name in df.columns:
             df = df.drop(self.validation_column_name)

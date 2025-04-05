@@ -3,9 +3,6 @@ from typing import Optional, Union
 
 from narwhals.typing import FrameT, IntoFrameT
 
-from spforge.ratings.performance_generator import (
-    PerformancesGenerator,
-)
 from spforge.ratings.rating_calculators import MatchRatingGenerator
 from spforge.ratings.enums import (
     RatingKnownFeatures,
@@ -25,34 +22,35 @@ class RatingGenerator(ABC):
     def __init__(
         self,
         performance_column: str,
-        performances_generator: Optional[PerformancesGenerator],
         features_out: Optional[list[RatingKnownFeatures]],
         non_estimator_known_features_out: Optional[list[RatingKnownFeatures]],
         unknown_features_out: Optional[list[RatingUnknownFeatures]],
         match_rating_generator: MatchRatingGenerator,
+        column_names: Optional[ColumnNames],
         distinct_positions: Optional[list[str]] = None,
         seperate_player_by_position: Optional[bool] = False,
         prefix: str = "",
         suffix: str = "",
     ):
-        self.performances_generator = performances_generator
         self._features_out = features_out or []
         self._non_estimator_known_features_out = non_estimator_known_features_out or []
         self._unknown_features_out = unknown_features_out or []
         self.performance_column = performance_column
-        if self.performances_generator:
-            self.performance_column = self.performances_generator.features_out[0]
         self.seperate_player_by_position = seperate_player_by_position
         self.match_rating_generator = match_rating_generator
         self.distinct_positions = distinct_positions
         self.prefix = prefix
         self.suffix = suffix
-        self.column_names = None
+        self.column_names = column_names
         self._calculated_match_ids = []
         self._df = None
 
     def reset_ratings(self):
         self._calculated_match_ids = []
+
+    @abstractmethod
+    def fit_transform(self, df: FrameT, column_names: ColumnNames) -> IntoFrameT:
+        pass
 
     @abstractmethod
     def transform_historical(

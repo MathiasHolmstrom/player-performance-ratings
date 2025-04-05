@@ -9,7 +9,7 @@ from spforge.data_structures import Match, ColumnNames
 from spforge.cross_validator._base import CrossValidator
 
 from spforge import PipelineFactory
-from spforge.ratings import UpdateRatingGenerator
+from spforge.ratings import PlayerRatingGenerator
 from spforge.ratings.enums import (
     RatingKnownFeatures,
     RatingUnknownFeatures,
@@ -53,7 +53,7 @@ class StartLeagueRatingOptimizer:
         self,
         df: pd.DataFrame,
         rating_model_idx: int,
-        rating_generator: UpdateRatingGenerator,
+        rating_generator: PlayerRatingGenerator,
         matches: list[Match],
         column_names: ColumnNames,
     ) -> dict[str, float]:

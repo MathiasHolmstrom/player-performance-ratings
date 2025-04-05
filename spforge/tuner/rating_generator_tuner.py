@@ -18,7 +18,7 @@ from spforge.ratings.rating_calculators import MatchRatingGenerator
 from spforge.ratings.rating_calculators.start_rating_generator import (
     StartRatingGenerator,
 )
-from spforge.ratings import UpdateRatingGenerator
+from spforge.ratings import PlayerRatingGenerator
 
 from spforge.ratings.rating_generator import RatingGenerator
 
@@ -130,7 +130,7 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
         cross_validator: CrossValidator,
         pipeline_factory: PipelineFactory,
         matches: list[Match],
-    ) -> UpdateRatingGenerator:
+    ) -> PlayerRatingGenerator:
 
         if pipeline_factory.rating_generators:
             best_rating_generator = copy.deepcopy(
@@ -190,9 +190,9 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
                 best_start_rating
             )
 
-        return UpdateRatingGenerator(
+        return PlayerRatingGenerator(
             match_rating_generator=best_rating_generator.match_rating_generator,
-            non_estimator_known_features_out=best_rating_generator.non_estimator_known_features_out,
+            non_predictor_known_features_out=best_rating_generator.non_estimator_known_features_out,
             features_out=best_rating_generator._known_features_out,
             performance_column=best_rating_generator.performance_column,
         )
@@ -200,7 +200,7 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
     def _tune_team_rating(
         self,
         df: pd.DataFrame,
-        rating_generator: UpdateRatingGenerator,
+        rating_generator: PlayerRatingGenerator,
         rating_index: int,
         matches: list[Match],
         cross_validator: CrossValidator,
@@ -314,7 +314,7 @@ class UpdateRatingGeneratorTuner(RatingGeneratorTuner):
     def _tune_start_rating(
         self,
         df: pd.DataFrame,
-        rating_generator: UpdateRatingGenerator,
+        rating_generator: PlayerRatingGenerator,
         rating_index: int,
         matches: list[Match],
         cross_validator: CrossValidator,

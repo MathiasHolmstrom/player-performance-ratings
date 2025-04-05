@@ -163,7 +163,6 @@ class MatchRatingGenerator:
         else:
             pre_match_player_ratings = new_player_pre_match_ratings
 
-        # pre_match_player_ratings += new_player_pre_match_ratings
         pre_match_team_rating_value = self._generate_pre_match_team_rating_value(
             pre_match_player_ratings=pre_match_player_ratings
         )

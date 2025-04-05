@@ -5,7 +5,7 @@ with open("requirements.txt") as f:
 
 setup(
     name="spforge",
-    version="0.1.6",
+    version="0.2.0",
     packages=find_packages(),
     install_requires=required,
     author="Mathias Holmstrøm",

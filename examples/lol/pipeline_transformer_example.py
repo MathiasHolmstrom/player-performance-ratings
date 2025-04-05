@@ -11,7 +11,7 @@ from spforge.predictor import (
 )
 from spforge.predictor.classifier import NegativeBinomialPredictor
 from spforge.ratings import (
-    UpdateRatingGenerator,
+    PlayerRatingGenerator,
     RatingKnownFeatures,
 )
 from spforge.ratings.performance_generator import (
@@ -57,12 +57,12 @@ future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(
     columns=["result"]
 )
 
-rating_generator_result = UpdateRatingGenerator(
+rating_generator_result = PlayerRatingGenerator(
     features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
     performance_column="result",
 )
 
-rating_generator_player_kills = UpdateRatingGenerator(
+rating_generator_player_kills = PlayerRatingGenerator(
     features_out=[RatingKnownFeatures.RATING_MEAN_PROJECTED],
     performances_generator=PerformancesGenerator(
         performances=Performance(

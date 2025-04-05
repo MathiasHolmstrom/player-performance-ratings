@@ -5,15 +5,15 @@ import polars as pl
 from spforge import ColumnNames
 from spforge.pipeline_transformer import PipelineTransformer
 from spforge.ratings import (
-    UpdateRatingGenerator,
+    PlayerRatingGenerator,
     RatingKnownFeatures,
 )
-from spforge.ratings.performance_generator import (
-    ColumnWeight,
-    Performance,
-    PerformancesGenerator,
-)
+
 from spforge.transformers import LagTransformer
+from spforge.transformers.fit_transformers._performance_manager import (
+    ColumnWeight,
+    PerformanceWeightsManager,
+)
 
 
 @pytest.mark.parametrize("to_polars", [True, False])
@@ -48,11 +48,9 @@ def test_pipeline_transformer(to_polars):
         player_id="player_id",
         start_date="start_date",
     )
-    rating_generator = UpdateRatingGenerator(
+    rating_generator = PlayerRatingGenerator(
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
-        performances_generator=PerformancesGenerator(
-            Performance(weights=column_weights)
-        ),
+        performances_generator=PerformanceWeightsManager(weights=column_weights),
     )
 
     pipeline = PipelineTransformer(

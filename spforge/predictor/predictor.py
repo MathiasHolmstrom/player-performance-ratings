@@ -120,6 +120,8 @@ class GameTeamPredictor(BasePredictor):
         :param df:
         :return: Input df with prediction column
         """
+        if self.pred_column in df.columns:
+            df = df.drop(self.pred_column)
 
         if not self._features:
             raise ValueError("features not set. Please train first")

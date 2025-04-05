@@ -4,16 +4,16 @@ import pytest
 from deepdiff import DeepDiff
 
 from spforge import ColumnNames
-from spforge.ratings.performance_generator import (
-    ColumnWeight,
-    PerformancesGenerator,
-    auto_create_pre_performance_transformations,
-    Performance,
-)
+
 from spforge.transformers.fit_transformers import (
     SymmetricDistributionTransformer,
     PartialStandardScaler,
     MinMaxTransformer,
+)
+from spforge.transformers.fit_transformers._performance_manager import (
+    ColumnWeight,
+    create_performance_scalers_transformers,
+    PerformanceWeightsManager,
 )
 
 
@@ -28,10 +28,9 @@ def test_auto_create_pre_transformers():
         )
     ]
 
-    pre_transformations = auto_create_pre_performance_transformations(
+    pre_transformations = create_performance_scalers_transformers(
         performances=performances,
         pre_transformers=[],
-        auto_generated_features_prefix="",
     )
 
     expected_pre_transformations = [
@@ -64,10 +63,9 @@ def test_auto_create_pre_transformers_multiple_column_names():
         Performance(name="performance", weights=[ColumnWeight(name="kills", weight=1)]),
     ]
 
-    pre_transformations = auto_create_pre_performance_transformations(
+    pre_transformations = create_performance_scalers_transformers(
         performances=performances,
         pre_transformers=[],
-        auto_generated_features_prefix="",
     )
 
     expected_pre_transformations = [
@@ -136,11 +134,11 @@ def test_performances_generator(df):
         Performance(name="performance", weights=[ColumnWeight(name="won", weight=1)]),
     ]
 
-    performances_generator = PerformancesGenerator(
-        performances, transformers=pre_transformers, auto_generated_features_prefix=""
+    performances_generator = PerformanceWeightsManager(
+        performances, transformers=pre_transformers, prefix=""
     )
 
-    df_with_performances = performances_generator.generate(data)
+    df_with_performances = performances_generator.fit_transform(data)
     if isinstance(data, pd.DataFrame):
         expected_df_with_performances = data.copy()
     else:

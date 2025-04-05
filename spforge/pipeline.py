@@ -198,7 +198,7 @@ class Pipeline(BasePredictor):
 
         for idx in range(len(self.rating_generators)):
             df = nw.from_native(
-                self.rating_generators[idx].transform_historical(
+                self.rating_generators[idx].fit_transform(
                     df, column_names=self.column_names
                 )
             )

@@ -8,7 +8,7 @@ from spforge import ColumnNames, PipelineFactory
 from spforge.ratings.rating_calculators import MatchRatingGenerator
 from spforge.ratings import (
     RatingKnownFeatures,
-    UpdateRatingGenerator,
+    PlayerRatingGenerator,
 )
 from spforge.ratings.match_generator import convert_df_to_matches
 from spforge.ratings.rating_calculators.performance_predictor import (
@@ -40,10 +40,10 @@ def test_opponent_adjusted_rating_generator_tuner_team_rating():
         start_date="start_date",
     )
 
-    rating_generator1 = UpdateRatingGenerator(
+    rating_generator1 = PlayerRatingGenerator(
         match_rating_generator=MatchRatingGenerator(confidence_weight=0.5)
     )
-    rating_generator2 = UpdateRatingGenerator(
+    rating_generator2 = PlayerRatingGenerator(
         match_rating_generator=MatchRatingGenerator(confidence_weight=0.4),
         prefix="rating2",
     )
@@ -114,7 +114,7 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
         start_date="start_date",
     )
 
-    rating_generator1 = UpdateRatingGenerator(
+    rating_generator1 = PlayerRatingGenerator(
         performance_column="won",
         match_rating_generator=MatchRatingGenerator(
             confidence_weight=0.5,
@@ -123,7 +123,7 @@ def test_opponent_adjusted_rating_generator_tuner_performance_predictor():
             ),
         ),
     )
-    rating_generator2 = UpdateRatingGenerator(
+    rating_generator2 = PlayerRatingGenerator(
         performance_column="won",
         match_rating_generator=MatchRatingGenerator(
             confidence_weight=0.4,
@@ -219,14 +219,14 @@ def test_update_rating_generator_tuner_start_rating():
         start_date="start_date",
     )
 
-    rating_generator1 = UpdateRatingGenerator(
+    rating_generator1 = PlayerRatingGenerator(
         performance_column="won",
         match_rating_generator=MatchRatingGenerator(
             confidence_weight=0.5,
             start_rating_generator=StartRatingGenerator(team_weight=0.5),
         ),
     )
-    rating_generator2 = UpdateRatingGenerator(
+    rating_generator2 = PlayerRatingGenerator(
         performance_column="won",
         match_rating_generator=MatchRatingGenerator(
             confidence_weight=0.4,
