@@ -4,7 +4,7 @@ from sklearn.linear_model import LogisticRegression
 from spforge.pipeline import Pipeline
 from spforge.predictor import GameTeamPredictor, SklearnPredictor
 
-from spforge.ratings import UpdateRatingGenerator
+from spforge.ratings import PlayerRatingGenerator
 
 from spforge.data_structures import ColumnNames
 from spforge.ratings.rating_calculators import MatchRatingGenerator
@@ -51,7 +51,7 @@ future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(
 
 match_rating_generator = MatchRatingGenerator(rating_change_multiplier=30)
 
-rating_generator = UpdateRatingGenerator(
+rating_generator = PlayerRatingGenerator(
     performance_column="won", match_rating_generator=match_rating_generator
 )
 

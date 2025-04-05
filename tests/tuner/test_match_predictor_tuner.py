@@ -10,7 +10,7 @@ from spforge.tuner.performances_generator_tuner import (
 from spforge.tuner.utils import ParameterSearchRange
 
 from spforge import ColumnNames, Pipeline
-from spforge.ratings import UpdateRatingGenerator
+from spforge.ratings import PlayerRatingGenerator
 
 from spforge.tuner import PipelineTuner, PerformancesGeneratorTuner
 
@@ -37,7 +37,7 @@ def test_match_predictor_tuner():
 
     pipeline = Pipeline(
         column_names=col_names,
-        rating_generators=UpdateRatingGenerator(performance_column="performance"),
+        rating_generators=PlayerRatingGenerator(performance_column="performance"),
         predictor=SklearnPredictor(
             target="won",
             estimator=mock.Mock(),

@@ -10,8 +10,11 @@ from spforge.transformers.fit_transformers import (
     PartialStandardScaler,
     MinMaxTransformer,
 )
-from spforge.transformers.fit_transformers._performance_manager import ColumnWeight, \
-    create_performance_scalers_transformers, PerformanceWeightsManager
+from spforge.transformers.fit_transformers._performance_manager import (
+    ColumnWeight,
+    create_performance_scalers_transformers,
+    PerformanceWeightsManager,
+)
 
 
 def test_auto_create_pre_transformers():

@@ -8,7 +8,7 @@ from examples import get_sub_sample_nba_data, get_sub_sample_lol_data
 from spforge import Pipeline, ColumnNames
 from spforge.cross_validator import MatchKFoldCrossValidator
 from spforge.predictor import SklearnPredictor
-from spforge.ratings import RatingKnownFeatures, UpdateRatingGenerator
+from spforge.ratings import RatingKnownFeatures, PlayerRatingGenerator
 from spforge.transformers import (
     RollingMeanTransformer,
     LagTransformer,
@@ -32,7 +32,7 @@ def test_nba_integration_pipeline_cross_validate_train_future_predict():
 
     pipeline = Pipeline(
         rating_generators=[
-            UpdateRatingGenerator(
+            PlayerRatingGenerator(
                 features_out=[RatingKnownFeatures.PLAYER_RATING],
                 performance_column="won",
             )
@@ -161,7 +161,7 @@ def test_lol_integration_pipeline_cross_validate_train_future_predic():
 
     pipeline = Pipeline(
         rating_generators=[
-            UpdateRatingGenerator(
+            PlayerRatingGenerator(
                 features_out=[RatingKnownFeatures.PLAYER_RATING],
                 performance_column="result",
             )

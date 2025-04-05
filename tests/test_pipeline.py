@@ -12,7 +12,7 @@ from sklearn.linear_model import LinearRegression
 from spforge.ratings.rating_calculators import MatchRatingGenerator
 from spforge.ratings import (
     RatingKnownFeatures,
-    UpdateRatingGenerator,
+    PlayerRatingGenerator,
     RatingUnknownFeatures,
 )
 
@@ -26,8 +26,10 @@ from spforge import ColumnNames, Pipeline
 from spforge.transformers import (
     RollingMeanTransformer,
 )
-from spforge.transformers.fit_transformers._performance_manager import ColumnWeight, Performance, \
-    PerformanceWeightsManager
+from spforge.transformers.fit_transformers._performance_manager import (
+    ColumnWeight,
+    PerformanceWeightsManager,
+)
 
 
 def test_pipeline_constructor():
@@ -45,7 +47,7 @@ def test_pipeline_constructor():
             predictor=SklearnPredictor(estimator=LinearRegression(), target="won")
         )
     ]
-    rating_generator = UpdateRatingGenerator(
+    rating_generator = PlayerRatingGenerator(
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
     )
 
@@ -120,14 +122,10 @@ def test_match_predictor_auto_pre_transformers(df):
     predictor_mock.columns_added = ["prediction"]
     predictor_mock.features = [RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
 
-    rating_generators = UpdateRatingGenerator(
+    rating_generators = PlayerRatingGenerator(
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         performance_column="weighted_performance",
-        performances_generator=PerformanceWeightsManager(
-            performances=Performance(
-                name="weighted_performance", weights=column_weights
-            )
-        ),
+        performances_generator=PerformanceWeightsManager(weights=column_weights),
     )
 
     pipeline = Pipeline(
@@ -192,12 +190,12 @@ def test_match_predictor_multiple_rating_generators_same_performance(df):
 
     pipeline = Pipeline(
         rating_generators=[
-            UpdateRatingGenerator(
+            PlayerRatingGenerator(
                 features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
                 prefix="rating_1",
                 suffix="2",
             ),
-            UpdateRatingGenerator(
+            PlayerRatingGenerator(
                 match_rating_generator=MatchRatingGenerator(
                     rating_change_multiplier=20
                 ),
@@ -336,7 +334,7 @@ def test_match_predictor_generate_and_predict(df):
         player_id="player_id",
         start_date="start_date",
     )
-    rating_generator = UpdateRatingGenerator(
+    rating_generator = PlayerRatingGenerator(
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         performances_generator=PerformanceWeightsManager(
             Performance(weights=column_weights)
@@ -401,7 +399,7 @@ def test_train_predict_post_pre_and_lag_transformers():
         player_id="player_id",
         start_date="start_date",
     )
-    rating_generator = UpdateRatingGenerator(
+    rating_generator = PlayerRatingGenerator(
         non_predictor_known_features_out=[RatingKnownFeatures.PLAYER_RATING],
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         unknown_features_out=[RatingUnknownFeatures.TEAM_RATING],

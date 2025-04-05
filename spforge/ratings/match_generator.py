@@ -33,7 +33,7 @@ def convert_df_to_matches(
     separate_player_by_position: bool = False,
     league_identifier: Optional[LeagueIdentifier] = LeagueIdentifier(),
     max_value_allowed: float = 1.05,
-    min_value_allowed: float =-0.05
+    min_value_allowed: float = -0.05,
 ) -> list[Match]:
     """
     Converts a dataframe to a list of matches.

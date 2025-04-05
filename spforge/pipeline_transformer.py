@@ -77,9 +77,7 @@ class PipelineTransformer:
         ), "Dataframe contains duplicates"
         for rating_generator in self.rating_generators:
             df = nw.from_native(
-                rating_generator.fit_transform(
-                    df=df, column_names=self.column_names
-                )
+                rating_generator.fit_transform(df=df, column_names=self.column_names)
             )
             assert len(df.unique(unique_constraint)) == len(
                 df

@@ -140,7 +140,9 @@ class BaseLagTransformer:
         if self._df is None:
             self._df = df.select(cols)
         else:
-            self._df = nw.concat([nw.from_native(self._df), df.select(cols)])
+            self._df = nw.concat(
+                [nw.from_native(self._df), df.select(cols)], how="diagonal"
+            )
 
         sort_cols = (
             [
@@ -156,11 +158,10 @@ class BaseLagTransformer:
         )
 
         self._df = (
-            self._df.sort(sort_cols)
-            .unique(
-                subset=self.unique_constraint,
-                maintain_order=True,
+            self._df.unique(
+                subset=self.unique_constraint, maintain_order=True, keep="last"
             )
+            .sort(sort_cols)
             .to_native()
         )
 

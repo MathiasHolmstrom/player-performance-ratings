@@ -9,7 +9,7 @@ from spforge import ColumnNames, PipelineFactory
 from spforge.predictor import SklearnPredictor
 from spforge.ratings import (
     RatingKnownFeatures,
-    UpdateRatingGenerator,
+    PlayerRatingGenerator,
 )
 from spforge.ratings.performance_generator import (
     Performance,
@@ -33,7 +33,7 @@ def test_transformer_tuner():
         start_date="start_date",
     )
 
-    rating_generator1 = UpdateRatingGenerator(
+    rating_generator1 = PlayerRatingGenerator(
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
     )
 
@@ -119,12 +119,12 @@ def test_transformer_tuner_2_performances(estimator):
         ),
     ]
 
-    rating_generator1 = UpdateRatingGenerator(
+    rating_generator1 = PlayerRatingGenerator(
         performance_column="performance1",
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
     )
 
-    rating_generator2 = UpdateRatingGenerator(
+    rating_generator2 = PlayerRatingGenerator(
         performance_column="performance2",
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         prefix="rating2",

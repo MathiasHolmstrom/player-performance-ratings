@@ -20,17 +20,17 @@ from spforge.data_structures import (
 class RatingGenerator(ABC):
 
     def __init__(
-            self,
-            performance_column: str,
-            features_out: Optional[list[RatingKnownFeatures]],
-            non_estimator_known_features_out: Optional[list[RatingKnownFeatures]],
-            unknown_features_out: Optional[list[RatingUnknownFeatures]],
-            match_rating_generator: MatchRatingGenerator,
-            column_names: Optional[ColumnNames],
-            distinct_positions: Optional[list[str]] = None,
-            seperate_player_by_position: Optional[bool] = False,
-            prefix: str = "",
-            suffix: str = "",
+        self,
+        performance_column: str,
+        features_out: Optional[list[RatingKnownFeatures]],
+        non_estimator_known_features_out: Optional[list[RatingKnownFeatures]],
+        unknown_features_out: Optional[list[RatingUnknownFeatures]],
+        match_rating_generator: MatchRatingGenerator,
+        column_names: Optional[ColumnNames],
+        distinct_positions: Optional[list[str]] = None,
+        seperate_player_by_position: Optional[bool] = False,
+        prefix: str = "",
+        suffix: str = "",
     ):
         self._features_out = features_out or []
         self._non_estimator_known_features_out = non_estimator_known_features_out or []
@@ -54,23 +54,23 @@ class RatingGenerator(ABC):
 
     @abstractmethod
     def transform_historical(
-            self,
-            df: FrameT,
-            column_names: ColumnNames,
+        self,
+        df: FrameT,
+        column_names: ColumnNames,
     ) -> IntoFrameT:
         pass
 
     @abstractmethod
     def transform_future(
-            self,
-            df: Optional[FrameT],
-            matches: Optional[list[Match]] = None,
+        self,
+        df: Optional[FrameT],
+        matches: Optional[list[Match]] = None,
     ) -> IntoFrameT:
         pass
 
     @property
     def features_out(
-            self,
+        self,
     ) -> list[str]:
         """
         Contains features to be passed into the estimator
@@ -104,9 +104,9 @@ class RatingGenerator(ABC):
     @property
     def all_rating_features_out(self) -> list[str]:
         return (
-                self.features_out
-                + self.unknown_features_out
-                + self.non_estimator_known_features_out
+            self.features_out
+            + self.unknown_features_out
+            + self.non_estimator_known_features_out
         )
 
     @property

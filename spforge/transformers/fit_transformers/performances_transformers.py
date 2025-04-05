@@ -86,7 +86,6 @@ class PartialStandardScaler(BaseTransformer):
 
         self._features_mean = {}
         self._features_std = {}
-        self._features_out = []
 
     @narwhals.narwhalify
     def fit_transform(
@@ -119,10 +118,6 @@ class PartialStandardScaler(BaseTransformer):
                 .alias(new_feature)
             )
         return df.to_native()
-
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out
 
 
 class MinMaxTransformer(BaseTransformer):
@@ -223,10 +218,6 @@ class MinMaxTransformer(BaseTransformer):
             # Add the transformed feature to the DataFrame with the prefixed name
             df = df.with_columns(normalized_feature.alias(self.prefix + feature))
         return df.to_native()
-
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out
 
 
 class DiminishingValueTransformer(BaseTransformer):
