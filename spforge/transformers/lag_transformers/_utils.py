@@ -133,6 +133,7 @@ def required_lag_column_names(method):
         self.column_names = column_names or self.column_names
 
         if not self.column_names:
+
             if "__row_index" not in df.columns:
                 df = df.with_row_index(name="__row_index")
 
@@ -142,7 +143,7 @@ def required_lag_column_names(method):
                 )
 
             assert (
-                self.match_id_update_column is not None
+                self.update_column is not None
             ), "if column names is not passed. match_id_update_column must be passed"
 
             if self.add_opponent:
@@ -150,7 +151,7 @@ def required_lag_column_names(method):
                     "add_opponent is set but column names must be passed for opponent feats to be created"
                 )
         else:
-            self.match_id_update_column = self.column_names.update_match_id
+            self.update_column = self.column_names.update_match_id
         return method(self, df, self.column_names, *args, **kwargs)
 
     return wrapper

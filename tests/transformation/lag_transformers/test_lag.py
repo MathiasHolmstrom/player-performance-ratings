@@ -66,7 +66,7 @@ def team_lag_transform_historical_team_granularity(df, column_names, use_column_
             features=["points"],
             lag_length=1,
             granularity=["team"],
-            match_id_update_column="game",
+            update_column="game",
         )
 
         df_with_lags = lag_transformation.transform_historical(data, column_names=None)
@@ -131,7 +131,7 @@ def test_lag_fit_transform_update_match_id(df, column_names, use_column_names):
             features=["points"],
             lag_length=1,
             granularity=["team"],
-            match_id_update_column=column_names.update_match_id,
+            update_column=column_names.update_match_id,
         )
         column_names = None
     else:
@@ -139,6 +139,8 @@ def test_lag_fit_transform_update_match_id(df, column_names, use_column_names):
             features=["points"],
             lag_length=1,
             granularity=["team"],
+            column_names=column_names,
+            add_opponent=True,
         )
 
     df_with_lags = lag_transformation.transform_historical(
@@ -147,20 +149,44 @@ def test_lag_fit_transform_update_match_id(df, column_names, use_column_names):
     if isinstance(data, pl.DataFrame):
         expected_df = original_df.with_columns(
             [
-                pl.Series("lag_points1", [None, None, None, None, 2, 2, 2, 2]),
+                pl.Series("lag_points1", [None, None, None, None, 3, 2, 3, 2]),
                 pl.col("team"),
                 pl.col("game"),
                 pl.col("player"),
             ]
         )
+        if use_column_names:
+            expected_df = expected_df.with_columns(
+                pl.Series(
+                    lag_transformation.features_out[1],
+                    [None, None, None, None, 2, 3, 2, 3],
+                )
+            )
         pl.testing.assert_frame_equal(
             df_with_lags, expected_df.select(df_with_lags.columns), check_dtype=False
         )
 
     elif isinstance(data, pd.DataFrame):
         expected_df = original_df.assign(
-            **{"lag_points1": [None, None, None, None, 2, 2, 2, 2]}
+            **{
+                "lag_points1": [None, None, None, None, 3, 2, 3, 2],
+            }
         )
+        if use_column_names:
+            expected_df = expected_df.assign(
+                **{
+                    lag_transformation.features_out[1]: [
+                        None,
+                        None,
+                        None,
+                        None,
+                        2,
+                        3,
+                        2,
+                        3,
+                    ]
+                }
+            )
 
         pd.testing.assert_frame_equal(
             df_with_lags, expected_df[df_with_lags.columns], check_dtype=False
@@ -202,7 +228,7 @@ def test_lag_transform_historical_2_features_update_match_id(
             features=["points", "points_per_minute"],
             lag_length=1,
             granularity=["player"],
-            match_id_update_column=column_names.update_match_id,
+            update_column=column_names.update_match_id,
         )
         column_names = None
 

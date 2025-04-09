@@ -147,18 +147,20 @@ class PerformanceWeightsManager(PerformanceManager):
         max_value: float = 1.02,
         min_value: float = -0.02,
         prefix: str = "performance__",
+        return_all_features: bool = False,
     ):
 
-        features = [p.name for p in weights]
+        self.features = [p.name for p in weights]
+        self.return_all_features = return_all_features
+        self.weights = weights
         super().__init__(
-            features=features,
+            features=self.features,
             transformers=transformers,
             scale_performance=scale_performance,
             prefix=prefix,
             max_value=max_value,
             min_value=min_value,
         )
-        self.weights = weights
 
     @nw.narwhalify
     def fit_transform(self, df: FrameT) -> IntoFrameT:
@@ -307,3 +309,12 @@ class PerformanceWeightsManager(PerformanceManager):
     @property
     def performance_column(self) -> str:
         return self.prefix + "weighted"
+
+    @property
+    def features_out(self) -> list[str]:
+        if self.return_all_features:
+            return [self.prefix + f for f in self.features] + [
+                self.performance_column,
+            ]
+
+        return [self.performance_column]

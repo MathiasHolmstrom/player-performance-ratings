@@ -53,7 +53,7 @@ def test_rolling_mean_transform_historical_game_team(
             min_periods=1,
             granularity=["team"],
             add_opponent=add_opponent,
-            match_id_update_column=column_names.update_match_id,
+            update_column=column_names.update_match_id,
         )
         column_names = None
 
@@ -382,7 +382,7 @@ def test_rolling_mean_historical_transform_team_stat(df, column_names):
 
 
 @pytest.mark.parametrize("use_column_names", [True, False])
-def test_rolling_mean_transform_parent_match_id(
+def test_rolling_mean_transform_update_id_different_from_game_id(
     column_names: ColumnNames, use_column_names
 ):
     column_names = column_names
@@ -415,7 +415,7 @@ def test_rolling_mean_transform_parent_match_id(
             features=["points"],
             window=2,
             granularity=["player"],
-            match_id_update_column="series_id",
+            update_column="series_id",
         )
         column_names = None
 
@@ -424,7 +424,7 @@ def test_rolling_mean_transform_parent_match_id(
     )
 
     expected_df = expected_df.assign(
-        **{transformer.features_out[0]: [None, None, 1.5, (1.5 + 3) / 2]}
+        **{transformer.features_out[0]: [None, None, 1.5, (3 + 2) / 2]}
     )
     pd.testing.assert_frame_equal(
         transformed_df, expected_df, check_like=True, check_dtype=False
@@ -485,7 +485,7 @@ def test_rolling_mean_transform_historical_granularity_differs_from_input_granul
             features=["points"],
             window=10,
             granularity=["league", "position"],
-            match_id_update_column=column_names.match_id,
+            update_column=column_names.match_id,
         )
         column_names = None
 

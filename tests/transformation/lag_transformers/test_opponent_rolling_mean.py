@@ -77,7 +77,7 @@ def test_rolling_mean_transform_historical(column_names, df, use_column_names):
             granularity=["position"],
             features=["points"],
             window=20,
-            match_id_update_column="game",
+            update_column="game",
             team_column="team",
         )
         transformed_data = rolling_mean.transform_historical(data)

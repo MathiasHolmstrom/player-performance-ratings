@@ -53,7 +53,7 @@ class OpponentTransformer(BaseLagTransformer):
         min_periods: int = 1,
         are_estimator_features=True,
         prefix: str = "opponent_rolling_mean",
-        match_id_update_column: Optional[str] = None,
+        update_column: Optional[str] = None,
         team_column: Optional[str] = None,
         opponent_column: str = "__opponent",
         transformation: Literal["rolling_mean"] = "rolling_mean",
@@ -80,7 +80,7 @@ class OpponentTransformer(BaseLagTransformer):
             prefix=prefix,
             granularity=granularity,
             are_estimator_features=are_estimator_features,
-            match_id_update_column=match_id_update_column,
+            update_column=update_column,
         )
         self.window = window
         self.min_periods = min_periods
@@ -104,16 +104,14 @@ class OpponentTransformer(BaseLagTransformer):
         """
 
         if self.column_names:
-            self.match_id_update_column = (
-                self.column_names.update_match_id or self.match_id_update_column
-            )
+            self.update_column = self.column_names.update_match_id or self.update_column
             self.team_column = self.column_names.team_id or self.team_column
         else:
             assert (
                 self.team_column is not None
             ), "team_column must be set if column names is not passed"
             assert (
-                self.match_id_update_column is not None
+                self.update_column is not None
             ), "match_id_update_column must be set if column names is not passed"
         if self.transformation == "rolling_mean":
             self._transformer = RollingMeanTransformer(
@@ -121,10 +119,10 @@ class OpponentTransformer(BaseLagTransformer):
                 features=self.features,
                 window=self.window,
                 min_periods=self.min_periods,
-                match_id_update_column=self.match_id_update_column,
+                update_column=self.update_column,
                 unique_constraint=[
                     self.opponent_column,
-                    self.match_id_update_column,
+                    self.update_column,
                     *self.granularity,
                 ],
             )
@@ -138,7 +136,7 @@ class OpponentTransformer(BaseLagTransformer):
             )
             concat_df = self._rename_features(concat_df)
             return self._merge_into_input_df(
-                df=df, concat_df=concat_df, match_id_join_on=self.match_id_update_column
+                df=df, concat_df=concat_df, match_id_join_on=self.update_column
             )
 
         else:
@@ -152,13 +150,13 @@ class OpponentTransformer(BaseLagTransformer):
                         [
                             *self.granularity,
                             self.team_column,
-                            self.match_id_update_column,
+                            self.update_column,
                             *self.features_out,
                         ]
                     ),
                     on=[
                         *self.granularity,
-                        self.match_id_update_column,
+                        self.update_column,
                         self.team_column,
                     ],
                     how="left",
@@ -222,12 +220,10 @@ class OpponentTransformer(BaseLagTransformer):
         concat_df = df.clone()
 
         if self.opponent_column not in concat_df.columns:
-            gt = concat_df.unique(
-                [self.match_id_update_column, self.team_column]
-            ).select([self.match_id_update_column, self.team_column])
-            gt_opponent = gt.join(
-                gt, on=self.match_id_update_column, how="left", suffix="__opp"
+            gt = concat_df.unique([self.update_column, self.team_column]).select(
+                [self.update_column, self.team_column]
             )
+            gt_opponent = gt.join(gt, on=self.update_column, how="left", suffix="__opp")
             gt_opponent = gt_opponent.filter(
                 nw.col(self.team_column) != nw.col(f"{self.team_column}__opp")
             )
@@ -236,7 +232,7 @@ class OpponentTransformer(BaseLagTransformer):
             ).drop(f"{self.team_column}__opp")
             concat_df = concat_df.join(
                 gt_opponent,
-                on=[self.match_id_update_column, self.team_column],
+                on=[self.update_column, self.team_column],
                 how="left",
             )
 
@@ -245,7 +241,7 @@ class OpponentTransformer(BaseLagTransformer):
             grouped = (
                 concat_df.group_by(
                     [
-                        self.match_id_update_column,
+                        self.update_column,
                         self.team_column,
                         self.opponent_column,
                         *self.granularity,
@@ -259,7 +255,7 @@ class OpponentTransformer(BaseLagTransformer):
             grouped = (
                 concat_df.group_by(
                     [
-                        self.match_id_update_column,
+                        self.update_column,
                         self.team_column,
                         self.opponent_column,
                         *self.granularity,
@@ -282,7 +278,7 @@ class OpponentTransformer(BaseLagTransformer):
                     grouped, column_names=column_names_transformer
                 )
             )
-        on_cols = [self.match_id_update_column, *self.granularity, self.opponent_column]
+        on_cols = [self.update_column, *self.granularity, self.opponent_column]
         return concat_df.join(
             grouped.select([*on_cols, *self._transformer.features_out]),
             on=on_cols,
@@ -311,12 +307,12 @@ class OpponentTransformer(BaseLagTransformer):
                 concat_df.select(
                     [
                         self.team_column,
-                        self.match_id_update_column,
+                        self.update_column,
                         *self.features_out,
                         *self.granularity,
                     ]
                 ),
-                on=[self.match_id_update_column, self.team_column, *self.granularity],
+                on=[self.update_column, self.team_column, *self.granularity],
             )
             .unique(self.unique_constraint)
             .sort(sort_cols)

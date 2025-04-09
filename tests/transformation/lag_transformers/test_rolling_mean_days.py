@@ -55,7 +55,7 @@ def test_rolling_mean_days_transform_historical(column_names, use_column_names):
             granularity=["player"],
             add_count=True,
             date_column=column_names.start_date,
-            match_id_update_column=column_names.update_match_id,
+            update_column=column_names.update_match_id,
         )
         transformed_df = rolling_mean_transformation.transform_historical(
             df, column_names=None
@@ -75,7 +75,9 @@ def test_rolling_mean_days_transform_historical(column_names, use_column_names):
 
 
 @pytest.mark.parametrize("use_column_names", [True, False])
-def test_rolling_mean_days_series_id(column_names: ColumnNames, use_column_names):
+def test_rolling_mean_days_update_id_different_from_game_id(
+    column_names: ColumnNames, use_column_names
+):
     column_names = column_names
     column_names.update_match_id = "series_id"
     historical_df = pd.DataFrame(
@@ -97,6 +99,7 @@ def test_rolling_mean_days_series_id(column_names: ColumnNames, use_column_names
     expected_df = historical_df.copy()
     if column_names:
         transformer = RollingMeanDaysTransformer(
+            add_count=True,
             features=["points"],
             days=2,
             granularity=["player"],
@@ -105,16 +108,20 @@ def test_rolling_mean_days_series_id(column_names: ColumnNames, use_column_names
 
     else:
         transformer = RollingMeanDaysTransformer(
+            add_count=True,
             features=["points"],
             days=2,
             granularity=["player"],
-            match_id_update_column=column_names.update_match_id,
+            update_column=column_names.update_match_id,
         )
 
     transformed_df = transformer.transform_historical(historical_df)
 
     expected_df = expected_df.assign(
-        **{transformer.features_out[0]: [None, None, 1.5, 3]}
+        **{
+            transformer.features_out[0]: [None, None, 1.5, 3],
+            transformer.features_out[1]: [0, 0, 2, 1],
+        }
     )
 
     pd.testing.assert_frame_equal(
@@ -424,7 +431,7 @@ def test_rolling_mean_days_transform_historical_granularity_differs_from_input_g
             features=["points"],
             days=10,
             granularity=["league", "position"],
-            match_id_update_column=column_names.match_id,
+            update_column=column_names.match_id,
             date_column=column_names.start_date,
         )
         column_names = None
