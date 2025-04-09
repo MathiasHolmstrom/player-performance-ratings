@@ -34,7 +34,7 @@ class RollingMeanTransformer(BaseLagTransformer):
         min_periods: int = 1,
         are_estimator_features=True,
         prefix: str = "rolling_mean",
-        match_id_update_column: Optional[str] = None,
+        update_column: Optional[str] = None,
         unique_constraint: Optional[list[str]] = None,
     ):
         """
@@ -58,7 +58,7 @@ class RollingMeanTransformer(BaseLagTransformer):
             prefix=prefix,
             granularity=granularity,
             are_estimator_features=are_estimator_features,
-            match_id_update_column=match_id_update_column,
+            update_column=update_column,
             unique_constraint=unique_constraint,
         )
         self.scale_by_participation_weight = scale_by_participation_weight
@@ -86,16 +86,16 @@ class RollingMeanTransformer(BaseLagTransformer):
             df = self._merge_into_input_df(
                 df=df,
                 concat_df=df_with_feats,
-                match_id_join_on=self.match_id_update_column,
+                match_id_join_on=self.update_column,
             )
 
         else:
             df_with_feats = self._generate_features(df).sort("__row_index")
             df = df.join(
                 df_with_feats.select(
-                    [*self.granularity, self.match_id_update_column, *self.features_out]
+                    [*self.granularity, self.update_column, *self.features_out]
                 ),
-                on=[*self.granularity, self.match_id_update_column],
+                on=[*self.granularity, self.update_column],
                 how="left",
             ).unique("__row_index")
         if self.add_opponent:
@@ -137,22 +137,11 @@ class RollingMeanTransformer(BaseLagTransformer):
             if "__row_index" not in concat_df.columns:
                 concat_df = concat_df.with_row_index(name="__row_index")
             sort_col = "__row_index"
-
-        aggr_cols = (
-            [*self.features] + [self.column_names.participation_weight]
-            if self.scale_by_participation_weight
-            else self.features
-        )
-        grp = (
-            concat_df.group_by(self.granularity + [self.match_id_update_column]).agg(
-                [nw.col(feature).mean().alias(feature) for feature in [*aggr_cols]]
-                + [nw.col(sort_col).min()]
-            )
-        ).sort(sort_col)
+        concat_df = concat_df.sort(sort_col)
 
         if self.scale_by_participation_weight:
 
-            grp = grp.with_columns(
+            concat_df = concat_df.with_columns(
                 (
                     nw.col(feature) * nw.col(self.column_names.participation_weight)
                 ).alias(f"__scaled_{feature}")
@@ -171,7 +160,7 @@ class RollingMeanTransformer(BaseLagTransformer):
                     self.column_names.participation_weight,
                 ]
             ]
-            grp = grp.with_columns(rolling_sums)
+            concat_df = concat_df.with_columns(rolling_sums)
             rolling_means = [
                 (
                     nw.col(f"{self.prefix}___scaled_{feature}{self.window}__sum")
@@ -181,7 +170,7 @@ class RollingMeanTransformer(BaseLagTransformer):
                 ).alias(f"{self.prefix}_{feature}{self.window}")
                 for feature in self.features
             ]
-            grp = grp.with_columns(rolling_means)
+            concat_df = concat_df.with_columns(rolling_means)
 
         else:
 
@@ -193,9 +182,14 @@ class RollingMeanTransformer(BaseLagTransformer):
                 .alias(f"{self.prefix}_{feature_name}{self.window}")
                 for feature_name in self.features
             ]
-            grp = grp.with_columns(rolling_means)
+            concat_df = concat_df.with_columns(rolling_means)
 
-        return grp.with_columns(
+        for feature_name in self.features:
+            concat_df = self._equalize_update_values(
+                df=concat_df, column_name=f"{self.prefix}_{feature_name}{self.window}"
+            )
+
+        return concat_df.with_columns(
             [
                 nw.col(f).fill_null(strategy="forward").over(self.granularity).alias(f)
                 for f in self._entity_features_out

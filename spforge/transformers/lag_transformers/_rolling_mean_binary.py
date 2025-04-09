@@ -27,7 +27,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
         min_periods: int = 1,
         add_opponent: bool = False,
         prefix: str = "rolling_mean_binary",
-        match_id_update_column: Optional[str] = None,
+        update_column: Optional[str] = None,
         column_names: Optional[ColumnNames] = None,
     ):
         super().__init__(
@@ -36,7 +36,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
             prefix=prefix,
             iterations=[],
             granularity=granularity,
-            match_id_update_column=match_id_update_column,
+            update_column=update_column,
         )
         self.window = window
         self.min_periods = min_periods
@@ -82,7 +82,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
 
         if self.column_names:
             self.match_id_update_column = (
-                self.column_names.update_match_id or self.match_id_update_column
+                self.column_names.update_match_id or self.update_column
             )
             additional_cols = [self.binary_column] + (
                 [self.prob_column] if self.prob_column else []
@@ -168,29 +168,16 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
         if self.column_names and self._df is not None:
             sort_col = self.column_names.start_date
             concat_df = self._concat_with_stored(df)
-            aggregation[sort_col] = nw.min(sort_col)
         else:
             concat_df = df
             if "__row_index" not in concat_df.columns:
                 concat_df = concat_df.with_row_index(name="__row_index")
             sort_col = "__row_index"
-            aggregation[sort_col] = nw.mean(sort_col)
-
-        groupby_cols = [
-            self.match_id_update_column,
-            *self.granularity,
-        ]
-
-        grouped = (
-            concat_df.group_by(groupby_cols)
-            .agg(list(aggregation.values()))
-            .sort([sort_col, self.match_id_update_column])
-        )
 
         feats_added = []
 
         for feature in self.features:
-            grouped = grouped.with_columns(
+            concat_df = concat_df.with_columns(
                 [
                     nw.when(nw.col(self.binary_column) == 1)
                     .then(nw.col(feature))
@@ -201,7 +188,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
                 ]
             )
 
-            grouped = grouped.with_columns(
+            concat_df = concat_df.with_columns(
                 [
                     nw.col("value_result_0")
                     .shift(1)
@@ -232,26 +219,19 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
                 ]
             )
 
-        concat_df = concat_df.join(
-            grouped.select(
-                [
-                    self.match_id_update_column,
-                    *self.granularity,
-                    *feats_added,
-                ]
-            ),
-            on=[self.match_id_update_column, *self.granularity],
-            how="left",
-        )
-
         concat_df = concat_df.with_columns(
             [nw.col(feats_added).fill_null(strategy="forward").over(self.granularity)]
         )
+        for output_feature_name in feats_added:
+            concat_df = self._equalize_update_values(
+                df=concat_df, column_name=output_feature_name
+            )
+
         df = df.join(
-            concat_df.select(
-                [*self.granularity, self.match_id_update_column, *feats_added]
+            concat_df.unique([*self.granularity, self.update_column]).select(
+                [*self.granularity, self.update_column, *feats_added]
             ),
-            on=[*self.granularity, self.match_id_update_column],
+            on=[*self.granularity, self.update_column],
             how="left",
         )
 

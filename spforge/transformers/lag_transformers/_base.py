@@ -17,13 +17,13 @@ class BaseLagTransformer:
         add_opponent: bool,
         iterations: list[int],
         prefix: str,
-        match_id_update_column: Optional[str],
+        update_column: Optional[str],
         column_names: Optional[ColumnNames] = None,
         are_estimator_features: bool = True,
         unique_constraint: Optional[list[str]] = None,
         scale_by_participation_weight: bool = False,
     ):
-        self.match_id_update_column = match_id_update_column
+        self.update_column = update_column
         self.column_names = column_names
         self.features = features
         self.iterations = iterations
@@ -372,6 +372,37 @@ class BaseLagTransformer:
             ),
             on=join_cols,
             how="left",
+        )
+
+    def _equalize_update_values(self, df: FrameT, column_name: str) -> FrameT:
+        df_ranked = df.with_columns(
+            [
+                nw.lit(1).alias("one"),  # dummy column
+            ]
+        ).with_columns(
+            [
+                nw.col("one")
+                .cum_sum()
+                .over([self.update_column, *self.granularity])
+                .alias("__game_rank")
+            ]
+        )
+
+        first_values = df_ranked.filter(nw.col("__game_rank") == 1).select(
+            [
+                self.update_column,
+                *self.granularity,
+                nw.col(column_name).alias(column_name),
+            ]
+        )
+
+        return (
+            df.drop(column_name)
+            .join(first_values, on=[self.update_column, *self.granularity], how="left")
+            .with_columns(
+                nw.col(column_name).alias(column_name)  # overwrite or create new
+            )
+            .select(df.columns)
         )
 
     def reset(self) -> "BaseLagTransformer":

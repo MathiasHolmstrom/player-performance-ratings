@@ -28,7 +28,7 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
         prefix: str = "rolling_mean_days",
         column_names: Optional[ColumnNames] = None,
         date_column: Optional[str] = None,
-        match_id_update_column: Optional[str] = None,
+        update_column: Optional[str] = None,
         unique_constraint: Optional[list[str]] = None,
     ):
         self.days = days
@@ -40,7 +40,7 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
             prefix=prefix,
             add_opponent=add_opponent,
             granularity=granularity,
-            match_id_update_column=match_id_update_column,
+            update_column=update_column,
             unique_constraint=unique_constraint,
         )
 
@@ -70,7 +70,7 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
         if self.column_names:
             self.date_column = self.column_names.start_date or self.date_column
             self.match_id_update_column = (
-                self.column_names.update_match_id or self.match_id_update_column
+                self.column_names.update_match_id or self.update_column
             )
 
         if self.column_names:

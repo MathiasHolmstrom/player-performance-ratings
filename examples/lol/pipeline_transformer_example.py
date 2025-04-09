@@ -14,15 +14,13 @@ from spforge.ratings import (
     PlayerRatingGenerator,
     RatingKnownFeatures,
 )
-from spforge.ratings.performance_generator import (
-    PerformancesGenerator,
-    Performance,
-    ColumnWeight,
-)
+
 from spforge.transformers import LagTransformer
 from spforge.transformers import (
     RollingMeanTransformer,
 )
+from spforge.transformers.fit_transformers import PerformanceWeightsManager
+from spforge.transformers.fit_transformers._performance_manager import ColumnWeight
 
 column_names = ColumnNames(
     team_id="teamname",
@@ -64,13 +62,10 @@ rating_generator_result = PlayerRatingGenerator(
 
 rating_generator_player_kills = PlayerRatingGenerator(
     features_out=[RatingKnownFeatures.RATING_MEAN_PROJECTED],
-    performances_generator=PerformancesGenerator(
-        performances=Performance(
-            name="performance_kills",
-            weights=[
-                ColumnWeight(name="kills", weight=1),
-            ],
-        ),
+    performances_generator=PerformanceWeightsManager(
+        weights=[
+            ColumnWeight(name="kills", weight=1),
+        ],
     ),
 )
 
