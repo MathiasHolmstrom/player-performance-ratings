@@ -11,30 +11,21 @@ from spforge.predictor_transformer._simple_transformer import (
 )
 from spforge.scorer import Filter, apply_filters
 
-
 from typing import Optional
 
 from spforge.data_structures import ColumnNames
 from spforge.predictor._base import BasePredictor
 
 
-class GameTeamPredictor(BasePredictor):
+class GroupByPredictor(BasePredictor):
     """
-    Wrapper for sklearn models that predicts game results.
-    The GameTeam Predictor is intended to transform predictions from a lower granularity into a GameTeam level.
-    If input data is at game-player, data is converted to game_team before being trained
-    Similar concept if it is at a granularity below game level.
-
-    Can be used similarly to an Sklearn pipeline by injecting pre_transformers into it.
-    By default the Predictor will always create pre_transformers to ensure that the estimator can train on the estimator-features that it receives.
-    Adding basic encoding of categorical features, standardizing or imputation is therefore not required.
+    Aggregates the data to a desired granularity before training the predictor
 
     """
 
     def __init__(
         self,
-        game_id_colum: str,
-        team_id_column: str,
+        granularity: list[str],
         predictor: BasePredictor,
         scale_features: bool = False,
         one_hot_encode_cat_features: bool = False,
@@ -45,15 +36,8 @@ class GameTeamPredictor(BasePredictor):
         filters: Optional[list[Filter]] = None,
     ):
         """
-        :param game_id_colum - name of game_id column
-        :param team_id_column - name of team_id column
-        :param target - Name of the column that the predictor should predict
-        :param estimator: Sklearn like Estimator
-        :param estimator_features: Features that the estimator should use to train.
-            Note the estimator_features passed to the constructor can be overriden by estimator_features passed to .train()
-        :param multiclassifier: If set to true the output when calling add_prediction() will be in multiclassifier format.
-            This results in the pred_column containing a list of probabilities along with a class column added containing the unique classes.
-            Further a Logistic Regression estimator will be converted to OrdinalClassifier(LogisticRegression())
+        :param granularity - Granularity to group by.
+        :param predictor: Predictor
 
         :param pred_column: Name of the new column added containing predictions or probabilities when calling .add_prediction().
             Defaults to f"{self._target}_prediction"
@@ -64,8 +48,7 @@ class GameTeamPredictor(BasePredictor):
         :param filters - If filters are added the predictor will only train on a subset of the data.
         """
 
-        self.game_id_colum = game_id_colum
-        self.team_id_column = team_id_column
+        self.granularity = granularity
         self.predictor = predictor
         self._features = []
 
@@ -132,10 +115,8 @@ class GameTeamPredictor(BasePredictor):
 
         grouped = nw.from_native(self.predictor.predict(grouped))
         df = df.join(
-            grouped.select(
-                [*self.predictor.columns_added, self.game_id_colum, self.team_id_column]
-            ),
-            on=[self.game_id_colum, self.team_id_column],
+            grouped.select([*self.predictor.columns_added, *self.granularity]),
+            on=self.granularity,
             how="left",
         ).drop("__row_index")
 
@@ -155,73 +136,26 @@ class GameTeamPredictor(BasePredictor):
 
         if self._target in df.columns:
 
-            grouped = df.group_by([self.game_id_colum, self.team_id_column]).agg(
+            grouped = df.group_by(self.granularity).agg(
                 [nw.col(feature).mean() for feature in numeric_features]
                 + [nw.col(self._target).median().alias(self._target)]
             )
         else:
-            grouped = df.group_by([self.game_id_colum, self.team_id_column]).agg(
+            grouped = df.group_by(self.granularity).agg(
                 nw.col(feature).mean() for feature in numeric_features
             )
 
         return (
             grouped.join(
-                df.select(
-                    [self.game_id_colum, self.team_id_column, *cat_feats, "__row_index"]
-                ).unique(subset=[self.game_id_colum, self.team_id_column]),
-                on=[self.game_id_colum, self.team_id_column],
+                df.select([*self.granularity, *cat_feats, "__row_index"]).unique(
+                    subset=self.granularity
+                ),
+                on=self.granularity,
                 how="inner",
             )
             .sort("__row_index")
             .drop("__row_index")
         )
-
-
-class DistributionPredictor(BasePredictor):
-
-    def __init__(
-        self,
-        point_predictor: BasePredictor,
-        distribution_predictor: BasePredictor,
-        filters: Optional[list[Filter]] = None,
-        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-        multiclass_output_as_struct: bool = False,
-    ):
-        self.point_predictor = point_predictor
-        self.distribution_predictor = distribution_predictor
-
-        super().__init__(
-            target=point_predictor.target,
-            pred_column=distribution_predictor.pred_column,
-            features=point_predictor.features,
-            multiclass_output_as_struct=multiclass_output_as_struct,
-            post_predict_transformers=post_predict_transformers,
-            filters=filters,
-        )
-        self._pred_columns_added = [
-            point_predictor.pred_column,
-            distribution_predictor.pred_column,
-        ]
-
-    @nw.narwhalify
-    def train(self, df: FrameT, features: Optional[list[str]] = None) -> None:
-        self._features = features or self.features
-
-        df = apply_filters(df=df, filters=self.filters)
-        self.point_predictor.train(df=df, features=features)
-        df = nw.from_native(self.point_predictor.predict(df))
-        self.distribution_predictor.train(df, features)
-
-    @nw.narwhalify
-    def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
-    ) -> IntoFrameT:
-        if self.point_predictor.pred_column not in df.columns:
-            df = nw.from_native(self.point_predictor.predict(df))
-        df = self.distribution_predictor.predict(df)
-        for post_predict_transformer in self.post_predict_transformers:
-            df = nw.from_native(post_predict_transformer.transform(df))
-        return df
 
 
 class SklearnPredictor(BasePredictor):
@@ -244,8 +178,18 @@ class SklearnPredictor(BasePredictor):
         pre_transformers: Optional[list[PredictorTransformer]] = None,
         post_predict_transformers: Optional[list[SimpleTransformer]] = None,
         multiclass_output_as_struct: bool = False,
+        weight_by_date: bool = False,
+        date_column: None | str = None,
+        day_weight_epsilon: float = 400,
     ):
         self.estimator = estimator
+        self.weight_by_date = weight_by_date
+        self.day_weight_epsilon = day_weight_epsilon
+        self.date_column = date_column
+        if self.weight_by_date:
+            assert (
+                self.date_column
+            ), "date_column must be set if weight_by_date is set to True"
 
         super().__init__(
             target=target,
@@ -302,10 +246,41 @@ class SklearnPredictor(BasePredictor):
                     f" It is recommended to limit max and min values to ensure less than 50 unique targets"
                 )
 
+        if self.weight_by_date:
+            dtype = filtered_df.schema[self.date_column]
+            if dtype not in [nw.Datetime, nw.Date]:
+                filtered_df = filtered_df.with_columns(
+                    nw.col(self.date_column).str.to_datetime().alias(self.date_column)
+                )
+
+            max_date = filtered_df.select(nw.col(self.date_column).max()).item()
+            filtered_df = filtered_df.with_columns(
+                (
+                    (nw.col(self.date_column) - nw.lit(max_date)).dt.total_minutes()
+                    / (24 * 60)
+                ).alias("days_diff")
+            )
+            min_days_diff = filtered_df.select(nw.col("days_diff").min()).item()
+
+            filtered_df = filtered_df.with_columns(
+                (
+                    (
+                        nw.col("days_diff")
+                        + nw.lit(min_days_diff) * -1
+                        + nw.lit(self.day_weight_epsilon)
+                    )
+                    / (nw.lit(min_days_diff) * -2 + nw.lit(self.day_weight_epsilon))
+                ).alias("weight")
+            )
+            sample_weight = filtered_df["weight"].to_list()
+        else:
+            sample_weight = None
+
         features = features or self._features
         self.estimator.fit(
             filtered_df.select(features).to_pandas(),
             filtered_df[self.target].to_numpy(),
+            sample_weight=sample_weight,
         )
 
     @nw.narwhalify

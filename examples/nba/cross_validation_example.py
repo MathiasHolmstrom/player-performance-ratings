@@ -6,11 +6,14 @@ from examples import get_sub_sample_nba_data
 from spforge.cross_validator import MatchKFoldCrossValidator
 
 from spforge.pipeline import Pipeline
-from spforge.predictor import SklearnPredictor
+from spforge.predictor import (
+    SklearnPredictor,
+    NegativeBinomialPredictor,
+    DistributionPredictor,
+)
 
 from spforge.data_structures import ColumnNames
-from spforge.predictor.classifier import NegativeBinomialPredictor
-from spforge.predictor.predictor import DistributionPredictor
+
 from spforge.scorer import SklearnScorer, OrdinalLossScorer
 from spforge.scorer import Filter, Operator
 from spforge.transformers import (
@@ -44,9 +47,16 @@ predictor = DistributionPredictor(
         target="points",
         convert_cat_features_to_cat_dtype=True,
         pred_column="points_estimate",
+        weight_by_date=True,
+        date_column=column_names.start_date,
     ),
     distribution_predictor=NegativeBinomialPredictor(
-        max_value=40, target="points", point_estimate_pred_column="points_estimate"
+        max_value=40,
+        target="points",
+        point_estimate_pred_column="points_estimate",
+        # predict_granularity=["game_id", "team_id"],
+        r_specific_granularity=["player_id"],
+        column_names=column_names,
     ),
 )
 
@@ -120,7 +130,6 @@ ordinal_scorer_lgbm_classifier = OrdinalLossScorer(
     validation_column="is_validation",
     filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
 )
-
 
 lgbm_classifier_ordinal_loss_score = (
     lgbm_classifier_cross_validator.cross_validation_score(

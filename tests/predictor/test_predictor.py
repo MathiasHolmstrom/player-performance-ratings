@@ -8,7 +8,7 @@ import pytest
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from spforge.predictor import (
-    GameTeamPredictor,
+    GroupByPredictor,
     GranularityPredictor,
     SklearnPredictor,
 )
@@ -58,9 +58,8 @@ def test_game_team_predictor_add_prediction_df(df):
     mock_predictor.predict.return_value = predict_return_value
     mock_predictor.columns_added = ["pred_col"]
 
-    predictor = GameTeamPredictor(
-        game_id_colum="game_id",
-        team_id_column="team_id",
+    predictor = GroupByPredictor(
+        granularity=["game_id", "team_id"],
         predictor=mock_predictor,
     )
 
@@ -86,9 +85,8 @@ def test_game_team_predictor_add_prediction_df(df):
                 multiclass_output_as_struct=True,
             ),
         ),
-        GameTeamPredictor(
-            game_id_colum="game_id",
-            team_id_column="team_id",
+        GroupByPredictor(
+            granularity=["game_id", "team_id"],
             predictor=SklearnPredictor(
                 estimator=LogisticRegression(),
                 target="__target",
@@ -137,9 +135,8 @@ def test_game_team_predictor_train_input(df):
     mock_model = Mock()
     mock_model.target = "__target"
     mock_model.features_contain_str = []
-    predictor = GameTeamPredictor(
-        game_id_colum="game_id",
-        team_id_column="team_id",
+    predictor = GroupByPredictor(
+        granularity=["game_id", "team_id"],
         predictor=mock_model,
         pre_transformers=[],
     )
@@ -180,9 +177,8 @@ def test_game_team_predictor_train_input(df):
 def test_game_team_predictor(target_values, df):
     "should identify it's a regressor and train and predict works as intended"
 
-    predictor = GameTeamPredictor(
-        game_id_colum="game_id",
-        team_id_column="team_id",
+    predictor = GroupByPredictor(
+        granularity=["game_id", "team_id"],
         predictor=SklearnPredictor(estimator=LinearRegression(), target="__target"),
     )
 
@@ -293,15 +289,14 @@ def test_one_hot_encoder_train(df):
             granularity_column_name="group",
             features_contain_str=["lag"],
         ),
-        GameTeamPredictor(
+        GroupByPredictor(
             predictor=SklearnPredictor(
                 estimator=LinearRegression(),
                 target="__target",
                 features=["feature1"],
                 features_contain_str=["lag"],
             ),
-            game_id_colum="game_id",
-            team_id_column="team_id",
+            granularity=["game_id", "team_id"],
         ),
     ],
 )
