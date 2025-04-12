@@ -399,9 +399,7 @@ class BaseLagTransformer:
         return (
             df.drop(column_name)
             .join(first_values, on=[self.update_column, *self.granularity], how="left")
-            .with_columns(
-                nw.col(column_name).alias(column_name)
-            )
+            .with_columns(nw.col(column_name).alias(column_name))
             .select(df.columns)
         )
 

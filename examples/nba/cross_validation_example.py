@@ -56,6 +56,7 @@ predictor = DistributionPredictor(
         point_estimate_pred_column="points_estimate",
         # predict_granularity=["game_id", "team_id"],
         r_specific_granularity=["player_id"],
+        predicted_r_weight=1,
         column_names=column_names,
     ),
 )
