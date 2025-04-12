@@ -1,3 +1,4 @@
+import copy
 from typing import Optional
 
 import numpy as np
@@ -15,7 +16,6 @@ from spforge.scorer import apply_filters, Filter
 from spforge.predictor import (
     BasePredictor,
 )
-from spforge.scorer import BaseScorer
 from spforge.transformers import RollingWindowTransformer
 
 
@@ -75,6 +75,7 @@ class NegativeBinomialPredictor(BasePredictor):
                 are_estimator_features=False,
                 update_column=self.column_names.update_match_id,
                 min_periods=5,
+                unique_constraint=[self.column_names.match_id, *self.r_specific_granularity],
             )
             self._rolling_var: RollingWindowTransformer = RollingWindowTransformer(
                 aggregation="var",
@@ -84,6 +85,7 @@ class NegativeBinomialPredictor(BasePredictor):
                 are_estimator_features=False,
                 update_column=self.column_names.update_match_id,
                 min_periods=5,
+                unique_constraint=[self.column_names.match_id, *self.r_specific_granularity],
             )
         else:
             self._rolling_mean = None
@@ -138,14 +140,17 @@ class NegativeBinomialPredictor(BasePredictor):
         self._mean_r = float(result.x[0])
         if self.r_specific_granularity:
             gran_grp = self._grp_to_r_granularity(df)
+            column_names_lag = copy.deepcopy(self.column_names)
+            if self.column_names.player_id not in self.r_specific_granularity:
+                column_names_lag.player_id = None
             gran_grp = nw.from_native(
                 self._rolling_mean.transform_historical(
-                    gran_grp, column_names=self.column_names
+                    gran_grp, column_names=column_names_lag
                 )
             )
             gran_grp = nw.from_native(
                 self._rolling_var.transform_historical(
-                    gran_grp, column_names=self.column_names
+                    gran_grp, column_names=column_names_lag
                 )
             )
 
@@ -282,6 +287,7 @@ class NegativeBinomialPredictor(BasePredictor):
                             self.column_names.match_id,
                             *self.r_specific_granularity,
                             self.column_names.team_id,
+                            self.column_names.update_match_id
                         ]
                     )
                 )
