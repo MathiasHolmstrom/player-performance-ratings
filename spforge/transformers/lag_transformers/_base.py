@@ -202,7 +202,7 @@ class BaseLagTransformer:
             .unique(self.unique_constraint)
             .sort(sort_cols)
         )
-        return transformed_df.select(list(set(df.columns + self._entity_features_out)))
+        return transformed_df.select(list(set(ori_cols + self._entity_features_out)))
 
     def _add_opponent_features(self, df: FrameT) -> FrameT:
         team_features = df.group_by(

@@ -6,10 +6,11 @@ from spforge import ColumnNames
 from spforge.cross_validator import MatchKFoldCrossValidator
 from spforge.pipeline_transformer import PipelineTransformer
 from spforge.predictor import (
-    GameTeamPredictor,
+    GroupByPredictor,
     SklearnPredictor,
+    NegativeBinomialPredictor,
 )
-from spforge.predictor.classifier import NegativeBinomialPredictor
+
 from spforge.ratings import (
     PlayerRatingGenerator,
     RatingKnownFeatures,
@@ -89,7 +90,7 @@ transformer = PipelineTransformer(
 
 historical_df = transformer.fit_transform(historical_df)
 
-game_winner_predictor = GameTeamPredictor(
+game_winner_predictor = GroupByPredictor(
     predictor=SklearnPredictor(
         estimator=LogisticRegression(),
         target="result",
@@ -97,8 +98,7 @@ game_winner_predictor = GameTeamPredictor(
     ),
     one_hot_encode_cat_features=True,
     impute_missing_values=True,
-    game_id_colum=column_names.match_id,
-    team_id_column=column_names.team_id,
+    granularity=[column_names.match_id, column_names.team_id],
 )
 
 player_kills_predictor = SklearnPredictor(
@@ -134,12 +134,6 @@ future_df = player_kills_predictor.predict(future_df)
 probability_predictor = NegativeBinomialPredictor(
     target="kills",
     point_estimate_pred_column=player_kills_predictor.pred_column,
-    relative_error_predictor=SklearnPredictor(
-        estimator=LGBMRegressor(),
-        target=None,
-        features=["position"],
-        convert_cat_features_to_cat_dtype=True,
-    ),
     max_value=15,
 )
 

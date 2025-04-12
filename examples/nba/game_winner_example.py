@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
 from spforge.pipeline import Pipeline
-from spforge.predictor import GameTeamPredictor, SklearnPredictor
+from spforge.predictor import GroupByPredictor, SklearnPredictor
 
 from spforge.ratings import PlayerRatingGenerator
 
@@ -58,9 +58,8 @@ rating_generator = PlayerRatingGenerator(
 # Defines the predictor. A machine-learning model will be used to predict game winner on a game-team-level.
 # Mean team-ratings will be calculated (from player-level) and rating-difference between the 2 teams calculated.
 # It will also use the location of the game as a feature.
-predictor = GameTeamPredictor(
-    game_id_colum=column_names.match_id,
-    team_id_column=column_names.team_id,
+predictor = GroupByPredictor(
+    granularity=[column_names.match_id, column_names.team_id],
     predictor=SklearnPredictor(
         features=["location"], target="won", estimator=LogisticRegression()
     ),

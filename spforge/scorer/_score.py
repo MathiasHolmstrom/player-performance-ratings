@@ -56,21 +56,21 @@ def _apply_filters_pandas(df: pd.DataFrame, filters: list[Filter]) -> pd.DataFra
 def _apply_filters_polars(df: pl.DataFrame, filters: list[Filter]) -> pl.DataFrame:
     for filter in filters:
         if filter.operator == Operator.EQUALS:
-            df = df.filter(col(filter.column_name) == filter.value)
+            df = df.filter(pl.col(filter.column_name) == pl.lit(filter.value))
         elif filter.operator == Operator.NOT_EQUALS:
-            df = df.filter(col(filter.column_name) != filter.value)
+            df = df.filter(pl.col(filter.column_name) != pl.lit(filter.value))
         elif filter.operator == Operator.GREATER_THAN:
-            df = df.filter(col(filter.column_name) > filter.value)
+            df = df.filter(pl.col(filter.column_name) > pl.lit(filter.value))
         elif filter.operator == Operator.LESS_THAN:
-            df = df.filter(col(filter.column_name) < filter.value)
+            df = df.filter(pl.col(filter.column_name) < pl.lit(filter.value))
         elif filter.operator == Operator.GREATER_THAN_OR_EQUALS:
-            df = df.filter(col(filter.column_name) >= filter.value)
+            df = df.filter(pl.col(filter.column_name) >= pl.lit(filter.value))
         elif filter.operator == Operator.LESS_THAN_OR_EQUALS:
-            df = df.filter(col(filter.column_name) <= filter.value)
+            df = df.filter(pl.col(filter.column_name) <= pl.lit(filter.value))
         elif filter.operator == Operator.IN:
-            df = df.filter(col(filter.column_name).isin(filter.value))
+            df = df.filter(pl.col(filter.column_name).is_in(pl.lit(filter.value)))
         elif filter.operator == Operator.NOT_IN:
-            df = df.filter(~col(filter.column_name).isin(filter.value))
+            df = df.filter(~pl.col(filter.column_name).is_in(pl.lit(filter.value)))
 
     return df
 
