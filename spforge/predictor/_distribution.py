@@ -16,6 +16,7 @@ from spforge.scorer import apply_filters, Filter
 from spforge.predictor import (
     BasePredictor,
 )
+from spforge.scorer import BaseScorer
 from spforge.transformers import RollingWindowTransformer
 
 
@@ -44,19 +45,19 @@ def neg_binom_log_likelihood(r, actual_points, predicted_points):
 class NegativeBinomialPredictor(BasePredictor):
 
     def __init__(
-        self,
-        point_estimate_pred_column: str,
-        max_value: int,
-        target: str,
-        min_value: int = 0,
-        pred_column: Optional[str] = None,
-        predicted_r_iterations: int = 6,
-        predict_granularity: Optional[list[str]] = None,
-        multiclass_output_as_struct: bool = True,
-        r_specific_granularity: Optional[list[str]] = None,
-        r_rolling_mean_window: int = 40,
-        predicted_r_weight: float = 1.0,
-        column_names: Optional[ColumnNames] = None,
+            self,
+            point_estimate_pred_column: str,
+            max_value: int,
+            target: str,
+            min_value: int = 0,
+            pred_column: Optional[str] = None,
+            predicted_r_iterations: int = 6,
+            predict_granularity: Optional[list[str]] = None,
+            multiclass_output_as_struct: bool = True,
+            r_specific_granularity: Optional[list[str]] = None,
+            r_rolling_mean_window: int = 40,
+            predicted_r_weight: float = 1.0,
+            column_names: Optional[ColumnNames] = None,
     ):
         self.point_estimate_pred_column = point_estimate_pred_column
         pred_column = pred_column or f"{target}_probabilities"
@@ -139,7 +140,7 @@ class NegativeBinomialPredictor(BasePredictor):
         )
         self._mean_r = float(result.x[0])
         if self.r_specific_granularity:
-            gran_grp = self._grp_to_r_granularity(df)
+            gran_grp = self._grp_to_r_granularity(df, is_train=True)
             column_names_lag = copy.deepcopy(self.column_names)
             if self.column_names.player_id not in self.r_specific_granularity:
                 column_names_lag.player_id = None
@@ -155,7 +156,7 @@ class NegativeBinomialPredictor(BasePredictor):
             )
 
             def define_quantile_bins(
-                df: FrameT, column: str, quantiles: list[float]
+                    df: FrameT, column: str, quantiles: list[float]
             ) -> list[float]:
                 return [
                     df[column].quantile(q, interpolation="nearest") for q in quantiles
@@ -201,15 +202,15 @@ class NegativeBinomialPredictor(BasePredictor):
                     )
                     self._r_estimates[(mu_bin, var_bin)] = float(result.x[0])
 
-            self._historical_game_ids = gran_grp[self.column_names.match_id].unique()
+            self._historical_game_ids = gran_grp[self.column_names.match_id].unique().to_list()
 
     @nw.narwhalify
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+            self, df: FrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
         input_cols = df.columns
         if self.r_specific_granularity:
-            gran_grp = self._grp_to_r_granularity(df)
+            gran_grp = self._grp_to_r_granularity(df, is_train=False)
             historical_gran_group = gran_grp.filter(
                 nw.col(self.column_names.match_id).is_in(self._historical_game_ids)
             )
@@ -257,8 +258,8 @@ class NegativeBinomialPredictor(BasePredictor):
             pred_df = pred_df.with_columns(
                 (
                     (
-                        nw.col("__predicted_r") * self.predicted_r_weight
-                        + nw.lit(self._mean_r) * (1 - self.predicted_r_weight)
+                            nw.col("__predicted_r") * self.predicted_r_weight
+                            + nw.lit(self._mean_r) * (1 - self.predicted_r_weight)
                     )
                 ).alias("__predicted_r")
             )
@@ -276,7 +277,16 @@ class NegativeBinomialPredictor(BasePredictor):
                 [*input_cols, self.pred_column]
             )
 
-    def _grp_to_r_granularity(self, df: FrameT) -> FrameT:
+    def _grp_to_r_granularity(self, df: FrameT, is_train: bool) -> FrameT:
+
+        aggregation = [nw.col([self.point_estimate_pred_column, self.target]).mean(),
+                       nw.col(self.column_names.start_date).median(),
+                       ] if is_train else [
+            nw.col(self.point_estimate_pred_column).mean(),
+            nw.col(self.column_names.start_date).median(),
+
+        ]
+
         if df.schema[self.column_names.start_date] not in (nw.Date, nw.Datetime):
             df = df.with_columns(nw.col(self.column_names.start_date).str.to_datetime())
         return (
@@ -292,12 +302,7 @@ class NegativeBinomialPredictor(BasePredictor):
                     )
                 )
             )
-            .agg(
-                [
-                    nw.col([self.point_estimate_pred_column, self.target]).mean(),
-                    nw.col(self.column_names.start_date).median(),
-                ]
-            )
+            .agg(aggregation)
             .sort(self.column_names.start_date)
         )
 
@@ -343,8 +348,8 @@ class NegativeBinomialPredictor(BasePredictor):
                 df = (
                     df.with_columns(
                         (
-                            nw.col(self.column_names.projected_participation_weight)
-                            * nw.col("__predicted_r")
+                                nw.col(self.column_names.projected_participation_weight)
+                                * nw.col("__predicted_r")
                         ).alias("raw_weighted__predicted_r")
                     )
                     .with_columns(
@@ -354,8 +359,8 @@ class NegativeBinomialPredictor(BasePredictor):
                     )
                     .with_columns(
                         (
-                            nw.col("raw_weighted__predicted_r")
-                            / nw.col("sum_projected_participation_weight")
+                                nw.col("raw_weighted__predicted_r")
+                                / nw.col("sum_projected_participation_weight")
                         ).alias("__predicted_r")
                     )
                 )
@@ -374,8 +379,8 @@ class NegativeBinomialPredictor(BasePredictor):
 
         pred_grp = pred_grp.with_columns(
             (
-                nw.col("__predicted_r")
-                / (nw.col("__predicted_r") + nw.col(self.point_estimate_pred_column))
+                    nw.col("__predicted_r")
+                    / (nw.col("__predicted_r") + nw.col(self.point_estimate_pred_column))
             ).alias("__predicted_p")
         )
 
@@ -421,12 +426,12 @@ class NegativeBinomialPredictor(BasePredictor):
 class DistributionPredictor(BasePredictor):
 
     def __init__(
-        self,
-        point_predictor: BasePredictor,
-        distribution_predictor: BasePredictor,
-        filters: Optional[list[Filter]] = None,
-        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-        multiclass_output_as_struct: bool = False,
+            self,
+            point_predictor: BasePredictor,
+            distribution_predictor: BasePredictor,
+            filters: Optional[list[Filter]] = None,
+            post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+            multiclass_output_as_struct: bool = False,
     ):
         self.point_predictor = point_predictor
         self.distribution_predictor = distribution_predictor
@@ -455,7 +460,7 @@ class DistributionPredictor(BasePredictor):
 
     @nw.narwhalify
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+            self, df: FrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
         if self.point_predictor.pred_column not in df.columns:
             df = nw.from_native(self.point_predictor.predict(df))
