@@ -223,7 +223,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
             [nw.col(feats_added).fill_null(strategy="forward").over(self.granularity)]
         )
         for output_feature_name in feats_added:
-            concat_df = self._equalize_update_values(
+            concat_df = self._equalize_values_within_update_id(
                 df=concat_df, column_name=output_feature_name
             )
 

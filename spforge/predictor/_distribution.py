@@ -54,12 +54,14 @@ class NegativeBinomialPredictor(BasePredictor):
         multiclass_output_as_struct: bool = True,
         r_specific_granularity: Optional[list[str]] = None,
         r_rolling_mean_window: int = 40,
+        predicted_r_weight: float = 0.7,
         column_names: Optional[ColumnNames] = None,
     ):
         self.point_estimate_pred_column = point_estimate_pred_column
         pred_column = pred_column or f"{target}_probabilities"
         self.multiclass_output_as_struct = multiclass_output_as_struct
         self.r_specific_granularity = r_specific_granularity
+        self.predicted_r_weight  =predicted_r_weight
         self.r_rolling_mean_window = r_rolling_mean_window
         self.column_names = column_names
         self.predict_granularity = predict_granularity
@@ -120,7 +122,7 @@ class NegativeBinomialPredictor(BasePredictor):
                     self.target,
                     self.point_estimate_pred_column,
                 ]
-            )
+            ).to_native()
 
     @nw.narwhalify
     def predict(
@@ -131,7 +133,7 @@ class NegativeBinomialPredictor(BasePredictor):
             pred_gran_grp = self._grp_to_r_granularity(df)
             gran_grp = nw.concat(
                 [
-                    self.historical_df,
+                    nw.from_native(self.historical_df),
                     pred_gran_grp.select(
                         [
                             self.column_names.match_id,
@@ -157,13 +159,14 @@ class NegativeBinomialPredictor(BasePredictor):
                 on=[self.column_names.match_id, *self.r_specific_granularity],
                 how="left",
             )
+            pred_df = pred_df.with_columns(
+                ((nw.col('__predicted_r')*self.predicted_r_weight+nw.lit(self._mean_r)*(1-self.predicted_r_weight))).alias('__predicted_r')
+            )
+
             assert len(pred_df) == pre_join_df_row_count
-            pred_df = self._add_probabilities(df=pred_df)
-            return df.join(
-                pred_df,
-                on=[self.column_names.match_id, *self.r_specific_granularity],
-                how="left",
-            ).select([*input_cols, self.pred_column])
+            df = self._add_probabilities(df=pred_df).select([*input_cols, self.pred_column])
+            assert len(df) == pre_join_df_row_count
+            return df
 
         else:
             df = df.with_columns(nw.lit(self._mean_r).alias("__predicted_r"))
