@@ -10,7 +10,7 @@ from spforge.cross_validator import MatchKFoldCrossValidator
 from spforge.predictor import SklearnPredictor
 from spforge.ratings import RatingKnownFeatures, PlayerRatingGenerator
 from spforge.transformers import (
-    RollingMeanTransformer,
+    RollingWindowTransformer,
     LagTransformer,
     RollingMeanDaysTransformer,
     BinaryOutcomeRollingMeanTransformer,
@@ -43,7 +43,7 @@ def test_nba_integration_pipeline_cross_validate_train_future_predict():
                 features=["points"],
                 granularity=["player_id"],
             ),
-            RollingMeanTransformer(
+            RollingWindowTransformer(
                 features=["points"], window=15, granularity=["player_id"]
             ),
             LagTransformer(
@@ -178,7 +178,7 @@ def test_lol_integration_pipeline_cross_validate_train_future_predic():
                 granularity=["playername", "teamname"],
                 binary_column="result",
             ),
-            RollingMeanTransformer(
+            RollingWindowTransformer(
                 features=["kills"], window=15, granularity=[column_names.player_id]
             ),
             LagTransformer(

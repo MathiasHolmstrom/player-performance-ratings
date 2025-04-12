@@ -18,7 +18,7 @@ from spforge.ratings import (
 
 from spforge.transformers import LagTransformer
 from spforge.transformers import (
-    RollingMeanTransformer,
+    RollingWindowTransformer,
 )
 from spforge.transformers.fit_transformers import PerformanceWeightsManager
 from spforge.transformers.fit_transformers._performance_manager import ColumnWeight
@@ -74,7 +74,7 @@ lag_generators = [
     LagTransformer(
         features=["kills", "deaths", "result"], lag_length=3, granularity=["playername"]
     ),
-    RollingMeanTransformer(
+    RollingWindowTransformer(
         features=["kills", "deaths", "result"],
         window=20,
         min_periods=1,

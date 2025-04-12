@@ -3,7 +3,7 @@ import pytest
 import polars as pl
 from polars.testing import assert_frame_equal
 from spforge import ColumnNames
-from spforge.transformers import RollingMeanTransformer
+from spforge.transformers import RollingWindowTransformer
 
 
 @pytest.fixture
@@ -47,7 +47,7 @@ def test_rolling_mean_transform_historical_game_team(
     if not use_column_names:
         if add_opponent:
             return
-        rolling_mean_transformation = RollingMeanTransformer(
+        rolling_mean_transformation = RollingWindowTransformer(
             features=["points"],
             window=3,
             min_periods=1,
@@ -58,7 +58,7 @@ def test_rolling_mean_transform_historical_game_team(
         column_names = None
 
     else:
-        rolling_mean_transformation = RollingMeanTransformer(
+        rolling_mean_transformation = RollingWindowTransformer(
             features=["points"],
             window=3,
             min_periods=1,
@@ -146,7 +146,7 @@ def test_rolling_mean_transform_historical_player(df, column_names):
     except:
         original_df = data.clone()
 
-    rolling_mean_transformation = RollingMeanTransformer(
+    rolling_mean_transformation = RollingWindowTransformer(
         features=["points"],
         window=2,
         min_periods=1,
@@ -204,7 +204,7 @@ def test_rolling_mean_historical_participation_weight(df, column_names):
             "participation_weight": [1.0, 0.5, 0.5, 0.5],
         }
     )
-    rolling_mean_transformation = RollingMeanTransformer(
+    rolling_mean_transformation = RollingWindowTransformer(
         features=["points"],
         window=2,
         min_periods=1,
@@ -275,7 +275,7 @@ def test_rolling_mean_transform_historical_and_transform_future(df, column_names
         original_future_df = future_df.copy()
     except:
         original_future_df = future_df.clone()
-    rolling_mean_transformation = RollingMeanTransformer(
+    rolling_mean_transformation = RollingWindowTransformer(
         features=["points"],
         window=2,
         min_periods=1,
@@ -341,7 +341,7 @@ def test_rolling_mean_historical_transform_team_stat(df, column_names):
     except:
         expected_df = historical_df.clone()
 
-    rolling_mean_transformation = RollingMeanTransformer(
+    rolling_mean_transformation = RollingWindowTransformer(
         features=["score_difference"],
         window=2,
         min_periods=1,
@@ -405,13 +405,13 @@ def test_rolling_mean_transform_update_id_different_from_game_id(
     )
     expected_df = historical_df.copy()
     if use_column_names:
-        transformer = RollingMeanTransformer(
+        transformer = RollingWindowTransformer(
             features=["points"],
             window=2,
             granularity=["player"],
         )
     else:
-        transformer = RollingMeanTransformer(
+        transformer = RollingWindowTransformer(
             features=["points"],
             window=2,
             granularity=["player"],
@@ -474,14 +474,14 @@ def test_rolling_mean_transform_historical_granularity_differs_from_input_granul
     )
 
     if use_column_names:
-        transformer = RollingMeanTransformer(
+        transformer = RollingWindowTransformer(
             features=["points"],
             window=10,
             granularity=["league", "position"],
             unique_constraint=[column_names.match_id, column_names.team_id, "position"],
         )
     else:
-        transformer = RollingMeanTransformer(
+        transformer = RollingWindowTransformer(
             features=["points"],
             window=10,
             granularity=["league", "position"],
@@ -557,7 +557,7 @@ def test_rolling_mean_transform_future_granularity_differs_from_input_granularit
         }
     )
 
-    transformer = RollingMeanTransformer(
+    transformer = RollingWindowTransformer(
         features=["points"],
         window=10,
         granularity=["league", "position"],

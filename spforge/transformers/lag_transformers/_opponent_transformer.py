@@ -6,7 +6,7 @@ import polars as pl
 from narwhals.typing import FrameT, IntoFrameT
 
 from spforge import ColumnNames
-from spforge.transformers.lag_transformers import RollingMeanTransformer
+from spforge.transformers.lag_transformers import RollingWindowTransformer
 from spforge.transformers.lag_transformers._utils import (
     historical_lag_transformations_wrapper,
     required_lag_column_names,
@@ -114,7 +114,7 @@ class OpponentTransformer(BaseLagTransformer):
                 self.update_column is not None
             ), "match_id_update_column must be set if column names is not passed"
         if self.transformation == "rolling_mean":
-            self._transformer = RollingMeanTransformer(
+            self._transformer = RollingWindowTransformer(
                 granularity=[self.opponent_column, *self.granularity],
                 features=self.features,
                 window=self.window,
