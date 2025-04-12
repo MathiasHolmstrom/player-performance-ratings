@@ -17,7 +17,7 @@ from spforge.data_structures import ColumnNames
 from spforge.scorer import SklearnScorer, OrdinalLossScorer
 from spforge.scorer import Filter, Operator
 from spforge.transformers import (
-    RollingMeanTransformer,
+    RollingWindowTransformer,
     LagTransformer,
 )
 
@@ -27,7 +27,7 @@ column_names = ColumnNames(
     team_id="team_id",
     match_id="game_id",
     start_date="start_date",
-    player_id="player_name",
+    player_id="player_id",
 )
 df = df.sort(
     [
@@ -56,13 +56,14 @@ predictor = DistributionPredictor(
         point_estimate_pred_column="points_estimate",
         # predict_granularity=["game_id", "team_id"],
         r_specific_granularity=["player_id"],
+        predicted_r_weight=1,
         column_names=column_names,
     ),
 )
 
 pipeline = Pipeline(
     lag_transformers=[
-        RollingMeanTransformer(
+        RollingWindowTransformer(
             features=["points"], window=15, granularity=["player_id"]
         ),
         LagTransformer(features=["points"], lag_length=3, granularity=["player_id"]),

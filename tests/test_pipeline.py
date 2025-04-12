@@ -24,7 +24,7 @@ from spforge.transformers import (
 
 from spforge import ColumnNames, Pipeline
 from spforge.transformers import (
-    RollingMeanTransformer,
+    RollingWindowTransformer,
 )
 from spforge.transformers.fit_transformers._performance_manager import (
     ColumnWeight,
@@ -34,7 +34,7 @@ from spforge.transformers.fit_transformers._performance_manager import (
 
 def test_pipeline_constructor():
     lag_generators = [
-        RollingMeanTransformer(
+        RollingWindowTransformer(
             features=["kills", "deaths"],
             window=1,
             granularity=["player_id"],

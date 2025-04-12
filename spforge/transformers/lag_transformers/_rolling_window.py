@@ -1,4 +1,4 @@
-from typing import Union, Optional
+from typing import Union, Optional, Literal
 import narwhals as nw
 
 from narwhals.typing import FrameT, IntoFrameT
@@ -14,7 +14,7 @@ from spforge.transformers.lag_transformers._utils import (
 from spforge.transformers.lag_transformers import BaseLagTransformer
 
 
-class RollingMeanTransformer(BaseLagTransformer):
+class RollingWindowTransformer(BaseLagTransformer):
     """
     Calculates the rolling mean for a list of features over a window of matches.
     Rolling Mean Values are also shifted by one match to avoid data leakage.
@@ -35,6 +35,7 @@ class RollingMeanTransformer(BaseLagTransformer):
         are_estimator_features=True,
         prefix: str = "rolling_mean",
         update_column: Optional[str] = None,
+        aggregation: Literal["mean", "sum", "var"] = "mean",
         unique_constraint: Optional[list[str]] = None,
     ):
         """
@@ -51,6 +52,11 @@ class RollingMeanTransformer(BaseLagTransformer):
         :param prefix: Prefix for the new rolling mean columns
         """
 
+        prefix = (
+            "rolling_mean"
+            if aggregation == "mean"
+            else "rolling_sum" if aggregation == "sum" else "rolling_var"
+        )
         super().__init__(
             features=features,
             add_opponent=add_opponent,
@@ -61,7 +67,12 @@ class RollingMeanTransformer(BaseLagTransformer):
             update_column=update_column,
             unique_constraint=unique_constraint,
         )
+        self.aggregation = aggregation
         self.scale_by_participation_weight = scale_by_participation_weight
+        if self.aggregation == "var" and self.scale_by_participation_weight:
+            raise NotImplementedError(
+                f"Rolling variance with participation weight is not implemented yet."
+            )
         self.window = window
         self.min_periods = min_periods
 
@@ -123,7 +134,6 @@ class RollingMeanTransformer(BaseLagTransformer):
             )
 
         df_with_feats = self._forward_fill_future_features(df=df_with_feats)
-
         return df_with_feats
 
     def _generate_features(self, df: FrameT) -> FrameT:
@@ -139,6 +149,17 @@ class RollingMeanTransformer(BaseLagTransformer):
             sort_col = "__row_index"
         concat_df = concat_df.sort(sort_col)
 
+        agg_method = {
+            "sum": lambda col: col.rolling_sum(
+                window_size=self.window, min_samples=self.min_periods
+            ),
+            "mean": lambda col: col.rolling_mean(
+                window_size=self.window, min_samples=self.min_periods
+            ),
+            "var": lambda col: col.rolling_var(
+                window_size=self.window, min_samples=self.min_periods
+            ),
+        }
         if self.scale_by_participation_weight:
 
             concat_df = concat_df.with_columns(
@@ -150,9 +171,7 @@ class RollingMeanTransformer(BaseLagTransformer):
             scaled_feats = [f"__scaled_{feature}" for feature in self.features]
 
             rolling_sums = [
-                nw.col(feature_name)
-                .shift(n=1)
-                .rolling_sum(window_size=self.window, min_samples=self.min_periods)
+                agg_method["sum"](nw.col(feature_name).shift(n=1))
                 .over(self.granularity)
                 .alias(f"{self.prefix}_{feature_name}{self.window}__sum")
                 for feature_name in [
@@ -161,31 +180,30 @@ class RollingMeanTransformer(BaseLagTransformer):
                 ]
             ]
             concat_df = concat_df.with_columns(rolling_sums)
-            rolling_means = [
-                (
-                    nw.col(f"{self.prefix}___scaled_{feature}{self.window}__sum")
-                    / nw.col(
-                        f"{self.prefix}_{self.column_names.participation_weight}{self.window}__sum"
-                    )
-                ).alias(f"{self.prefix}_{feature}{self.window}")
-                for feature in self.features
-            ]
-            concat_df = concat_df.with_columns(rolling_means)
+            if self.aggregation == "mean":
+                rolling_values = [
+                    (
+                        nw.col(f"{self.prefix}___scaled_{feature}{self.window}__sum")
+                        / nw.col(
+                            f"{self.prefix}_{self.column_names.participation_weight}{self.window}__sum"
+                        )
+                    ).alias(f"{self.prefix}_{feature}{self.window}")
+                    for feature in self.features
+                ]
+                concat_df = concat_df.with_columns(rolling_values)
 
         else:
-
-            rolling_means = [
-                nw.col(feature_name)
-                .shift(n=1)
+            rolling_values = [
+                agg_method[self.aggregation](nw.col(feature_name).shift(n=1))
                 .rolling_mean(window_size=self.window, min_samples=self.min_periods)
                 .over(self.granularity)
                 .alias(f"{self.prefix}_{feature_name}{self.window}")
                 for feature_name in self.features
             ]
-            concat_df = concat_df.with_columns(rolling_means)
+            concat_df = concat_df.with_columns(rolling_values)
 
         for feature_name in self.features:
-            concat_df = self._equalize_update_values(
+            concat_df = self._equalize_values_within_update_id(
                 df=concat_df, column_name=f"{self.prefix}_{feature_name}{self.window}"
             )
 

@@ -158,7 +158,7 @@ class LagTransformer(BaseLagTransformer):
                         .alias(output_column_name)
                     )
 
-                concat_df = self._equalize_update_values(
+                concat_df = self._equalize_values_within_update_id(
                     df=concat_df, column_name=output_column_name
                 )
 

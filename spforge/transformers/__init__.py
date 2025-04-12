@@ -1,6 +1,6 @@
 from .lag_transformers import (
     LagTransformer,
-    RollingMeanTransformer,
+    RollingWindowTransformer,
     RollingMeanDaysTransformer,
     BinaryOutcomeRollingMeanTransformer,
     OpponentTransformer,

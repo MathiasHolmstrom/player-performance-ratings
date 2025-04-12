@@ -374,10 +374,10 @@ class BaseLagTransformer:
             how="left",
         )
 
-    def _equalize_update_values(self, df: FrameT, column_name: str) -> FrameT:
+    def _equalize_values_within_update_id(self, df: FrameT, column_name: str) -> FrameT:
         df_ranked = df.with_columns(
             [
-                nw.lit(1).alias("one"),  # dummy column
+                nw.lit(1).alias("one"),
             ]
         ).with_columns(
             [
@@ -399,9 +399,7 @@ class BaseLagTransformer:
         return (
             df.drop(column_name)
             .join(first_values, on=[self.update_column, *self.granularity], how="left")
-            .with_columns(
-                nw.col(column_name).alias(column_name)  # overwrite or create new
-            )
+            .with_columns(nw.col(column_name).alias(column_name))
             .select(df.columns)
         )
 
