@@ -1,8 +1,54 @@
 import math
-
+import polars as pl
 from typing import List, Dict
 
 from spforge.data_structures import Match
+
+
+class LeagueIdentifer2:
+
+    def __init__(self, matches_back: int = 25):
+        self.matches_back = matches_back
+
+    def add_leagues(self, df: pl.DataFrame) -> pl.DataFrame :
+
+
+        # Sample input: df must have these columns
+        # player_id | match_id | league
+
+        df = df.sort(["player_id", "match_id"])
+
+        # Add a per-player match index
+        df = df.with_columns(
+            pl.arange(0, df.height).over("player_id").alias("match_idx")
+        )
+
+        history = (
+            df
+            .group_by("player_id")
+            .agg([
+                pl.col("league").alias("league_history"),
+                pl.col("match_idx").alias("index_history"),
+            ])
+        )
+
+        df = df.join(history, on="player_id", how="left")
+
+        def get_most_common_league(leagues, indices, current_idx):
+            window = [
+                league for league, idx in zip(leagues, indices)
+                if current_idx > idx and current_idx - idx <= matches_back
+            ]
+            return max(set(window), key=window.count) if window else None
+
+        # Use map_elements to apply this logic row-wise
+        return df.with_columns(
+            pl.struct(["league_history", "index_history", "match_idx"]).map_elements(
+                lambda x: get_most_common_league(
+                    x["league_history"], x["index_history"], x["match_idx"]
+                )
+            ).alias("most_common_league_last_N")
+        )
 
 
 class LeagueIdentifier:

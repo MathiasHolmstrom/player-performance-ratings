@@ -3,12 +3,6 @@ from enum import Enum
 
 
 @dataclass
-class InputColumnNames:
-    hour = "hour"
-    performance = "performance"
-
-
-@dataclass
 class RatingKnownFeatures:
     PLAYER_RATING = "player_rating"
     PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED = (
@@ -22,7 +16,6 @@ class RatingKnownFeatures:
     TEAM_LEAGUE = "team_league"
     PLAYER_LEAGUE = "player_league"
     OPPONENT_LEAGUE = "opponent_league"
-    RATING_DIFFERENCE_POSITION = "rating_difference_position"
 
 
 @dataclass
