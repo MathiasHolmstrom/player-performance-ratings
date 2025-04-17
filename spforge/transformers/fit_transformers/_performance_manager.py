@@ -61,12 +61,14 @@ class PerformanceManager(BaseTransformer):
     def __init__(
         self,
         features: list[str],
+        performance_column_name: Optional[str] = None,
         transformers: Optional[list[BaseTransformer]] = None,
         scale_performance: bool = True,
         prefix: str = "performance__",
         min_value: float = -0.02,
         max_value: float = 1.02,
     ):
+        self._performance_column_name = performance_column_name
         self.prefix = prefix
 
         self.scale_performance = scale_performance
@@ -124,7 +126,7 @@ class PerformanceManager(BaseTransformer):
         )
         df = df.with_columns(nw.col("__ori" + f).alias(f) for f in self.features)
         df = df.with_columns(
-            nw.col(self.performance_column).clip(self.min_value, self.max_value)
+            nw .col(self.performance_column).clip(self.min_value, self.max_value)
         )
         return df.select(list(set([*input_cols, *self.features_out])))
 
@@ -134,6 +136,8 @@ class PerformanceManager(BaseTransformer):
 
     @property
     def performance_column(self) -> str:
+        if self._performance_column_name:
+            return self._performance_column_name
         return self.prefix + self.transformers[-1].features_out[0]
 
 
@@ -142,6 +146,7 @@ class PerformanceWeightsManager(PerformanceManager):
     def __init__(
         self,
         weights: list[ColumnWeight],
+        performance_column_name: Optional[str] = None,
         transformers: Optional[list[BaseTransformer]] = None,
         scale_performance: bool = True,
         max_value: float = 1.02,
@@ -154,6 +159,7 @@ class PerformanceWeightsManager(PerformanceManager):
         self.return_all_features = return_all_features
         self.weights = weights
         super().__init__(
+            performance_column_name=performance_column_name,
             features=self.features,
             transformers=transformers,
             scale_performance=scale_performance,
@@ -308,6 +314,8 @@ class PerformanceWeightsManager(PerformanceManager):
 
     @property
     def performance_column(self) -> str:
+        if self.performance_column:
+            return self.performance_column
         return self.prefix + "weighted"
 
     @property

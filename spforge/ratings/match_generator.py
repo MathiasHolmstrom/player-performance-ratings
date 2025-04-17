@@ -27,13 +27,12 @@ HOUR_NUMBER_COLUMN_NAME = "hour_number"
 
 @nw.narwhalify
 def convert_df_to_matches(
-    df: FrameT,
-    column_names: ColumnNames,
-    performance_column_name: str,
-    separate_player_by_position: bool = False,
-    league_identifier: Optional[LeagueIdentifier] = LeagueIdentifier(),
-    max_value_allowed: float = 1.05,
-    min_value_allowed: float = -0.05,
+        df: FrameT,
+        column_names: ColumnNames,
+        performance_column_name: str,
+        league_identifier: Optional[LeagueIdentifier] = LeagueIdentifier(),
+        max_value_allowed: float = 1.05,
+        min_value_allowed: float = -0.05,
 ) -> list[Match]:
     """
     Converts a dataframe to a list of matches.
@@ -56,16 +55,16 @@ def convert_df_to_matches(
     """
 
     if (
-        column_names.participation_weight is None
-        and column_names.projected_participation_weight is not None
+            column_names.participation_weight is None
+            and column_names.projected_participation_weight is not None
     ):
         raise ValueError(
             "projected_participation_weight column passed but not participation_weight column"
         )
     if performance_column_name in df.columns:
         if (
-            max(df[performance_column_name]) > max_value_allowed
-            or min(df[performance_column_name]) < min_value_allowed
+                max(df[performance_column_name]) > max_value_allowed
+                or min(df[performance_column_name]) < min_value_allowed
         ):
             raise ValueError("performance column must be between 0 and 1")
 
@@ -148,15 +147,15 @@ def convert_df_to_matches(
         league_in_df = True
 
     if (
-        col_names.projected_participation_weight
-        and col_names.projected_participation_weight not in df.columns
+            col_names.projected_participation_weight
+            and col_names.projected_participation_weight not in df.columns
     ):
         raise ValueError(
             "projected_participation_weight column passed but not in dataframe."
         )
     if (
-        col_names.team_players_playing_time
-        and col_names.team_players_playing_time in df.columns
+            col_names.team_players_playing_time
+            and col_names.team_players_playing_time in df.columns
     ):
 
         is_team_players_playing_time = True
@@ -164,8 +163,8 @@ def convert_df_to_matches(
         is_team_players_playing_time = False
 
     if (
-        col_names.opponent_players_playing_time
-        and col_names.opponent_players_playing_time in df.columns
+            col_names.opponent_players_playing_time
+            and col_names.opponent_players_playing_time in df.columns
     ):
 
         is_opponent_players_playing_time = True
@@ -220,10 +219,10 @@ def convert_df_to_matches(
         team_id = row[col_names.team_id]
         update_team_id = row[col_names.parent_team_id]
         if (
-            team_id != prev_team_id
-            and prev_team_id != None
-            or prev_match_id != match_id
-            and prev_match_id != None
+                team_id != prev_team_id
+                and prev_team_id != None
+                or prev_match_id != match_id
+                and prev_match_id != None
         ):
             match_team = _create_match_team(
                 team_league_counts=team_league_counts,
@@ -255,8 +254,7 @@ def convert_df_to_matches(
 
         if col_names.position is not None:
             position = row[col_names.position]
-            if separate_player_by_position:
-                player_id = f"{player_id}_{position}"
+
 
         else:
             position = None
@@ -296,8 +294,8 @@ def convert_df_to_matches(
             opponent_players_playing_time = {}
 
         if (
-            col_names.projected_participation_weight
-            and col_names.projected_participation_weight in row
+                col_names.projected_participation_weight
+                and col_names.projected_participation_weight in row
         ):
             projected_participation_weight = row[
                 col_names.projected_participation_weight
@@ -361,10 +359,10 @@ def convert_df_to_matches(
 
 
 def _create_match(
-    league_in_df,
-    row: dict[str, Any],
-    match_teams: list[MatchTeam],
-    column_names: ColumnNames,
+        league_in_df,
+        row: dict[str, Any],
+        match_teams: list[MatchTeam],
+        column_names: ColumnNames,
 ) -> Match:
     match_id = row[column_names.match_id]
     if league_in_df:
@@ -382,10 +380,10 @@ def _create_match(
 
 
 def _create_match_team(
-    team_league_counts: dict,
-    team_id: str,
-    update_team_id: str,
-    match_team_players: list[MatchPlayer],
+        team_league_counts: dict,
+        team_id: str,
+        update_team_id: str,
+        match_team_players: list[MatchPlayer],
 ) -> MatchTeam:
     if team_league_counts:
         team_league = max(

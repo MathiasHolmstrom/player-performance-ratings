@@ -25,7 +25,6 @@ class RatingGenerator(ABC):
         features_out: Optional[list[RatingKnownFeatures]],
         non_estimator_known_features_out: Optional[list[RatingKnownFeatures]],
         unknown_features_out: Optional[list[RatingUnknownFeatures]],
-        match_rating_generator: MatchRatingGenerator,
         column_names: Optional[ColumnNames],
         distinct_positions: Optional[list[str]] = None,
         seperate_player_by_position: Optional[bool] = False,
@@ -37,7 +36,6 @@ class RatingGenerator(ABC):
         self._unknown_features_out = unknown_features_out or []
         self.performance_column = performance_column
         self.seperate_player_by_position = seperate_player_by_position
-        self.match_rating_generator = match_rating_generator
         self.distinct_positions = distinct_positions
         self.prefix = prefix
         self.suffix = suffix
