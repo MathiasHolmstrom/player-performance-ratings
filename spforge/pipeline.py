@@ -206,6 +206,10 @@ class Pipeline(BasePredictor):
                 df
             ), "The dataframe contains duplicates"
 
+        expected_feats_added = []
+        dup_feats = []
+        feats_not_added = []
+
         for idx in range(len(self.pre_lag_transformers)):
             self.pre_lag_transformers[idx].reset()
             df = nw.from_native(
@@ -213,6 +217,15 @@ class Pipeline(BasePredictor):
                     df, column_names=self.column_names
                 )
             )
+            for f in self.pre_lag_transformers[idx].features_out:
+                if f in expected_feats_added:
+                    dup_feats.append(f)
+                if f not in df.columns:
+                    feats_not_added.append(f)
+
+            assert len(feats_not_added) == 0, f"Features not added: {feats_not_added}"
+            assert len(dup_feats) == 0, f"Duplicate features: {dup_feats}"
+            expected_feats_added.extend(self.pre_lag_transformers[idx].features_out)
 
         for idx in range(len(self.lag_transformers)):
             df = nw.from_native(
@@ -224,6 +237,16 @@ class Pipeline(BasePredictor):
                 df
             ), "The dataframe contains duplicates"
 
+            for f in self.lag_transformers[idx].features_out:
+                if f in expected_feats_added:
+                    dup_feats.append(f)
+                if f not in df.columns:
+                    feats_not_added.append(f)
+
+            assert len(feats_not_added) == 0, f"Features not added: {feats_not_added}"
+            assert len(dup_feats) == 0, f"Duplicate features: {dup_feats}"
+            expected_feats_added.extend(self.lag_transformers[idx].features_out)
+
         for idx in range(len(self.post_lag_transformers)):
             df = nw.from_native(
                 self.post_lag_transformers[idx].fit_transform(
@@ -233,6 +256,16 @@ class Pipeline(BasePredictor):
             assert len(df.unique(unique_constraint)) == len(
                 df
             ), "The dataframe contains duplicates"
+
+            for f in self.post_lag_transformers[idx].features_out:
+                if f in expected_feats_added:
+                    dup_feats.append(f)
+                if f not in df.columns:
+                    feats_not_added.append(f)
+
+            assert len(feats_not_added) == 0, f"Features not added: {feats_not_added}"
+            assert len(dup_feats) == 0, f"Duplicate features: {dup_feats}"
+            expected_feats_added.extend(self.post_lag_transformers[idx].features_out)
 
         self.predictor.train(df=df, features=features)
 

@@ -313,7 +313,7 @@ class OpponentTransformer(BaseLagTransformer):
                     ]
                 ),
                 on=[self.update_column, self.team_column, *self.granularity],
-                how='left'
+                how="left",
             )
             .unique(self.unique_constraint)
             .sort(sort_cols)
