@@ -221,6 +221,16 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
         ]
 
         grp = grp.with_columns(rolling_means)
+        grp = grp.with_columns(
+            [
+                pl.when(
+                    pl.col(f"{self.prefix}_{col}{str(self.days)}").is_nan())
+                .then(pl.lit(None))
+                .otherwise(pl.col(f"{self.prefix}_{col}{str(self.days)}"))
+                .alias(f"{self.prefix}_{col}{str(self.days)}")
+                for col in self.features
+            ]
+        )
 
         df = df.join(grp, on=grp_cols, how="left")
         if self.add_count:

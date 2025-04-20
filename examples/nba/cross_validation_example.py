@@ -128,7 +128,6 @@ validation_df = lgbm_classifier_cross_validator.generate_validation_df(df=valida
 ordinal_scorer_lgbm_classifier = OrdinalLossScorer(
     pred_column=lgbm_classifier_predictor.pred_column,
     target=predictor.target,
-    validation_column="is_validation",
     filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
 )
 

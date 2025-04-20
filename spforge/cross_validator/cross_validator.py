@@ -47,7 +47,7 @@ class MatchKFoldCrossValidator(CrossValidator):
         self,
         df: FrameT,
         return_features: bool = False,
-        add_train_prediction: bool = True,
+        add_train_prediction: bool = False,
     ) -> IntoFrameT:
         """
         Generate predictions on validation dataset.

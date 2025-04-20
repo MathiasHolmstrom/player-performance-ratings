@@ -272,15 +272,17 @@ class SklearnPredictor(BasePredictor):
                     / (nw.lit(min_days_diff) * -2 + nw.lit(self.day_weight_epsilon))
                 ).alias("weight")
             )
-            sample_weight = filtered_df["weight"].to_list()
+            kwargs= {
+                'sample_weight': filtered_df["weight"].to_list(),
+            }
         else:
-            sample_weight = None
+            kwargs = {}
 
         features = features or self._features
         self.estimator.fit(
             filtered_df.select(features).to_pandas(),
             filtered_df[self.target].to_numpy(),
-            sample_weight=sample_weight,
+            **kwargs
         )
 
     @nw.narwhalify
