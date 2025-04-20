@@ -62,13 +62,16 @@ class BasePredictor(ABC):
 
     def _add_features_contain_str(self, df: FrameT) -> None:
         columns = df.columns
+        already_added = []
         for contain in self.features_contain_str:
             estimator_feature_count = len(self._features)
             for column in columns:
                 if column not in self._features and contain in column:
                     self._features.append(column)
-            if len(self._features) == estimator_feature_count:
-                logging.warning(f"Added no new columns containing {contain}")
+                elif contain in column:
+                    already_added.append(column)
+            if len(self._features) == estimator_feature_count and len(already_added) == 0:
+                raise ValueError(f"Feature Contain {contain} not found in df")
 
     @abstractmethod
     def train(self, df: FrameT, features: Optional[list[str]] = None) -> None:
