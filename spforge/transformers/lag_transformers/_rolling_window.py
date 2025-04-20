@@ -51,12 +51,12 @@ class RollingWindowTransformer(BaseLagTransformer):
             If false, it makes it possible for the outer layer (Pipeline) to exclude these features from the estimator.
         :param prefix: Prefix for the new rolling mean columns
         """
-
-        prefix = (
-            "rolling_mean"
-            if aggregation == "mean"
-            else "rolling_sum" if aggregation == "sum" else "rolling_var"
-        )
+        if prefix == 'rolling_mean':
+            prefix = (
+                "rolling_mean"
+                if aggregation == "mean"
+                else "rolling_sum" if aggregation == "sum" else "rolling_var"
+            )
         super().__init__(
             features=features,
             add_opponent=add_opponent,
