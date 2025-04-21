@@ -10,18 +10,18 @@ from spforge import ColumnNames
 class BaseLagTransformer:
 
     def __init__(
-            self,
-            granularity: list[str],
-            features: list[str],
-            add_opponent: bool,
-            iterations: list[int],
-            prefix: str,
-            column_names: Optional[ColumnNames] = None,
-            are_estimator_features: bool = True,
-            unique_constraint: Optional[list[str]] = None,
-            group_to_granularity: Optional[list[str]] = None,
-            update_column: Optional[str] = None,
-            scale_by_participation_weight: bool = False,
+        self,
+        granularity: list[str],
+        features: list[str],
+        add_opponent: bool,
+        iterations: list[int],
+        prefix: str,
+        column_names: Optional[ColumnNames] = None,
+        are_estimator_features: bool = True,
+        unique_constraint: Optional[list[str]] = None,
+        group_to_granularity: Optional[list[str]] = None,
+        update_column: Optional[str] = None,
+        scale_by_participation_weight: bool = False,
     ):
         self.column_names = column_names
         self.features = features
@@ -59,7 +59,7 @@ class BaseLagTransformer:
 
     @abstractmethod
     def transform_historical(
-            self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         pass
 
@@ -78,7 +78,13 @@ class BaseLagTransformer:
         return self._features_out
 
     def _concat_with_stored(self, group_df: FrameT, ori_df: FrameT) -> FrameT:
-        df = ori_df if self.update_column and self.group_to_granularity and self.update_column not in self.group_to_granularity else group_df
+        df = (
+            ori_df
+            if self.update_column
+            and self.group_to_granularity
+            and self.update_column not in self.group_to_granularity
+            else group_df
+        )
 
         sort_cols = [self.column_names.start_date, self.column_names.update_match_id]
 
@@ -103,16 +109,35 @@ class BaseLagTransformer:
             how="diagonal",
         ).sort(sort_cols)
 
-        if self.update_column and self.group_to_granularity and self.update_column not in self.group_to_granularity:
-            concat_df = self._group_to_granularity_level(df=concat_df, sort_col=self.column_names.start_date)
-        feature_generation_constraint = self.group_to_granularity or self.unique_constraint
+        if (
+            self.update_column
+            and self.group_to_granularity
+            and self.update_column not in self.group_to_granularity
+        ):
+            concat_df = self._group_to_granularity_level(
+                df=concat_df, sort_col=self.column_names.start_date
+            )
+        feature_generation_constraint = (
+            self.group_to_granularity or self.unique_constraint
+        )
         return concat_df.unique(
             subset=feature_generation_constraint,
             maintain_order=True,
         )
 
-    def _store_df(self, grouped_df: FrameT, ori_df: nw.DataFrame, additional_cols: Optional[list[str]] = None):
-        df = ori_df if self.update_column and self.group_to_granularity and self.update_column not in self.group_to_granularity else grouped_df
+    def _store_df(
+        self,
+        grouped_df: FrameT,
+        ori_df: nw.DataFrame,
+        additional_cols: Optional[list[str]] = None,
+    ):
+        df = (
+            ori_df
+            if self.update_column
+            and self.group_to_granularity
+            and self.update_column not in self.group_to_granularity
+            else grouped_df
+        )
 
         df = df.with_columns(
             [
@@ -135,7 +160,7 @@ class BaseLagTransformer:
             cols.append(self.column_names.participation_weight)
         if self.column_names.projected_participation_weight in df.columns:
             cols.append(self.column_names.projected_participation_weight)
-        if self.update_column:
+        if self.update_column and self.update_column not in cols:
             cols.append(self.update_column)
 
         if additional_cols:
@@ -150,15 +175,14 @@ class BaseLagTransformer:
 
         storage_unique_constraint = self._create_storage_unique_constraint()
 
-        self._df = (
-            self._df.unique(
-                subset=storage_unique_constraint, maintain_order=True, keep="last"
-            )
-            .to_native()
-        )
+        self._df = self._df.unique(
+            subset=storage_unique_constraint, maintain_order=True, keep="last"
+        ).to_native()
 
     def _create_storage_unique_constraint(self) -> list[str]:
-        storage_unique_constraint = self.group_to_granularity.copy() or self.unique_constraint.copy()
+        storage_unique_constraint = (
+            self.group_to_granularity.copy() or self.unique_constraint.copy()
+        )
         if self.update_column and self.update_column not in storage_unique_constraint:
             storage_unique_constraint.append(self.update_column)
         return storage_unique_constraint
@@ -169,15 +193,12 @@ class BaseLagTransformer:
         if self.scale_by_participation_weight:
             aggr_cols.append(self.column_names.participation_weight)
 
-        return df.group_by(
-            self.group_to_granularity
-        ).agg(
-            [nw.col(c).mean() for c in aggr_cols] +
-            [nw.col(sort_col).min()]
+        return df.group_by(self.group_to_granularity).agg(
+            [nw.col(c).mean() for c in aggr_cols] + [nw.col(sort_col).min()]
         )
 
     def _merge_into_input_df(
-            self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
+        self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
     ) -> IntoFrameT:
 
         ori_cols = [c for c in df.columns if c not in self.features_out]
@@ -196,7 +217,11 @@ class BaseLagTransformer:
                 self.column_names.team_id,
             ]
         )
-        join_cols = self.group_to_granularity if self.group_to_granularity else self.unique_constraint
+        join_cols = (
+            self.group_to_granularity
+            if self.group_to_granularity
+            else self.unique_constraint
+        )
         for column in join_cols:
             if concat_df[column].dtype != df[column].dtype:
                 concat_df = concat_df.with_columns(
@@ -262,8 +287,8 @@ class BaseLagTransformer:
         )
 
     def _forward_fill_future_features(
-            self,
-            df: FrameT,
+        self,
+        df: FrameT,
     ) -> FrameT:
         cn = self.column_names
 
@@ -414,7 +439,7 @@ class BaseLagTransformer:
         )
 
     def _post_features_generated(self, df: FrameT) -> FrameT:
-        df = df.sort('__row_index')
+        df = df.sort("__row_index")
         if self.update_column:
             for feature_name in self._entity_features_out:
                 df = self._equalize_values_within_update_id(

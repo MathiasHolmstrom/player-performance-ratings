@@ -71,12 +71,23 @@ class LagTransformer(BaseLagTransformer):
         self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """ """
-        if self.group_to_granularity and not self.unique_constraint or self.unique_constraint and sorted(
-                self.unique_constraint) != sorted(self.group_to_granularity):
-            sort_col = self.column_names.start_date if self.column_names else "__row_index"
-            aggr_cols = self.features + [
-                self.column_names.participation_weight] if self.scale_by_participation_weight else self.features
-            grouped = self._group_to_granularity_level(df=df, sort_col=sort_col, aggr_cols=aggr_cols)
+        if (
+            self.group_to_granularity
+            and not self.unique_constraint
+            or self.unique_constraint
+            and sorted(self.unique_constraint) != sorted(self.group_to_granularity)
+        ):
+            sort_col = (
+                self.column_names.start_date if self.column_names else "__row_index"
+            )
+            aggr_cols = (
+                self.features + [self.column_names.participation_weight]
+                if self.scale_by_participation_weight
+                else self.features
+            )
+            grouped = self._group_to_granularity_level(
+                df=df, sort_col=sort_col, aggr_cols=aggr_cols
+            )
         else:
             grouped = df
         if self.column_names:
@@ -107,16 +118,20 @@ class LagTransformer(BaseLagTransformer):
     def transform_future(self, df: FrameT) -> IntoFrameT:
 
         sort_col = self.column_names.start_date if self.column_names else "__row_index"
-        grouped = self._group_to_granularity_level(df=df,sort_col=sort_col, aggr_cols=[])
+        grouped = self._group_to_granularity_level(
+            df=df, sort_col=sort_col, aggr_cols=[]
+        )
         grouped_df_with_feats = self._generate_features(df=grouped)
 
         grouped_df_with_feats = self._generate_features(df=grouped_df_with_feats)
         if self.add_opponent:
-            grouped_df_with_feats = self._add_opponent_features(grouped_df_with_feats).sort(
-                "__row_index"
-            )
+            grouped_df_with_feats = self._add_opponent_features(
+                grouped_df_with_feats
+            ).sort("__row_index")
 
-        grouped_df_with_feats = self._forward_fill_future_features(df=grouped_df_with_feats)
+        grouped_df_with_feats = self._forward_fill_future_features(
+            df=grouped_df_with_feats
+        )
         return grouped_df_with_feats
 
     def _generate_features(self, df: FrameT, ori_df: FrameT) -> FrameT:

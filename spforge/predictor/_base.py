@@ -70,7 +70,10 @@ class BasePredictor(ABC):
                     self._features.append(column)
                 elif contain in column:
                     already_added.append(column)
-            if len(self._features) == estimator_feature_count and len(already_added) == 0:
+            if (
+                len(self._features) == estimator_feature_count
+                and len(already_added) == 0
+            ):
                 raise ValueError(f"Feature Contain {contain} not found in df")
 
     @abstractmethod
