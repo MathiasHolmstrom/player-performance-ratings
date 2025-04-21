@@ -27,8 +27,10 @@ class LagTransformer(BaseLagTransformer):
         future_lag: bool = False,
         prefix: str = "lag",
         add_opponent: bool = False,
-        update_column: Optional[str] = None,
         column_names: Optional[ColumnNames] = None,
+        group_to_granularity: Optional[list[str]] = None,
+        unique_constraint: Optional[list[str]] = None,
+        update_column: Optional[str] = None,
     ):
         """
         :param features. List of features to create lags for
@@ -49,6 +51,8 @@ class LagTransformer(BaseLagTransformer):
             iterations=[i for i in range(1, lag_length + 1)],
             granularity=granularity,
             column_names=column_names,
+            unique_constraint=unique_constraint,
+            group_to_granularity=group_to_granularity,
             update_column=update_column,
         )
         self.days_between_lags = days_between_lags or []
@@ -67,16 +71,33 @@ class LagTransformer(BaseLagTransformer):
         self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """ """
+        if self.group_to_granularity and not self.unique_constraint or self.unique_constraint and sorted(
+                self.unique_constraint) != sorted(self.group_to_granularity):
+            sort_col = self.column_names.start_date if self.column_names else "__row_index"
+            aggr_cols = self.features + [
+                self.column_names.participation_weight] if self.scale_by_participation_weight else self.features
+            grouped = self._group_to_granularity_level(df=df, sort_col=sort_col, aggr_cols=aggr_cols)
+        else:
+            grouped = df
         if self.column_names:
-            self._store_df(df)
-            df = self._generate_features(df)
+            self._store_df(grouped)
+            df_with_feats = self._generate_features(grouped)
+            df = self._merge_into_input_df(df=df, concat_df=df_with_feats)
             if self.add_opponent:
                 return self._add_opponent_features(df).sort("__row_index")
         else:
             assert (
                 self.add_opponent is False
             ), "Column Names must be passed for opponent features to be added"
-            df = self._generate_features(df)
+            df_with_feats = self._generate_features(grouped)
+            df = df.join(
+                df_with_feats.select(
+                    [*self.granularity, self.update_column, *self.features_out]
+                ),
+                on=[*self.granularity, self.update_column],
+                how="left",
+            ).unique("__row_index")
+
         return df
 
     @nw.narwhalify
@@ -85,19 +106,22 @@ class LagTransformer(BaseLagTransformer):
     @transformation_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
 
-        df_with_feats = self._generate_features(df=df)
+        sort_col = self.column_names.start_date if self.column_names else "__row_index"
+        grouped = self._group_to_granularity_level(df=df,sort_col=sort_col, aggr_cols=[])
+        grouped_df_with_feats = self._generate_features(df=grouped)
+
+        grouped_df_with_feats = self._generate_features(df=grouped_df_with_feats)
         if self.add_opponent:
-            df_with_feats = self._add_opponent_features(df_with_feats).sort(
+            grouped_df_with_feats = self._add_opponent_features(grouped_df_with_feats).sort(
                 "__row_index"
             )
 
-        df_with_feats = self._forward_fill_future_features(df=df_with_feats)
+        grouped_df_with_feats = self._forward_fill_future_features(df=grouped_df_with_feats)
+        return grouped_df_with_feats
 
-        return df_with_feats
-
-    def _generate_features(self, df: FrameT) -> FrameT:
+    def _generate_features(self, df: FrameT, ori_df: FrameT) -> FrameT:
         if self.column_names and self._df is not None:
-            concat_df = self._concat_with_stored(df=df).sort(
+            concat_df = self._concat_with_stored(df=df, ori_df=ori_df).sort(
                 self.column_names.start_date
             )
 
@@ -174,6 +198,8 @@ class LagTransformer(BaseLagTransformer):
         for days_lag in self.days_between_lags:
             feats_out.append(f"{self.prefix}{days_lag}_days_ago")
 
+        sort_col = self.column_names.start_date if self.column_names else "__row_index"
+
         return df.join(
             concat_df.select(
                 [
@@ -184,7 +210,7 @@ class LagTransformer(BaseLagTransformer):
             ),
             on=[*self.granularity, self.update_column],
             how="left",
-        ).sort("__row_index")
+        ).sort(sort_col)
 
     @property
     def features_out(self) -> list[str]:

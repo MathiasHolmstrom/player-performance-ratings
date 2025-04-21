@@ -122,7 +122,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
         if self.binary_column in df.columns:
             if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
                 df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
-        df = df.with_columns(nw.lit(1).alias("is_future"))
+
         concat_df = self._generate_features(df=df)
         unique_match_ids = (
             df.select(nw.col(self.column_names.match_id))
@@ -134,13 +134,10 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
         )
         transformed_future = self._forward_fill_future_features(
             df=transformed_df,
-            known_future_features=self._get_known_future_features(),
         )
         if self.add_opponent:
             transformed_future = self._add_opponent_features(df=transformed_future)
 
-        if "is_future" in transformed_future.columns:
-            transformed_future = transformed_future.drop("is_future")
         transformed_future = self._add_weighted_prob(transformed_df=transformed_future)
 
         transformed_future = transformed_future.select(

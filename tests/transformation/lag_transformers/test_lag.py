@@ -93,6 +93,42 @@ def team_lag_transform_historical_team_granularity(df, column_names, use_column_
             df_with_lags, expected_df[df_with_lags.columns], check_dtype=False
         )
 
+@pytest.mark.parametrize("use_column_names", [True, False])
+def test_lag_fit_tranform_group_to_team_granularity(column_names, use_column_names):
+    data = pd.DataFrame(
+        {
+            column_names.start_date: ["2023-01-01"] * 4 + ["2023-01-02"] * 4 + ["2023-01-03"] * 4,
+            column_names.player_id: [1, 2, 3, 4] * 3,
+            column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3],
+            column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2],
+            "team_points": [1, 1, 2, 2, 3, 3, 4, 4, 9, 10, 11, 12],
+        }
+    )
+
+    if use_column_names:
+        transformer = LagTransformer(
+            features=["team_points"],
+            lag_length=2,
+            granularity=[column_names.team_id],
+            group_to_granularity=[column_names.team_id, column_names.match_id]
+        )
+    else:
+        transformer = LagTransformer(
+            features=["team_points"],
+            lag_length=2,
+            granularity=[column_names.team_id],
+            group_to_granularity=[column_names.team_id, column_names.match_id]
+        )
+        column_names = None
+
+    expected_df = data.copy()
+    transformed_df = transformer.transform_historical(
+        df=data, column_names=column_names
+    )
+    expected_df[transformer.features_out[0]] = [None] * 4 + [1, 1, 2, 2, 3, 3, 4, 4]
+    expected_df[transformer.features_out[1]] = [None] * 8 + [1, 1, 2, 2]
+
+    pd.testing.assert_frame_equal(expected_df, transformed_df[expected_df.columns], check_dtype=False)
 
 @pytest.mark.parametrize("use_column_names", [True, False])
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])

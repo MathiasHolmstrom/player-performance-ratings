@@ -21,7 +21,7 @@ def column_names():
 @pytest.mark.parametrize("use_column_names", [True, False])
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_rolling_mean_transform_historical_game_team(
-    df, column_names, use_column_names, add_opponent
+        df, column_names, use_column_names, add_opponent
 ):
     column_names.player_id = None
     data = df(
@@ -383,7 +383,7 @@ def test_rolling_mean_historical_transform_team_stat(df, column_names):
 
 @pytest.mark.parametrize("use_column_names", [True, False])
 def test_rolling_mean_transform_update_id_different_from_game_id(
-    column_names: ColumnNames, use_column_names
+        column_names: ColumnNames, use_column_names
 ):
     column_names = column_names
     column_names.update_match_id = "series_id"
@@ -432,8 +432,129 @@ def test_rolling_mean_transform_update_id_different_from_game_id(
 
 
 @pytest.mark.parametrize("use_column_names", [True, False])
+def test_rolling_mean_transform_historical_group_to_granularity(
+        column_names: ColumnNames, use_column_names
+):
+    data = pd.DataFrame(
+        {
+            column_names.start_date: ["2023-01-01"] * 4 + ["2023-01-02"] * 4 + ["2023-01-03"] * 4,
+            column_names.player_id: [1, 2, 3, 4] * 3,
+            column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3],
+            column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2],
+            "team_points": [1, 1, 2, 2, 3, 3, 4, 4, 9, 10, 11, 12],
+        }
+    )
+
+    if use_column_names:
+        transformer = RollingWindowTransformer(
+            features=["team_points"],
+            window=2,
+            granularity=[column_names.team_id],
+            group_to_granularity=[column_names.match_id, column_names.team_id],
+        )
+    else:
+        transformer = RollingWindowTransformer(
+            features=["team_points"],
+            window=2,
+            granularity=[column_names.team_id],
+            group_to_granularity=[column_names.match_id, column_names.team_id],
+        )
+        column_names = None
+
+    expected_df = data.copy()
+    transformed_df = transformer.transform_historical(
+        df=data, column_names=column_names
+    )
+    expected_df[transformer.features_out[0]] = [None] * 4 + [1, 1, 2, 2, 2, 2, 3, 3]
+    pd.testing.assert_frame_equal(expected_df, transformed_df[expected_df.columns], check_dtype=False)
+
+
+def test_rolling_mean_transform_future_game_team_granularity(
+        column_names: ColumnNames
+):
+    hist_data = pd.DataFrame(
+        {
+            column_names.start_date: ["2023-01-01"] * 4 + ["2023-01-02"] * 4,
+            column_names.player_id: [1, 2, 3, 4] * 2,
+            column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2],
+            column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2],
+            "team_points": [1, 1, 2, 2, 3, 3, 4, 4],
+        }
+    )
+
+    future_data = pd.DataFrame(
+        {
+            column_names.start_date: ["2023-01-03"] * 4,
+            column_names.player_id: [1, 2, 3, 4],
+            column_names.match_id: [3, 3, 3, 3],
+            column_names.team_id: [1, 1, 2, 2],
+            "team_points": [9, 10, 11, 12],
+        }
+    )
+
+    transformer = RollingWindowTransformer(
+        features=["team_points"],
+        window=2,
+        granularity=[column_names.team_id],
+        group_to_granularity=[column_names.match_id, column_names.team_id],
+    )
+
+    expected_df = future_data.copy()
+    _ = transformer.transform_historical(
+        df=hist_data, column_names=column_names
+    )
+    transformed_future_df = transformer.transform_future(future_data)
+
+    expected_df[transformer.features_out[0]] = [2, 2, 3, 3]
+    pd.testing.assert_frame_equal(expected_df, transformed_future_df[expected_df.columns], check_dtype=False)
+
+
+
+@pytest.mark.parametrize("use_column_names", [True, False])
+def test_rolling_mean_transform_historical_group_to_granularity_and_update_id(
+        column_names: ColumnNames, use_column_names
+):
+    column_names.update_match_id = "series_id"
+    data = pd.DataFrame(
+        {
+            column_names.start_date: ["2023-01-01"] * 4 + ["2023-01-02"] * 4 + ["2023-01-03"] * 4,
+            column_names.player_id: [1, 2, 3, 4] * 3,
+            column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3],
+            column_names.update_match_id: [1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2],
+            column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2],
+            "team_points": [1, 1, 2, 2, 3, 3, 4, 4, 9, 10, 11, 12],
+        }
+    )
+
+    if use_column_names:
+        transformer = RollingWindowTransformer(
+            features=["team_points"],
+            window=2,
+            granularity=[column_names.team_id],
+            group_to_granularity=[column_names.match_id, column_names.team_id],
+        )
+    else:
+        transformer = RollingWindowTransformer(
+            features=["team_points"],
+            window=2,
+            granularity=[column_names.team_id],
+            update_column=column_names.update_match_id,
+            group_to_granularity=[column_names.match_id, column_names.team_id],
+        )
+        column_names = None
+
+    expected_df = data.copy()
+    transformed_df = transformer.transform_historical(
+        df=data, column_names=column_names
+    )
+    expected_df[transformer.features_out[0]] = [None] * 4 + [1, 1, 2, 2] * 2
+    pd.testing.assert_frame_equal(expected_df, transformed_df[expected_df.columns], check_dtype=False)
+
+
+
+@pytest.mark.parametrize("use_column_names", [True, False])
 def test_rolling_mean_transform_historical_granularity_differs_from_input_granularity(
-    column_names: ColumnNames, use_column_names
+        column_names: ColumnNames, use_column_names
 ):
     column_names.player_id = None
     data = pd.DataFrame(
@@ -518,10 +639,8 @@ def test_rolling_mean_transform_historical_granularity_differs_from_input_granul
 
 
 def test_rolling_mean_transform_future_granularity_differs_from_input_granularity(
-    column_names: ColumnNames,
+        column_names: ColumnNames,
 ):
-
-    column_names.player_id = None
     historical_df = pd.DataFrame(
         {
             column_names.start_date: [
@@ -562,6 +681,7 @@ def test_rolling_mean_transform_future_granularity_differs_from_input_granularit
         window=10,
         granularity=["league", "position"],
         unique_constraint=[column_names.match_id, column_names.team_id, "position"],
+        group_to_granularity=["league", "position", column_names.match_id]
     )
 
     expected_df = future_df.copy()

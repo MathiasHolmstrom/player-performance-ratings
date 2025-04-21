@@ -34,9 +34,10 @@ class RollingWindowTransformer(BaseLagTransformer):
         min_periods: int = 1,
         are_estimator_features=True,
         prefix: str = "rolling_mean",
-        update_column: Optional[str] = None,
         aggregation: Literal["mean", "sum", "var"] = "mean",
+        group_to_granularity: Optional[list[str]] = None,
         unique_constraint: Optional[list[str]] = None,
+        update_column: Optional[str] = None,
     ):
         """
         :param features:   Features to create rolling mean for
@@ -64,8 +65,9 @@ class RollingWindowTransformer(BaseLagTransformer):
             prefix=prefix,
             granularity=granularity,
             are_estimator_features=are_estimator_features,
-            update_column=update_column,
             unique_constraint=unique_constraint,
+            group_to_granularity=group_to_granularity,
+            update_column=update_column
         )
         self.aggregation = aggregation
         self.scale_by_participation_weight = scale_by_participation_weight
@@ -90,28 +92,32 @@ class RollingWindowTransformer(BaseLagTransformer):
         :param df: Historical data
         :param column_names: Column names
         """
+        if self.group_to_granularity and not self.unique_constraint or self.unique_constraint and sorted(self.unique_constraint) != sorted(self.group_to_granularity):
+            sort_col = self.column_names.start_date if self.column_names else "__row_index"
+            grouped = self._group_to_granularity_level(df=df, sort_col=sort_col)
+        else:
+            grouped = df
 
         if self.column_names:
-            self._store_df(df)
-            df_with_feats = self._generate_features(df)
+            self._store_df(grouped_df=grouped, ori_df=df)
+            grouped_with_feats = self._generate_features(grouped, ori_df=df)
             df = self._merge_into_input_df(
                 df=df,
-                concat_df=df_with_feats,
-                match_id_join_on=self.update_column,
+                concat_df=grouped_with_feats,
             )
 
         else:
-            df_with_feats = self._generate_features(df).sort("__row_index")
+            join_on_cols = self.group_to_granularity if self.group_to_granularity  else [*self.granularity, self.update_column]
+            grouped_with_feats = self._generate_features(grouped, ori_df=df).sort("__row_index")
             df = df.join(
-                df_with_feats.select(
-                    [*self.granularity, self.update_column, *self.features_out]
+                grouped_with_feats.select(
+                    [*join_on_cols, *self.features_out]
                 ),
-                on=[*self.granularity, self.update_column],
+                on=join_on_cols,
                 how="left",
             ).unique("__row_index")
-        if self.add_opponent:
-            return self._add_opponent_features(df).sort("__row_index")
-        return df
+
+        return self._post_features_generated(df)
 
     @nw.narwhalify
     @future_lag_transformations_wrapper
@@ -126,21 +132,23 @@ class RollingWindowTransformer(BaseLagTransformer):
         :param df: Future data
         """
 
-        df_with_feats = self._generate_features(df=df)
-        df_with_feats = self._merge_into_input_df(df=df, concat_df=df_with_feats)
+        sort_col = self.column_names.start_date if self.column_names else "__row_index"
+        grouped = self._group_to_granularity_level(df=df,sort_col=sort_col)
+        grouped_df_with_feats = self._generate_features(df=grouped, ori_df=df)
+        grouped_df_with_feats = self._merge_into_input_df(df=df, concat_df=grouped_df_with_feats)
         if self.add_opponent:
-            df_with_feats = self._add_opponent_features(df_with_feats).sort(
+            grouped_df_with_feats = self._add_opponent_features(grouped_df_with_feats).sort(
                 "__row_index"
             )
 
-        df_with_feats = self._forward_fill_future_features(df=df_with_feats)
-        return df_with_feats
+        grouped_df_with_feats = self._forward_fill_future_features(df=grouped_df_with_feats)
+        return grouped_df_with_feats
 
-    def _generate_features(self, df: FrameT) -> FrameT:
+    def _generate_features(self, df: FrameT, ori_df:FrameT) -> FrameT:
 
         if self.column_names and self._df is not None:
             sort_col = self.column_names.start_date
-            concat_df = self._concat_with_stored(df)
+            concat_df = self._concat_with_stored(group_df=df, ori_df=ori_df)
 
         else:
             concat_df = df
@@ -195,17 +203,12 @@ class RollingWindowTransformer(BaseLagTransformer):
         else:
             rolling_values = [
                 agg_method[self.aggregation](nw.col(feature_name).shift(n=1))
-                .rolling_mean(window_size=self.window, min_samples=self.min_periods)
                 .over(self.granularity)
                 .alias(f"{self.prefix}_{feature_name}{self.window}")
                 for feature_name in self.features
             ]
-            concat_df = concat_df.with_columns(rolling_values)
 
-        for feature_name in self.features:
-            concat_df = self._equalize_values_within_update_id(
-                df=concat_df, column_name=f"{self.prefix}_{feature_name}{self.window}"
-            )
+            concat_df = concat_df.with_columns(rolling_values)
 
         return concat_df.with_columns(
             [
@@ -213,3 +216,4 @@ class RollingWindowTransformer(BaseLagTransformer):
                 for f in self._entity_features_out
             ]
         )
+

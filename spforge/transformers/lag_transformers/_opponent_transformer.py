@@ -182,7 +182,6 @@ class OpponentTransformer(BaseLagTransformer):
         else:
             ori_type = "pl"
 
-        df = df.with_columns(nw.lit(1).alias("is_future"))
         concat_df = self._concat_with_stored_and_calculate_feats(df=df, is_future=True)
         concat_df = self._rename_features(concat_df)
 
@@ -203,8 +202,6 @@ class OpponentTransformer(BaseLagTransformer):
             on=[cn.player_id, cn.team_id, cn.match_id],
             how="left",
         )
-        if "is_future" in df.columns:
-            df = df.drop("is_future")
 
         if ori_type == "pd":
             return df.to_pandas()
