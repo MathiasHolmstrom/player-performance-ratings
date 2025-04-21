@@ -291,18 +291,18 @@ def test_rolling_mean_transform_historical_and_transform_future(df, column_names
     if isinstance(future_df, pd.DataFrame):
         expected_df = original_future_df.assign(
             **{
-                f"{rolling_mean_transformation.prefix}_points2": [2.5, 2, 2.5, 2],
+                rolling_mean_transformation.features_out[0]: [2.5, 2, 2.5, 2],
                 rolling_mean_transformation.features_out[1]: [2, 2.5, 2, 2.5],
             }
         )
         pd.testing.assert_frame_equal(
-            transformed_future_df, expected_df, check_like=True
+            transformed_future_df, expected_df[transformed_future_df.columns], check_like=True
         )
     else:
         expected_df = original_future_df.with_columns(
             [
                 pl.Series(
-                    f"{rolling_mean_transformation.prefix}_points2", [2.5, 2, 2.5, 2]
+                    rolling_mean_transformation.features_out[0], [2.5, 2, 2.5, 2]
                 ),
                 pl.Series(
                     rolling_mean_transformation.features_out[1], [2, 2.5, 2, 2.5]

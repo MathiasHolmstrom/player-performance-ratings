@@ -22,7 +22,7 @@ def column_names():
 
 @pytest.mark.parametrize("use_column_names", [True, False])
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
-def team_lag_transform_historical_team_granularity(df, column_names, use_column_names):
+def test_team_lag_transform_historical_group_to_team_granularity(df, column_names, use_column_names):
     "Should calculate average point of prior game"
 
     data = df(
@@ -55,6 +55,7 @@ def team_lag_transform_historical_team_granularity(df, column_names, use_column_
             features=["points"],
             lag_length=1,
             granularity=["team"],
+            group_to_granularity=['team', 'game'],
         )
 
         df_with_lags = lag_transformation.transform_historical(
@@ -66,6 +67,7 @@ def team_lag_transform_historical_team_granularity(df, column_names, use_column_
             features=["points"],
             lag_length=1,
             granularity=["team"],
+            group_to_granularity=['team', 'game'],
             update_column="game",
         )
 
@@ -121,6 +123,7 @@ def test_lag_fit_tranform_group_to_team_granularity(column_names, use_column_nam
             lag_length=2,
             granularity=[column_names.team_id],
             group_to_granularity=[column_names.team_id, column_names.match_id],
+            update_column="game",
         )
         column_names = None
 
@@ -138,7 +141,7 @@ def test_lag_fit_tranform_group_to_team_granularity(column_names, use_column_nam
 
 @pytest.mark.parametrize("use_column_names", [True, False])
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
-def test_lag_fit_transform_update_match_id(df, column_names, use_column_names):
+def test_lag_fit_transform_group_to_team_granularity_update_match_id(df, column_names, use_column_names):
     "Should calculate average point of prior game"
     column_names = copy.deepcopy(column_names)
     column_names.update_match_id = "update_match_id"
@@ -153,12 +156,12 @@ def test_lag_fit_transform_update_match_id(df, column_names, use_column_names):
             "start_date": [
                 pd.to_datetime("2023-01-01"),
                 pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-01"),
                 pd.to_datetime("2023-01-02"),
                 pd.to_datetime("2023-01-02"),
-                pd.to_datetime("2023-01-02"),
-                pd.to_datetime("2023-01-02"),
+                pd.to_datetime("2023-01-03"),
+                pd.to_datetime("2023-01-03"),
+                pd.to_datetime("2023-01-04"),
+                pd.to_datetime("2023-01-04"),
             ],
         }
     )
@@ -173,6 +176,7 @@ def test_lag_fit_transform_update_match_id(df, column_names, use_column_names):
             features=["points"],
             lag_length=1,
             granularity=["team"],
+            group_to_granularity=["team", "game"],
             update_column=column_names.update_match_id,
         )
         column_names = None
@@ -181,6 +185,7 @@ def test_lag_fit_transform_update_match_id(df, column_names, use_column_names):
             features=["points"],
             lag_length=1,
             granularity=["team"],
+            group_to_granularity=["team", "game"],
             column_names=column_names,
             add_opponent=True,
         )

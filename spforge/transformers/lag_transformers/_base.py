@@ -77,6 +77,20 @@ class BaseLagTransformer:
     def features_out(self) -> list[str]:
         return self._features_out
 
+    def _maybe_group(self, df: FrameT) -> FrameT:
+        if (
+            self.group_to_granularity
+            and not self.unique_constraint
+            or self.unique_constraint
+            and sorted(self.unique_constraint) != sorted(self.group_to_granularity)
+        ):
+            sort_col = (
+                self.column_names.start_date if self.column_names else "__row_index"
+            )
+            return self._group_to_granularity_level(df=df, sort_col=sort_col)
+
+        return df
+
     def _concat_with_stored(self, group_df: FrameT, ori_df: FrameT) -> FrameT:
         df = (
             ori_df

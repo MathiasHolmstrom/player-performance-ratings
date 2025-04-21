@@ -105,6 +105,7 @@ def historical_lag_transformations_wrapper(method):
             ori_native = "pd"
         else:
             ori_native = "pl"
+
         result = method(self=self, df=df, *args, **kwargs).sort("__row_index")
 
         input_cols = [c for c in input_cols]
