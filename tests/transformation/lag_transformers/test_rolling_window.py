@@ -296,7 +296,9 @@ def test_rolling_mean_transform_historical_and_transform_future(df, column_names
             }
         )
         pd.testing.assert_frame_equal(
-            transformed_future_df, expected_df[transformed_future_df.columns], check_like=True
+            transformed_future_df,
+            expected_df[transformed_future_df.columns],
+            check_like=True,
         )
     else:
         expected_df = original_future_df.with_columns(

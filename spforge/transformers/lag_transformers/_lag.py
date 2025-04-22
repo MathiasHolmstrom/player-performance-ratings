@@ -97,7 +97,6 @@ class LagTransformer(BaseLagTransformer):
 
         return self._post_features_generated(df)
 
-
     @nw.narwhalify
     @future_lag_transformations_wrapper
     @future_validator
@@ -105,19 +104,12 @@ class LagTransformer(BaseLagTransformer):
     def transform_future(self, df: FrameT) -> IntoFrameT:
 
         sort_col = self.column_names.start_date if self.column_names else "__row_index"
-        grouped = self._group_to_granularity_level(
-            df=df, sort_col=sort_col
-        )
-
+        grouped = self._group_to_granularity_level(df=df, sort_col=sort_col)
 
         grouped_df_with_feats = self._generate_features(df=grouped, ori_df=df)
-        df = self._merge_into_input_df(
-            df=df, concat_df=grouped_df_with_feats
-        )
+        df = self._merge_into_input_df(df=df, concat_df=grouped_df_with_feats)
         df = self._post_features_generated(df)
-        return self._forward_fill_future_features(
-            df=df
-        )
+        return self._forward_fill_future_features(df=df)
 
     def _generate_features(self, df: FrameT, ori_df: FrameT) -> FrameT:
         if self.column_names and self._df is not None:
@@ -182,7 +174,6 @@ class LagTransformer(BaseLagTransformer):
                     )
 
         return concat_df
-
 
     @property
     def features_out(self) -> list[str]:

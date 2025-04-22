@@ -22,7 +22,9 @@ def column_names():
 
 @pytest.mark.parametrize("use_column_names", [True, False])
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
-def test_team_lag_transform_historical_group_to_team_granularity(df, column_names, use_column_names):
+def test_team_lag_transform_historical_group_to_team_granularity(
+    df, column_names, use_column_names
+):
     "Should calculate average point of prior game"
 
     data = df(
@@ -55,7 +57,7 @@ def test_team_lag_transform_historical_group_to_team_granularity(df, column_name
             features=["points"],
             lag_length=1,
             granularity=["team"],
-            group_to_granularity=['team', 'game'],
+            group_to_granularity=["team", "game"],
         )
 
         df_with_lags = lag_transformation.transform_historical(
@@ -67,7 +69,7 @@ def test_team_lag_transform_historical_group_to_team_granularity(df, column_name
             features=["points"],
             lag_length=1,
             granularity=["team"],
-            group_to_granularity=['team', 'game'],
+            group_to_granularity=["team", "game"],
             update_column="game",
         )
 
@@ -141,7 +143,9 @@ def test_lag_fit_tranform_group_to_team_granularity(column_names, use_column_nam
 
 @pytest.mark.parametrize("use_column_names", [True, False])
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
-def test_lag_fit_transform_group_to_team_granularity_update_match_id(df, column_names, use_column_names):
+def test_lag_fit_transform_group_to_team_granularity_update_match_id(
+    df, column_names, use_column_names
+):
     "Should calculate average point of prior game"
     column_names = copy.deepcopy(column_names)
     column_names.update_match_id = "update_match_id"
