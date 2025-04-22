@@ -144,7 +144,6 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
             df = df.to_native()
             ori_type = "pl"
 
-        df = df.with_columns(pl.lit(1).alias("is_future"))
         concat_df = self._concat_with_stored_and_calculate_feats(df=df)
         concat_df = concat_df.filter(
             pl.col(self.column_names.match_id).is_in(
@@ -157,9 +156,6 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
 
         if self.add_opponent:
             transformed_future = self._add_opponent_features(transformed_future)
-
-        if "is_future" in transformed_future.columns:
-            transformed_future = transformed_future.drop("is_future")
 
         transformed_future = transformed_future.select(ori_cols + self.features_out)
 

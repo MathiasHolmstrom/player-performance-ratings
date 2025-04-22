@@ -12,6 +12,7 @@ from spforge.transformers.lag_transformers._utils import (
     required_lag_column_names,
     transformation_validator,
     future_validator,
+    future_lag_transformations_wrapper,
 )
 from spforge.transformers.base_transformer import (
     BaseTransformer,
@@ -120,7 +121,7 @@ class OpponentTransformer(BaseLagTransformer):
                 window=self.window,
                 min_periods=self.min_periods,
                 update_column=self.update_column,
-                unique_constraint=[
+                group_to_granularity=[
                     self.opponent_column,
                     self.update_column,
                     *self.granularity,
@@ -130,7 +131,7 @@ class OpponentTransformer(BaseLagTransformer):
             raise NotImplementedError("Only rolling_mean transformation is supported")
 
         if self.column_names:
-            self._store_df(df)
+            self._store_df(df, ori_df=df)
             concat_df = self._concat_with_stored_and_calculate_feats(
                 df, is_future=False
             )
@@ -166,6 +167,7 @@ class OpponentTransformer(BaseLagTransformer):
             )
 
     @nw.narwhalify
+    @future_lag_transformations_wrapper
     @future_validator
     @transformation_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
@@ -182,7 +184,6 @@ class OpponentTransformer(BaseLagTransformer):
         else:
             ori_type = "pl"
 
-        df = df.with_columns(nw.lit(1).alias("is_future"))
         concat_df = self._concat_with_stored_and_calculate_feats(df=df, is_future=True)
         concat_df = self._rename_features(concat_df)
 
@@ -203,8 +204,6 @@ class OpponentTransformer(BaseLagTransformer):
             on=[cn.player_id, cn.team_id, cn.match_id],
             how="left",
         )
-        if "is_future" in df.columns:
-            df = df.drop("is_future")
 
         if ori_type == "pd":
             return df.to_pandas()
@@ -234,56 +233,18 @@ class OpponentTransformer(BaseLagTransformer):
                 gt_opponent,
                 on=[self.update_column, self.team_column],
                 how="left",
-            )
-
-        if self.column_names and self._df is not None:
-            sort_col = self.column_names.start_date
-            grouped = (
-                concat_df.group_by(
-                    [
-                        self.update_column,
-                        self.team_column,
-                        self.opponent_column,
-                        *self.granularity,
-                        sort_col,
-                    ]
-                )
-                .agg(nw.col(self.features).mean())
-                .sort(sort_col)
-            )
-        else:
-            grouped = (
-                concat_df.group_by(
-                    [
-                        self.update_column,
-                        self.team_column,
-                        self.opponent_column,
-                        *self.granularity,
-                    ]
-                )
-                .agg([nw.col(self.features).mean(), nw.col("__row_index").min()])
-                .sort("__row_index")
-            )
+            ).sort("__row_index")
 
         if is_future:
-            grouped = nw.from_native(self._transformer.transform_future(grouped))
+            concat_df = nw.from_native(self._transformer.transform_future(concat_df))
+
         else:
-            if self.column_names:
-                column_names_transformer = ColumnNames(**self.column_names.__dict__)
-                column_names_transformer.player_id = None
-            else:
-                column_names_transformer = None
-            grouped = nw.from_native(
+            concat_df = nw.from_native(
                 self._transformer.transform_historical(
-                    grouped, column_names=column_names_transformer
+                    concat_df, column_names=self.column_names
                 )
             )
-        on_cols = [self.update_column, *self.granularity, self.opponent_column]
-        return concat_df.join(
-            grouped.select([*on_cols, *self._transformer.features_out]),
-            on=on_cols,
-            how="left",
-        ).unique(self.unique_constraint)
+        return concat_df
 
     def _merge_into_input_df(
         self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
