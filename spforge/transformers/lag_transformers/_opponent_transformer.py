@@ -11,7 +11,7 @@ from spforge.transformers.lag_transformers._utils import (
     historical_lag_transformations_wrapper,
     required_lag_column_names,
     transformation_validator,
-    future_validator,
+    future_validator, future_lag_transformations_wrapper,
 )
 from spforge.transformers.base_transformer import (
     BaseTransformer,
@@ -46,17 +46,17 @@ class OpponentTransformer(BaseLagTransformer):
     """
 
     def __init__(
-        self,
-        features: list[str],
-        window: int,
-        granularity: Union[list[str], str],
-        min_periods: int = 1,
-        are_estimator_features=True,
-        prefix: str = "opponent_rolling_mean",
-        update_column: Optional[str] = None,
-        team_column: Optional[str] = None,
-        opponent_column: str = "__opponent",
-        transformation: Literal["rolling_mean"] = "rolling_mean",
+            self,
+            features: list[str],
+            window: int,
+            granularity: Union[list[str], str],
+            min_periods: int = 1,
+            are_estimator_features=True,
+            prefix: str = "opponent_rolling_mean",
+            update_column: Optional[str] = None,
+            team_column: Optional[str] = None,
+            opponent_column: str = "__opponent",
+            transformation: Literal["rolling_mean"] = "rolling_mean",
     ):
         """
         :param features:   Features to create rolling mean for
@@ -94,7 +94,7 @@ class OpponentTransformer(BaseLagTransformer):
     @required_lag_column_names
     @transformation_validator
     def transform_historical(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+            self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """
         Generates rolling mean for historical data
@@ -108,10 +108,10 @@ class OpponentTransformer(BaseLagTransformer):
             self.team_column = self.column_names.team_id or self.team_column
         else:
             assert (
-                self.team_column is not None
+                    self.team_column is not None
             ), "team_column must be set if column names is not passed"
             assert (
-                self.update_column is not None
+                    self.update_column is not None
             ), "match_id_update_column must be set if column names is not passed"
         if self.transformation == "rolling_mean":
             self._transformer = RollingWindowTransformer(
@@ -120,7 +120,7 @@ class OpponentTransformer(BaseLagTransformer):
                 window=self.window,
                 min_periods=self.min_periods,
                 update_column=self.update_column,
-                unique_constraint=[
+                group_to_granularity=[
                     self.opponent_column,
                     self.update_column,
                     *self.granularity,
@@ -130,7 +130,7 @@ class OpponentTransformer(BaseLagTransformer):
             raise NotImplementedError("Only rolling_mean transformation is supported")
 
         if self.column_names:
-            self._store_df(df)
+            self._store_df(df, ori_df=df)
             concat_df = self._concat_with_stored_and_calculate_feats(
                 df, is_future=False
             )
@@ -166,6 +166,7 @@ class OpponentTransformer(BaseLagTransformer):
             )
 
     @nw.narwhalify
+    @future_lag_transformations_wrapper
     @future_validator
     @transformation_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
@@ -209,7 +210,7 @@ class OpponentTransformer(BaseLagTransformer):
         return df.to_native()
 
     def _concat_with_stored_and_calculate_feats(
-        self, df: FrameT, is_future: bool
+            self, df: FrameT, is_future: bool
     ) -> FrameT:
 
         cols_to_drop = [c for c in self.features_out if c in df.columns]
@@ -231,59 +232,21 @@ class OpponentTransformer(BaseLagTransformer):
                 gt_opponent,
                 on=[self.update_column, self.team_column],
                 how="left",
-            )
-
-        if self.column_names and self._df is not None:
-            sort_col = self.column_names.start_date
-            grouped = (
-                concat_df.group_by(
-                    [
-                        self.update_column,
-                        self.team_column,
-                        self.opponent_column,
-                        *self.granularity,
-                        sort_col,
-                    ]
-                )
-                .agg(nw.col(self.features).mean())
-                .sort(sort_col)
-            )
-        else:
-            grouped = (
-                concat_df.group_by(
-                    [
-                        self.update_column,
-                        self.team_column,
-                        self.opponent_column,
-                        *self.granularity,
-                    ]
-                )
-                .agg([nw.col(self.features).mean(), nw.col("__row_index").min()])
-                .sort("__row_index")
-            )
+            ).sort('__row_index')
 
         if is_future:
-            grouped = nw.from_native(self._transformer.transform_future(grouped))
+            concat_df = nw.from_native(self._transformer.transform_future(concat_df))
+
         else:
-            if self.column_names:
-                column_names_transformer = ColumnNames(**self.column_names.__dict__)
-                column_names_transformer.player_id = None
-            else:
-                column_names_transformer = None
-            grouped = nw.from_native(
+            concat_df = nw.from_native(
                 self._transformer.transform_historical(
-                    grouped, column_names=column_names_transformer
+                    concat_df, column_names=self.column_names
                 )
             )
-        on_cols = [self.update_column, *self.granularity, self.opponent_column]
-        return concat_df.join(
-            grouped.select([*on_cols, *self._transformer.features_out]),
-            on=on_cols,
-            how="left",
-        ).unique(self.unique_constraint)
+        return concat_df
 
     def _merge_into_input_df(
-        self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
+            self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
     ) -> IntoFrameT:
         sort_cols = (
             [

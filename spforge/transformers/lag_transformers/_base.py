@@ -10,18 +10,18 @@ from spforge import ColumnNames
 class BaseLagTransformer:
 
     def __init__(
-        self,
-        granularity: list[str],
-        features: list[str],
-        add_opponent: bool,
-        iterations: list[int],
-        prefix: str,
-        column_names: Optional[ColumnNames] = None,
-        are_estimator_features: bool = True,
-        unique_constraint: Optional[list[str]] = None,
-        group_to_granularity: Optional[list[str]] = None,
-        update_column: Optional[str] = None,
-        scale_by_participation_weight: bool = False,
+            self,
+            granularity: list[str],
+            features: list[str],
+            add_opponent: bool,
+            iterations: list[int],
+            prefix: str,
+            column_names: Optional[ColumnNames] = None,
+            are_estimator_features: bool = True,
+            unique_constraint: Optional[list[str]] = None,
+            group_to_granularity: Optional[list[str]] = None,
+            update_column: Optional[str] = None,
+            scale_by_participation_weight: bool = False,
     ):
         self.column_names = column_names
         self.features = features
@@ -59,7 +59,7 @@ class BaseLagTransformer:
 
     @abstractmethod
     def transform_historical(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+            self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         pass
 
@@ -79,10 +79,10 @@ class BaseLagTransformer:
 
     def _maybe_group(self, df: FrameT) -> FrameT:
         if (
-            self.group_to_granularity
-            and not self.unique_constraint
-            or self.unique_constraint
-            and sorted(self.unique_constraint) != sorted(self.group_to_granularity)
+                self.group_to_granularity
+                and not self.unique_constraint
+                or self.unique_constraint
+                and sorted(self.unique_constraint) != sorted(self.group_to_granularity)
         ):
             sort_col = (
                 self.column_names.start_date if self.column_names else "__row_index"
@@ -91,12 +91,12 @@ class BaseLagTransformer:
 
         return df
 
-    def _concat_with_stored(self, group_df: FrameT, ori_df: FrameT) -> FrameT:
+    def _concat_with_stored(self, group_df: FrameT, ori_df: Optional[FrameT] = None) -> FrameT:
         df = (
             ori_df
-            if self.update_column
-            and self.group_to_granularity
-            and self.update_column not in self.group_to_granularity
+            if self.update_column and isinstance(ori_df, nw.DataFrame)
+               and self.group_to_granularity
+               and self.update_column not in self.group_to_granularity
             else group_df
         )
 
@@ -124,15 +124,15 @@ class BaseLagTransformer:
         ).sort(sort_cols)
 
         if (
-            self.update_column
-            and self.group_to_granularity
-            and self.update_column not in self.group_to_granularity
+                self.update_column
+                and self.group_to_granularity
+                and self.update_column not in self.group_to_granularity
         ):
             concat_df = self._group_to_granularity_level(
                 df=concat_df, sort_col=self.column_names.start_date
             )
         feature_generation_constraint = (
-            self.group_to_granularity or self.unique_constraint
+                self.group_to_granularity or self.unique_constraint
         )
         return concat_df.unique(
             subset=feature_generation_constraint,
@@ -140,16 +140,16 @@ class BaseLagTransformer:
         )
 
     def _store_df(
-        self,
-        grouped_df: FrameT,
-        ori_df: nw.DataFrame,
-        additional_cols: Optional[list[str]] = None,
+            self,
+            grouped_df: FrameT,
+            ori_df: Optional[nw.DataFrame] = None,
+            additional_cols: Optional[list[str]] = None,
     ):
         df = (
             ori_df
-            if self.update_column
-            and self.group_to_granularity
-            and self.update_column not in self.group_to_granularity
+            if self.update_column and isinstance(ori_df, nw.DataFrame)
+               and self.group_to_granularity
+               and self.update_column not in self.group_to_granularity
             else grouped_df
         )
 
@@ -178,7 +178,7 @@ class BaseLagTransformer:
             cols.append(self.update_column)
 
         if additional_cols:
-            cols += additional_cols
+            cols.extend(additional_cols)
 
         if self._df is None:
             self._df = df.select(cols)
@@ -195,14 +195,15 @@ class BaseLagTransformer:
 
     def _create_storage_unique_constraint(self) -> list[str]:
         storage_unique_constraint = (
-            self.group_to_granularity.copy() or self.unique_constraint.copy()
+                self.group_to_granularity.copy() or self.unique_constraint.copy()
         )
         if self.update_column and self.update_column not in storage_unique_constraint:
             storage_unique_constraint.append(self.update_column)
         return storage_unique_constraint
 
     def _group_to_granularity_level(self, df: FrameT, sort_col) -> FrameT:
-
+        if self.group_to_granularity and self.unique_constraint and sorted(self.unique_constraint) == sorted(self.group_to_granularity) or not self.group_to_granularity:
+            return df
         aggr_cols = [f for f in self.features if f in df.columns]
         if self.scale_by_participation_weight:
             aggr_cols.append(self.column_names.participation_weight)
@@ -212,7 +213,7 @@ class BaseLagTransformer:
         )
 
     def _merge_into_input_df(
-        self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
+            self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
     ) -> IntoFrameT:
 
         ori_cols = [c for c in df.columns if c not in self.features_out]
@@ -301,8 +302,8 @@ class BaseLagTransformer:
         )
 
     def _forward_fill_future_features(
-        self,
-        df: FrameT,
+            self,
+            df: FrameT,
     ) -> FrameT:
         cn = self.column_names
 
