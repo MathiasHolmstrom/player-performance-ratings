@@ -40,6 +40,7 @@ class BasePredictor(ABC):
         multiclass_output_as_struct: bool = False,
     ):
         self._features = features or []
+        self._modified_features = self._features.copy()
         self._ori_estimator_features = self._features.copy()
         self._target = target
         self.features_contain_str = features_contain_str or []
@@ -68,6 +69,7 @@ class BasePredictor(ABC):
             for column in columns:
                 if column not in self._features and contain in column:
                     self._features.append(column)
+                    self._modified_features.append(column)
                 elif contain in column:
                     already_added.append(column)
             if (
@@ -139,7 +141,7 @@ class BasePredictor(ABC):
         for estimator_feature in self._features.copy():
 
             if estimator_feature not in df.columns:
-                self._features.remove(estimator_feature)
+                self._modified_features.remove(estimator_feature)
                 logging.warning(
                     f"Feature {estimator_feature} not in df, removing from estimator_features"
                 )
@@ -175,7 +177,7 @@ class BasePredictor(ABC):
 
         if self.impute_missing_values:
             numeric_feats = [
-                f for f in self._features if f not in cat_feats_to_transform
+                f for f in self._modified_features if f not in cat_feats_to_transform
             ]
             if numeric_feats:
 
@@ -217,13 +219,13 @@ class BasePredictor(ABC):
 
             for feature in pre_transformer.features:
                 if (
-                    feature in self._features
+                    feature in self._modified_features
                     and feature not in pre_transformer.features_out
                 ):
-                    self._features.remove(feature)
+                    self._modified_features.remove(feature)
             for features_out in pre_transformer.features_out:
-                if features_out not in self._features:
-                    self._features.append(features_out)
+                if features_out not in self._modified_features:
+                    self._modified_features.append(features_out)
 
         return df
 

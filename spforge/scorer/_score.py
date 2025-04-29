@@ -1,4 +1,5 @@
 import math
+import datetime
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -55,44 +56,64 @@ def _apply_filters_pandas(df: pd.DataFrame, filters: list[Filter]) -> pd.DataFra
 
 def _apply_filters_polars(df: pl.DataFrame, filters: list[Filter]) -> pl.DataFrame:
     for filter in filters:
+
+        if df[filter.column_name].dtype in (pl.Datetime, pl.Date) and isinstance(
+            filter.value, str
+        ):
+            filter_value = datetime.datetime.fromisoformat(filter.value).replace(
+                tzinfo=datetime.timezone.utc
+            )
+        else:
+            filter_value = filter.value
+
         if filter.operator == Operator.EQUALS:
-            df = df.filter(pl.col(filter.column_name) == pl.lit(filter.value))
+            df = df.filter(pl.col(filter.column_name) == pl.lit(filter_value))
         elif filter.operator == Operator.NOT_EQUALS:
-            df = df.filter(pl.col(filter.column_name) != pl.lit(filter.value))
+            df = df.filter(pl.col(filter.column_name) != pl.lit(filter_value))
         elif filter.operator == Operator.GREATER_THAN:
-            df = df.filter(pl.col(filter.column_name) > pl.lit(filter.value))
+            df = df.filter(pl.col(filter.column_name) > pl.lit(filter_value))
         elif filter.operator == Operator.LESS_THAN:
-            df = df.filter(pl.col(filter.column_name) < pl.lit(filter.value))
+            df = df.filter(pl.col(filter.column_name) < pl.lit(filter_value))
         elif filter.operator == Operator.GREATER_THAN_OR_EQUALS:
-            df = df.filter(pl.col(filter.column_name) >= pl.lit(filter.value))
+            df = df.filter(pl.col(filter.column_name) >= pl.lit(filter_value))
         elif filter.operator == Operator.LESS_THAN_OR_EQUALS:
-            df = df.filter(pl.col(filter.column_name) <= pl.lit(filter.value))
+            df = df.filter(pl.col(filter.column_name) <= pl.lit(filter_value))
         elif filter.operator == Operator.IN:
-            df = df.filter(pl.col(filter.column_name).is_in(pl.lit(filter.value)))
+            df = df.filter(pl.col(filter.column_name).is_in(filter_value))
         elif filter.operator == Operator.NOT_IN:
-            df = df.filter(~pl.col(filter.column_name).is_in(pl.lit(filter.value)))
+            df = df.filter(~pl.col(filter.column_name).is_in(filter_value))
 
     return df
 
 
 def apply_filters(df: FrameT, filters: list[Filter]) -> FrameT:
     for filter in filters:
+
+        if df[filter.column_name].dtype in (nw.Datetime, nw.Date) and isinstance(
+            filter.value, str
+        ):
+            filter_value = datetime.datetime.fromisoformat(filter.value).replace(
+                tzinfo=datetime.timezone.utc
+            )
+        else:
+            filter_value = filter.value
+
         if filter.operator == Operator.EQUALS:
-            df = df.filter(nw.col(filter.column_name) == filter.value)
+            df = df.filter(nw.col(filter.column_name) == nw.lit(filter_value))
         elif filter.operator == Operator.NOT_EQUALS:
-            df = df.filter(nw.col(filter.column_name) != filter.value)
+            df = df.filter(nw.col(filter.column_name) != nw.lit(filter_value))
         elif filter.operator == Operator.GREATER_THAN:
-            df = df.filter(nw.col(filter.column_name) > filter.value)
+            df = df.filter(nw.col(filter.column_name) > nw.lit(filter_value))
         elif filter.operator == Operator.LESS_THAN:
-            df = df.filter(nw.col(filter.column_name) < filter.value)
+            df = df.filter(nw.col(filter.column_name) < nw.lit(filter_value))
         elif filter.operator == Operator.GREATER_THAN_OR_EQUALS:
-            df = df.filter(nw.col(filter.column_name) >= filter.value)
+            df = df.filter(nw.col(filter.column_name) >= nw.lit(filter_value))
         elif filter.operator == Operator.LESS_THAN_OR_EQUALS:
-            df = df.filter(nw.col(filter.column_name) <= filter.value)
+            df = df.filter(nw.col(filter.column_name) <= nw.lit(filter_value))
         elif filter.operator == Operator.IN:
-            df = df.filter(nw.col(filter.column_name).is_in(filter.value))
+            df = df.filter(nw.col(filter.column_name).is_in(filter_value))
         elif filter.operator == Operator.NOT_IN:
-            df = df.filter(~nw.col(filter.column_name).is_in(filter.value))
+            df = df.filter(~nw.col(filter.column_name).is_in(filter_value))
 
     return df
 
