@@ -1,5 +1,7 @@
+from unittest import mock
 from unittest.mock import Mock
 
+import numpy as np
 import pandas as pd
 import polars as pl
 from polars.testing import assert_frame_equal
@@ -318,3 +320,49 @@ def test_features_contain_str(predictor, df):
     predictor.train(data)
     assert predictor.features == ["feature1", "lag_feature1", "lag_feature2"]
     predictor.predict(data)
+
+
+def test_predictor_granularity():
+
+    data = pd.DataFrame(
+        {
+            "game_id": [1, 1, 2, 2],
+            "team_id": [1, 2, 1, 2],
+            "player_id": [1, 2, 1, 2],
+            "feature1": [0.1, 0.5, 0.1, 0.5],
+            "lag_feature1": [0.2, 0.3, 0.4, 0.5],
+            "group": [1, 1, 1, 1],
+            "__target": [125, 125, 100, 00],
+        }
+    )
+    estimator = mock.Mock()
+    predictor = SklearnPredictor(
+        estimator=estimator,
+        granularity=["game_id"],
+        features=["feature1", "lag_feature1"],
+        target="__target",
+    )
+
+    predictor.train(data)
+    grp = (
+        data.groupby(["game_id"])
+        .agg({"feature1": "mean", "lag_feature1": "mean", "__target": "median"})
+        .reset_index()
+    )
+
+    fit_x_values = estimator.fit.call_args[0][0]
+    fit_y_values = estimator.fit.call_args[0][1]
+
+    assert fit_y_values.tolist() == grp["__target"].tolist()
+    pd.testing.assert_frame_equal(fit_x_values, grp[["feature1", "lag_feature1"]])
+
+    estimator.predict_proba.return_value = np.array([[0.8, 0.2], [0.5, 0.5]])
+    expected_predicted_data = data.copy()
+    predicted_data = predictor.predict(data)
+
+    pd.testing.assert_frame_equal(fit_x_values, estimator.predict_proba.call_args[0][0])
+
+    expected_predicted_data[predictor.pred_column] = [0.2, 0.2, 0.5, 0.5]
+    pd.testing.assert_frame_equal(
+        predicted_data, expected_predicted_data, check_dtype=False
+    )
