@@ -24,16 +24,16 @@ class GroupByPredictor(BasePredictor):
     """
 
     def __init__(
-        self,
-        granularity: list[str],
-        predictor: BasePredictor,
-        scale_features: bool = False,
-        one_hot_encode_cat_features: bool = False,
-        convert_cat_features_to_cat_dtype: bool = False,
-        impute_missing_values: bool = False,
-        pre_transformers: Optional[list[PredictorTransformer]] = None,
-        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-        filters: Optional[list[Filter]] = None,
+            self,
+            granularity: list[str],
+            predictor: BasePredictor,
+            scale_features: bool = False,
+            one_hot_encode_cat_features: bool = False,
+            convert_cat_features_to_cat_dtype: bool = False,
+            impute_missing_values: bool = False,
+            pre_transformers: Optional[list[PredictorTransformer]] = None,
+            post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+            filters: Optional[list[Filter]] = None,
     ):
         """
         :param granularity - Granularity to group by.
@@ -97,7 +97,7 @@ class GroupByPredictor(BasePredictor):
 
     @nw.narwhalify
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+            self, df: FrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
         """
         Adds prediction to df
@@ -166,24 +166,24 @@ class SklearnPredictor(BasePredictor):
     """
 
     def __init__(
-        self,
-        estimator,
-        target: str,
-        pred_column: Optional[str] = None,
-        features: Optional[list[str]] = None,
-        features_contain_str: Optional[list[str]] = None,
-        granularity: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
-        scale_features: bool = False,
-        one_hot_encode_cat_features: bool = False,
-        convert_cat_features_to_cat_dtype: bool = False,
-        impute_missing_values: bool = False,
-        pre_transformers: Optional[list[PredictorTransformer]] = None,
-        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-        multiclass_output_as_struct: bool = False,
-        weight_by_date: bool = False,
-        date_column: None | str = None,
-        day_weight_epsilon: float = 400,
+            self,
+            estimator,
+            target: str,
+            pred_column: Optional[str] = None,
+            features: Optional[list[str]] = None,
+            features_contain_str: Optional[list[str]] = None,
+            granularity: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
+            scale_features: bool = False,
+            one_hot_encode_cat_features: bool = False,
+            convert_cat_features_to_cat_dtype: bool = False,
+            impute_missing_values: bool = False,
+            pre_transformers: Optional[list[PredictorTransformer]] = None,
+            post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+            multiclass_output_as_struct: bool = False,
+            weight_by_date: bool = False,
+            date_column: None | str = None,
+            day_weight_epsilon: float = 400,
     ):
         self.granularity = granularity
         self.estimator = estimator
@@ -249,9 +249,9 @@ class SklearnPredictor(BasePredictor):
                 pass
 
         if (
-            not self.multiclassifier
-            and len(filtered_df[self._target].unique()) > 2
-            and hasattr(self.estimator, "predict_proba")
+                not self.multiclassifier
+                and len(filtered_df[self._target].unique()) > 2
+                and hasattr(self.estimator, "predict_proba")
         ):
             self.multiclassifier = True
 
@@ -271,20 +271,20 @@ class SklearnPredictor(BasePredictor):
             max_date = filtered_df.select(nw.col(self.date_column).max()).item()
             filtered_df = filtered_df.with_columns(
                 (
-                    (nw.col(self.date_column) - nw.lit(max_date)).dt.total_minutes()
-                    / (24 * 60)
+                        (nw.col(self.date_column) - nw.lit(max_date)).dt.total_minutes()
+                        / (24 * 60)
                 ).alias("days_diff")
             )
             min_days_diff = filtered_df.select(nw.col("days_diff").min()).item()
 
             filtered_df = filtered_df.with_columns(
                 (
-                    (
-                        nw.col("days_diff")
-                        + nw.lit(min_days_diff) * -1
-                        + nw.lit(self.day_weight_epsilon)
-                    )
-                    / (nw.lit(min_days_diff) * -2 + nw.lit(self.day_weight_epsilon))
+                        (
+                                nw.col("days_diff")
+                                + nw.lit(min_days_diff) * -1
+                                + nw.lit(self.day_weight_epsilon)
+                        )
+                        / (nw.lit(min_days_diff) * -2 + nw.lit(self.day_weight_epsilon))
                 ).alias("weight")
             )
             kwargs = {
@@ -301,7 +301,7 @@ class SklearnPredictor(BasePredictor):
 
     @nw.narwhalify
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+            self, df: FrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
         if self.pred_column in df.columns:
             df = df.drop(self.pred_column)
@@ -319,23 +319,6 @@ class SklearnPredictor(BasePredictor):
             )
         else:
             grouped_df = df
-
-        if hasattr(self.estimator, "predict_proba"):
-            predictions = self.estimator.predict_proba(
-                grouped_df.select(self._modified_features).to_pandas()
-            )
-        else:
-            predictions = self.estimator.predict(
-                grouped_df.select(self._modified_features).to_pandas()
-            )
-
-        grouped_df = grouped_df.with_columns(
-            nw.new_series(
-                name=self.pred_column,
-                values=predictions,
-                native_namespace=nw.get_native_namespace(df),
-            )
-        )
 
         if self.multiclassifier:
 
@@ -407,6 +390,8 @@ class SklearnPredictor(BasePredictor):
                 on=self.granularity,
                 how="left",
             )
+        else:
+            df = grouped_df
 
         for simple_transformer in self.post_predict_transformers:
             df = simple_transformer.transform(df)
@@ -422,18 +407,18 @@ class GranularityPredictor(BasePredictor):
     """
 
     def __init__(
-        self,
-        granularity_column_name: str,
-        predictor: BasePredictor,
-        scale_features: bool = False,
-        one_hot_encode_cat_features: bool = False,
-        convert_cat_features_to_cat_dtype: bool = False,
-        impute_missing_values: bool = False,
-        features: Optional[list[str]] = None,
-        features_contain_str: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
-        column_names: Optional[ColumnNames] = None,
-        pre_transformers: Optional[list[PredictorTransformer]] = None,
+            self,
+            granularity_column_name: str,
+            predictor: BasePredictor,
+            scale_features: bool = False,
+            one_hot_encode_cat_features: bool = False,
+            convert_cat_features_to_cat_dtype: bool = False,
+            impute_missing_values: bool = False,
+            features: Optional[list[str]] = None,
+            features_contain_str: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
+            column_names: Optional[ColumnNames] = None,
+            pre_transformers: Optional[list[PredictorTransformer]] = None,
     ):
         """
         :param predictor - Predictor
@@ -519,7 +504,7 @@ class GranularityPredictor(BasePredictor):
 
     @nw.narwhalify
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+            self, df: FrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
 
         if isinstance(df.to_native(), pd.DataFrame):
@@ -552,7 +537,7 @@ class GranularityPredictor(BasePredictor):
         return df
 
     def _unify_struct_fields(
-        self, dfs: list[FrameT], struct_col: str
+            self, dfs: list[FrameT], struct_col: str
     ) -> list[IntoFrameT]:
         dfs = [df.to_native() for df in dfs]
         all_fields = set()
