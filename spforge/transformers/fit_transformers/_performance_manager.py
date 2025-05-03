@@ -62,21 +62,21 @@ class PerformanceManager(BaseTransformer):
         self,
         features: list[str],
         transformers: Optional[list[BaseTransformer]] = None,
-        scale_performance: bool = True,
+        auto_scale_performance: bool = True,
         prefix: str = "performance__",
         min_value: float = -0.02,
         max_value: float = 1.02,
     ):
         self.prefix = prefix
 
-        self.scale_performance = scale_performance
+        self.auto_scale_performance = auto_scale_performance
         self.original_transformers = (
             [copy.deepcopy(p) for p in transformers] if transformers else []
         )
         self.min_value = min_value
         self.max_value = max_value
         self.transformers = transformers or []
-        if self.scale_performance:
+        if self.auto_scale_performance:
             self.transformers = create_performance_scalers_transformers(
                 pre_transformers=self.transformers,
                 features=features,
@@ -143,7 +143,7 @@ class PerformanceWeightsManager(PerformanceManager):
         self,
         weights: list[ColumnWeight],
         transformers: Optional[list[BaseTransformer]] = None,
-        scale_performance: bool = True,
+        auto_scale_performance: bool = True,
         max_value: float = 1.02,
         min_value: float = -0.02,
         prefix: str = "performance__",
@@ -156,7 +156,7 @@ class PerformanceWeightsManager(PerformanceManager):
         super().__init__(
             features=self.features,
             transformers=transformers,
-            scale_performance=scale_performance,
+            auto_scale_performance=auto_scale_performance,
             prefix=prefix,
             max_value=max_value,
             min_value=min_value,

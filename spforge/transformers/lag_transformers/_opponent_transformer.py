@@ -22,24 +22,26 @@ from spforge.transformers.lag_transformers import BaseLagTransformer
 
 class OpponentTransformer(BaseLagTransformer):
     """
-    Calculates the rolling mean of a list of features from the opponents perspective.
-    In contrast to RollingMeanTransformer and setting add_opponent = True, the OpponentRollingMeanTransformer does not calculate the mean of the rolling mean for the team itself.
-    Rather it calculates the rolling-mean performance of every entity that has faced the opponent over the window period.
+    Calculates the rolling mean of specified features from the opponent's perspective.
 
-    This is useful for creating features that indicate how the opponent performs in different contexts.
+    Unlike `RollingMeanTransformer` with `add_opponent=True`, the `OpponentRollingMeanTransformer`
+    does not compute a rolling mean for the entity itself. Instead, it aggregates how opponents
+    typically perform *against* entities over a defined rolling window.
+
+    This allows for creation of features that reflect opponent tendencies in various contexts.
+
+    Example use case:
+        - Do opponents tend to allow more points to centers than to players in other positions?
+
     Example:
-        - Does the opponent allow more points against centers than other positions?
-    df = get_sub_sample_nba_data(as_polars=True, as_pandas=False)
-    transformer = OpponentRollingMeanTransformer(
-        features=["points"],
-        window=15,
-        granularity=['position'],
-        opponent_column='opponent_team_id'
+        df = get_sub_sample_nba_data(as_polars=True, as_pandas=False)
+        transformer = OpponentRollingMeanTransformer(
+            features=["points"],
+            window=15,
+            granularity=["position"],
+            opponent_column="opponent_team_id"
         )
-    df = transformer.generate_historical(df)
-
-
-
+        df = transformer.generate_historical(df)
 
     Use .transform_historical() to generate rolling mean for historical data.
         The historical data is stored as instance-variables after calling .generate_historical()
@@ -47,17 +49,17 @@ class OpponentTransformer(BaseLagTransformer):
     """
 
     def __init__(
-        self,
-        features: list[str],
-        window: int,
-        granularity: Union[list[str], str],
-        min_periods: int = 1,
-        are_estimator_features=True,
-        prefix: str = "opponent_rolling_mean",
-        update_column: Optional[str] = None,
-        team_column: Optional[str] = None,
-        opponent_column: str = "__opponent",
-        transformation: Literal["rolling_mean"] = "rolling_mean",
+            self,
+            features: list[str],
+            window: int,
+            granularity: Union[list[str], str],
+            min_periods: int = 1,
+            are_estimator_features=True,
+            prefix: str = "opponent_rolling_mean",
+            update_column: Optional[str] = None,
+            team_column: Optional[str] = None,
+            opponent_column: str = "__opponent",
+            transformation: Literal["rolling_mean"] = "rolling_mean",
     ):
         """
         :param features:   Features to create rolling mean for
@@ -95,7 +97,7 @@ class OpponentTransformer(BaseLagTransformer):
     @required_lag_column_names
     @transformation_validator
     def transform_historical(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+            self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """
         Generates rolling mean for historical data
@@ -109,10 +111,10 @@ class OpponentTransformer(BaseLagTransformer):
             self.team_column = self.column_names.team_id or self.team_column
         else:
             assert (
-                self.team_column is not None
+                    self.team_column is not None
             ), "team_column must be set if column names is not passed"
             assert (
-                self.update_column is not None
+                    self.update_column is not None
             ), "match_id_update_column must be set if column names is not passed"
         if self.transformation == "rolling_mean":
             self._transformer = RollingWindowTransformer(
@@ -211,7 +213,7 @@ class OpponentTransformer(BaseLagTransformer):
         return df.to_native()
 
     def _concat_with_stored_and_calculate_feats(
-        self, df: FrameT, is_future: bool
+            self, df: FrameT, is_future: bool
     ) -> FrameT:
 
         cols_to_drop = [c for c in self.features_out if c in df.columns]
@@ -247,7 +249,7 @@ class OpponentTransformer(BaseLagTransformer):
         return concat_df
 
     def _merge_into_input_df(
-        self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
+            self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
     ) -> IntoFrameT:
         sort_cols = (
             [

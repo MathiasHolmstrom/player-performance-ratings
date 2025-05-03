@@ -60,7 +60,7 @@ def historical_lag_transformations_wrapper(method):
         if "__row_index" not in df.columns:
             df = df.with_row_index(name="__row_index")
         self.column_names = column_names or self.column_names
-
+        self.group_to_granularity = self.group_to_granularity or [self.update_column or self.column_names.match_id, *self.granularity]
         if self.column_names and not self.unique_constraint:
             self.unique_constraint = (
                 [

@@ -90,15 +90,14 @@ transformer = PipelineTransformer(
 
 historical_df = transformer.fit_transform(historical_df)
 
-game_winner_predictor = GroupByPredictor(
-    predictor=SklearnPredictor(
-        estimator=LogisticRegression(),
-        target="result",
-        features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
-    ),
+game_winner_predictor = SklearnPredictor(
+
+    estimator=LogisticRegression(),
+    target="result",
+    features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+    granularity=[column_names.match_id, column_names.team_id],
     one_hot_encode_cat_features=True,
     impute_missing_values=True,
-    granularity=[column_names.match_id, column_names.team_id],
 )
 
 player_kills_predictor = SklearnPredictor(
