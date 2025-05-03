@@ -396,6 +396,8 @@ class Pipeline(BasePredictor):
         ), "Dataframe row count has changed throughout predict pipeline"
 
         if "return_features" in kwargs and kwargs["return_features"]:
-            return joined
+            return joined.select(
+                list(set(input_cols + self.columns_added + self.features))
+            )
 
         return joined.select(input_cols + self.columns_added)

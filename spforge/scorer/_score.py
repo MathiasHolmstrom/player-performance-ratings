@@ -211,6 +211,7 @@ class SklearnScorer(BaseScorer):
 
         self.pred_column_name = pred_column
         self.scorer_function = scorer_function
+
         super().__init__(
             target=target,
             pred_column=pred_column,
@@ -223,6 +224,18 @@ class SklearnScorer(BaseScorer):
     def score(self, df: FrameT) -> float:
 
         df = apply_filters(df=df, filters=self.filters)
+        if isinstance(df[self.pred_column_name].to_list()[0], dict):
+            assert (
+                not self.granularity
+            ), "Granularity is not supported for dict predictions"
+            df = df.to_polars()
+            df = df.with_columns(
+                pl.col(self.pred_column)
+                .struct.unnest()
+                .pipe(pl.concat_list)
+                .alias(self.pred_column)
+            )
+
         if self.granularity:
             grouped = df.group_by(self.granularity).agg(
                 [
@@ -376,7 +389,6 @@ class OrdinalLossScorer(BaseScorer):
         sum_lr = 0
         count_higher_rows = len(df.filter(pl.col(self.target) > min_field))
         for class_ in field_names[1:]:
-
             count_exact = len(df.filter(pl.col(self.target) == class_ - 1))
             weight_class = count_exact / count_higher_rows
 

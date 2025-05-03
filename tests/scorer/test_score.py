@@ -82,6 +82,36 @@ def test_sk_learn_scorer_mean_absolute_error(df):
     assert score == expected_score
 
 
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_sk_learn_scorer_mean_absolute_error_is_multiclass(df_type):
+    df = df_type(
+        {
+            "multi_class_predictions": [
+                {"0": 0.4, "1": 0.3, "2": 0.3},
+                {"0": 0.5, "1": 0.3, "2": 0.2},
+                {"0": 0.2, "1": 0.3, "2": 0.5},
+            ],
+            "non_multiclass_predictions": [
+                [0.4, 0.3, 0.3],
+                [0.5, 0.3, 0.2],
+                [0.2, 0.3, 0.5],
+            ],
+            "__target": [0, 1, 2],
+        }
+    )
+
+    score = SklearnScorer(
+        pred_column="multi_class_predictions",
+        scorer_function=log_loss,
+        target="__target",
+    ).score(df)
+
+    expected_score = log_loss(
+        df["__target"], df["non_multiclass_predictions"].to_list()
+    )
+    assert score == expected_score
+
+
 @pytest.mark.parametrize(
     "df",
     [
@@ -90,7 +120,6 @@ def test_sk_learn_scorer_mean_absolute_error(df):
     ],
 )
 def test_mean_absolute_error(df):
-
     scorer = MeanBiasScorer(pred_column="predictions", target="__target")
 
     score = scorer.score(df)
