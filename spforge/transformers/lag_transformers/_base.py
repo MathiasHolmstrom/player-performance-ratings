@@ -21,6 +21,7 @@ class BaseLagTransformer:
         unique_constraint: Optional[list[str]] = None,
         group_to_granularity: Optional[list[str]] = None,
         update_column: Optional[str] = None,
+        match_id_column: Optional[str] = None,
         scale_by_participation_weight: bool = False,
     ):
         self.column_names = column_names
@@ -28,6 +29,7 @@ class BaseLagTransformer:
         self.iterations = iterations
         self._features_out = []
         self._are_estimator_features = are_estimator_features
+        self.match_id_column = match_id_column
         self.granularity = granularity
         if isinstance(self.granularity, str):
             self.granularity = [self.granularity]
@@ -38,7 +40,7 @@ class BaseLagTransformer:
         self._entity_features_out = []
         cn = self.column_names
         self.group_to_granularity = group_to_granularity or []
-        self.update_column = update_column
+        self.update_column = update_column or self.match_id_column
         self.scale_by_participation_weight = scale_by_participation_weight
         self.unique_constraint = (
             unique_constraint
@@ -77,7 +79,9 @@ class BaseLagTransformer:
     def features_out(self) -> list[str]:
         return self._features_out
 
-    def _maybe_group(self, df: FrameT) -> FrameT:
+    def _maybe_group(
+        self, df: FrameT, additional_cols: Optional[list[str]] = None
+    ) -> FrameT:
         if (
             self.group_to_granularity
             and not self.unique_constraint
@@ -87,12 +91,17 @@ class BaseLagTransformer:
             sort_col = (
                 self.column_names.start_date if self.column_names else "__row_index"
             )
-            return self._group_to_granularity_level(df=df, sort_col=sort_col)
+            return self._group_to_granularity_level(
+                df=df, sort_col=sort_col, additional_cols=additional_cols
+            )
 
         return df
 
     def _concat_with_stored(
-        self, group_df: FrameT, ori_df: Optional[FrameT] = None
+        self,
+        group_df: FrameT,
+        ori_df: Optional[FrameT] = None,
+        additional_cols: Optional[list[str]] = None,
     ) -> FrameT:
         df = (
             ori_df
@@ -131,8 +140,11 @@ class BaseLagTransformer:
             and self.group_to_granularity
             and self.update_column not in self.group_to_granularity
         ):
+
             concat_df = self._group_to_granularity_level(
-                df=concat_df, sort_col=self.column_names.start_date
+                df=concat_df,
+                sort_col=self.column_names.start_date,
+                additional_cols=additional_cols,
             )
         feature_generation_constraint = (
             self.group_to_granularity or self.unique_constraint
@@ -205,7 +217,9 @@ class BaseLagTransformer:
             storage_unique_constraint.append(self.update_column)
         return storage_unique_constraint
 
-    def _group_to_granularity_level(self, df: FrameT, sort_col) -> FrameT:
+    def _group_to_granularity_level(
+        self, df: FrameT, sort_col, additional_cols: Optional[list[str]] = None
+    ) -> FrameT:
         if (
             self.group_to_granularity
             and self.unique_constraint
@@ -217,8 +231,13 @@ class BaseLagTransformer:
         if self.scale_by_participation_weight:
             aggr_cols.append(self.column_names.participation_weight)
 
-        return df.group_by(self.group_to_granularity).agg(
-            [nw.col(c).mean() for c in aggr_cols] + [nw.col(sort_col).min()]
+        if additional_cols:
+            aggr_cols.extend(additional_cols)
+
+        return (
+            df.group_by(self.group_to_granularity)
+            .agg([nw.col(c).mean() for c in aggr_cols] + [nw.col(sort_col).min()])
+            .sort(sort_col)
         )
 
     def _merge_into_input_df(
@@ -464,7 +483,7 @@ class BaseLagTransformer:
 
     def _post_features_generated(self, df: FrameT) -> FrameT:
         df = df.sort("__row_index")
-        if self.update_column:
+        if self.update_column != self.match_id_column:
             for feature_name in self._entity_features_out:
                 df = self._equalize_values_within_update_id(
                     df=df, column_name=feature_name

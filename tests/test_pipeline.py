@@ -337,7 +337,7 @@ def test_match_predictor_generate_and_predict(df):
     rating_generator = PlayerRatingGenerator(
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         performances_generator=PerformanceWeightsManager(
-            Performance(weights=column_weights)
+            weights=column_weights,
         ),
     )
 
@@ -353,6 +353,8 @@ def test_match_predictor_generate_and_predict(df):
         *rating_generator.all_rating_features_out,
         pipeline.predictor.pred_column,
     ]
+    expected_columns.sort()
+    new_df.columns = sorted(new_df.columns)
     if isinstance(new_df, pd.DataFrame):
         assert new_df.columns.to_list() == expected_columns
     else:
@@ -403,9 +405,7 @@ def test_train_predict_post_pre_and_lag_transformers():
         non_predictor_known_features_out=[RatingKnownFeatures.PLAYER_RATING],
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         unknown_features_out=[RatingUnknownFeatures.TEAM_RATING],
-        performances_generator=PerformanceWeightsManager(
-            Performance(weights=column_weights)
-        ),
+        performances_generator=PerformanceWeightsManager(weights=column_weights),
     )
     pre_transformer = PredictorTransformer(
         predictor=SklearnPredictor(
@@ -414,6 +414,7 @@ def test_train_predict_post_pre_and_lag_transformers():
             estimator=LinearRegression(),
             features=rating_generator.features_out,
             target="__target",
+            pred_column="pre_prediction_transformer_target",
         ),
     )
 

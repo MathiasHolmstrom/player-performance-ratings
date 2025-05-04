@@ -37,6 +37,7 @@ class RollingWindowTransformer(BaseLagTransformer):
         aggregation: Literal["mean", "sum", "var"] = "mean",
         group_to_granularity: Optional[list[str]] = None,
         unique_constraint: Optional[list[str]] = None,
+        match_id_column: Optional[str] = None,
         update_column: Optional[str] = None,
     ):
         """
@@ -68,6 +69,7 @@ class RollingWindowTransformer(BaseLagTransformer):
             unique_constraint=unique_constraint,
             group_to_granularity=group_to_granularity,
             update_column=update_column,
+            match_id_column=match_id_column,
         )
         self.aggregation = aggregation
         self.scale_by_participation_weight = scale_by_participation_weight
