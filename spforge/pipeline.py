@@ -321,10 +321,9 @@ class Pipeline(BasePredictor):
         df_with_predict = df.clone()
         df_with_predict = apply_filters(df_with_predict, filters=self.filters)
         df_with_predict = df_with_predict.sort(sort_cols)
-
+        rating_feats_added = []
         for rating_idx, rating_generator in enumerate(self.rating_generators):
             if cross_validation:
-
                 df_with_predict = nw.from_native(
                     rating_generator.transform_historical(
                         df_with_predict, column_names=self.column_names
@@ -347,6 +346,7 @@ class Pipeline(BasePredictor):
                 assert len(df_with_predict.unique(unique_constraint)) == len(
                     df_with_predict
                 ), "The dataframe contains duplicates"
+                rating_feats_added.extend(rating_generator.all_rating_features_out)
 
         for pre_lag_transformer in self.pre_lag_transformers:
             df_with_predict = nw.from_native(
@@ -397,7 +397,7 @@ class Pipeline(BasePredictor):
 
         if "return_features" in kwargs and kwargs["return_features"]:
             return joined.select(
-                list(set(input_cols + self.columns_added + self.features))
+                list(set(input_cols + self.columns_added + self.features + rating_feats_added ))
             )
 
         return joined.select(input_cols + self.columns_added)

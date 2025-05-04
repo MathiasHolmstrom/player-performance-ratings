@@ -54,6 +54,7 @@ def test_rolling_mean_transform_historical_game_team(
             granularity=["team"],
             add_opponent=add_opponent,
             update_column=column_names.update_match_id,
+            match_id_column=column_names.match_id,
         )
         column_names = None
 
@@ -331,10 +332,10 @@ def test_rolling_mean_transform_update_id_different_from_game_id(
             "points": [1, 2, 3, 2],
             "points2": [1, 2, 3, 4],
             "start_date": [
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-02"),
-                pd.to_datetime("2023-01-04"),
+                pd.to_datetime("2023-01-01 12:00:00"),
+                pd.to_datetime("2023-01-01 13:00:00"),
+                pd.to_datetime("2023-01-02 12:00:00"),
+                pd.to_datetime("2023-01-04 12:00:00"),
             ],
             "team": [1, 1, 1, 1],
             "series_id": [1, 1, 2, 3],
@@ -353,6 +354,7 @@ def test_rolling_mean_transform_update_id_different_from_game_id(
             window=2,
             granularity=["player"],
             update_column="series_id",
+            match_id_column=column_names.match_id,
         )
         column_names = None
 
@@ -397,6 +399,7 @@ def test_rolling_mean_transform_historical_group_to_granularity(
             window=2,
             granularity=[column_names.team_id],
             group_to_granularity=[column_names.match_id, column_names.team_id],
+            match_id_column=column_names.match_id,
             update_column=column_names.update_match_id,
         )
         column_names = None
@@ -480,6 +483,7 @@ def test_rolling_mean_transform_historical_group_to_granularity_and_update_id(
             window=2,
             granularity=[column_names.team_id],
             update_column=column_names.update_match_id,
+            match_id_column=column_names.match_id,
             group_to_granularity=[column_names.match_id, column_names.team_id],
         )
         column_names = None
@@ -549,7 +553,7 @@ def test_rolling_mean_transform_historical_different_unique_constraint(
             features=["points"],
             window=10,
             granularity=["league", "position"],
-            update_column=column_names.match_id,
+            match_id_column=column_names.match_id,
         )
         column_names = None
 
@@ -690,7 +694,7 @@ def test_rolling_mean_historical_transform_higher_granularity(
             window=2,
             granularity=["position"],
             group_to_granularity=["league", "position", column_names.match_id],
-            update_column=column_names.update_match_id,
+            match_id_column=column_names.update_match_id,
         )
         column_names = None
 

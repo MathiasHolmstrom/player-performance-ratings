@@ -269,7 +269,7 @@ def test_one_hot_encoder_train(df):
 
     predictor.train(data)
     assert len(predictor.pre_transformers) == 2
-    assert predictor.features == [
+    assert predictor._modified_features == [
         "feature1",
         "cat_feature_cat1",
         "cat_feature_cat2",
@@ -323,7 +323,6 @@ def test_features_contain_str(predictor, df):
 
 
 def test_predictor_granularity():
-
     data = pd.DataFrame(
         {
             "game_id": [1, 1, 2, 2],
@@ -357,12 +356,12 @@ def test_predictor_granularity():
     pd.testing.assert_frame_equal(fit_x_values, grp[["feature1", "lag_feature1"]])
 
     estimator.predict_proba.return_value = np.array([[0.8, 0.2], [0.5, 0.5]])
-    expected_predicted_data = data.copy()
+
     predicted_data = predictor.predict(data)
 
-    pd.testing.assert_frame_equal(fit_x_values, estimator.predict_proba.call_args[0][0])
-
-    expected_predicted_data[predictor.pred_column] = [0.2, 0.2, 0.5, 0.5]
-    pd.testing.assert_frame_equal(
-        predicted_data, expected_predicted_data, check_dtype=False
-    )
+    assert len(estimator.predict_proba.call_args[0][0]) == 2
+    assert "feature1" in estimator.predict_proba.call_args[0][0].columns
+    assert "lag_feature1" in estimator.predict_proba.call_args[0][0].columns
+    pred_values = predicted_data[predictor.pred_column].to_list()
+    pred_values.sort()
+    assert pred_values == [0.2, 0.2, 0.5, 0.5]

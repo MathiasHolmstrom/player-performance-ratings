@@ -60,7 +60,24 @@ def historical_lag_transformations_wrapper(method):
         if "__row_index" not in df.columns:
             df = df.with_row_index(name="__row_index")
         self.column_names = column_names or self.column_names
-        self.group_to_granularity = self.group_to_granularity or [self.update_column or self.column_names.match_id, *self.granularity]
+        if not self.__class__.__name__ == "RollingMeanDaysTransformer":
+            if self.match_id_column is None and not self.column_names:
+                raise ValueError(
+                    "Either match_id_column or column_names must be passed"
+                )
+            self.match_id_column = self.match_id_column or self.column_names.match_id
+            if self.group_to_granularity:
+                self.group_to_granularity = self.group_to_granularity
+            elif self.match_id_column:
+                self.group_to_granularity = [self.match_id_column, *self.granularity]
+            elif self.column_names:
+                self.group_to_granularity = [self.column_names.match_id, *self.granularity]
+            else:
+                self.group_to_granularity = None
+            assert self.group_to_granularity is not None, (
+                "Either group_to_granularity or match_id_column must be passed"
+            )
+
         if self.column_names and not self.unique_constraint:
             self.unique_constraint = (
                 [
@@ -98,6 +115,7 @@ def historical_lag_transformations_wrapper(method):
         if not self.column_names and not self.update_column:
             raise ValueError("column_names or update_column must be provided")
         self.update_column = self.update_column or self.column_names.update_match_id
+
         self.group_to_granularity = self.group_to_granularity or self.unique_constraint
         native = nw.to_native(df)
         if isinstance(native, pd.DataFrame):

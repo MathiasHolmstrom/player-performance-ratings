@@ -49,17 +49,18 @@ class OpponentTransformer(BaseLagTransformer):
     """
 
     def __init__(
-            self,
-            features: list[str],
-            window: int,
-            granularity: Union[list[str], str],
-            min_periods: int = 1,
-            are_estimator_features=True,
-            prefix: str = "opponent_rolling_mean",
-            update_column: Optional[str] = None,
-            team_column: Optional[str] = None,
-            opponent_column: str = "__opponent",
-            transformation: Literal["rolling_mean"] = "rolling_mean",
+        self,
+        features: list[str],
+        window: int,
+        granularity: Union[list[str], str],
+        min_periods: int = 1,
+        are_estimator_features=True,
+        prefix: str = "opponent_rolling_mean",
+        update_column: Optional[str] = None,
+        match_id_column: Optional[str] = None,
+        team_column: Optional[str] = None,
+        opponent_column: str = "__opponent",
+        transformation: Literal["rolling_mean"] = "rolling_mean",
     ):
         """
         :param features:   Features to create rolling mean for
@@ -84,6 +85,7 @@ class OpponentTransformer(BaseLagTransformer):
             granularity=granularity,
             are_estimator_features=are_estimator_features,
             update_column=update_column,
+            match_id_column=match_id_column,
         )
         self.window = window
         self.min_periods = min_periods
@@ -97,7 +99,7 @@ class OpponentTransformer(BaseLagTransformer):
     @required_lag_column_names
     @transformation_validator
     def transform_historical(
-            self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """
         Generates rolling mean for historical data
@@ -111,10 +113,10 @@ class OpponentTransformer(BaseLagTransformer):
             self.team_column = self.column_names.team_id or self.team_column
         else:
             assert (
-                    self.team_column is not None
+                self.team_column is not None
             ), "team_column must be set if column names is not passed"
             assert (
-                    self.update_column is not None
+                self.update_column is not None
             ), "match_id_update_column must be set if column names is not passed"
         if self.transformation == "rolling_mean":
             self._transformer = RollingWindowTransformer(
@@ -123,6 +125,7 @@ class OpponentTransformer(BaseLagTransformer):
                 window=self.window,
                 min_periods=self.min_periods,
                 update_column=self.update_column,
+                match_id_column=self.match_id_column,
                 group_to_granularity=[
                     self.opponent_column,
                     self.update_column,
@@ -213,7 +216,7 @@ class OpponentTransformer(BaseLagTransformer):
         return df.to_native()
 
     def _concat_with_stored_and_calculate_feats(
-            self, df: FrameT, is_future: bool
+        self, df: FrameT, is_future: bool
     ) -> FrameT:
 
         cols_to_drop = [c for c in self.features_out if c in df.columns]
@@ -249,7 +252,7 @@ class OpponentTransformer(BaseLagTransformer):
         return concat_df
 
     def _merge_into_input_df(
-            self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
+        self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
     ) -> IntoFrameT:
         sort_cols = (
             [

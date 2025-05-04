@@ -1,7 +1,7 @@
 import copy
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, Union
+from typing import Optional, Union, Literal, List
 
 from narwhals.typing import FrameT, IntoFrameT
 import narwhals as nw
@@ -25,8 +25,9 @@ class ColumnWeight:
         if self.weight > 1:
             raise ValueError("Weight must be less than 1")
 
-
+TransformerName = Literal["partial_standard_scaler", "symmetric", "min_max"]
 def create_performance_scalers_transformers(
+    transformer_names: List[TransformerName],
     pre_transformers: list[BaseTransformer],
     features: list[str],
 ) -> list[BaseTransformer]:
@@ -35,23 +36,34 @@ def create_performance_scalers_transformers(
     Ensures columns aren't too skewed, scales them to similar ranges, ensure values are between 0 and 1,
     and then weights them according to the column_weights.
     """
-
+    if not transformer_names:
+        return pre_transformers
     transformed_features = []
     not_transformed_features = features or []
+    all_features = not_transformed_features.copy()
+    for transformer_name in transformer_names:
+        if transformer_name == "symmetric":
+            distribution_transformer = SymmetricDistributionTransformer(
+                features=not_transformed_features, prefix=""
+            )
+            pre_transformers.append(distribution_transformer)
+            all_features = transformed_features + not_transformed_features
 
-    distribution_transformer = SymmetricDistributionTransformer(
-        features=not_transformed_features, prefix=""
-    )
-    pre_transformers.append(distribution_transformer)
+        elif transformer_name == "partial_standard_scaler":
+            pre_transformers.append(
+                PartialStandardScaler(
+                    features=all_features, ratio=1, max_value=9999, target_mean=0, prefix=""
+                )
+            )
+        elif transformer_name == "partial_standard_scaler_mean0.5":
+            pre_transformers.append(
+                PartialStandardScaler(
+                    features=all_features, ratio=1, max_value=9999, target_mean=0.5, prefix=""
+                )
+            )
 
-    all_features = transformed_features + not_transformed_features
-
-    pre_transformers.append(
-        PartialStandardScaler(
-            features=all_features, ratio=1, max_value=9999, target_mean=0, prefix=""
-        )
-    )
-    pre_transformers.append(MinMaxTransformer(features=all_features, prefix=""))
+        elif transformer_name == "min_max":
+            pre_transformers.append(MinMaxTransformer(features=all_features, prefix=""))
 
     return pre_transformers
 
@@ -61,26 +73,30 @@ class PerformanceManager(BaseTransformer):
     def __init__(
         self,
         features: list[str],
-        transformers: Optional[list[BaseTransformer]] = None,
-        auto_scale_performance: bool = True,
+        transformer_names: Optional[list[Literal["partial_standard_scaler", "symmetric" , "min_max", "partial_standard_scaler_mean0.5"]]] = None,
+        custom_transformers: Optional[list[BaseTransformer]] = None,
         prefix: str = "performance__",
         min_value: float = -0.02,
         max_value: float = 1.02,
     ):
         self.prefix = prefix
 
-        self.auto_scale_performance = auto_scale_performance
+
+        self.transformer_names = transformer_names
+        if self.transformer_names is None:
+            self.transformer_names = ["symmetric","partial_standard_scaler" , "min_max"]
         self.original_transformers = (
-            [copy.deepcopy(p) for p in transformers] if transformers else []
+            [copy.deepcopy(p) for p in custom_transformers] if custom_transformers else []
         )
         self.min_value = min_value
         self.max_value = max_value
-        self.transformers = transformers or []
-        if self.auto_scale_performance:
-            self.transformers = create_performance_scalers_transformers(
-                pre_transformers=self.transformers,
-                features=features,
-            )
+        self.custom_transformers = custom_transformers or []
+
+        self.transformers = create_performance_scalers_transformers(
+            transformer_names=self.transformer_names,
+            pre_transformers=self.custom_transformers,
+            features=features,
+        )
 
         super().__init__(features=features, features_out=self.features_out)
 
@@ -97,14 +113,7 @@ class PerformanceManager(BaseTransformer):
                         df = df.with_columns(nw.col(ori_feature_name).alias(feature))
             df = nw.from_native(transformer.fit_transform(df))
 
-        df = df.with_columns(
-            nw.col(self.transformers[-1].features_out[0]).alias(self.performance_column)
-        )
-        df = df.with_columns(nw.col("__ori" + f).alias(f) for f in self.features)
-        df = df.with_columns(
-            nw.col(self.performance_column).clip(self.min_value, self.max_value)
-        )
-        return df.select(list(set([*input_cols, *self.features_out])))
+        return self._post_transform(df, input_cols)
 
     @nw.narwhalify
     def transform(self, df: FrameT) -> IntoFrameT:
@@ -119,13 +128,17 @@ class PerformanceManager(BaseTransformer):
                         df = df.with_columns(nw.col(ori_feature_name).alias(feature))
             df = nw.from_native(transformer.transform(df))
 
+        return self._post_transform(df, input_cols)
+
+    def _post_transform(self, df: FrameT, input_cols: list[str]) -> IntoFrameT:
         df = df.with_columns(
             nw.col(self.transformers[-1].features_out[0]).alias(self.performance_column)
         )
-        df = df.with_columns(nw.col("__ori" + f).alias(f) for f in self.features)
         df = df.with_columns(
             nw.col(self.performance_column).clip(self.min_value, self.max_value)
         )
+        df = df.with_columns(nw.col("__ori" + f).alias(f) for f in self.features)
+
         return df.select(list(set([*input_cols, *self.features_out])))
 
     @property
@@ -134,7 +147,7 @@ class PerformanceManager(BaseTransformer):
 
     @property
     def performance_column(self) -> str:
-        return self.prefix + self.transformers[-1].features_out[0]
+        return self.prefix + "weighted"
 
 
 class PerformanceWeightsManager(PerformanceManager):
@@ -142,8 +155,8 @@ class PerformanceWeightsManager(PerformanceManager):
     def __init__(
         self,
         weights: list[ColumnWeight],
-        transformers: Optional[list[BaseTransformer]] = None,
-        auto_scale_performance: bool = True,
+        custom_transformers: Optional[list[BaseTransformer]] = None,
+        transformer_names: Optional[list[Literal["partial_standard_scaler", "symmetric", "min_max"]]] = None,
         max_value: float = 1.02,
         min_value: float = -0.02,
         prefix: str = "performance__",
@@ -155,8 +168,8 @@ class PerformanceWeightsManager(PerformanceManager):
         self.weights = weights
         super().__init__(
             features=self.features,
-            transformers=transformers,
-            auto_scale_performance=auto_scale_performance,
+            custom_transformers=custom_transformers,
+            transformer_names=transformer_names,
             prefix=prefix,
             max_value=max_value,
             min_value=min_value,
@@ -306,9 +319,6 @@ class PerformanceWeightsManager(PerformanceManager):
                 )
         return df
 
-    @property
-    def performance_column(self) -> str:
-        return self.prefix + "weighted"
 
     @property
     def features_out(self) -> list[str]:

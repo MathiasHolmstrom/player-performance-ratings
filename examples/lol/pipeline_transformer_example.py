@@ -91,7 +91,6 @@ transformer = PipelineTransformer(
 historical_df = transformer.fit_transform(historical_df)
 
 game_winner_predictor = SklearnPredictor(
-
     estimator=LogisticRegression(),
     target="result",
     features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
