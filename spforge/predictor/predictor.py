@@ -185,6 +185,8 @@ class SklearnPredictor(BasePredictor):
         date_column: None | str = None,
         day_weight_epsilon: float = 400,
     ):
+        self._numeric_feats = None
+        self._cat_feats = None
         self.granularity = granularity
         self.estimator = estimator
         self.weight_by_date = weight_by_date
@@ -226,13 +228,37 @@ class SklearnPredictor(BasePredictor):
         self._add_features_contain_str(df)
 
         filtered_df = apply_filters(df=df, filters=self.filters)
-        if self.granularity:
-            filtered_df = filtered_df.group_by(self.granularity).agg(
-                [nw.col(feature).mean() for feature in self._features]
-                + [nw.col(self._target).median().alias(self._target)]
-            )
 
         filtered_df = self._fit_transform_pre_transformers(df=filtered_df)
+        if self.granularity:
+            self._numeric_feats = [
+                f
+                for f in self._modified_features
+                if filtered_df.schema[f]
+                in (
+                    nw.Float64,
+                    nw.Float32,
+                    nw.Int32,
+                    nw.UInt8,
+                    nw.UInt32,
+                    nw.UInt16,
+                    nw.UInt64,
+                    nw.Int64,
+                )
+            ]
+            self._cat_feats = [
+                f for f in self._modified_features if f not in self._numeric_feats
+            ]
+            row_count_before_grouping = len(filtered_df)
+            filtered_df = filtered_df.group_by([*self.granularity, *self._cat_feats]).agg(
+                [nw.col(feature).mean() for feature in self._numeric_feats]
+                + [nw.col(self._target).median().alias(self._target)]
+            )
+            assert len(filtered_df.unique(self.granularity)) == len(filtered_df), (
+                f"Row count after grouping is not unique on granularity."
+                f" This is likely a consequence of the categorical {self._cat_feats} features not matching the granularity {self.granularity} "
+            )
+
         logging.info(
             f"Training with {len(filtered_df)} rows. Features: {self._features}"
         )
@@ -314,9 +340,15 @@ class SklearnPredictor(BasePredictor):
             ori_type = "pl"
 
         if self.granularity:
-            grouped_df = df.group_by(self.granularity).agg(
-                [nw.col(feature).mean() for feature in self._features]
+            row_count_before_grouping = len(df)
+            grouped_df = df.group_by([*self.granularity, *self._cat_feats]).agg(
+                [nw.col(feature).mean() for feature in self._numeric_feats]
             )
+            assert len(grouped_df.unique(self.granularity)) == len(grouped_df), (
+                f"Row count after grouping is not unique on granularity."
+                f" This is likely a consequence of the categorical {self._cat_feats} features not matching the granularity {self.granularity} "
+            )
+
         else:
             grouped_df = df
 
