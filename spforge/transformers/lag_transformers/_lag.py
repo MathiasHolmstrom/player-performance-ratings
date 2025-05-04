@@ -31,6 +31,7 @@ class LagTransformer(BaseLagTransformer):
         group_to_granularity: Optional[list[str]] = None,
         unique_constraint: Optional[list[str]] = None,
         update_column: Optional[str] = None,
+        match_id_column: Optional[str] = None,
     ):
         """
         :param features. List of features to create lags for
@@ -54,6 +55,7 @@ class LagTransformer(BaseLagTransformer):
             unique_constraint=unique_constraint,
             group_to_granularity=group_to_granularity,
             update_column=update_column,
+            match_id_column=match_id_column,
         )
         self.days_between_lags = days_between_lags or []
         for days_lag in self.days_between_lags:

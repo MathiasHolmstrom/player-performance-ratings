@@ -106,12 +106,10 @@ class PlayerRatingGenerator(RatingGenerator):
             if not performance_weights:
                 self.performances_generator = PerformanceManager(
                     features=[performance_column],
-                    auto_scale_performance=True,
                 )
             else:
                 self.performances_generator = PerformanceWeightsManager(
                     weights=performance_weights,
-                    auto_scale_performance=True,
                 )
             logging.info(
                 f"Renamed performance column to performance_{performance_column}"

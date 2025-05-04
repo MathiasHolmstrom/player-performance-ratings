@@ -70,7 +70,7 @@ def test_team_lag_transform_historical_group_to_team_granularity(
             lag_length=1,
             granularity=["team"],
             group_to_granularity=["team", "game"],
-            update_column="game",
+            match_id_column="game",
         )
 
         df_with_lags = lag_transformation.transform_historical(data, column_names=None)
@@ -125,7 +125,7 @@ def test_lag_fit_tranform_group_to_team_granularity(column_names, use_column_nam
             lag_length=2,
             granularity=[column_names.team_id],
             group_to_granularity=[column_names.team_id, column_names.match_id],
-            update_column="game",
+            match_id_column="game",
         )
         column_names = None
 
@@ -181,6 +181,7 @@ def test_lag_fit_transform_group_to_team_granularity_update_match_id(
             lag_length=1,
             granularity=["team"],
             group_to_granularity=["team", "game"],
+            match_id_column=column_names.match_id,
             update_column=column_names.update_match_id,
         )
         column_names = None
@@ -279,7 +280,7 @@ def test_lag_transform_historical_2_features_update_match_id(
             features=["points", "points_per_minute"],
             lag_length=1,
             granularity=["player"],
-            update_column=column_names.update_match_id,
+            match_id_column=column_names.match_id,
         )
         column_names = None
 
