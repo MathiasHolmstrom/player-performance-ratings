@@ -397,7 +397,14 @@ class Pipeline(BasePredictor):
 
         if "return_features" in kwargs and kwargs["return_features"]:
             return joined.select(
-                list(set(input_cols + self.columns_added + self.features + rating_feats_added ))
+                list(
+                    set(
+                        input_cols
+                        + self.columns_added
+                        + self.features
+                        + rating_feats_added
+                    )
+                )
             )
 
         return joined.select(input_cols + self.columns_added)

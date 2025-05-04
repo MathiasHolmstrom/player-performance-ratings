@@ -10,7 +10,8 @@ from spforge.transformers.lag_transformers._utils import (
     historical_lag_transformations_wrapper,
     required_lag_column_names,
     transformation_validator,
-    future_validator, future_lag_transformations_wrapper,
+    future_validator,
+    future_lag_transformations_wrapper,
 )
 from spforge.transformers.lag_transformers import BaseLagTransformer
 
@@ -82,7 +83,11 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
         if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
             df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
 
-        add_cols = [self.binary_column, self.prob_column] if self.prob_column else [self.binary_column]
+        add_cols = (
+            [self.binary_column, self.prob_column]
+            if self.prob_column
+            else [self.binary_column]
+        )
         grouped = self._maybe_group(df, additional_cols=add_cols)
         if self.column_names:
             self._store_df(grouped_df=grouped, ori_df=df, additional_cols=add_cols)
@@ -116,14 +121,19 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
         if self.binary_column in df.columns:
             if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
                 df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
-        add_cols = [self.binary_column, self.prob_column] if self.prob_column else [self.binary_column]
+        add_cols = (
+            [self.binary_column, self.prob_column]
+            if self.prob_column
+            else [self.binary_column]
+        )
         sort_col = self.column_names.start_date if self.column_names else "__row_index"
-        grouped = self._group_to_granularity_level(df=df, sort_col=sort_col, additional_cols=add_cols)
+        grouped = self._group_to_granularity_level(
+            df=df, sort_col=sort_col, additional_cols=add_cols
+        )
         grouped_df_with_feats = self._generate_features(df=grouped, ori_df=df)
         df = self._merge_into_input_df(df=df, concat_df=grouped_df_with_feats)
         df = self._post_features_generated(df)
         return self._forward_fill_future_features(df=df)
-
 
     def _get_known_future_features(self) -> list[str]:
         known_future_features = []
@@ -139,8 +149,14 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
     def _generate_features(self, df: FrameT, ori_df: FrameT) -> FrameT:
         if self.column_names and self._df is not None:
             sort_col = self.column_names.start_date
-            add_cols = [self.binary_column, self.prob_column] if self.prob_column else [self.binary_column]
-            concat_df = self._concat_with_stored(group_df=df, ori_df=ori_df, additional_cols=add_cols)
+            add_cols = (
+                [self.binary_column, self.prob_column]
+                if self.prob_column
+                else [self.binary_column]
+            )
+            concat_df = self._concat_with_stored(
+                group_df=df, ori_df=ori_df, additional_cols=add_cols
+            )
         else:
             concat_df = df
             if "__row_index" not in concat_df.columns:

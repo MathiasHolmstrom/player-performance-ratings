@@ -283,6 +283,7 @@ def test_binary_granularity_rolling_mean_transformer_update_id_differ_from_game_
         expected_df, transformed_data[expected_df.columns], check_dtype=False
     )
 
+
 @pytest.mark.skip(reason="Temporarily disabled as it does not work yet")
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
 @pytest.mark.parametrize("min_periods", [10, 1])

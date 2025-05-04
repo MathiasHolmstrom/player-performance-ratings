@@ -25,7 +25,10 @@ class ColumnWeight:
         if self.weight > 1:
             raise ValueError("Weight must be less than 1")
 
+
 TransformerName = Literal["partial_standard_scaler", "symmetric", "min_max"]
+
+
 def create_performance_scalers_transformers(
     transformer_names: List[TransformerName],
     pre_transformers: list[BaseTransformer],
@@ -52,13 +55,21 @@ def create_performance_scalers_transformers(
         elif transformer_name == "partial_standard_scaler":
             pre_transformers.append(
                 PartialStandardScaler(
-                    features=all_features, ratio=1, max_value=9999, target_mean=0, prefix=""
+                    features=all_features,
+                    ratio=1,
+                    max_value=9999,
+                    target_mean=0,
+                    prefix="",
                 )
             )
         elif transformer_name == "partial_standard_scaler_mean0.5":
             pre_transformers.append(
                 PartialStandardScaler(
-                    features=all_features, ratio=1, max_value=9999, target_mean=0.5, prefix=""
+                    features=all_features,
+                    ratio=1,
+                    max_value=9999,
+                    target_mean=0.5,
+                    prefix="",
                 )
             )
 
@@ -73,7 +84,16 @@ class PerformanceManager(BaseTransformer):
     def __init__(
         self,
         features: list[str],
-        transformer_names: Optional[list[Literal["partial_standard_scaler", "symmetric" , "min_max", "partial_standard_scaler_mean0.5"]]] = None,
+        transformer_names: Optional[
+            list[
+                Literal[
+                    "partial_standard_scaler",
+                    "symmetric",
+                    "min_max",
+                    "partial_standard_scaler_mean0.5",
+                ]
+            ]
+        ] = None,
         custom_transformers: Optional[list[BaseTransformer]] = None,
         prefix: str = "performance__",
         min_value: float = -0.02,
@@ -81,12 +101,13 @@ class PerformanceManager(BaseTransformer):
     ):
         self.prefix = prefix
 
-
         self.transformer_names = transformer_names
         if self.transformer_names is None:
-            self.transformer_names = ["symmetric","partial_standard_scaler" , "min_max"]
+            self.transformer_names = ["symmetric", "partial_standard_scaler", "min_max"]
         self.original_transformers = (
-            [copy.deepcopy(p) for p in custom_transformers] if custom_transformers else []
+            [copy.deepcopy(p) for p in custom_transformers]
+            if custom_transformers
+            else []
         )
         self.min_value = min_value
         self.max_value = max_value
@@ -156,7 +177,9 @@ class PerformanceWeightsManager(PerformanceManager):
         self,
         weights: list[ColumnWeight],
         custom_transformers: Optional[list[BaseTransformer]] = None,
-        transformer_names: Optional[list[Literal["partial_standard_scaler", "symmetric", "min_max"]]] = None,
+        transformer_names: Optional[
+            list[Literal["partial_standard_scaler", "symmetric", "min_max"]]
+        ] = None,
         max_value: float = 1.02,
         min_value: float = -0.02,
         prefix: str = "performance__",
@@ -318,7 +341,6 @@ class PerformanceWeightsManager(PerformanceManager):
                     )
                 )
         return df
-
 
     @property
     def features_out(self) -> list[str]:

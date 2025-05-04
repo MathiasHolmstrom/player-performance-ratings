@@ -79,7 +79,9 @@ class BaseLagTransformer:
     def features_out(self) -> list[str]:
         return self._features_out
 
-    def _maybe_group(self, df: FrameT, additional_cols: Optional[list[str]] = None) -> FrameT:
+    def _maybe_group(
+        self, df: FrameT, additional_cols: Optional[list[str]] = None
+    ) -> FrameT:
         if (
             self.group_to_granularity
             and not self.unique_constraint
@@ -89,15 +91,17 @@ class BaseLagTransformer:
             sort_col = (
                 self.column_names.start_date if self.column_names else "__row_index"
             )
-            return self._group_to_granularity_level(df=df, sort_col=sort_col, additional_cols=additional_cols)
+            return self._group_to_granularity_level(
+                df=df, sort_col=sort_col, additional_cols=additional_cols
+            )
 
         return df
 
     def _concat_with_stored(
-        self, group_df: FrameT,
-            ori_df: Optional[FrameT] = None,
-            additional_cols: Optional[list[str]] = None,
-
+        self,
+        group_df: FrameT,
+        ori_df: Optional[FrameT] = None,
+        additional_cols: Optional[list[str]] = None,
     ) -> FrameT:
         df = (
             ori_df
@@ -138,7 +142,9 @@ class BaseLagTransformer:
         ):
 
             concat_df = self._group_to_granularity_level(
-                df=concat_df, sort_col=self.column_names.start_date, additional_cols=additional_cols
+                df=concat_df,
+                sort_col=self.column_names.start_date,
+                additional_cols=additional_cols,
             )
         feature_generation_constraint = (
             self.group_to_granularity or self.unique_constraint
@@ -211,7 +217,9 @@ class BaseLagTransformer:
             storage_unique_constraint.append(self.update_column)
         return storage_unique_constraint
 
-    def _group_to_granularity_level(self, df: FrameT, sort_col, additional_cols: Optional[list[str]] = None) -> FrameT:
+    def _group_to_granularity_level(
+        self, df: FrameT, sort_col, additional_cols: Optional[list[str]] = None
+    ) -> FrameT:
         if (
             self.group_to_granularity
             and self.unique_constraint
@@ -226,9 +234,11 @@ class BaseLagTransformer:
         if additional_cols:
             aggr_cols.extend(additional_cols)
 
-        return df.group_by(self.group_to_granularity).agg(
-            [nw.col(c).mean() for c in aggr_cols] + [nw.col(sort_col).min()]
-        ).sort(sort_col)
+        return (
+            df.group_by(self.group_to_granularity)
+            .agg([nw.col(c).mean() for c in aggr_cols] + [nw.col(sort_col).min()])
+            .sort(sort_col)
+        )
 
     def _merge_into_input_df(
         self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None

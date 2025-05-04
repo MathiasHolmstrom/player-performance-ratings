@@ -71,12 +71,15 @@ def historical_lag_transformations_wrapper(method):
             elif self.match_id_column:
                 self.group_to_granularity = [self.match_id_column, *self.granularity]
             elif self.column_names:
-                self.group_to_granularity = [self.column_names.match_id, *self.granularity]
+                self.group_to_granularity = [
+                    self.column_names.match_id,
+                    *self.granularity,
+                ]
             else:
                 self.group_to_granularity = None
-            assert self.group_to_granularity is not None, (
-                "Either group_to_granularity or match_id_column must be passed"
-            )
+            assert (
+                self.group_to_granularity is not None
+            ), "Either group_to_granularity or match_id_column must be passed"
 
         if self.column_names and not self.unique_constraint:
             self.unique_constraint = (

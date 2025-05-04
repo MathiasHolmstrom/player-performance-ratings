@@ -281,7 +281,6 @@ def test_lag_transform_historical_2_features_update_match_id(
             lag_length=1,
             granularity=["player"],
             match_id_column=column_names.match_id,
-
         )
         column_names = None
 

@@ -93,8 +93,6 @@ def test_nba_integration_pipeline_cross_validate_train_future_predict():
         future_data, on=column_names.player_id
     )
 
-
-
     for feat in pipeline.features:
         assert (
             future_joined_data[f"{feat}_cv"].to_list()

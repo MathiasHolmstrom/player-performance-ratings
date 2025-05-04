@@ -405,9 +405,7 @@ def test_train_predict_post_pre_and_lag_transformers():
         non_predictor_known_features_out=[RatingKnownFeatures.PLAYER_RATING],
         features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
         unknown_features_out=[RatingUnknownFeatures.TEAM_RATING],
-        performances_generator=PerformanceWeightsManager(
-            weights=column_weights
-        ),
+        performances_generator=PerformanceWeightsManager(weights=column_weights),
     )
     pre_transformer = PredictorTransformer(
         predictor=SklearnPredictor(
