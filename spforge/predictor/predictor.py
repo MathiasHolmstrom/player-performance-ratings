@@ -250,7 +250,9 @@ class SklearnPredictor(BasePredictor):
                 f for f in self._modified_features if f not in self._numeric_feats
             ]
             row_count_before_grouping = len(filtered_df)
-            filtered_df = filtered_df.group_by([*self.granularity, *self._cat_feats]).agg(
+            filtered_df = filtered_df.group_by(
+                [*self.granularity, *self._cat_feats]
+            ).agg(
                 [nw.col(feature).mean() for feature in self._numeric_feats]
                 + [nw.col(self._target).median().alias(self._target)]
             )

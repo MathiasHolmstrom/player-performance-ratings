@@ -8,6 +8,7 @@ from narwhals.typing import FrameT, IntoFrameT
 from spforge import ColumnNames
 from spforge.transformers.lag_transformers._utils import (
     historical_lag_transformations_wrapper,
+    future_lag_transformations_wrapper,
     required_lag_column_names,
     transformation_validator,
     future_validator,
@@ -97,29 +98,28 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
                 match_id_join_on=self.match_id_update_column,
             )
 
-            if self.add_opponent:
-                transformed_df = self._add_opponent_features(transformed_df)
-
-            if self.add_opponent and self.add_count:
-                transformed_df = transformed_df.with_columns(
-                    nw.col(f"{self._count_column_name}_opponent")
-                    .fill_null(0)
-                    .alias(f"{self._count_column_name}_opponent")
-                )
-            return transformed_df
-
         else:
             concat_df = nw.from_native(
                 self._concat_with_stored_and_calculate_feats(df.to_polars())
             )
-            return df.join(
+            transformed_df = df.join(
                 concat_df.select(["__row_index", *self.features_out]),
                 on="__row_index",
                 how="left",
             ).sort("__row_index")
 
+        transformed_df = self._post_features_generated(transformed_df)
+        if self.add_opponent and self.add_count:
+            transformed_df = transformed_df.with_columns(
+                nw.col(f"{self._count_column_name}_opponent")
+                .fill_null(0)
+                .alias(f"{self._count_column_name}_opponent")
+            )
+        return transformed_df
+
     @nw.narwhalify
     @future_validator
+    @future_lag_transformations_wrapper
     @transformation_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
         ori_cols = df.columns
@@ -150,13 +150,10 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
                 df[self.column_names.match_id].unique().to_list()
             )
         )
+        concat_df = self._post_features_generated(nw.from_native(concat_df))
         transformed_future = self._forward_fill_future_features(
             df=nw.from_native(concat_df)
         )
-
-        if self.add_opponent:
-            transformed_future = self._add_opponent_features(transformed_future)
-
         transformed_future = transformed_future.select(ori_cols + self.features_out)
 
         if ori_type == "pd":
