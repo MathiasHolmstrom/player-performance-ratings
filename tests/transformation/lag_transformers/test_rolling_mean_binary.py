@@ -284,11 +284,9 @@ def test_binary_granularity_rolling_mean_transformer_update_id_differ_from_game_
     )
 
 
-@pytest.mark.skip(reason="Temporarily disabled as it does not work yet")
 @pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
 @pytest.mark.parametrize("min_periods", [10, 1])
 def test_binary_granularity_rolling_mean_generate_future(df, column_names, min_periods):
-
     historical_df = df(
         {
             "player": ["a", "b", "c", "d", "a", "b", "c", "d", "a", "b", "c", "d"],
@@ -346,35 +344,12 @@ def test_binary_granularity_rolling_mean_generate_future(df, column_names, min_p
         None,
         None,
     ]
-    expected_historical_df[transformer.features_out[1]] = [
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        -10,
-        -10,
-        None,
-        None,
-        -12.5,
-        -15,
-    ]
-
-    expected_historical_df[transformer.features_out[2]] = [
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        10,
-        10,
-        None,
-        None,
-        12.5,
-        12.5,
-    ]
+    expected_historical_df[transformer.features_out[1]] = (
+        [None] * 6 + [-10] * 2 + [None] * 2 + [-12.5, -15]
+    )
+    expected_historical_df[transformer.features_out[2]] = (
+        [None] * 6 + [10, 10] + [None] * 2 + [12.5, 12.5]
+    )
 
     expected_historical_df[transformer.features_out[3]] = [
         None,
@@ -391,20 +366,9 @@ def test_binary_granularity_rolling_mean_generate_future(df, column_names, min_p
         None,
     ]
 
-    expected_historical_df[transformer.features_out[4]] = [
-        float("nan"),
-        float("nan"),
-        float("nan"),
-        float("nan"),
-        float("nan"),
-        float("nan"),
-        float("nan"),
-        float("nan"),
-        float("nan"),
-        float("nan"),
-        float("nan"),
-        float("nan"),
-    ]
+    expected_historical_df[transformer.features_out[4]] = [float("nan")] * 12
+    expected_historical_df[transformer.features_out[5]] = [float("nan")] * 12
+
     if isinstance(historical_df, pd.DataFrame):
         pd.testing.assert_frame_equal(
             historical_df, expected_historical_df, check_like=True, check_dtype=False
@@ -448,6 +412,13 @@ def test_binary_granularity_rolling_mean_generate_future(df, column_names, min_p
         12.5 * 0.7 - 2 * 0.3,
         2 * 0.3 - 15 * 0.7,
     ]
+    expected_future_df[transformer.features_out[5]] = [
+        2 * 0.4 - 15 * 0.6,
+        12.5 * 0.6 + 0.4 * -2,
+        2 * 0.3 - 15 * 0.7,
+        12.5 * 0.7 - 2 * 0.3,
+    ]
+
     if isinstance(future_df, pd.DataFrame):
         pd.testing.assert_frame_equal(
             future_df, expected_future_df, check_like=True, check_dtype=False
@@ -539,6 +510,15 @@ def test_binary_granularity_rolling_mean_generate_historical_opponent(df, column
         10 * 0.6 + 0.4 * 5,
         -10 * 0.6 + 0.4 * -5,
     ]
+    expected_historical_df[rolling_mean_transformation.features_out[5]] = [
+        None,
+        None,
+        None,
+        None,
+        -10 * 0.6 + 0.4 * -5,
+        10 * 0.6 + 0.4 * 5,
+    ]
+
     if isinstance(df, pd.DataFrame):
         pd.testing.assert_frame_equal(
             df, expected_historical_df, check_like=True, check_dtype=False

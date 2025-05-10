@@ -128,6 +128,7 @@ def test_rolling_mean_days_update_id_different_from_game_id(
         transformed_df, expected_df, check_like=True, check_dtype=False
     )
 
+
 @pytest.mark.parametrize("use_column_names", [True, False])
 def test_rolling_mean_days_transform_historical_40_days(use_column_names, column_names):
     df = pd.DataFrame(
@@ -164,7 +165,6 @@ def test_rolling_mean_days_transform_historical_40_days(use_column_names, column
             days=40,
             granularity=["player"],
             update_column=column_names.update_match_id,
-
         )
 
         transformed_df = rolling_mean_transformation.transform_historical(

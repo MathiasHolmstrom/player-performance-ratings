@@ -360,7 +360,7 @@ class SklearnPredictor(BasePredictor):
                 nw.new_series(
                     name=self._pred_column,
                     values=self.estimator.predict_proba(
-                        df.select(self._modified_features).to_pandas()
+                        grouped_df.select(self._modified_features).to_pandas()
                     ).tolist(),
                     native_namespace=nw.get_native_namespace(df),
                 )
@@ -379,8 +379,8 @@ class SklearnPredictor(BasePredictor):
                 grouped_df = grouped_df.with_columns(
                     nw.new_series(
                         name="classes",
-                        values=[self.classes_ for _ in range(len(df))],
-                        native_namespace=nw.get_native_namespace(df),
+                        values=[self.classes_ for _ in range(len(grouped_df))],
+                        native_namespace=nw.get_native_namespace(grouped_df),
                     )
                 )
 

@@ -241,8 +241,13 @@ class BaseLagTransformer:
         )
 
     def _merge_into_input_df(
-        self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
+        self,
+        df: FrameT,
+        concat_df: FrameT,
+        match_id_join_on: Optional[str] = None,
+        features_out: Optional[list[str]] = None,
     ) -> IntoFrameT:
+        features_out = features_out or self._entity_features_out
 
         ori_cols = [c for c in df.columns if c not in self.features_out]
 
@@ -274,14 +279,14 @@ class BaseLagTransformer:
         transformed_df = (
             df.select(ori_cols)
             .join(
-                concat_df.select([*join_cols, *self._entity_features_out]),
+                concat_df.select([*join_cols, *features_out]),
                 on=join_cols,
                 how="left",
             )
             .unique(self.unique_constraint)
             .sort(sort_cols)
         )
-        return transformed_df.select(list(set(ori_cols + self._entity_features_out)))
+        return transformed_df.select(list(set(ori_cols + features_out)))
 
     def _add_opponent_features(self, df: FrameT) -> FrameT:
         team_features = df.group_by(
@@ -332,7 +337,9 @@ class BaseLagTransformer:
     def _forward_fill_future_features(
         self,
         df: FrameT,
+        granularity: Optional[list[str]] = None,
     ) -> FrameT:
+
         cn = self.column_names
 
         df = df.with_columns(
