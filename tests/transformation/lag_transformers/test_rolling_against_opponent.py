@@ -4,7 +4,7 @@ import polars as pl
 from polars.testing import assert_frame_equal
 
 from spforge import ColumnNames
-from spforge.transformers import OpponentTransformer
+from spforge.transformers.lag_transformers._rolling_against_opponent import RollingAgainstOpponentTransformer
 
 
 @pytest.fixture
@@ -63,7 +63,7 @@ def test_rolling_mean_transform_historical(column_names, df, use_column_names):
     )
 
     if use_column_names:
-        rolling_mean = OpponentTransformer(
+        rolling_mean = RollingAgainstOpponentTransformer(
             granularity=["position"],
             features=["points"],
             window=20,
@@ -73,7 +73,7 @@ def test_rolling_mean_transform_historical(column_names, df, use_column_names):
         )
 
     else:
-        rolling_mean = OpponentTransformer(
+        rolling_mean = RollingAgainstOpponentTransformer(
             granularity=["position"],
             features=["points"],
             window=20,
@@ -154,7 +154,7 @@ def test_rolling_mean_transform_future(column_names, df):
         }
     )
 
-    rolling_mean = OpponentTransformer(
+    rolling_mean = RollingAgainstOpponentTransformer(
         granularity=["position"],
         features=["points"],
         window=20,

@@ -37,16 +37,17 @@ class Pipeline(BasePredictor):
     """
 
     def __init__(
-        self,
-        predictor: BasePredictor,
-        column_names: ColumnNames,
-        filters: Optional[list[Filter]] = None,
-        rating_generators: Optional[
-            Union[RatingGenerator, list[RatingGenerator]]
-        ] = None,
-        pre_lag_transformers: Optional[list[BaseTransformer]] = None,
-        lag_transformers: Optional[List[BaseLagTransformer]] = None,
-        post_lag_transformers: Optional[list[BaseTransformer]] = None,
+            self,
+            predictor: BasePredictor,
+            column_names: ColumnNames,
+            filters: Optional[list[Filter]] = None,
+            rating_generators: Optional[
+                Union[RatingGenerator, list[RatingGenerator]]
+            ] = None,
+            pre_lag_transformers: Optional[list[BaseTransformer]] = None,
+            lag_transformers: Optional[List[BaseLagTransformer]] = None,
+            post_lag_transformers: Optional[list[BaseTransformer]] = None,
+            unique_constraint: Optional[list[str]] = None
     ):
         """
         :param predictor: The predictor to use for generating the predictions
@@ -75,6 +76,7 @@ class Pipeline(BasePredictor):
         self.column_names = column_names
 
         self._predictor_features = predictor.features
+        self.unique_constraint = unique_constraint
         for r in self.rating_generators:
             self._predictor_features = list(
                 set(self._predictor_features + r.features_out)
@@ -86,8 +88,8 @@ class Pipeline(BasePredictor):
                     self._predictor_features.copy()
                 )
             if (
-                hasattr(pre_transformer, "predictor")
-                and pre_transformer.predictor.pred_column == predictor.pred_column
+                    hasattr(pre_transformer, "predictor")
+                    and pre_transformer.predictor.pred_column == predictor.pred_column
             ):
                 self.pre_lag_transformers[idx]._predictor_features_out.remove(
                     predictor.pred_column
@@ -103,6 +105,8 @@ class Pipeline(BasePredictor):
             self._predictor_features = list(
                 set(self._predictor_features + f.predictor_features_out)
             )
+            if not f.unique_constraint and self.unique_constraint:
+                f.unique_constraint = self.unique_constraint
 
         for idx, post_transformer in enumerate(self.post_lag_transformers):
             if hasattr(post_transformer, "predictor") and not post_transformer.features:
@@ -110,8 +114,8 @@ class Pipeline(BasePredictor):
                     self._predictor_features.copy()
                 )
             if (
-                hasattr(post_transformer, "predictor")
-                and post_transformer.predictor.pred_column == predictor.pred_column
+                    hasattr(post_transformer, "predictor")
+                    and post_transformer.predictor.pred_column == predictor.pred_column
             ):
                 self.post_lag_transformers[idx]._predictor_features_out.remove(
                     predictor.pred_column
@@ -174,7 +178,7 @@ class Pipeline(BasePredictor):
         )
         df = df.sort(sort_cols)
 
-        unique_constraint = (
+        self.unique_constraint = self.unique_constraint or (
             [
                 self.column_names.match_id,
                 self.column_names.team_id,
@@ -183,7 +187,7 @@ class Pipeline(BasePredictor):
             if self.column_names.player_id
             else [self.column_names.match_id, self.column_names.team_id]
         )
-        assert len(df.unique(unique_constraint)) == len(
+        assert len(df.unique(self.unique_constraint)) == len(
             df
         ), "The dataframe contains duplicates"
         df = apply_filters(df, filters=self.filters)
@@ -202,7 +206,7 @@ class Pipeline(BasePredictor):
                     df, column_names=self.column_names
                 )
             )
-            assert len(df.unique(unique_constraint)) == len(
+            assert len(df.unique(self.unique_constraint)) == len(
                 df
             ), "The dataframe contains duplicates"
 
@@ -233,7 +237,7 @@ class Pipeline(BasePredictor):
                     df, column_names=self.column_names
                 )
             )
-            assert len(df.unique(unique_constraint)) == len(
+            assert len(df.unique(self.unique_constraint)) == len(
                 df
             ), "The dataframe contains duplicates"
 
@@ -253,7 +257,7 @@ class Pipeline(BasePredictor):
                     df, column_names=self.column_names
                 )
             )
-            assert len(df.unique(unique_constraint)) == len(
+            assert len(df.unique(self.unique_constraint)) == len(
                 df
             ), "The dataframe contains duplicates"
 
@@ -279,7 +283,7 @@ class Pipeline(BasePredictor):
 
     @nw.narwhalify
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+            self, df: FrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
         """
         Generates either cross-validated or future predictions on the given dataframe.
@@ -290,15 +294,7 @@ class Pipeline(BasePredictor):
         :param return_features: If True, the features generated by the pipeline will be returned in the output dataframe.
         """
         input_cols = df.columns
-        unique_constraint = (
-            [
-                self.column_names.team_id,
-                self.column_names.match_id,
-                self.column_names.player_id,
-            ]
-            if self.column_names.player_id
-            else [self.column_names.team_id, self.column_names.match_id]
-        )
+
         sort_cols = (
             [
                 self.column_names.start_date,
@@ -315,7 +311,7 @@ class Pipeline(BasePredictor):
         )
         if "__row_index" not in df.columns:
             df = df.with_row_index(name="__row_index")
-        assert len(df.unique(unique_constraint)) == len(
+        assert len(df.unique(self.unique_constraint)) == len(
             df
         ), "The dataframe contains duplicates"
         df_with_predict = df.clone()
@@ -330,7 +326,7 @@ class Pipeline(BasePredictor):
                     )
                 )
                 df_with_predict = df_with_predict.sort(sort_cols)
-                assert len(df.unique(unique_constraint)) == len(
+                assert len(df.unique(self.unique_constraint)) == len(
                     df_with_predict
                 ), "The dataframe contains duplicates"
             else:
@@ -343,7 +339,7 @@ class Pipeline(BasePredictor):
                     rating_generator.transform_future(df=df_with_predict)
                 )
                 df_with_predict = df_with_predict.sort(sort_cols)
-                assert len(df_with_predict.unique(unique_constraint)) == len(
+                assert len(df_with_predict.unique(self.unique_constraint)) == len(
                     df_with_predict
                 ), "The dataframe contains duplicates"
                 rating_feats_added.extend(rating_generator.all_rating_features_out)
@@ -365,7 +361,7 @@ class Pipeline(BasePredictor):
                 df_with_predict = nw.from_native(
                     lag_generator.transform_future(df_with_predict)
                 )
-            assert len(df_with_predict.unique(unique_constraint)) == len(
+            assert len(df_with_predict.unique(self.unique_constraint)) == len(
                 df_with_predict
             ), "The dataframe contains duplicates"
             df_with_predict = df_with_predict.sort(sort_cols)
@@ -375,7 +371,7 @@ class Pipeline(BasePredictor):
                 post_lag_transformer.transform(df_with_predict)
             )
 
-            assert len(df_with_predict.unique(unique_constraint)) == len(
+            assert len(df_with_predict.unique(self.unique_constraint)) == len(
                 df_with_predict
             ), "The dataframe contains duplicates"
             df_with_predict = df_with_predict.sort(sort_cols)
@@ -385,8 +381,8 @@ class Pipeline(BasePredictor):
 
         new_feats = [f for f in df_with_predict.columns if f not in df.columns]
         joined = df.join(
-            df_with_predict.select(new_feats + [cn.match_id, cn.team_id, cn.player_id]),
-            on=[cn.match_id, cn.team_id, cn.player_id],
+            df_with_predict.select(new_feats + self.unique_constraint),
+            on=self.unique_constraint,
             how="left",
         )
         if "__row_index" in joined.columns:

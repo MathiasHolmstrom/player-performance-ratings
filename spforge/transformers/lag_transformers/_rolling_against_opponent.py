@@ -20,13 +20,13 @@ from spforge.transformers.base_transformer import (
 from spforge.transformers.lag_transformers import BaseLagTransformer
 
 
-class OpponentTransformer(BaseLagTransformer):
+class RollingAgainstOpponentTransformer(BaseLagTransformer):
     """
-    Calculates the rolling mean of specified features from the opponent's perspective.
+    Performs a rolling calculation of the features from the entities perspective against the opponent.
 
-    Unlike `RollingMeanTransformer` with `add_opponent=True`, the `OpponentRollingMeanTransformer`
+    Unlike `RollingMeanTransformer` with `add_opponent=True`, the `RollingAgainstOpponentTransformer`
     does not compute a rolling mean for the entity itself. Instead, it aggregates how opponents
-    typically perform *against* entities over a defined rolling window.
+    typically perform *against* the specified granularity over a defined rolling window.
 
     This allows for creation of features that reflect opponent tendencies in various contexts.
 
@@ -35,7 +35,7 @@ class OpponentTransformer(BaseLagTransformer):
 
     Example:
         df = get_sub_sample_nba_data(as_polars=True, as_pandas=False)
-        transformer = OpponentRollingMeanTransformer(
+        transformer = RollingAgainstOpponentTransformer(
             features=["points"],
             window=15,
             granularity=["position"],
@@ -55,7 +55,7 @@ class OpponentTransformer(BaseLagTransformer):
         granularity: Union[list[str], str],
         min_periods: int = 1,
         are_estimator_features=True,
-        prefix: str = "opponent_rolling_mean",
+        prefix: str = "rolling_against_opponent",
         update_column: Optional[str] = None,
         match_id_column: Optional[str] = None,
         team_column: Optional[str] = None,
