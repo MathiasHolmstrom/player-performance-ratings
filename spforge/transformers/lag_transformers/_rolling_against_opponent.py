@@ -24,9 +24,9 @@ class RollingAgainstOpponentTransformer(BaseLagTransformer):
     """
     Performs a rolling calculation of the features from the entities perspective against the opponent.
 
-    Unlike `RollingMeanTransformer` with `add_opponent=True`, the `RollingAgainstOpponentTransformer`
+    Unlike `RollingWindowTransformer` with `add_opponent=True`, the `RollingAgainstOpponentTransformer`
     does not compute a rolling mean for the entity itself. Instead, it aggregates how opponents
-    typically perform *against* the specified granularity over a defined rolling window.
+    perform *against* the specified granularity over a defined rolling window.
 
     This allows for creation of features that reflect opponent tendencies in various contexts.
 

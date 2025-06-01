@@ -24,20 +24,20 @@ DataFrameType = TypeVar("DataFrameType", pd.DataFrame, pl.DataFrame)
 class BasePredictor(ABC):
 
     def __init__(
-        self,
-        features: list[str],
-        target: str,
-        features_contain_str: Optional[list[str]] = None,
-        scale_features: bool = False,
-        one_hot_encode_cat_features: bool = False,
-        convert_cat_features_to_cat_dtype: bool = False,
-        impute_missing_values: bool = False,
-        pre_transformers: Optional[list[PredictorTransformer]] = None,
-        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-        pred_column: Optional[str] = None,
-        filters: Optional[dict] = None,
-        auto_pre_transform: bool = True,
-        multiclass_output_as_struct: bool = False,
+            self,
+            features: list[str],
+            target: str,
+            features_contain_str: Optional[list[str]] = None,
+            scale_features: bool = False,
+            one_hot_encode_cat_features: bool = False,
+            convert_cat_features_to_cat_dtype: bool = False,
+            impute_missing_values: bool = False,
+            pre_transformers: Optional[list[PredictorTransformer]] = None,
+            post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+            pred_column: Optional[str] = None,
+            filters: Optional[dict] = None,
+            auto_pre_transform: bool = True,
+            multiclass_output_as_struct: bool = False,
     ):
         self._features = features or []
         self._modified_features = self._features.copy()
@@ -73,8 +73,8 @@ class BasePredictor(ABC):
                 elif contain in column:
                     already_added.append(column)
             if (
-                len(self._features) == estimator_feature_count
-                and len(already_added) == 0
+                    len(self._features) == estimator_feature_count
+                    and len(already_added) == 0
             ):
                 raise ValueError(f"Feature Contain {contain} not found in df")
 
@@ -84,7 +84,7 @@ class BasePredictor(ABC):
 
     @abstractmethod
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+            self, df: FrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
         pass
 
@@ -111,7 +111,7 @@ class BasePredictor(ABC):
         return [*self._pred_columns_added, "classes"]
 
     def _convert_multiclass_predictions_to_struct(
-        self, df: FrameT, classes: list[str]
+            self, df: FrameT, classes: list[str]
     ) -> FrameT:
         df = df.to_native()
         assert isinstance(df, pl.DataFrame)
@@ -193,8 +193,8 @@ class BasePredictor(ABC):
     def _transformer_exists(self, transformer: PredictorTransformer) -> bool:
         for pre_transformer in self.pre_transformers:
             if (
-                pre_transformer.__class__.__name__ == transformer.__class__.__name__
-                and pre_transformer.features == transformer.features
+                    pre_transformer.__class__.__name__ == transformer.__class__.__name__
+                    and pre_transformer.features == transformer.features
             ):
                 return True
         return False
@@ -219,8 +219,8 @@ class BasePredictor(ABC):
 
             for feature in pre_transformer.features:
                 if (
-                    feature in self._modified_features
-                    and feature not in pre_transformer.features_out
+                        feature in self._modified_features
+                        and feature not in pre_transformer.features_out
                 ):
                     self._modified_features.remove(feature)
             for features_out in pre_transformer.features_out:
@@ -245,3 +245,29 @@ class BasePredictor(ABC):
     @property
     def features(self) -> list[str]:
         return self._features
+
+
+class DistributionPredictor(BasePredictor):
+
+    def __init__(
+            self,
+            target: str,
+            point_estimate_pred_column: str,
+            min_value: int,
+            max_value: int,
+            pred_column: Optional[str] = None,
+            filters: Optional[dict] = None,
+            auto_pre_transform: bool = True,
+            multiclass_output_as_struct: bool = False,
+    ):
+        self.point_estimate_pred_column = point_estimate_pred_column
+        self.min_value = min_value
+        self.max_value = max_value
+        super().__init__(
+            target=target,
+            features=[],
+            pred_column=pred_column,
+            filters=filters or {},
+            auto_pre_transform=auto_pre_transform,
+            multiclass_output_as_struct=multiclass_output_as_struct,
+        )

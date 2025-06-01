@@ -9,7 +9,7 @@ from spforge.pipeline import Pipeline
 from spforge.predictor import (
     SklearnPredictor,
     NegativeBinomialPredictor,
-    DistributionPredictor,
+    DistributionManagerPredictor,
 )
 
 from spforge.data_structures import ColumnNames
@@ -40,7 +40,7 @@ df = df.sort(
 
 df = df.with_columns(pl.col("points").clip(0, 40).alias("points"))
 
-predictor = DistributionPredictor(
+predictor = DistributionManagerPredictor(
     point_predictor=SklearnPredictor(
         estimator=LGBMRegressor(verbose=-100, random_state=42),
         features=["location"],

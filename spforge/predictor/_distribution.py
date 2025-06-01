@@ -1,22 +1,23 @@
 import copy
 from typing import Optional
 
-import numpy as np
 import narwhals as nw
+import numpy as np
+import pandas as pd
+import polars as pl
 from narwhals.typing import FrameT, IntoFrameT
 from scipy.optimize import minimize
 from scipy.special import gammaln
-from scipy.stats import nbinom
+from scipy.stats import nbinom, norm
 from sklearn.preprocessing import StandardScaler
 
 from spforge import ColumnNames
-from spforge.predictor_transformer._simple_transformer import SimpleTransformer
-from spforge.scorer import apply_filters, Filter
-
 from spforge.predictor import (
     BasePredictor,
 )
-from spforge.scorer import BaseScorer
+from spforge.predictor._base import DistributionPredictor
+from spforge.predictor_transformer._simple_transformer import SimpleTransformer
+from spforge.scorer import apply_filters, Filter
 from spforge.transformers import RollingWindowTransformer
 
 
@@ -42,7 +43,7 @@ def neg_binom_log_likelihood(r, actual_points, predicted_points):
     return -np.sum(log_likelihood)
 
 
-class NegativeBinomialPredictor(BasePredictor):
+class NegativeBinomialPredictor(DistributionPredictor):
 
     def __init__(
         self,
@@ -59,7 +60,6 @@ class NegativeBinomialPredictor(BasePredictor):
         predicted_r_weight: float = 1.0,
         column_names: Optional[ColumnNames] = None,
     ):
-        self.point_estimate_pred_column = point_estimate_pred_column
         pred_column = pred_column or f"{target}_probabilities"
         self.multiclass_output_as_struct = multiclass_output_as_struct
         self.r_specific_granularity = r_specific_granularity
@@ -100,9 +100,11 @@ class NegativeBinomialPredictor(BasePredictor):
 
         super().__init__(
             target=target,
-            features=[],
             pred_column=pred_column,
             multiclass_output_as_struct=multiclass_output_as_struct,
+            max_value= max_value,
+            min_value=min_value,
+            point_estimate_pred_column=point_estimate_pred_column,
         )
 
         if self.r_specific_granularity and not self.column_names:
@@ -110,8 +112,7 @@ class NegativeBinomialPredictor(BasePredictor):
                 "r_specific_granularity is set but column names is not provided."
             )
 
-        self.max_value = max_value
-        self.min_value = min_value
+
         self._multipliers = list(range(2, 2 + predicted_r_iterations * 2, 2))
         self._target_scaler = StandardScaler()
         self._best_multiplier = None
@@ -433,9 +434,60 @@ class NegativeBinomialPredictor(BasePredictor):
                 how="left",
             )
         return pred_grp
+class NormalDistributionPredictor(DistributionPredictor):
 
+    def __init__(self,
+                 point_estimate_pred_column: str,
+                 max_value: int,
+                 min_value: int,
+                 target: str,
+                 sigma: float = 10.0,
+                 pred_column: Optional[str] = None,
+                 multiclass_output_as_struct: bool = True,
+                 ):
+        self.sigma = sigma
 
-class DistributionPredictor(BasePredictor):
+        super().__init__(
+            target=target,
+            pred_column=pred_column,
+            multiclass_output_as_struct=multiclass_output_as_struct,
+            max_value=max_value,
+            min_value=min_value,
+            point_estimate_pred_column=point_estimate_pred_column,
+        )
+
+    @nw.narwhalify
+    def train(self, df: FrameT, estimator_features: Optional[list[str]] = None) -> None:
+        self._classes =       np.arange(self.min_value, self.max_value + 1)
+
+    @nw.narwhalify
+    def predict(self, df: FrameT, cross_validation: bool = False, **kwargs) -> IntoFrameT:
+
+        ori_df = df.select(df.columns[0])
+        df = df.to_polars()
+        lower_bounds = self._classes - 0.5
+        upper_bounds = self._classes + 0.5
+
+        def compute_struct_probs(mu: float) -> dict:
+            cdf_upper = norm.cdf(upper_bounds, loc=mu, scale=self.sigma)
+            cdf_lower = norm.cdf(lower_bounds, loc=mu, scale=self.sigma)
+            probs = cdf_upper - cdf_lower
+            if self.multiclass_output_as_struct:
+                return {str(k): float(p) for k, p in zip(self._classes, probs)}
+            return probs
+
+        df = df.with_columns(
+            pl.col(self.point_estimate_pred_column).map_elements(compute_struct_probs, return_dtype=pl.Struct).alias(self.pred_column)
+        )
+        if not self.multiclass_output_as_struct:
+            df = df.with_columns(
+                pl.lit(list(range(self._classes_))).alias("classes")
+            )
+        if isinstance(ori_df, pd.DataFrame):
+            df = df.to_pandas()
+        return df
+
+class DistributionManagerPredictor(BasePredictor):
 
     def __init__(
         self,
