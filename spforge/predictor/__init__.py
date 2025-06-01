@@ -6,4 +6,4 @@ from .predictor import (
 )
 from ._base import BasePredictor
 from .sklearn_estimator import OrdinalClassifier, SkLearnWrapper
-from ._distribution import NegativeBinomialPredictor, DistributionManagerPredictor
+from ._distribution import NegativeBinomialPredictor, DistributionManagerPredictor, NormalDistributionPredictor
