@@ -178,6 +178,7 @@ class SklearnPredictor(BasePredictor):
         one_hot_encode_cat_features: bool = False,
         convert_cat_features_to_cat_dtype: bool = False,
         impute_missing_values: bool = False,
+        drop_rows_where_target_is_nan: bool = False,
         pre_transformers: Optional[list[PredictorTransformer]] = None,
         post_predict_transformers: Optional[list[SimpleTransformer]] = None,
         multiclass_output_as_struct: bool = False,
@@ -189,6 +190,7 @@ class SklearnPredictor(BasePredictor):
         self._cat_feats = None
         self.granularity = granularity
         self.estimator = estimator
+        self.drop_rows_where_target_is_nan = drop_rows_where_target_is_nan
         self.weight_by_date = weight_by_date
         self.day_weight_epsilon = day_weight_epsilon
         self.date_column = date_column
@@ -228,7 +230,8 @@ class SklearnPredictor(BasePredictor):
         self._add_features_contain_str(df)
 
         filtered_df = apply_filters(df=df, filters=self.filters)
-
+        if self.drop_rows_where_target_is_nan:
+            filtered_df = filtered_df.filter(~nw.col(self._target).is_nan())
         filtered_df = self._fit_transform_pre_transformers(df=filtered_df)
         if self.granularity:
             self._numeric_feats = [
@@ -390,7 +393,7 @@ class SklearnPredictor(BasePredictor):
                 nw.new_series(
                     name=self._pred_column,
                     values=self.estimator.predict(
-                        grouped_df.select(self._features).to_pandas()
+                        grouped_df.select(self._modified_features).to_pandas()
                     ),
                     native_namespace=nw.get_native_namespace(df),
                 )

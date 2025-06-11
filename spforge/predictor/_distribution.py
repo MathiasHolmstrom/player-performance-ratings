@@ -70,7 +70,7 @@ class NegativeBinomialPredictor(DistributionPredictor):
         if self.r_specific_granularity:
             self._rolling_mean: RollingWindowTransformer = RollingWindowTransformer(
                 aggregation="mean",
-                features=[self.point_estimate_pred_column],
+                features=[point_estimate_pred_column],
                 window=self.r_rolling_mean_window,
                 granularity=self.r_specific_granularity,
                 are_estimator_features=False,
@@ -83,7 +83,7 @@ class NegativeBinomialPredictor(DistributionPredictor):
             )
             self._rolling_var: RollingWindowTransformer = RollingWindowTransformer(
                 aggregation="var",
-                features=[self.point_estimate_pred_column],
+                features=[point_estimate_pred_column],
                 window=self.r_rolling_mean_window,
                 granularity=self.r_specific_granularity,
                 are_estimator_features=False,
@@ -102,7 +102,7 @@ class NegativeBinomialPredictor(DistributionPredictor):
             target=target,
             pred_column=pred_column,
             multiclass_output_as_struct=multiclass_output_as_struct,
-            max_value= max_value,
+            max_value=max_value,
             min_value=min_value,
             point_estimate_pred_column=point_estimate_pred_column,
         )
@@ -111,7 +111,6 @@ class NegativeBinomialPredictor(DistributionPredictor):
             raise ValueError(
                 "r_specific_granularity is set but column names is not provided."
             )
-
 
         self._multipliers = list(range(2, 2 + predicted_r_iterations * 2, 2))
         self._target_scaler = StandardScaler()
@@ -434,17 +433,20 @@ class NegativeBinomialPredictor(DistributionPredictor):
                 how="left",
             )
         return pred_grp
+
+
 class NormalDistributionPredictor(DistributionPredictor):
 
-    def __init__(self,
-                 point_estimate_pred_column: str,
-                 max_value: int,
-                 min_value: int,
-                 target: str,
-                 sigma: float = 10.0,
-                 pred_column: Optional[str] = None,
-                 multiclass_output_as_struct: bool = True,
-                 ):
+    def __init__(
+        self,
+        point_estimate_pred_column: str,
+        max_value: int,
+        min_value: int,
+        target: str,
+        sigma: float = 10.0,
+        pred_column: Optional[str] = None,
+        multiclass_output_as_struct: bool = True,
+    ):
         self.sigma = sigma
 
         super().__init__(
@@ -458,10 +460,12 @@ class NormalDistributionPredictor(DistributionPredictor):
 
     @nw.narwhalify
     def train(self, df: FrameT, estimator_features: Optional[list[str]] = None) -> None:
-        self._classes =       np.arange(self.min_value, self.max_value + 1)
+        self._classes = np.arange(self.min_value, self.max_value + 1)
 
     @nw.narwhalify
-    def predict(self, df: FrameT, cross_validation: bool = False, **kwargs) -> IntoFrameT:
+    def predict(
+        self, df: FrameT, cross_validation: bool = False, **kwargs
+    ) -> IntoFrameT:
 
         ori_df = df.select(df.columns[0])
         df = df.to_polars()
@@ -477,22 +481,23 @@ class NormalDistributionPredictor(DistributionPredictor):
             return probs
 
         df = df.with_columns(
-            pl.col(self.point_estimate_pred_column).map_elements(compute_struct_probs, return_dtype=pl.Struct).alias(self.pred_column)
+            pl.col(self.point_estimate_pred_column)
+            .map_elements(compute_struct_probs, return_dtype=pl.Struct)
+            .alias(self.pred_column)
         )
         if not self.multiclass_output_as_struct:
-            df = df.with_columns(
-                pl.lit(list(range(self._classes_))).alias("classes")
-            )
+            df = df.with_columns(pl.lit(list(range(self._classes_))).alias("classes"))
         if isinstance(ori_df, pd.DataFrame):
             df = df.to_pandas()
         return df
+
 
 class DistributionManagerPredictor(BasePredictor):
 
     def __init__(
         self,
         point_predictor: BasePredictor,
-        distribution_predictor: BasePredictor,
+        distribution_predictor: DistributionPredictor,
         filters: Optional[list[Filter]] = None,
         post_predict_transformers: Optional[list[SimpleTransformer]] = None,
         multiclass_output_as_struct: bool = False,

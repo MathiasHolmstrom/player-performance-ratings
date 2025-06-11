@@ -2,8 +2,12 @@ from .predictor import (
     SklearnPredictor,
     GroupByPredictor,
     GranularityPredictor,
-    SklearnPredictor,
 )
+from ._operators_predictor import OperatorsPredictor
 from ._base import BasePredictor
 from .sklearn_estimator import OrdinalClassifier, SkLearnWrapper
-from ._distribution import NegativeBinomialPredictor, DistributionManagerPredictor, NormalDistributionPredictor
+from ._distribution import (
+    NegativeBinomialPredictor,
+    DistributionManagerPredictor,
+    NormalDistributionPredictor,
+)

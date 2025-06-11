@@ -37,17 +37,18 @@ class Pipeline(BasePredictor):
     """
 
     def __init__(
-            self,
-            predictor: BasePredictor,
-            column_names: ColumnNames,
-            filters: Optional[list[Filter]] = None,
-            rating_generators: Optional[
-                Union[RatingGenerator, list[RatingGenerator]]
-            ] = None,
-            pre_lag_transformers: Optional[list[BaseTransformer]] = None,
-            lag_transformers: Optional[List[BaseLagTransformer]] = None,
-            post_lag_transformers: Optional[list[BaseTransformer]] = None,
-            unique_constraint: Optional[list[str]] = None
+        self,
+        predictor: BasePredictor,
+        column_names: ColumnNames,
+        filters: Optional[list[Filter]] = None,
+        rating_generators: Optional[
+            Union[RatingGenerator, list[RatingGenerator]]
+        ] = None,
+        pre_lag_transformers: Optional[list[BaseTransformer]] = None,
+        lag_transformers: Optional[List[BaseLagTransformer]] = None,
+        post_lag_transformers: Optional[list[BaseTransformer]] = None,
+        unique_constraint: Optional[list[str]] = None,
+        add_features_to_predictor: bool = True,
     ):
         """
         :param predictor: The predictor to use for generating the predictions
@@ -60,7 +61,7 @@ class Pipeline(BasePredictor):
         :param post_lag_transformers: A list of transformers that take place after the lag generators.
             This makes it possble to transform the lagged features before they are used by the predictor.
         """
-
+        self.add_features_to_predictor = add_features_to_predictor
         self.rating_generators: list[RatingGenerator] = (
             rating_generators
             if isinstance(rating_generators, list)
@@ -75,7 +76,7 @@ class Pipeline(BasePredictor):
         self.lag_transformers = lag_transformers or []
         self.column_names = column_names
 
-        self._predictor_features = predictor.features
+        self._predictor_features = predictor.features.copy()
         self.unique_constraint = unique_constraint
         for r in self.rating_generators:
             self._predictor_features = list(
@@ -88,8 +89,8 @@ class Pipeline(BasePredictor):
                     self._predictor_features.copy()
                 )
             if (
-                    hasattr(pre_transformer, "predictor")
-                    and pre_transformer.predictor.pred_column == predictor.pred_column
+                hasattr(pre_transformer, "predictor")
+                and pre_transformer.predictor.pred_column == predictor.pred_column
             ):
                 self.pre_lag_transformers[idx]._predictor_features_out.remove(
                     predictor.pred_column
@@ -114,8 +115,9 @@ class Pipeline(BasePredictor):
                     self._predictor_features.copy()
                 )
             if (
-                    hasattr(post_transformer, "predictor")
-                    and post_transformer.predictor.pred_column == predictor.pred_column
+                hasattr(post_transformer, "predictor")
+                and post_transformer.predictor.pred_column == predictor.pred_column
+                and predictor.pred_column in post_transformer.predictor_features_out
             ):
                 self.post_lag_transformers[idx]._predictor_features_out.remove(
                     predictor.pred_column
@@ -133,20 +135,26 @@ class Pipeline(BasePredictor):
                     + self.post_lag_transformers[idx].predictor_features_out
                 )
             )
+        if not self.add_features_to_predictor:
+            self._predictor_features = predictor.features.copy()
+
         super().__init__(
             features=self._predictor_features,
             target=predictor.target,
             pred_column=predictor.pred_column,
             filters=filters,
         )
-        for c in [
-            *self.lag_transformers,
-            *self.pre_lag_transformers,
-            *self.post_lag_transformers,
-        ]:
-            self._predictor_features += [
-                f for f in c.predictor_features_out if f not in self._predictor_features
-            ]
+        if self.add_features_to_predictor:
+            for c in [
+                *self.lag_transformers,
+                *self.pre_lag_transformers,
+                *self.post_lag_transformers,
+            ]:
+                self._predictor_features += [
+                    f
+                    for f in c.predictor_features_out
+                    if f not in self._predictor_features
+                ]
         if predictor.features_contain_str:
             logging.info(
                 f"Using estimator features {self._predictor_features} and {predictor.features_contain_str}"
@@ -283,7 +291,7 @@ class Pipeline(BasePredictor):
 
     @nw.narwhalify
     def predict(
-            self, df: FrameT, cross_validation: bool = False, **kwargs
+        self, df: FrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
         """
         Generates either cross-validated or future predictions on the given dataframe.
@@ -392,15 +400,6 @@ class Pipeline(BasePredictor):
         ), "Dataframe row count has changed throughout predict pipeline"
 
         if "return_features" in kwargs and kwargs["return_features"]:
-            return joined.select(
-                list(
-                    set(
-                        input_cols
-                        + self.columns_added
-                        + self.features
-                        + rating_feats_added
-                    )
-                )
-            )
+            return joined
 
         return joined.select(input_cols + self.columns_added)

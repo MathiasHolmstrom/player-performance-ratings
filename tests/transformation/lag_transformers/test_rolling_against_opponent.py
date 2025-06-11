@@ -4,7 +4,9 @@ import polars as pl
 from polars.testing import assert_frame_equal
 
 from spforge import ColumnNames
-from spforge.transformers.lag_transformers._rolling_against_opponent import RollingAgainstOpponentTransformer
+from spforge.transformers.lag_transformers._rolling_against_opponent import (
+    RollingAgainstOpponentTransformer,
+)
 
 
 @pytest.fixture
