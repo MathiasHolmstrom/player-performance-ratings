@@ -46,7 +46,7 @@ class PlayerRatingGeneratorNew():
         self.league_rating_change_update_threshold = (
             league_rating_change_update_threshold
         )
-        self.league_identifier = LeagueIdentifer2()
+        self.league_identifier = LeagueIdentifer2(column_names=column_names)
         self.confidence_max_days = confidence_max_days
         self._league_rating_changes: dict[Optional[str], float] = {}
         self._league_rating_changes_count: dict[str, float] = {}
@@ -60,16 +60,17 @@ class PlayerRatingGeneratorNew():
         self.column_names = column_names
         self._player_ratings: dict[str, PlayerRating] = {}
 
-    def fit_transform(self, df: pl.DataFrame) -> pl.DataFrame:
-
+    def fit_transform(self, df: pl.DataFrame,column_names: Optional[ColumnNames] = None) -> pl.DataFrame:
+        if column_names is not None:
+            self.league_identifier.column_names = column_names
         df = self.performances_generator.fit_transform(df)
         return self._transform(df)
 
     def _transform(self, df: pl.DataFrame) -> pl.DataFrame:
-
-        df = self.league_identifier.add_leagues(df)
+        if self.column_names.league is not None:
+            df = self.league_identifier.add_leagues(df)
         df = df.with_columns([
-            pl.struct([self.column_names.player_id, self.perforamnce_column]).alias("player_struct")
+            pl.struct([self.column_names.player_id, self.performance_column]).alias("player_struct")
         ])
 
         agg_df = df.group_by([self.column_names.match_id, self.column_names.team_id]).agg([
@@ -591,11 +592,16 @@ class PlayerRatingGeneratorNew():
         if id not in self._player_ratings:
             raise KeyError(f"{id} not in player_ratings")
         return self._player_ratings[id]
-
+6
 
 if __name__ == '__main__':
     df = pl.read_parquet(
-        r"C:\Users\HOM\PycharmProjects\player-performance-ratings\examples\nba\data\game_player_subsample.parquet")
-
-    player_rating_generator = PlayerRatingGeneratorNew()
+        r"C:\Users\Admin\PycharmProjects\spforge\examples\nba\data\game_player_subsample.parquet")
+    column_names = ColumnNames(
+        team_id="team_id",
+        match_id="game_id",
+        start_date="start_date",
+        player_id="player_id",
+    )
+    player_rating_generator = PlayerRatingGeneratorNew(column_names=column_names)
     df = player_rating_generator.fit_transform(df)

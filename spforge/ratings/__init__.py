@@ -2,7 +2,6 @@ from .enums import (
     RatingKnownFeatures,
     RatingUnknownFeatures,
     PredictedRatingMethod,
-    InputColumnNames,
 )
 from .league_identifier import LeagueIdentifier
 from .match_generator import convert_df_to_matches

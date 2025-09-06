@@ -2,42 +2,41 @@ import math
 import polars as pl
 from typing import List, Dict
 
-from spforge.data_structures import Match
+from spforge.data_structures import Match, ColumnNames
 
 
 class LeagueIdentifer2:
 
-    def __init__(self, matches_back: int = 25):
+    def __init__(self, column_names: ColumnNames, matches_back: int = 25):
+        self.column_names = column_names
         self.matches_back = matches_back
 
-    def add_leagues(self, df: pl.DataFrame) -> pl.DataFrame :
-
-
+    def add_leagues(self, df: pl.DataFrame) -> pl.DataFrame:
         # Sample input: df must have these columns
         # player_id | match_id | league
 
-        df = df.sort(["player_id", "match_id"])
+        df = df.sort([self.column_names.player_id, self.column_names.match_id])
 
-        # Add a per-player match index
-        df = df.with_columns(
-            pl.arange(0, df.height).over("player_id").alias("match_idx")
+        df = (
+            df.sort([self.column_names.player_id, self.column_names.match_id])
+            .with_columns(pl.int_range(0, pl.len()).over(self.column_names.player_id).alias("match_idx"))
         )
 
         history = (
             df
-            .group_by("player_id")
+            .group_by(self.column_names.player_id)
             .agg([
-                pl.col("league").alias("league_history"),
+                pl.col(self.column_names.league).alias("league_history"),
                 pl.col("match_idx").alias("index_history"),
             ])
         )
 
-        df = df.join(history, on="player_id", how="left")
+        df = df.join(history, on=self.column_names.player_id, how="left")
 
         def get_most_common_league(leagues, indices, current_idx):
             window = [
                 league for league, idx in zip(leagues, indices)
-                if current_idx > idx and current_idx - idx <= matches_back
+                if current_idx > idx and current_idx - idx <= self.matches_back
             ]
             return max(set(window), key=window.count) if window else None
 
@@ -75,15 +74,15 @@ class LeagueIdentifier:
             league_drop_out = self.entity_to_match_leagues[player_id][0]
             self.entity_to_match_league_counts[player_id][league_drop_out] -= 1
             self.entity_to_match_leagues[player_id] = self.entity_to_match_leagues[
-                player_id
-            ][1:]
+                                                          player_id
+                                                      ][1:]
             if league_drop_out == self.entity_id_to_most_league_name[player_id]:
                 self.entity_id_to_most_league_count[player_id] -= 1
 
         self.entity_to_match_league_counts[player_id][league_match] += 1
         if (
-            self.entity_to_match_league_counts[player_id][league_match]
-            > self.entity_id_to_most_league_count[player_id]
+                self.entity_to_match_league_counts[player_id][league_match]
+                > self.entity_id_to_most_league_count[player_id]
         ):
             self.entity_id_to_most_league_name[player_id] = league_match
 
@@ -93,7 +92,7 @@ class LeagueIdentifier:
         return self.entity_id_to_most_league_name[player_id]
 
     def _generate_teams_to_leagues(
-        self, team_ids: List[str], team_league_counts: Dict[str, Dict[str, int]]
+            self, team_ids: List[str], team_league_counts: Dict[str, Dict[str, int]]
     ) -> Dict[str, str]:
         team_leagues: Dict[str, str] = {}
         for team_id in team_ids:
