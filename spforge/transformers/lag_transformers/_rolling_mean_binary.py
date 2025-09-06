@@ -11,6 +11,7 @@ from spforge.transformers.lag_transformers._utils import (
     required_lag_column_names,
     transformation_validator,
     future_validator,
+    future_lag_transformations_wrapper,
 )
 from spforge.transformers.lag_transformers import BaseLagTransformer
 
@@ -27,10 +28,12 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
         min_periods: int = 1,
         add_opponent: bool = False,
         prefix: str = "rolling_mean_binary",
+        match_id_column: Optional[str] = None,
         update_column: Optional[str] = None,
         column_names: Optional[ColumnNames] = None,
     ):
         super().__init__(
+            match_id_column=match_id_column,
             features=features,
             add_opponent=add_opponent,
             prefix=prefix,
@@ -60,12 +63,24 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
                 )
 
         if self.prob_column:
+            self._weighted_features_out = {}
+            self._weighted_features_out_opponent = {}
             for feature_name in self.features:
-                prob_feature = (
+                self._weighted_features_out[feature_name] = (
                     f"{self.prefix}_{feature_name}_{self.prob_column}{self.window}"
                 )
-                self._features_out.append(prob_feature)
-                self._entity_features_out.append(prob_feature)
+                if self.add_opponent:
+                    self._weighted_features_out_opponent[feature_name] = (
+                        f"{self.prefix}_{feature_name}_{self.prob_column}{self.window}_opponent"
+                    )
+                    self._features_out.extend(
+                        [
+                            self._weighted_features_out[feature_name],
+                            self._weighted_features_out_opponent[feature_name],
+                        ]
+                    )
+                else:
+                    self._features_out.append(self._weighted_features_out[feature_name])
 
         self._estimator_features_out = self._features_out.copy()
 
@@ -80,76 +95,63 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
         if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
             df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
 
+        add_cols = (
+            [self.binary_column, self.prob_column]
+            if self.prob_column
+            else [self.binary_column]
+        )
+        grouped = self._maybe_group(df, additional_cols=add_cols)
         if self.column_names:
-            self.match_id_update_column = (
-                self.column_names.update_match_id or self.update_column
-            )
-            additional_cols = [self.binary_column] + (
-                [self.prob_column] if self.prob_column else []
-            )
-            self._store_df(df, additional_cols=additional_cols)
-            df_with_feats = self._concat_with_stored(df)
-            df_with_feats = self._generate_features(df_with_feats)
+            self._store_df(grouped_df=grouped, ori_df=df, additional_cols=add_cols)
+            grouped_with_feats = self._generate_features(grouped, ori_df=df)
             df = self._merge_into_input_df(
                 df=df,
-                concat_df=df_with_feats,
-                match_id_join_on=self.column_names.update_match_id,
+                concat_df=grouped_with_feats,
+                features_out=self._entity_features_out,
             )
-        else:
-            df = self._generate_features(df).sort("__row_index")
 
-        if self.add_opponent:
-            return self._add_opponent_features(df=df)
-        return df
+        else:
+            join_on_cols = self.group_to_granularity
+            grouped_with_feats = self._generate_features(grouped, ori_df=df).sort(
+                "__row_index"
+            )
+            feats = [
+                f
+                for f in self.features_out
+                if f not in self._weighted_features_out.values()
+            ]
+            df = df.join(
+                grouped_with_feats.select([*join_on_cols, *feats]),
+                on=join_on_cols,
+                how="left",
+            ).unique("__row_index")
+
+        df = self._post_features_generated(df)
+        return self._add_weighted_prob(df)
 
     @nw.narwhalify
+    @future_lag_transformations_wrapper
     @future_validator
     @transformation_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
-        input_cols = df.columns
-        native = nw.to_native(df)
-        if isinstance(native, pd.DataFrame):
-            df = nw.from_native(pl.DataFrame(native))
-            ori_native = "pd"
-        else:
-            ori_native = "pl"
-
-        if self._df is None:
-            raise ValueError(
-                "generate_historical needs to be called before generate_future"
-            )
 
         if self.binary_column in df.columns:
             if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
                 df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
-        df = df.with_columns(nw.lit(1).alias("is_future"))
-        concat_df = self._generate_features(df=df)
-        unique_match_ids = (
-            df.select(nw.col(self.column_names.match_id))
-            .unique()[self.column_names.match_id]
-            .to_list()
+        add_cols = (
+            [self.binary_column, self.prob_column]
+            if self.prob_column
+            else [self.binary_column]
         )
-        transformed_df = concat_df.filter(
-            nw.col(self.column_names.match_id).is_in(unique_match_ids)
+        sort_col = self.column_names.start_date if self.column_names else "__row_index"
+        grouped = self._group_to_granularity_level(
+            df=df, sort_col=sort_col, additional_cols=add_cols
         )
-        transformed_future = self._forward_fill_future_features(
-            df=transformed_df,
-            known_future_features=self._get_known_future_features(),
-        )
-        if self.add_opponent:
-            transformed_future = self._add_opponent_features(df=transformed_future)
-
-        if "is_future" in transformed_future.columns:
-            transformed_future = transformed_future.drop("is_future")
-        transformed_future = self._add_weighted_prob(transformed_df=transformed_future)
-
-        transformed_future = transformed_future.select(
-            [*input_cols, *self.features_out]
-        )
-
-        if ori_native == "pd":
-            return transformed_future.to_pandas()
-        return transformed_future
+        grouped_df_with_feats = self._generate_features(df=grouped, ori_df=df)
+        df = self._merge_into_input_df(df=df, concat_df=grouped_df_with_feats)
+        df = self._post_features_generated(df)
+        df = self._forward_fill_future_features(df=df)
+        return self._add_weighted_prob(df)
 
     def _get_known_future_features(self) -> list[str]:
         known_future_features = []
@@ -162,18 +164,23 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
 
         return known_future_features
 
-    def _generate_features(self, df: FrameT) -> FrameT:
-        aggregation = {f: nw.mean(f).alias(f) for f in self.features}
-        aggregation[self.binary_column] = nw.median(self.binary_column)
+    def _generate_features(self, df: FrameT, ori_df: FrameT) -> FrameT:
         if self.column_names and self._df is not None:
             sort_col = self.column_names.start_date
-            concat_df = self._concat_with_stored(df)
+            add_cols = (
+                [self.binary_column, self.prob_column]
+                if self.prob_column
+                else [self.binary_column]
+            )
+            concat_df = self._concat_with_stored(
+                group_df=df, ori_df=ori_df, additional_cols=add_cols
+            )
         else:
             concat_df = df
             if "__row_index" not in concat_df.columns:
                 concat_df = concat_df.with_row_index(name="__row_index")
             sort_col = "__row_index"
-
+        concat_df = concat_df.sort(sort_col)
         feats_added = []
 
         for feature in self.features:
@@ -222,34 +229,33 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
         concat_df = concat_df.with_columns(
             [nw.col(feats_added).fill_null(strategy="forward").over(self.granularity)]
         )
-        for output_feature_name in feats_added:
-            concat_df = self._equalize_values_within_update_id(
-                df=concat_df, column_name=output_feature_name
-            )
-
-        df = df.join(
-            concat_df.unique([*self.granularity, self.update_column]).select(
-                [*self.granularity, self.update_column, *feats_added]
-            ),
-            on=[*self.granularity, self.update_column],
-            how="left",
-        )
-
-        return self._add_weighted_prob(transformed_df=df)
+        return concat_df
 
     def _add_weighted_prob(self, transformed_df: FrameT) -> FrameT:
 
         if self.prob_column:
             for idx, feature_name in enumerate(self.features):
-                weighted_prob_feat_name = (
-                    f"{self.prefix}_{feature_name}_{self.prob_column}{self.window}"
-                )
+
                 transformed_df = transformed_df.with_columns(
                     (
                         nw.col(f"{self.prefix}_{feature_name}{self.window}_1")
                         * nw.col(self.prob_column)
                         + nw.col(f"{self.prefix}_{feature_name}{self.window}_0")
                         * (1 - nw.col(self.prob_column))
-                    ).alias(weighted_prob_feat_name)
+                    ).alias(self._weighted_features_out[feature_name])
                 )
+                if self.add_opponent:
+                    transformed_df = transformed_df.with_columns(
+                        (
+                            nw.col(
+                                f"{self.prefix}_{feature_name}{self.window}_1_opponent"
+                            )
+                            * (1 - nw.col(self.prob_column))
+                            + nw.col(
+                                f"{self.prefix}_{feature_name}{self.window}_0_opponent"
+                            )
+                            * nw.col(self.prob_column)
+                        ).alias(self._weighted_features_out_opponent[feature_name])
+                    )
+
         return transformed_df

@@ -83,7 +83,9 @@ class PipelineTransformer:
                 df
             ), "Dataframe contains duplicates"
             df = df.sort(sort_columns)
-
+        expected_feats_added = []
+        dup_feats = []
+        feats_not_added = []
         for transformer in self.pre_lag_transformers:
             df = nw.from_native(
                 transformer.fit_transform(df=df, column_names=self.column_names)
@@ -92,6 +94,15 @@ class PipelineTransformer:
             assert len(df.unique(unique_constraint)) == len(
                 df
             ), "Dataframe contains duplicates"
+            for f in transformer.features_out:
+                if f in expected_feats_added:
+                    dup_feats.append(f)
+                if f not in df.columns:
+                    feats_not_added.append(f)
+
+            assert len(feats_not_added) == 0, f"Features not added: {feats_not_added}"
+            assert len(dup_feats) == 0, f"Duplicate features: {dup_feats}"
+            expected_feats_added.extend(transformer.features_out)
 
         for lag_generator in self.lag_transformers:
             df = nw.from_native(
@@ -103,6 +114,15 @@ class PipelineTransformer:
             assert len(df.unique(unique_constraint)) == len(
                 df
             ), "Dataframe contains duplicates"
+            for f in lag_generator.features_out:
+                if f in expected_feats_added:
+                    dup_feats.append(f)
+                if f not in df.columns:
+                    feats_not_added.append(f)
+
+            assert len(feats_not_added) == 0, f"Features not added: {feats_not_added}"
+            assert len(dup_feats) == 0, f"Duplicate features: {dup_feats}"
+            expected_feats_added.extend(lag_generator.features_out)
 
         for transformer in self.post_lag_transformers:
             df = nw.from_native(transformer.transform(df))
@@ -110,6 +130,15 @@ class PipelineTransformer:
             assert len(df.unique(unique_constraint)) == len(
                 df
             ), "Dataframe contains duplicates"
+            for f in transformer.features_out:
+                if f in expected_feats_added:
+                    dup_feats.append(f)
+                if f not in df.columns:
+                    feats_not_added.append(f)
+
+            assert len(feats_not_added) == 0, f"Features not added: {feats_not_added}"
+            assert len(dup_feats) == 0, f"Duplicate features: {dup_feats}"
+            expected_feats_added.extend(transformer.features_out)
 
         return df
 

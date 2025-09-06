@@ -1,5 +1,5 @@
 import math
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Literal
 
 from spforge.data_structures import (
     MatchPlayer,
@@ -29,7 +29,9 @@ class MatchRatingGenerator:
         self,
         start_rating_generator: Optional[StartRatingGenerator] = None,
         performance_predictor: Optional[PerformancePredictor] = None,
+        rating_updater: Literal["linear", "sigmoidal"] = "linear",
         rating_change_multiplier: float = 50,
+        sigmoidal_rating_update_scale: float = 4,
         confidence_days_ago_multiplier: float = 0.06,
         confidence_max_days: int = 90,
         confidence_value_denom: float = 140,
@@ -96,8 +98,10 @@ class MatchRatingGenerator:
         self.confidence_weight = confidence_weight
         self.confidence_days_ago_multiplier = confidence_days_ago_multiplier
         self.confidence_value_denom = confidence_value_denom
+        self.rating_updater = rating_updater
         self.min_rating_change_multiplier_ratio = min_rating_change_multiplier_ratio
         self.rating_change_multiplier = rating_change_multiplier
+        self.sigmoidal_rating_update_scale = sigmoidal_rating_update_scale
         self.confidence_max_sum = confidence_max_sum
         self.league_rating_adjustor_multiplier = league_rating_adjustor_multiplier
         self.league_rating_change_update_threshold = (
@@ -329,11 +333,29 @@ class MatchRatingGenerator:
                 pre_player_rating.match_performance.performance_value
                 - predicted_performance
             )
-            rating_change_value = (
-                performance_difference
-                * applied_rating_change_multiplier
-                * pre_player_rating.match_performance.participation_weight
-            )
+            if self.rating_updater == "linear":
+                rating_change_value = (
+                    performance_difference
+                    * applied_rating_change_multiplier
+                    * pre_player_rating.match_performance.participation_weight
+                )
+            elif self.rating_updater == "sigmoidal":
+                rating_change_value = (
+                    performance_difference
+                    / (
+                        1
+                        + abs(
+                            performance_difference / self.sigmoidal_rating_update_scale
+                        )
+                    )
+                ) * 50
+
+            else:
+                raise NotImplementedError(
+                    f"rating_updater {self.rating_updater} not supported. "
+                    "Only linear and sigmoidal are supported."
+                )
+
             if math.isnan(rating_change_value):
                 raise ValueError(
                     f"rating_change_value is nan for {pre_player_rating.id}"

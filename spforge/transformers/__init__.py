@@ -3,7 +3,7 @@ from .lag_transformers import (
     RollingWindowTransformer,
     RollingMeanDaysTransformer,
     BinaryOutcomeRollingMeanTransformer,
-    OpponentTransformer,
+    RollingAgainstOpponentTransformer,
 )
 
 from .fit_transformers import (

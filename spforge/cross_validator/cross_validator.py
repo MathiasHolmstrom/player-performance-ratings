@@ -47,7 +47,7 @@ class MatchKFoldCrossValidator(CrossValidator):
         self,
         df: FrameT,
         return_features: bool = False,
-        add_train_prediction: bool = True,
+        add_train_prediction: bool = False,
     ) -> IntoFrameT:
         """
         Generate predictions on validation dataset.
@@ -186,13 +186,10 @@ class MatchKFoldCrossValidator(CrossValidator):
                 )
 
         concat_validation_df = nw.concat(validation_dfs).drop("__cv_match_number")
-        return_feats = list(
-            set(
-                [*ori_cols, *predictor.columns_added, self.validation_column_name]
-                + predictor.features
-                if return_features
-                else [*ori_cols, *predictor.columns_added]
-            )
+        return_feats = (
+            concat_validation_df.columns
+            if return_features
+            else [*ori_cols, *predictor.columns_added]
         )
 
         return (

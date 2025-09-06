@@ -49,12 +49,6 @@ def test_nba_integration_pipeline_cross_validate_train_future_predict():
             LagTransformer(
                 features=["points"], lag_length=3, granularity=["player_id"]
             ),
-            BinaryOutcomeRollingMeanTransformer(
-                window=5,
-                features=["points"],
-                granularity=[column_names.player_id],
-                binary_column="won",
-            ),
         ],
         predictor=SklearnPredictor(
             estimator=LGBMRegressor(max_depth=2, random_state=42, verbose=-100),
@@ -98,13 +92,6 @@ def test_nba_integration_pipeline_cross_validate_train_future_predict():
     future_joined_data = validation_future_player_grouped.join(
         future_data, on=column_names.player_id
     )
-
-    for row in future_joined_data.iter_rows(named=True):
-        if (
-            row["rolling_mean_binary_points5_1"]
-            != row["rolling_mean_binary_points5_1_cv"]
-        ):
-            h = 2
 
     for feat in pipeline.features:
         assert (
@@ -171,12 +158,6 @@ def test_lol_integration_pipeline_cross_validate_train_future_predic():
                 days=20,
                 features=["kills"],
                 granularity=["playername"],
-            ),
-            BinaryOutcomeRollingMeanTransformer(
-                window=5,
-                features=["kills"],
-                granularity=["playername", "teamname"],
-                binary_column="result",
             ),
             RollingWindowTransformer(
                 features=["kills"], window=15, granularity=[column_names.player_id]

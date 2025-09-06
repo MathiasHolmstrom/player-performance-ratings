@@ -83,7 +83,9 @@ class GroupByPredictor(BasePredictor):
             raise ValueError("df is empty")
         features = features or []
         if self._ori_estimator_features or features:
-            self._features = features.copy() or self._ori_estimator_features.copy()
+            self._features = (
+                features.copy() if features else self._ori_estimator_features.copy()
+            )
         else:
             self._features = []
         self._add_features_contain_str(df)
@@ -170,11 +172,13 @@ class SklearnPredictor(BasePredictor):
         pred_column: Optional[str] = None,
         features: Optional[list[str]] = None,
         features_contain_str: Optional[list[str]] = None,
+        granularity: Optional[list[str]] = None,
         filters: Optional[list[Filter]] = None,
         scale_features: bool = False,
         one_hot_encode_cat_features: bool = False,
         convert_cat_features_to_cat_dtype: bool = False,
         impute_missing_values: bool = False,
+        drop_rows_where_target_is_nan: bool = False,
         pre_transformers: Optional[list[PredictorTransformer]] = None,
         post_predict_transformers: Optional[list[SimpleTransformer]] = None,
         multiclass_output_as_struct: bool = False,
@@ -182,7 +186,11 @@ class SklearnPredictor(BasePredictor):
         date_column: None | str = None,
         day_weight_epsilon: float = 400,
     ):
+        self._numeric_feats = None
+        self._cat_feats = None
+        self.granularity = granularity
         self.estimator = estimator
+        self.drop_rows_where_target_is_nan = drop_rows_where_target_is_nan
         self.weight_by_date = weight_by_date
         self.day_weight_epsilon = day_weight_epsilon
         self.date_column = date_column
@@ -209,7 +217,11 @@ class SklearnPredictor(BasePredictor):
 
     @nw.narwhalify
     def train(self, df: FrameT, features: Optional[list[str]] = None) -> None:
-        self._features = features or self._ori_estimator_features.copy()
+
+        self._features = (
+            features.copy() if features else self._ori_estimator_features.copy()
+        )
+        self._modified_features = self._features.copy()
         if not self._features:
             raise ValueError(
                 "features not set. Either pass to train or pass when instantiating predictor object"
@@ -218,16 +230,50 @@ class SklearnPredictor(BasePredictor):
         self._add_features_contain_str(df)
 
         filtered_df = apply_filters(df=df, filters=self.filters)
+        if self.drop_rows_where_target_is_nan:
+            filtered_df = filtered_df.filter(~nw.col(self._target).is_nan())
         filtered_df = self._fit_transform_pre_transformers(df=filtered_df)
+        if self.granularity:
+            self._numeric_feats = [
+                f
+                for f in self._modified_features
+                if filtered_df.schema[f]
+                in (
+                    nw.Float64,
+                    nw.Float32,
+                    nw.Int32,
+                    nw.UInt8,
+                    nw.UInt32,
+                    nw.UInt16,
+                    nw.UInt64,
+                    nw.Int64,
+                )
+            ]
+            self._cat_feats = [
+                f for f in self._modified_features if f not in self._numeric_feats
+            ]
+            row_count_before_grouping = len(filtered_df)
+            filtered_df = filtered_df.group_by(
+                [*self.granularity, *self._cat_feats]
+            ).agg(
+                [nw.col(feature).mean() for feature in self._numeric_feats]
+                + [nw.col(self._target).median().alias(self._target)]
+            )
+            assert len(filtered_df.unique(self.granularity)) == len(filtered_df), (
+                f"Row count after grouping is not unique on granularity."
+                f" This is likely a consequence of the categorical {self._cat_feats} features not matching the granularity {self.granularity} "
+            )
+
         logging.info(
             f"Training with {len(filtered_df)} rows. Features: {self._features}"
         )
 
         if hasattr(self.estimator, "predict_proba"):
             try:
-                filtered_df = filtered_df.with_columns(
-                    nw.col(self._target).cast(nw.Int64)
-                )
+                if filtered_df[self._target].dtype in (nw.Float64, nw.Float32):
+                    filtered_df = filtered_df.with_columns(
+                        nw.col(self._target).cast(nw.Int64)
+                    )
                 self.classes_ = filtered_df[self._target].unique().to_list()
                 self.classes_.sort()
             except Exception:
@@ -272,15 +318,16 @@ class SklearnPredictor(BasePredictor):
                     / (nw.lit(min_days_diff) * -2 + nw.lit(self.day_weight_epsilon))
                 ).alias("weight")
             )
-            sample_weight = filtered_df["weight"].to_list()
+            kwargs = {
+                "sample_weight": filtered_df["weight"].to_list(),
+            }
         else:
-            sample_weight = None
+            kwargs = {}
 
-        features = features or self._features
         self.estimator.fit(
-            filtered_df.select(features).to_pandas(),
+            filtered_df.select(self._modified_features).to_pandas(),
             filtered_df[self.target].to_numpy(),
-            sample_weight=sample_weight,
+            **kwargs,
         )
 
     @nw.narwhalify
@@ -297,58 +344,56 @@ class SklearnPredictor(BasePredictor):
         else:
             ori_type = "pl"
 
-        if hasattr(self.estimator, "predict_proba"):
-            predictions = self.estimator.predict_proba(
-                df.select(self._features).to_pandas()
+        if self.granularity:
+            row_count_before_grouping = len(df)
+            grouped_df = df.group_by([*self.granularity, *self._cat_feats]).agg(
+                [nw.col(feature).mean() for feature in self._numeric_feats]
             )
-        else:
-            predictions = self.estimator.predict(df.select(self._features).to_pandas())
+            assert len(grouped_df.unique(self.granularity)) == len(grouped_df), (
+                f"Row count after grouping is not unique on granularity."
+                f" This is likely a consequence of the categorical {self._cat_feats} features not matching the granularity {self.granularity} "
+            )
 
-        df = df.with_columns(
-            nw.new_series(
-                name=self.pred_column,
-                values=predictions,
-                native_namespace=nw.get_native_namespace(df),
-            )
-        )
+        else:
+            grouped_df = df
 
         if self.multiclassifier:
 
-            df = df.with_columns(
+            grouped_df = grouped_df.with_columns(
                 nw.new_series(
                     name=self._pred_column,
                     values=self.estimator.predict_proba(
-                        df.select(self._features).to_pandas()
+                        grouped_df.select(self._modified_features).to_pandas()
                     ).tolist(),
                     native_namespace=nw.get_native_namespace(df),
                 )
             )
 
-            if len(set(df[self.pred_column].head(1).item(0))) == 2:
+            if len(set(grouped_df[self.pred_column].head(1).item(0))) == 2:
                 raise ValueError(
                     "Too many unique values in relation to rows in the training dataset causes multiclassifier to not train properly."
                     "Either limit unique classes or explicitly make the estimator a Regressor"
                 )
             if self.multiclass_output_as_struct:
-                df = self._convert_multiclass_predictions_to_struct(
-                    df=df, classes=self.classes_
+                grouped_df = self._convert_multiclass_predictions_to_struct(
+                    df=grouped_df, classes=self.classes_
                 )
             else:
-                df = df.with_columns(
+                grouped_df = grouped_df.with_columns(
                     nw.new_series(
                         name="classes",
-                        values=[self.classes_ for _ in range(len(df))],
-                        native_namespace=nw.get_native_namespace(df),
+                        values=[self.classes_ for _ in range(len(grouped_df))],
+                        native_namespace=nw.get_native_namespace(grouped_df),
                     )
                 )
 
         elif not hasattr(self.estimator, "predict_proba"):
 
-            df = df.with_columns(
+            grouped_df = grouped_df.with_columns(
                 nw.new_series(
                     name=self._pred_column,
                     values=self.estimator.predict(
-                        df.select(self._features).to_pandas()
+                        grouped_df.select(self._modified_features).to_pandas()
                     ),
                     native_namespace=nw.get_native_namespace(df),
                 )
@@ -356,7 +401,7 @@ class SklearnPredictor(BasePredictor):
 
         else:
             predictions = self.estimator.predict_proba(
-                df.select(self._features).to_pandas()
+                grouped_df.select(self._modified_features).to_pandas()
             )
 
             if self.multiclass_output_as_struct:
@@ -364,7 +409,7 @@ class SklearnPredictor(BasePredictor):
             else:
                 predictions = predictions[:, 1].tolist()
 
-            df = df.with_columns(
+            grouped_df = grouped_df.with_columns(
                 nw.new_series(
                     name=self._pred_column,
                     values=predictions,
@@ -372,9 +417,18 @@ class SklearnPredictor(BasePredictor):
                 )
             )
             if self.multiclass_output_as_struct:
-                df = self._convert_multiclass_predictions_to_struct(
-                    df=df, classes=self.classes_
+                grouped_df = self._convert_multiclass_predictions_to_struct(
+                    df=grouped_df, classes=self.classes_
                 )
+
+        if self.granularity:
+            df = df.join(
+                grouped_df.select([*self.columns_added, *self.granularity]),
+                on=self.granularity,
+                how="left",
+            )
+        else:
+            df = grouped_df
 
         for simple_transformer in self.post_predict_transformers:
             df = simple_transformer.transform(df)
@@ -452,9 +506,12 @@ class GranularityPredictor(BasePredictor):
         """
         features = features or []
         if self._ori_estimator_features or features:
-            self._features = features.copy() or self._ori_estimator_features.copy()
+            self._features = (
+                features.copy() if features else self._ori_estimator_features.copy()
+            )
         else:
             self._features = []
+        self._modified_features = self._features.copy()
 
         if isinstance(df.to_native(), pd.DataFrame):
             df = nw.from_native(pl.DataFrame(df))
@@ -476,7 +533,7 @@ class GranularityPredictor(BasePredictor):
                 nw.col(self.granularity_column_name) == granularity
             )
             self._granularity_predictors[granularity].train(
-                rows, features=self._features
+                rows, features=self._modified_features
             )
 
             self.classes_[granularity] = rows[self._target].unique().to_list()

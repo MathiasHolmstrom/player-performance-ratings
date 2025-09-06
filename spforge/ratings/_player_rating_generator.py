@@ -97,7 +97,7 @@ class PlayerRatingGenerator(RatingGenerator):
             self.performances_generator = performances_generator
 
         if self.auto_scale_performance and self.performances_generator:
-            self.performances_generator.scale_performance = True
+            self.performances_generator.auto_scale_performance = True
 
         if self.auto_scale_performance and not self.performances_generator:
             assert (
@@ -106,12 +106,10 @@ class PlayerRatingGenerator(RatingGenerator):
             if not performance_weights:
                 self.performances_generator = PerformanceManager(
                     features=[performance_column],
-                    scale_performance=True,
                 )
             else:
                 self.performances_generator = PerformanceWeightsManager(
                     weights=performance_weights,
-                    scale_performance=True,
                 )
             logging.info(
                 f"Renamed performance column to performance_{performance_column}"

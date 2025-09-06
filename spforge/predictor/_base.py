@@ -40,6 +40,7 @@ class BasePredictor(ABC):
         multiclass_output_as_struct: bool = False,
     ):
         self._features = features or []
+        self._modified_features = self._features.copy()
         self._ori_estimator_features = self._features.copy()
         self._target = target
         self.features_contain_str = features_contain_str or []
@@ -62,13 +63,20 @@ class BasePredictor(ABC):
 
     def _add_features_contain_str(self, df: FrameT) -> None:
         columns = df.columns
+        already_added = []
         for contain in self.features_contain_str:
             estimator_feature_count = len(self._features)
             for column in columns:
                 if column not in self._features and contain in column:
                     self._features.append(column)
-            if len(self._features) == estimator_feature_count:
-                logging.warning(f"Added no new columns containing {contain}")
+                    self._modified_features.append(column)
+                elif contain in column:
+                    already_added.append(column)
+            if (
+                len(self._features) == estimator_feature_count
+                and len(already_added) == 0
+            ):
+                raise ValueError(f"Feature Contain {contain} not found in df")
 
     @abstractmethod
     def train(self, df: FrameT, features: Optional[list[str]] = None) -> None:
@@ -133,7 +141,7 @@ class BasePredictor(ABC):
         for estimator_feature in self._features.copy():
 
             if estimator_feature not in df.columns:
-                self._features.remove(estimator_feature)
+                self._modified_features.remove(estimator_feature)
                 logging.warning(
                     f"Feature {estimator_feature} not in df, removing from estimator_features"
                 )
@@ -169,7 +177,7 @@ class BasePredictor(ABC):
 
         if self.impute_missing_values:
             numeric_feats = [
-                f for f in self._features if f not in cat_feats_to_transform
+                f for f in self._modified_features if f not in cat_feats_to_transform
             ]
             if numeric_feats:
 
@@ -211,13 +219,13 @@ class BasePredictor(ABC):
 
             for feature in pre_transformer.features:
                 if (
-                    feature in self._features
+                    feature in self._modified_features
                     and feature not in pre_transformer.features_out
                 ):
-                    self._features.remove(feature)
+                    self._modified_features.remove(feature)
             for features_out in pre_transformer.features_out:
-                if features_out not in self._features:
-                    self._features.append(features_out)
+                if features_out not in self._modified_features:
+                    self._modified_features.append(features_out)
 
         return df
 
@@ -237,3 +245,29 @@ class BasePredictor(ABC):
     @property
     def features(self) -> list[str]:
         return self._features
+
+
+class DistributionPredictor(BasePredictor):
+
+    def __init__(
+        self,
+        target: str,
+        point_estimate_pred_column: str,
+        min_value: int,
+        max_value: int,
+        pred_column: Optional[str] = None,
+        filters: Optional[dict] = None,
+        auto_pre_transform: bool = True,
+        multiclass_output_as_struct: bool = False,
+    ):
+        self.point_estimate_pred_column = point_estimate_pred_column
+        self.min_value = min_value
+        self.max_value = max_value
+        super().__init__(
+            target=target,
+            features=[],
+            pred_column=pred_column,
+            filters=filters or {},
+            auto_pre_transform=auto_pre_transform,
+            multiclass_output_as_struct=multiclass_output_as_struct,
+        )

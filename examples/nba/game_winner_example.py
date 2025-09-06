@@ -58,11 +58,11 @@ rating_generator = PlayerRatingGenerator(
 # Defines the predictor. A machine-learning model will be used to predict game winner on a game-team-level.
 # Mean team-ratings will be calculated (from player-level) and rating-difference between the 2 teams calculated.
 # It will also use the location of the game as a feature.
-predictor = GroupByPredictor(
+predictor = SklearnPredictor(
+    features=["location"],
+    target="won",
+    estimator=LogisticRegression(),
     granularity=[column_names.match_id, column_names.team_id],
-    predictor=SklearnPredictor(
-        features=["location"], target="won", estimator=LogisticRegression()
-    ),
     one_hot_encode_cat_features=True,
 )
 

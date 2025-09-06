@@ -23,7 +23,8 @@ def test_net_over_predicted():
 
     expected_df = fit_df.copy()
     fit_df = transformer.fit_transform(fit_df)
-    expected_df[transformer.features_out[0]] = [0.1, 0.2, 0, 0]
+    expected_df[transformer.features_out[0]] = [0.4, 0.8, 2, 3]
+    expected_df[transformer.features_out[1]] = [0.1, 0.2, 0, 0]
 
     pd.testing.assert_frame_equal(
         fit_df, expected_df[fit_df.columns], check_dtype=False
@@ -38,7 +39,8 @@ def test_net_over_predicted():
 
     expected_transformed_df = transform_df.copy()
     transformed_df = transformer.transform(transform_df, cross_validate=True)
-    expected_transformed_df[transformer.features_out[0]] = [0.1, 0.2, 0, 0]
+    expected_transformed_df[transformer.features_out[1]] = [0.1, 0.2, 0, 0]
+    expected_transformed_df[transformer.features_out[0]] = [0.4, 0.8, 2, 3]
 
     pd.testing.assert_frame_equal(
         transformed_df,

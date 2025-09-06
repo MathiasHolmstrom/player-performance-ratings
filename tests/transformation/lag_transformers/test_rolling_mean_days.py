@@ -129,7 +129,8 @@ def test_rolling_mean_days_update_id_different_from_game_id(
     )
 
 
-def test_rolling_mean_days_fit_transform_40_days(column_names):
+@pytest.mark.parametrize("use_column_names", [True, False])
+def test_rolling_mean_days_transform_historical_40_days(use_column_names, column_names):
     df = pd.DataFrame(
         {
             "player": ["a", "a", "a", "b", "a", "b"],
@@ -148,16 +149,27 @@ def test_rolling_mean_days_fit_transform_40_days(column_names):
     )
 
     original_df = df.copy()
+    if use_column_names:
+        rolling_mean_transformation = RollingMeanDaysTransformer(
+            features=["points"],
+            days=40,
+            granularity=["player"],
+        )
 
-    rolling_mean_transformation = RollingMeanDaysTransformer(
-        features=["points"],
-        days=40,
-        granularity=["player"],
-    )
+        transformed_df = rolling_mean_transformation.transform_historical(
+            df, column_names=column_names
+        )
+    else:
+        rolling_mean_transformation = RollingMeanDaysTransformer(
+            features=["points"],
+            days=40,
+            granularity=["player"],
+            update_column=column_names.update_match_id,
+        )
 
-    transformed_df = rolling_mean_transformation.transform_historical(
-        df, column_names=column_names
-    )
+        transformed_df = rolling_mean_transformation.transform_historical(
+            df, column_names=column_names
+        )
 
     expected_df = original_df.assign(
         **{
@@ -167,6 +179,74 @@ def test_rolling_mean_days_fit_transform_40_days(column_names):
 
     pd.testing.assert_frame_equal(
         transformed_df, expected_df, check_like=True, check_dtype=False
+    )
+
+
+def test_rolling_mean_days_transform_future_40_days_update_id_differs_from_match_id(
+    column_names,
+):
+    column_names.update_match_id = "series_id"
+    historical_df = pd.DataFrame(
+        {
+            "player": ["a", "b", "c", "d"] * 2,
+            "game": [1, 1, 1, 1, 2, 2, 2, 2],
+            "points": [1, 2, 3, 4, 5, 6, 7, 8],
+            "series_id": [1, 1, 1, 1, 1, 1, 1, 1],
+            "start_date": [
+                pd.to_datetime("2023-01-01 15:00:00"),
+                pd.to_datetime("2023-01-01 15:00:00"),
+                pd.to_datetime("2023-01-01 15:00:00"),
+                pd.to_datetime("2023-01-01 15:00:00"),
+                pd.to_datetime("2023-01-01 16:00:00"),
+                pd.to_datetime("2023-01-01 16:00:00"),
+                pd.to_datetime("2023-01-01 16:00:00"),
+                pd.to_datetime("2023-01-01 16:00:00"),
+            ],
+            "team": [1, 1, 2, 2, 1, 1, 2, 2],
+        }
+    )
+
+    future_df = pd.DataFrame(
+        {
+            "player": ["a", "b", "c", "d"] * 2,
+            "game": [3, 3, 3, 3, 4, 4, 4, 4],
+            "points": [9, 10, 11, 12] * 2,
+            "series_id": [3] * 8,
+            "start_date": [
+                pd.to_datetime("2023-01-02 17:00:00"),
+                pd.to_datetime("2023-01-02 17:00:00"),
+                pd.to_datetime("2023-01-02 17:00:00"),
+                pd.to_datetime("2023-01-02 17:00:00"),
+                pd.to_datetime("2023-01-02 18:00:00"),
+                pd.to_datetime("2023-01-02 18:00:00"),
+                pd.to_datetime("2023-01-02 18:00:00"),
+                pd.to_datetime("2023-01-02 18:00:00"),
+            ],
+            "team": [1, 1, 2, 2] * 2,
+        }
+    )
+
+    original_df = future_df.copy()
+
+    rolling_mean_transformation = RollingMeanDaysTransformer(
+        features=["points"],
+        days=40,
+        granularity=["player"],
+    )
+
+    _ = rolling_mean_transformation.transform_historical(
+        historical_df, column_names=column_names
+    )
+    transformed_future_df = rolling_mean_transformation.transform_future(future_df)
+
+    expected_df = original_df.assign(
+        **{
+            rolling_mean_transformation.features_out[0]: [3, 4, 5, 6] * 2,
+        }
+    )
+
+    pd.testing.assert_frame_equal(
+        transformed_future_df, expected_df, check_like=True, check_dtype=False
     )
 
 
@@ -467,7 +547,6 @@ def test_rolling_mean_days_transform_historical_granularity_differs_from_input_g
 def test_rolling_mean__days_transform_future_granularity_differs_from_input_granularity(
     column_names: ColumnNames,
 ):
-
     column_names.player_id = None
     historical_df = pd.DataFrame(
         {

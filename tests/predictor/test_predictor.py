@@ -1,5 +1,7 @@
+from unittest import mock
 from unittest.mock import Mock
 
+import numpy as np
 import pandas as pd
 import polars as pl
 from polars.testing import assert_frame_equal
@@ -267,7 +269,7 @@ def test_one_hot_encoder_train(df):
 
     predictor.train(data)
     assert len(predictor.pre_transformers) == 2
-    assert predictor.features == [
+    assert predictor._modified_features == [
         "feature1",
         "cat_feature_cat1",
         "cat_feature_cat2",
@@ -318,3 +320,48 @@ def test_features_contain_str(predictor, df):
     predictor.train(data)
     assert predictor.features == ["feature1", "lag_feature1", "lag_feature2"]
     predictor.predict(data)
+
+
+def test_predictor_granularity():
+    data = pd.DataFrame(
+        {
+            "game_id": [1, 1, 2, 2],
+            "team_id": [1, 2, 1, 2],
+            "player_id": [1, 2, 1, 2],
+            "feature1": [0.1, 0.5, 0.1, 0.5],
+            "lag_feature1": [0.2, 0.3, 0.4, 0.5],
+            "group": [1, 1, 1, 1],
+            "__target": [125, 125, 100, 00],
+        }
+    )
+    estimator = mock.Mock()
+    predictor = SklearnPredictor(
+        estimator=estimator,
+        granularity=["game_id"],
+        features=["feature1", "lag_feature1"],
+        target="__target",
+    )
+
+    predictor.train(data)
+    grp = (
+        data.groupby(["game_id"])
+        .agg({"feature1": "mean", "lag_feature1": "mean", "__target": "median"})
+        .reset_index()
+    )
+
+    fit_x_values = estimator.fit.call_args[0][0]
+    fit_y_values = estimator.fit.call_args[0][1]
+
+    assert fit_y_values.tolist() == grp["__target"].tolist()
+    pd.testing.assert_frame_equal(fit_x_values, grp[["feature1", "lag_feature1"]])
+
+    estimator.predict_proba.return_value = np.array([[0.8, 0.2], [0.5, 0.5]])
+
+    predicted_data = predictor.predict(data)
+
+    assert len(estimator.predict_proba.call_args[0][0]) == 2
+    assert "feature1" in estimator.predict_proba.call_args[0][0].columns
+    assert "lag_feature1" in estimator.predict_proba.call_args[0][0].columns
+    pred_values = predicted_data[predictor.pred_column].to_list()
+    pred_values.sort()
+    assert pred_values == [0.2, 0.2, 0.5, 0.5]

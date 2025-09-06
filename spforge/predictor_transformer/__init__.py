@@ -3,3 +3,5 @@ from .transformer import (
     SkLearnTransformerWrapper,
     ConvertDataFrameToCategoricalTransformer,
 )
+
+from ._simple_transformer import OperatorTransformer

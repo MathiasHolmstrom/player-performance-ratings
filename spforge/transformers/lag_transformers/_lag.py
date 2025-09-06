@@ -27,8 +27,11 @@ class LagTransformer(BaseLagTransformer):
         future_lag: bool = False,
         prefix: str = "lag",
         add_opponent: bool = False,
-        update_column: Optional[str] = None,
         column_names: Optional[ColumnNames] = None,
+        group_to_granularity: Optional[list[str]] = None,
+        unique_constraint: Optional[list[str]] = None,
+        update_column: Optional[str] = None,
+        match_id_column: Optional[str] = None,
     ):
         """
         :param features. List of features to create lags for
@@ -49,7 +52,10 @@ class LagTransformer(BaseLagTransformer):
             iterations=[i for i in range(1, lag_length + 1)],
             granularity=granularity,
             column_names=column_names,
+            unique_constraint=unique_constraint,
+            group_to_granularity=group_to_granularity,
             update_column=update_column,
+            match_id_column=match_id_column,
         )
         self.days_between_lags = days_between_lags or []
         for days_lag in self.days_between_lags:
@@ -67,17 +73,31 @@ class LagTransformer(BaseLagTransformer):
         self, df: FrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """ """
+        grouped = self._maybe_group(df)
         if self.column_names:
-            self._store_df(df)
-            df = self._generate_features(df)
-            if self.add_opponent:
-                return self._add_opponent_features(df).sort("__row_index")
+            self._store_df(grouped, ori_df=df)
+            df_with_feats = self._generate_features(grouped, ori_df=df)
+            df = self._merge_into_input_df(df=df, concat_df=df_with_feats)
+
         else:
             assert (
                 self.add_opponent is False
             ), "Column Names must be passed for opponent features to be added"
-            df = self._generate_features(df)
-        return df
+            join_on_cols = (
+                self.group_to_granularity
+                if self.group_to_granularity
+                else [*self.granularity, self.update_column]
+            )
+            grouped_with_feats = self._generate_features(grouped, ori_df=df).sort(
+                "__row_index"
+            )
+            df = df.join(
+                grouped_with_feats.select([*join_on_cols, *self.features_out]),
+                on=join_on_cols,
+                how="left",
+            ).unique("__row_index")
+
+        return self._post_features_generated(df)
 
     @nw.narwhalify
     @future_lag_transformations_wrapper
@@ -85,22 +105,19 @@ class LagTransformer(BaseLagTransformer):
     @transformation_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
 
-        df_with_feats = self._generate_features(df=df)
-        if self.add_opponent:
-            df_with_feats = self._add_opponent_features(df_with_feats).sort(
-                "__row_index"
-            )
+        sort_col = self.column_names.start_date if self.column_names else "__row_index"
+        grouped = self._group_to_granularity_level(df=df, sort_col=sort_col)
 
-        df_with_feats = self._forward_fill_future_features(df=df_with_feats)
+        grouped_df_with_feats = self._generate_features(df=grouped, ori_df=df)
+        df = self._merge_into_input_df(df=df, concat_df=grouped_df_with_feats)
+        df = self._post_features_generated(df)
+        return self._forward_fill_future_features(df=df)
 
-        return df_with_feats
-
-    def _generate_features(self, df: FrameT) -> FrameT:
+    def _generate_features(self, df: FrameT, ori_df: FrameT) -> FrameT:
         if self.column_names and self._df is not None:
-            concat_df = self._concat_with_stored(df=df).sort(
+            concat_df = self._concat_with_stored(group_df=df, ori_df=ori_df).sort(
                 self.column_names.start_date
             )
-
         else:
             concat_df = df.sort("__row_index")
 
@@ -158,33 +175,7 @@ class LagTransformer(BaseLagTransformer):
                         .alias(output_column_name)
                     )
 
-                concat_df = self._equalize_values_within_update_id(
-                    df=concat_df, column_name=output_column_name
-                )
-
-        concat_df = concat_df.unique([*self.granularity, self.update_column]).select(
-            [*self.granularity, self.update_column, *self._entity_features_out]
-        )
-
-        feats_out = []
-        for feature_name in self.features:
-            for lag in range(1, self.lag_length + 1):
-                feats_out.append(f"{self.prefix}_{feature_name}{lag}")
-
-        for days_lag in self.days_between_lags:
-            feats_out.append(f"{self.prefix}{days_lag}_days_ago")
-
-        return df.join(
-            concat_df.select(
-                [
-                    *self.granularity,
-                    self.update_column,
-                    *self._entity_features_out,
-                ]
-            ),
-            on=[*self.granularity, self.update_column],
-            how="left",
-        ).sort("__row_index")
+        return concat_df
 
     @property
     def features_out(self) -> list[str]:

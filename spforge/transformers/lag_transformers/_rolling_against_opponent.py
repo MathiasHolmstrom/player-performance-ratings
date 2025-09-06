@@ -12,6 +12,7 @@ from spforge.transformers.lag_transformers._utils import (
     required_lag_column_names,
     transformation_validator,
     future_validator,
+    future_lag_transformations_wrapper,
 )
 from spforge.transformers.base_transformer import (
     BaseTransformer,
@@ -19,26 +20,28 @@ from spforge.transformers.base_transformer import (
 from spforge.transformers.lag_transformers import BaseLagTransformer
 
 
-class OpponentTransformer(BaseLagTransformer):
+class RollingAgainstOpponentTransformer(BaseLagTransformer):
     """
-    Calculates the rolling mean of a list of features from the opponents perspective.
-    In contrast to RollingMeanTransformer and setting add_opponent = True, the OpponentRollingMeanTransformer does not calculate the mean of the rolling mean for the team itself.
-    Rather it calculates the rolling-mean performance of every entity that has faced the opponent over the window period.
+    Performs a rolling calculation of the features from the entities perspective against the opponent.
 
-    This is useful for creating features that indicate how the opponent performs in different contexts.
+    Unlike `RollingWindowTransformer` with `add_opponent=True`, the `RollingAgainstOpponentTransformer`
+    does not compute a rolling mean for the entity itself. Instead, it aggregates how opponents
+    perform *against* the specified granularity over a defined rolling window.
+
+    This allows for creation of features that reflect opponent tendencies in various contexts.
+
+    Example use case:
+        - Do opponents tend to allow more points to centers than to players in other positions?
+
     Example:
-        - Does the opponent allow more points against centers than other positions?
-    df = get_sub_sample_nba_data(as_polars=True, as_pandas=False)
-    transformer = OpponentRollingMeanTransformer(
-        features=["points"],
-        window=15,
-        granularity=['position'],
-        opponent_column='opponent_team_id'
+        df = get_sub_sample_nba_data(as_polars=True, as_pandas=False)
+        transformer = RollingAgainstOpponentTransformer(
+            features=["points"],
+            window=15,
+            granularity=["position"],
+            opponent_column="opponent_team_id"
         )
-    df = transformer.generate_historical(df)
-
-
-
+        df = transformer.generate_historical(df)
 
     Use .transform_historical() to generate rolling mean for historical data.
         The historical data is stored as instance-variables after calling .generate_historical()
@@ -52,8 +55,9 @@ class OpponentTransformer(BaseLagTransformer):
         granularity: Union[list[str], str],
         min_periods: int = 1,
         are_estimator_features=True,
-        prefix: str = "opponent_rolling_mean",
+        prefix: str = "rolling_against_opponent",
         update_column: Optional[str] = None,
+        match_id_column: Optional[str] = None,
         team_column: Optional[str] = None,
         opponent_column: str = "__opponent",
         transformation: Literal["rolling_mean"] = "rolling_mean",
@@ -81,6 +85,7 @@ class OpponentTransformer(BaseLagTransformer):
             granularity=granularity,
             are_estimator_features=are_estimator_features,
             update_column=update_column,
+            match_id_column=match_id_column,
         )
         self.window = window
         self.min_periods = min_periods
@@ -120,7 +125,8 @@ class OpponentTransformer(BaseLagTransformer):
                 window=self.window,
                 min_periods=self.min_periods,
                 update_column=self.update_column,
-                unique_constraint=[
+                match_id_column=self.match_id_column,
+                group_to_granularity=[
                     self.opponent_column,
                     self.update_column,
                     *self.granularity,
@@ -130,7 +136,7 @@ class OpponentTransformer(BaseLagTransformer):
             raise NotImplementedError("Only rolling_mean transformation is supported")
 
         if self.column_names:
-            self._store_df(df)
+            self._store_df(df, ori_df=df)
             concat_df = self._concat_with_stored_and_calculate_feats(
                 df, is_future=False
             )
@@ -166,6 +172,7 @@ class OpponentTransformer(BaseLagTransformer):
             )
 
     @nw.narwhalify
+    @future_lag_transformations_wrapper
     @future_validator
     @transformation_validator
     def transform_future(self, df: FrameT) -> IntoFrameT:
@@ -182,7 +189,6 @@ class OpponentTransformer(BaseLagTransformer):
         else:
             ori_type = "pl"
 
-        df = df.with_columns(nw.lit(1).alias("is_future"))
         concat_df = self._concat_with_stored_and_calculate_feats(df=df, is_future=True)
         concat_df = self._rename_features(concat_df)
 
@@ -203,8 +209,6 @@ class OpponentTransformer(BaseLagTransformer):
             on=[cn.player_id, cn.team_id, cn.match_id],
             how="left",
         )
-        if "is_future" in df.columns:
-            df = df.drop("is_future")
 
         if ori_type == "pd":
             return df.to_pandas()
@@ -234,56 +238,18 @@ class OpponentTransformer(BaseLagTransformer):
                 gt_opponent,
                 on=[self.update_column, self.team_column],
                 how="left",
-            )
-
-        if self.column_names and self._df is not None:
-            sort_col = self.column_names.start_date
-            grouped = (
-                concat_df.group_by(
-                    [
-                        self.update_column,
-                        self.team_column,
-                        self.opponent_column,
-                        *self.granularity,
-                        sort_col,
-                    ]
-                )
-                .agg(nw.col(self.features).mean())
-                .sort(sort_col)
-            )
-        else:
-            grouped = (
-                concat_df.group_by(
-                    [
-                        self.update_column,
-                        self.team_column,
-                        self.opponent_column,
-                        *self.granularity,
-                    ]
-                )
-                .agg([nw.col(self.features).mean(), nw.col("__row_index").min()])
-                .sort("__row_index")
-            )
+            ).sort("__row_index")
 
         if is_future:
-            grouped = nw.from_native(self._transformer.transform_future(grouped))
+            concat_df = nw.from_native(self._transformer.transform_future(concat_df))
+
         else:
-            if self.column_names:
-                column_names_transformer = ColumnNames(**self.column_names.__dict__)
-                column_names_transformer.player_id = None
-            else:
-                column_names_transformer = None
-            grouped = nw.from_native(
+            concat_df = nw.from_native(
                 self._transformer.transform_historical(
-                    grouped, column_names=column_names_transformer
+                    concat_df, column_names=self.column_names
                 )
             )
-        on_cols = [self.update_column, *self.granularity, self.opponent_column]
-        return concat_df.join(
-            grouped.select([*on_cols, *self._transformer.features_out]),
-            on=on_cols,
-            how="left",
-        ).unique(self.unique_constraint)
+        return concat_df
 
     def _merge_into_input_df(
         self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
@@ -313,7 +279,7 @@ class OpponentTransformer(BaseLagTransformer):
                     ]
                 ),
                 on=[self.update_column, self.team_column, *self.granularity],
-                how='left'
+                how="left",
             )
             .unique(self.unique_constraint)
             .sort(sort_cols)

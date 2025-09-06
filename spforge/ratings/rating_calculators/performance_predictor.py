@@ -339,7 +339,6 @@ class RatingMeanPerformancePredictor(PerformancePredictor):
         self.sum_rating += player_rating.rating_value
         start_index = max(0, len(self.sum_ratings) - self.last_sample_count)
         self.sum_ratings = self.sum_ratings[start_index:]
-        #  average_rating = sum(self.sum_ratings) / len(self.sum_ratings)
         historical_average_rating = self.sum_rating / self.rating_count
         net_mean_rating_over_historical_average = (
             player_rating.rating_value * 0.5

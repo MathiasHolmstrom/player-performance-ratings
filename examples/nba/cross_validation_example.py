@@ -9,7 +9,7 @@ from spforge.pipeline import Pipeline
 from spforge.predictor import (
     SklearnPredictor,
     NegativeBinomialPredictor,
-    DistributionPredictor,
+    DistributionManagerPredictor,
 )
 
 from spforge.data_structures import ColumnNames
@@ -40,7 +40,7 @@ df = df.sort(
 
 df = df.with_columns(pl.col("points").clip(0, 40).alias("points"))
 
-predictor = DistributionPredictor(
+predictor = DistributionManagerPredictor(
     point_predictor=SklearnPredictor(
         estimator=LGBMRegressor(verbose=-100, random_state=42),
         features=["location"],
@@ -128,7 +128,6 @@ validation_df = lgbm_classifier_cross_validator.generate_validation_df(df=valida
 ordinal_scorer_lgbm_classifier = OrdinalLossScorer(
     pred_column=lgbm_classifier_predictor.pred_column,
     target=predictor.target,
-    validation_column="is_validation",
     filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
 )
 
