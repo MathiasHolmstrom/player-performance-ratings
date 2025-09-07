@@ -1,5 +1,6 @@
+import logging
 import math
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 
 import polars as pl
 import time
@@ -19,8 +20,11 @@ from spforge.transformers.fit_transformers._performance_manager import ColumnWei
 class PlayerRatingGeneratorNew():
 
     def __init__(self,
-                 start_rating_generator: Optional[StartRatingGenerator] = None,
-                 performance_predictor: Optional[PerformancePredictor] = None,
+                 performance_column: str,
+                 performance_weights: Optional[
+                     list[Union[ColumnWeight, dict[str, float]]]
+                 ] = None,
+                 auto_scale_performance: bool = False,
                  rating_change_multiplier: float = 50,
                  confidence_days_ago_multiplier: float = 0.06,
                  confidence_max_days: int = 90,
@@ -31,12 +35,18 @@ class PlayerRatingGeneratorNew():
                  league_rating_change_update_threshold: float = 100,
                  league_rating_adjustor_multiplier: float = 0.05,
                  team_id_change_confidence_sum_decrease: float = 3,
+                 start_league_ratings: dict[str, float] | None = None,
+                 start_league_quantile: float = 0.2,
+                 start_min_count_for_percentiles: int = 50,
+                 start_team_rating_subtract: float = 80,
+                 start_team_weight: float = 0,
+                 start_max_days_ago_league_entities: int = 120,
+                 start_min_match_count_team_rating: int = 2,
+                 start_harcoded_start_rating : float | None = None,
                  column_names: Optional[ColumnNames] = None):
-        self.performances_generator = PerformanceManager(
-            performance_column_name='performance',
-            features=['plus_minus']
-        )
+
         self.confidence_weight = confidence_weight
+        self.performance_column = performance_column
         self.confidence_days_ago_multiplier = confidence_days_ago_multiplier
         self.confidence_value_denom = confidence_value_denom
         self.min_rating_change_multiplier_ratio = min_rating_change_multiplier_ratio
@@ -46,24 +56,71 @@ class PlayerRatingGeneratorNew():
         self.league_rating_change_update_threshold = (
             league_rating_change_update_threshold
         )
+        self.performance_manager = None
         self.league_identifier = LeagueIdentifer2(column_names=column_names)
+        self.start_league_ratings = start_league_ratings
+        self.start_league_quantile = start_league_quantile
+        self.start_min_count_for_percentiles = start_min_count_for_percentiles
+        self.start_team_rating_subtract = start_team_rating_subtract
+        self.start_team_weight = start_team_weight
+        self.start_max_days_ago_league_entities = start_max_days_ago_league_entities
+        self.start_min_match_count_team_rating = start_min_match_count_team_rating
+        self.start_hardcoded_start_rating = start_harcoded_start_rating
         self.confidence_max_days = confidence_max_days
         self._league_rating_changes: dict[Optional[str], float] = {}
         self._league_rating_changes_count: dict[str, float] = {}
-        self.performance_predictor = (
-                performance_predictor or RatingDifferencePerformancePredictor()
-        )
-        self.start_rating_generator = start_rating_generator or StartRatingGenerator()
+        self.performance_weights = performance_weights
+        self.auto_scale_performance = auto_scale_performance
+
         self.team_id_change_confidence_sum_decrease = (
             team_id_change_confidence_sum_decrease
         )
         self.column_names = column_names
         self._player_ratings: dict[str, PlayerRating] = {}
 
-    def fit_transform(self, df: pl.DataFrame,column_names: Optional[ColumnNames] = None) -> pl.DataFrame:
+    def fit_transform(self, df: pl.DataFrame, column_names: Optional[ColumnNames] = None) -> pl.DataFrame:
+        if self.performance_weights:
+            if isinstance(self.performance_weights[0], dict):
+                self.performance_weights = [
+                    ColumnWeight(**weight) for weight in self.performance_weights
+                ]
+
+            self.performance_manager = PerformanceWeightsManager(
+                weights=self.performance_weights,
+            )
+        else:
+            assert self.performance_column in df.columns, f"{self.performance_column} not in df. If performance_weights are not set, performance_column must exist in dataframe"
+
+        if self.auto_scale_performance:
+            assert (
+                self.performance_column
+            ), "performance_column must be set if auto_scale_performance is True"
+            if not self.performance_weights:
+                self.performance_manager = PerformanceManager(
+                    features=[self.performance_column],
+                )
+            else:
+                self.performance_manager = PerformanceWeightsManager(
+                    weights=self.performance_weights,
+                )
+            logging.info(
+                f"Renamed performance column to performance_{self.performance_column}"
+            )
         if column_names is not None:
             self.league_identifier.column_names = column_names
-        df = self.performances_generator.fit_transform(df)
+
+        self.start_rating_generator = StartRatingGenerator(
+            league_ratings=self.start_league_ratings,
+            league_quantile=self.start_league_quantile,
+            min_match_count_team_rating=self.start_min_match_count_team_rating,
+            team_weight=self.start_team_weight,
+            team_rating_subtract=self.start_team_rating_subtract,
+            max_days_ago_league_entities=self.start_max_days_ago_league_entities,
+            min_count_for_percentiles=self.start_min_count_for_percentiles,
+            harcoded_start_rating=self.start_hardcoded_start_rating
+        )
+        if self.performance_manager:
+            df = self.performance_manager.fit_transform(df)
         return self._transform(df)
 
     def _transform(self, df: pl.DataFrame) -> pl.DataFrame:
@@ -73,21 +130,26 @@ class PlayerRatingGeneratorNew():
             pl.struct([self.column_names.player_id, self.performance_column]).alias("player_struct")
         ])
 
-        agg_df = df.group_by([self.column_names.match_id, self.column_names.team_id]).agg([
-            pl.col("player_struct").alias("players_with_stats"),
-        ]
+        agg_df = df.group_by([self.column_names.match_id, self.column_names.team_id, self.column_names.start_date]).agg(
+            [
+                pl.col("player_struct").alias("players_with_stats"),
+            ]
         )
 
         match_df = agg_df.join(
             agg_df,
-            on="game_id",
+            on=self.column_names.match_id,
             how="inner",
             suffix="_opponent"
         ).filter(
-            pl.col("team_id") != pl.col("team_id_opponent")
-        ).unique("game_id").sort(
+            pl.col(self.column_names.team_id) != pl.col("team_id_opponent")
+        ).unique(self.column_names.match_id).sort(
             list(set([self.column_names.start_date, self.column_names.match_id, self.column_names.update_match_id])))
-
+        match_df = match_df.with_columns(
+            (pl.col(self.column_names.start_date).str.strptime(pl.Date, "%Y-%m-%d").cast(pl.Int32)
+             - pl.col(self.column_names.start_date).str.strptime(pl.Date, "%Y-%m-%d").cast(pl.Int32).min()
+             + 1).alias("__day_number")
+        )
         team_rating_changes = []
         update_ids = []
         new_ratings_data = {}
@@ -138,16 +200,17 @@ class PlayerRatingGeneratorNew():
 
             return pl.DataFrame(new_ratings_data)
 
-    def _add_rating_columns(self, df: pl.DataFrame, known_features_to_return: list[str], unknown_features_to_return:list[str]) -> pl.DataFrame:
+    def _add_rating_columns(self, df: pl.DataFrame, known_features_to_return: list[str],
+                            unknown_features_to_return: list[str]) -> pl.DataFrame:
         input_cols = df.columns
         if self.column_names.participation_weight:
             df = (df
-                      .with_columns(
+                  .with_columns(
                 (pl.col(self.column_names.participation_weight) * (pl.col(RatingKnownFeatures.PLAYER_RATING)).alias(
                     '__raw_player_rating')))
-                      .with_columns(pl.col(self.column_names.participation_weight).sum().over(
+                  .with_columns(pl.col(self.column_names.participation_weight).sum().over(
                 [self.column_names.match_id, self.column_names.team_id]).alias('__sum_participation_weight'))
-                      ).with_columns(
+                  ).with_columns(
                 (pl.col('__raw_player_rating') / pl.col('__sum_participation_weight')).alias(
                     RatingUnknownFeatures.TEAM_RATING)
             ).drop(['__raw_player_rating', '__sum_participation_weight'])
@@ -157,12 +220,12 @@ class PlayerRatingGeneratorNew():
 
         if self.column_names.projected_participation_weight:
             df = (df
-                      .with_columns(
+                  .with_columns(
                 (pl.col(self.column_names.participation_weight) * (pl.col(RatingKnownFeatures.PLAYER_RATING)).alias(
                     '__raw_player_rating')))
-                      .with_columns(pl.col(self.column_names.projected_participation_weight).sum().over(
+                  .with_columns(pl.col(self.column_names.projected_participation_weight).sum().over(
                 [self.column_names.match_id, self.column_names.team_id]).alias('__sum_participation_weight'))
-                      ).with_columns(
+                  ).with_columns(
                 (pl.col('__raw_player_rating') / pl.col('__sum_participation_weight')).alias(
                     RatingKnownFeatures.TEAM_RATING_PROJECTED)
             )
@@ -170,10 +233,9 @@ class PlayerRatingGeneratorNew():
             df = df.with_columns(
                 pl.col(RatingUnknownFeatures.TEAM_RATING).alias(RatingKnownFeatures.TEAM_RATING_PROJECTED))
 
-
-
         if RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED in known_features_to_return:
-            df = df.with_columns((pl.col(RatingKnownFeatures.TEAM_RATING_PROJECTED)-pl.col(RatingKnownFeatures.OPPONENT_RATING_PROJECTED)).alias(RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED))
+            df = df.with_columns((pl.col(RatingKnownFeatures.TEAM_RATING_PROJECTED) - pl.col(
+                RatingKnownFeatures.OPPONENT_RATING_PROJECTED)).alias(RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED))
 
         return df.select(list(set([input_cols + known_features_to_return + unknown_features_to_return])))
 
@@ -239,10 +301,14 @@ class PlayerRatingGeneratorNew():
 
         for team_player in r[players_col_name]:
             player_id = team_player['player_id']
+            position = team_player.get(self.column_names.position)
+            league = team_player.get(self.column_names.league)
+            projected_participation_weight = team_player.get(self.column_names.projected_participation_weight)
+            participation_weight = team_player.get(self.column_names.participation_weight)
             match_performance = MatchPerformance(
-                performance_value=team_player['performance'],
-                projected_participation_weight=1,
-                participation_weight=1,
+                performance_value=team_player[self.performance_column],
+                projected_participation_weight=projected_participation_weight,
+                participation_weight=participation_weight,
             )
             if player_id in self._player_ratings:
 
@@ -253,8 +319,8 @@ class PlayerRatingGeneratorNew():
                     rating_value=player_rating.rating_value,
                     match_performance=match_performance,
                     games_played=player_rating.games_played,
-                    league=r[self.column_names.league],
-                    position=r[self.column_names.position],
+                    league=league,
+                    position=position,
                 )
 
             else:
@@ -262,8 +328,8 @@ class PlayerRatingGeneratorNew():
                     MatchPlayer(
                         id=player_id,
                         performance=match_performance,
-                        league=r[self.column_names.league],
-                        position=r[self.column_names.position],
+                        league=league,
+                        position=position,
                     )
                 )
                 continue
@@ -592,6 +658,8 @@ class PlayerRatingGeneratorNew():
         if id not in self._player_ratings:
             raise KeyError(f"{id} not in player_ratings")
         return self._player_ratings[id]
+
+
 6
 
 if __name__ == '__main__':
@@ -603,5 +671,5 @@ if __name__ == '__main__':
         start_date="start_date",
         player_id="player_id",
     )
-    player_rating_generator = PlayerRatingGeneratorNew(column_names=column_names)
+    player_rating_generator = PlayerRatingGeneratorNew(column_names=column_names, performance_column='points')
     df = player_rating_generator.fit_transform(df)
