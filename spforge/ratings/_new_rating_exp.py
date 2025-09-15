@@ -1,18 +1,20 @@
+import inspect
 import logging
 import math
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional, Union, Any, Literal
 
 import polars as pl
 import time
 
 from spforge.data_structures import MatchPlayer, MatchPerformance, MatchTeam, PreMatchPlayerRating, PlayerRating, \
-    PlayerRatingChange, TeamRatingChange, PreMatchTeamRating, ColumnNames
+    PlayerRatingChange, TeamRatingChange, PreMatchTeamRating, ColumnNames, PreMatchPlayersCollection
 from spforge.ratings import StartRatingGenerator, RatingDifferencePerformancePredictor, RatingKnownFeatures, \
     RatingUnknownFeatures
 from spforge.ratings.league_identifier import LeagueIdentifer2
 from spforge.ratings.rating_calculators.match_rating_generator import MATCH_CONTRIBUTION_TO_SUM_VALUE, \
     EXPECTED_MEAN_CONFIDENCE_SUM
-from spforge.ratings.rating_calculators.performance_predictor import PerformancePredictor
+from spforge.ratings.rating_calculators.performance_predictor import PerformancePredictor, \
+    RatingMeanPerformancePredictor, RatingNonOpponentPerformancePredictor
 from spforge.transformers.fit_transformers import PerformanceWeightsManager
 from spforge.transformers.fit_transformers._performance_manager import ColumnWeight, PerformanceManager
 
@@ -25,6 +27,7 @@ class PlayerRatingGeneratorNew():
                      list[Union[ColumnWeight, dict[str, float]]]
                  ] = None,
                  auto_scale_performance: bool = False,
+                 performance_predictor: Literal['difference', 'mean', 'ignore_opponent'] = 'difference',
                  rating_change_multiplier: float = 50,
                  confidence_days_ago_multiplier: float = 0.06,
                  confidence_max_days: int = 90,
@@ -43,10 +46,31 @@ class PlayerRatingGeneratorNew():
                  start_max_days_ago_league_entities: int = 120,
                  start_min_match_count_team_rating: int = 2,
                  start_harcoded_start_rating : float | None = None,
-                 column_names: Optional[ColumnNames] = None):
+                 column_names: Optional[ColumnNames] = None,
+                 **kwargs):
+
+        self.performance_predictor = performance_predictor
+        if self.performance_predictor == 'mean':
+            _performance_predictor_class = RatingMeanPerformancePredictor
+        elif self.performance_predictor == 'difference':
+            _performance_predictor_class = RatingDifferencePerformancePredictor
+        elif self.performance_predictor == 'ignore_opponent':
+            _performance_predictor_class =  RatingNonOpponentPerformancePredictor
+        else:
+            raise ValueError(f"performance_predictor {self.performance_predictor} is not supported")
+        sig = inspect.signature(_performance_predictor_class.__init__)
+
+        init_params = [
+            name for name, param in sig.parameters.items()
+            if name != "self"
+        ]
+
+        performance_predictor_params = {k: v for k, v in kwargs.items() if k in init_params}
+        self._performance_predictor = _performance_predictor_class(**performance_predictor_params)
 
         self.confidence_weight = confidence_weight
         self.performance_column = performance_column
+        self.kwargs = kwargs
         self.confidence_days_ago_multiplier = confidence_days_ago_multiplier
         self.confidence_value_denom = confidence_value_denom
         self.min_rating_change_multiplier_ratio = min_rating_change_multiplier_ratio
@@ -57,7 +81,7 @@ class PlayerRatingGeneratorNew():
             league_rating_change_update_threshold
         )
         self.performance_manager = None
-        self.league_identifier = LeagueIdentifer2(column_names=column_names)
+        self.league_identifier = None
         self.start_league_ratings = start_league_ratings
         self.start_league_quantile = start_league_quantile
         self.start_min_count_for_percentiles = start_min_count_for_percentiles
@@ -79,6 +103,9 @@ class PlayerRatingGeneratorNew():
         self._player_ratings: dict[str, PlayerRating] = {}
 
     def fit_transform(self, df: pl.DataFrame, column_names: Optional[ColumnNames] = None) -> pl.DataFrame:
+        self.column_names = column_names if column_names else self.column_names
+        if self.column_names.league:
+            self.league_identifier = LeagueIdentifer2(column_names=self.column_names)
         if self.performance_weights:
             if isinstance(self.performance_weights[0], dict):
                 self.performance_weights = [
@@ -106,8 +133,6 @@ class PlayerRatingGeneratorNew():
             logging.info(
                 f"Renamed performance column to performance_{self.performance_column}"
             )
-        if column_names is not None:
-            self.league_identifier.column_names = column_names
 
         self.start_rating_generator = StartRatingGenerator(
             league_ratings=self.start_league_ratings,
@@ -124,7 +149,7 @@ class PlayerRatingGeneratorNew():
         return self._transform(df)
 
     def _transform(self, df: pl.DataFrame) -> pl.DataFrame:
-        if self.column_names.league is not None:
+        if self.league_identifier:
             df = self.league_identifier.add_leagues(df)
         df = df.with_columns([
             pl.struct([self.column_names.player_id, self.performance_column]).alias("player_struct")
@@ -150,34 +175,75 @@ class PlayerRatingGeneratorNew():
              - pl.col(self.column_names.start_date).str.strptime(pl.Date, "%Y-%m-%d").cast(pl.Int32).min()
              + 1).alias("__day_number")
         )
+        ratings = self._calculate_ratings(match_df)
+
+    def _calculate_ratings(self, match_df: pl.DataFrame) -> pl.DataFrame:
         team_rating_changes = []
         update_ids = []
-        new_ratings_data = {}
+        new_ratings_data = {
+            self.column_names.player_id: [],
+            self.column_names.match_id:[],
+            self.column_names.team_id: [],
+            RatingKnownFeatures.PLAYER_RATING: []
+        }
         for r in match_df.iter_rows(named=True):
-            team1_ = r[self.column_names.team_id]
+            team1 = r[self.column_names.team_id]
             team2 = r[f"{self.column_names.team_id}_opponent"]
             update_ids.append(r[self.column_names.update_match_id])
-            existing_pre_match_player_ratings_team1, player_rating_values_team1, new_players_team1 = self._create_pre_match_player_ratings_and_new_players(
+            pre_match_players_collection_team1 = self._create_pre_match_players_collection(
                 r=r,
                 players_col_name='players_with_stats')
-            existing_pre_match_player_ratings_team2, player_rating_values_team2, new_players_team2 = self._create_pre_match_player_ratings_and_new_players(
+            pre_match_players_collection_team2 = self._create_pre_match_players_collection(
                 r=r,
                 players_col_name='players_with_stats_opponent')
-            new_player_pre_match_ratings_team1 = self._generate_new_player_pre_match_ratings(
+            new_player_pre_match_ratings_team1, new_player_pre_match_ratings_values_team1 = self._generate_new_player_pre_match_ratings(
                 day_number=r['__day_number'],
-                new_players=new_players_team1,
-                team_pre_match_player_ratings=existing_pre_match_player_ratings_team1)
-            new_player_pre_match_ratings_team2 = self._generate_new_player_pre_match_ratings(
+                new_players=pre_match_players_collection_team1.new_players,
+                team_pre_match_player_ratings=pre_match_players_collection_team1.pre_match_player_ratings)
+            new_player_pre_match_ratings_team2, new_player_pre_match_ratings_values_team2 = self._generate_new_player_pre_match_ratings(
                 day_number=r['__day_number'],
-                new_players=new_players_team2,
-                team_pre_match_player_ratings=existing_pre_match_player_ratings_team2)
+                new_players=pre_match_players_collection_team2.new_players,
+                team_pre_match_player_ratings=pre_match_players_collection_team2.pre_match_player_ratings)
 
-            player_pre_match_ratings_team1 = new_player_pre_match_ratings_team1 + existing_pre_match_player_ratings_team1
-            player_pre_match_ratings_team2 = new_player_pre_match_ratings_team2 + existing_pre_match_player_ratings_team2
+            pre_match_players_collection_team1.pre_match_player_ratings.extend(new_player_pre_match_ratings_team1)
+            pre_match_players_collection_team2.pre_match_player_ratings.extend(new_player_pre_match_ratings_team2)
+            pre_match_players_collection_team1.player_rating_values.extend(new_player_pre_match_ratings_values_team1)
+            pre_match_players_collection_team2.player_rating_values.extend(new_player_pre_match_ratings_values_team2)
+            player_rating_values_team1 = pre_match_players_collection_team1.player_rating_values
+            player_rating_values_team2 = pre_match_players_collection_team2.player_rating_values
+            if self.column_names.participation_weight:
+                if self.column_names.projected_participation_weight:
+                    team1_proj_weights = pre_match_players_collection_team1.projected_particiation_weights
+                    team2_proj_weights = pre_match_players_collection_team2.projected_particiation_weights
+                else:
+                    team1_proj_weights = pre_match_players_collection_team1.projected_particiation_weights
+                    team2_proj_weights = pre_match_players_collection_team2.projected_particiation_weights
 
+                team1_rating_value = sum(x * y for x, y in zip(player_rating_values_team1,
+                                                               team1_proj_weights) / sum(team1_proj_weights))
+                team2_rating_value = sum(x * y for x, y in zip(player_rating_values_team2,
+                                                               team2_proj_weights) / sum(team2_proj_weights))
+            else:
+                team1_rating_value = sum(pre_match_players_collection_team1.player_rating_values) / len(
+                    pre_match_players_collection_team1.player_rating_values)
+                team2_rating_value = sum(pre_match_players_collection_team2.player_rating_values) / len(
+                    pre_match_players_collection_team2.player_rating_values)
+
+            pre_match_team_ratings = [
+                PreMatchTeamRating(
+                    id=team1,
+                    players=new_player_pre_match_ratings_team1,
+                    rating_value=team1_rating_value,
+                ),
+                PreMatchTeamRating(
+                    id=team2,
+                    players=new_player_pre_match_ratings_team2,
+                    rating_value=team2_rating_value,
+                )
+            ]
             match_team_rating_changes = self._create_match_team_rating_changes(
                 day_number=r['__day_number'],
-                pre_match_team_ratings=[player_pre_match_ratings_team1, player_pre_match_ratings_team2]
+                pre_match_team_ratings=pre_match_team_ratings
             )
 
             team_rating_changes += match_team_rating_changes
@@ -188,17 +254,21 @@ class PlayerRatingGeneratorNew():
                     or update_ids[len(update_ids) - 1].update_id != r[self.column_names.update_match_id]
             ):
                 self._update_ratings(team_rating_changes=team_rating_changes)
-                team_rating_changes = []
 
-            new_ratings_data[RatingKnownFeatures.PLAYER_RATING].extend(
-                [player_rating_values_team1] * len(player_pre_match_ratings_team1) + [player_rating_values_team2] * len(
-                    player_pre_match_ratings_team2))
-            new_ratings_data[self.column_names.match_id].extend(r[self.column_names.match_id] * (
-                    len(player_pre_match_ratings_team1) + len(player_pre_match_ratings_team2)))
-            new_ratings_data[self.column_names.team_id].extend(
-                [team1_] * len(player_pre_match_ratings_team1) + [team2] * len(player_pre_match_ratings_team2))
+            player_ratings =    [player_rating_values_team1] * len(player_rating_values_team1) + [player_rating_values_team2] * len(
+                    player_rating_values_team2)
+            match_ids = [r[self.column_names.match_id]] * (
+                    len(player_rating_values_team1) + len(player_rating_values_team2))
+            team_ids = [team1] * len(player_rating_values_team1) + [team2] * len(player_rating_values_team2)
+            player_ids = pre_match_players_collection_team1.player_ids + pre_match_players_collection_team2.player_ids
+            new_ratings_data[RatingKnownFeatures.PLAYER_RATING].extend(player_ratings)
+            new_ratings_data[self.column_names.match_id].extend(match_ids)
+            new_ratings_data[self.column_names.team_id].extend(team_ids)
 
-            return pl.DataFrame(new_ratings_data)
+
+            new_ratings_data[self.column_names.player_id].extend(player_ids)
+
+        return pl.DataFrame(new_ratings_data)
 
     def _add_rating_columns(self, df: pl.DataFrame, known_features_to_return: list[str],
                             unknown_features_to_return: list[str]) -> pl.DataFrame:
@@ -239,77 +309,31 @@ class PlayerRatingGeneratorNew():
 
         return df.select(list(set([input_cols + known_features_to_return + unknown_features_to_return])))
 
-    def _create_pre_match_team_rating(self,
-                                      match_id: str,
-                                      league: str,
-                                      player_ids: list[str],
-                                      new_player_pre_match_ratings: list[PreMatchPlayerRating],
-                                      existing_pre_match_player_ratings: list[
-                                          PreMatchPlayerRating]) -> PreMatchTeamRating:
-
-        if (
-                len(new_player_pre_match_ratings) > 0
-                and len(existing_pre_match_player_ratings) > 0
-        ):
-
-            pre_match_player_ratings = []
-            for player_id in player_ids:
-
-                pre_match_player = [
-                    p for p in new_player_pre_match_ratings if p.id == player_id
-                ]
-                if len(pre_match_player) == 0:
-                    pre_match_player = [
-                        p
-                        for p in existing_pre_match_player_ratings
-                        if p.id == player_id
-                    ]
-
-                pre_match_player_ratings.append(pre_match_player[0])
-
-        elif len(new_player_pre_match_ratings) == 0:
-            pre_match_player_ratings = existing_pre_match_player_ratings
-        else:
-            pre_match_player_ratings = new_player_pre_match_ratings
-
-        pre_match_team_rating_value = self._generate_pre_match_team_rating_value(
-            pre_match_player_ratings=pre_match_player_ratings
-        )
-        pre_match_team_rating_projected_value = (
-            self._generate_pre_match_team_rating_projected_value(
-                pre_match_player_ratings=pre_match_player_ratings
-            )
-        )
-
-        return PreMatchTeamRating(
-            id=match_id,
-            players=pre_match_player_ratings,
-            rating_value=pre_match_team_rating_value,
-            projected_rating_value=pre_match_team_rating_projected_value,
-            league=league,
-        )
-
-    def _create_pre_match_player_ratings_and_new_players(
+    def _create_pre_match_players_collection(
             self, r: dict, players_col_name: str
-    ) -> Tuple[list[PreMatchPlayerRating], list[float], list[MatchPlayer]]:
+    ) -> PreMatchPlayersCollection:
 
         pre_match_player_ratings = []
         player_count = 0
+        projected_participation_weights = []
 
         new_match_entities = []
         pre_match_player_ratings_values = []
+        player_ids = []
 
         for team_player in r[players_col_name]:
-            player_id = team_player['player_id']
+            player_id = team_player[self.column_names.player_id]
             position = team_player.get(self.column_names.position)
-            league = team_player.get(self.column_names.league)
-            projected_participation_weight = team_player.get(self.column_names.projected_participation_weight)
-            participation_weight = team_player.get(self.column_names.participation_weight)
+            player_league = team_player.get('player_primary_league')# update league naming later
+            projected_participation_weight = team_player.get(self.column_names.projected_participation_weight, 1.0)
+            projected_participation_weights.append(projected_participation_weight)
+            participation_weight = team_player.get(self.column_names.participation_weight, 1.0)
             match_performance = MatchPerformance(
                 performance_value=team_player[self.performance_column],
                 projected_participation_weight=projected_participation_weight,
                 participation_weight=participation_weight,
             )
+            player_ids.append(player_id)
             if player_id in self._player_ratings:
 
                 player_rating = self._player_ratings[player_id]
@@ -319,7 +343,7 @@ class PlayerRatingGeneratorNew():
                     rating_value=player_rating.rating_value,
                     match_performance=match_performance,
                     games_played=player_rating.games_played,
-                    league=league,
+                    league=player_league,
                     position=position,
                 )
 
@@ -328,7 +352,7 @@ class PlayerRatingGeneratorNew():
                     MatchPlayer(
                         id=player_id,
                         performance=match_performance,
-                        league=league,
+                        league=player_league,
                         position=position,
                     )
                 )
@@ -336,13 +360,16 @@ class PlayerRatingGeneratorNew():
 
             player_count += self._player_ratings[player_id].games_played
 
+
             pre_match_player_ratings.append(pre_match_player_rating)
             pre_match_player_ratings_values.append(pre_match_player_rating.rating_value)
 
-        return (
-            pre_match_player_ratings,
-            pre_match_player_ratings_values,
-            new_match_entities,
+        return PreMatchPlayersCollection(
+            pre_match_player_ratings=pre_match_player_ratings,
+            new_players=new_match_entities,
+            player_ids=player_ids,
+            player_rating_values=pre_match_player_ratings_values,
+            projected_particiation_weights=projected_participation_weights,
         )
 
     def _generate_new_player_pre_match_ratings(
@@ -350,10 +377,10 @@ class PlayerRatingGeneratorNew():
             day_number: int,
             new_players: list[MatchPlayer],
             team_pre_match_player_ratings: list[PreMatchPlayerRating],
-    ) -> list[PreMatchPlayerRating]:
+    ) -> tuple[list[PreMatchPlayerRating], list[float]]:
 
         pre_match_player_ratings = []
-
+        pre_match_player_rating_values = []
         for match_player in new_players:
             id = match_player.id
 
@@ -362,7 +389,7 @@ class PlayerRatingGeneratorNew():
                 match_player=match_player,
                 team_pre_match_player_ratings=team_pre_match_player_ratings,
             )
-
+            pre_match_player_rating_values.append(rating_value)
             self._player_ratings[match_player.id] = PlayerRating(
                 id=id, rating_value=rating_value
             )
@@ -379,53 +406,10 @@ class PlayerRatingGeneratorNew():
 
             pre_match_player_ratings.append(pre_match_player_rating)
 
-        return pre_match_player_ratings
-
-    def _generate_pre_match_team_rating_value(
-            self, pre_match_player_ratings: list[PreMatchPlayerRating]
-    ) -> Optional[float]:
-        if (
-                len(pre_match_player_ratings) > 0
-                and pre_match_player_ratings[0].match_performance.participation_weight
-                is None
-        ):
-            return None
-        team_rating = sum(
-            player.rating_value * player.match_performance.participation_weight
-            for player in pre_match_player_ratings
-        )
-        sum_participation_weight = sum(
-            player.match_performance.participation_weight
-            for player in pre_match_player_ratings
-        )
-
-        return (
-            team_rating / sum_participation_weight
-            if sum_participation_weight > 0
-            else 0
-        )
-
-    def _generate_pre_match_team_rating_projected_value(
-            self, pre_match_player_ratings: list[PreMatchPlayerRating]
-    ) -> float:
-        team_rating = sum(
-            player.rating_value
-            * player.match_performance.projected_participation_weight
-            for player in pre_match_player_ratings
-        )
-        sum_participation_weight = sum(
-            player.match_performance.projected_participation_weight
-            for player in pre_match_player_ratings
-        )
-
-        return (
-            team_rating / sum_participation_weight
-            if sum_participation_weight > 0
-            else 0
-        )
+        return pre_match_player_ratings, pre_match_player_rating_values
 
     def _create_match_team_rating_changes(
-            self, day_number: int, pre_match_team_ratings: [list[PreMatchTeamRating]]
+            self, day_number: int, pre_match_team_ratings: list[PreMatchTeamRating]
     ) -> list[TeamRatingChange]:
         team_rating_changes = []
 
@@ -452,9 +436,10 @@ class PlayerRatingGeneratorNew():
         sum_performance_value = 0
         sum_rating_change = 0
 
+        leagues = {}
         for pre_player_rating in pre_match_team_rating.players:
 
-            predicted_performance = self.performance_predictor.predict_performance(
+            predicted_performance = self._performance_predictor.predict_performance(
                 player_rating=pre_player_rating,
                 opponent_team_rating=pre_match_opponent_team_rating,
                 team_rating=pre_match_team_rating,
@@ -490,6 +475,9 @@ class PlayerRatingGeneratorNew():
                 pre_match_rating_value=pre_player_rating.rating_value,
             )
             player_rating_changes.append(player_rating_change)
+            if player_rating_change.league not in leagues:
+                leagues[player_rating_change.league] = 0
+            leagues[player_rating_change.league] += 1
             sum_predicted_performance += (
                     player_rating_change.predicted_performance
                     * pre_player_rating.match_performance.participation_weight
@@ -523,8 +511,8 @@ class PlayerRatingGeneratorNew():
             rating_change_value=sum_rating_change,
             predicted_performance=predicted_performance,
             pre_match_projected_rating_value=pre_match_team_rating.rating_value,
-            league=pre_match_team_rating.league,
             performance=performance,
+            league=max(leagues, key=leagues.get) if leagues else None
         )
 
     def _update_ratings(self, team_rating_changes: list[TeamRatingChange]):
@@ -671,5 +659,5 @@ if __name__ == '__main__':
         start_date="start_date",
         player_id="player_id",
     )
-    player_rating_generator = PlayerRatingGeneratorNew(column_names=column_names, performance_column='points')
+    player_rating_generator = PlayerRatingGeneratorNew(column_names=column_names, performance_column='points', rating_diff_coef = 0.0056)
     df = player_rating_generator.fit_transform(df)

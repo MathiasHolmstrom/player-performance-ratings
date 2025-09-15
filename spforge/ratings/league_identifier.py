@@ -14,6 +14,8 @@ class LeagueIdentifer2:
     def add_leagues(self, df: pl.DataFrame) -> pl.DataFrame:
         # Sample input: df must have these columns
         # player_id | match_id | league
+        # TODO: Add fallback logic for new players so they default to teams league
+        # TODO: Add proper column naming
 
         df = df.sort([self.column_names.player_id, self.column_names.match_id])
 
@@ -46,7 +48,7 @@ class LeagueIdentifer2:
                 lambda x: get_most_common_league(
                     x["league_history"], x["index_history"], x["match_idx"]
                 )
-            ).alias("most_common_league_last_N")
+            ).alias("game_league")
         )
 
 

@@ -90,9 +90,7 @@ class PreMatchPlayerRating:
 class PreMatchTeamRating:
     id: str
     players: list[PreMatchPlayerRating]
-    rating_value: Optional[float]
-    projected_rating_value: float
-    league: Optional[str]
+    rating_value: float
 
 
 @dataclass
@@ -100,6 +98,8 @@ class PreMatchRating:
     id: str
     teams: list[PreMatchTeamRating]
     day_number: int
+
+
 
 
 @dataclass
@@ -168,6 +168,13 @@ class MatchPlayer:
     opponent_players_participation_weight: Optional[dict[str, float]] = None
     others: Optional[dict[str, Any]] = None
 
+@dataclass
+class PreMatchPlayersCollection:
+    pre_match_player_ratings: list[PreMatchPlayerRating]
+    player_rating_values: list[float]
+    new_players: list[MatchPlayer]
+    projected_particiation_weights: list[float]
+    player_ids: list[str]
 
 @dataclass
 class MatchTeam:

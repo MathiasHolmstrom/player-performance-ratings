@@ -1,11 +1,9 @@
 import math
-import time
 from abc import ABC, abstractmethod
 from typing import Optional
 
 import numpy as np
-import pandas as pd
-from lightgbm import LGBMRegressor
+
 
 from spforge.data_structures import (
     PreMatchPlayerRating,
