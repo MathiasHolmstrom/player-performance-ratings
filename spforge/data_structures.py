@@ -119,6 +119,7 @@ class TeamRatingChange:
     id: str
     players: list[PlayerRatingChange]
     predicted_performance: float
+    predicted_player_performances: list[float]
     performance: float
     pre_match_projected_rating_value: float
     rating_change_value: float
@@ -173,8 +174,15 @@ class PreMatchPlayersCollection:
     pre_match_player_ratings: list[PreMatchPlayerRating]
     player_rating_values: list[float]
     new_players: list[MatchPlayer]
-    projected_particiation_weights: list[float]
     player_ids: list[str]
+    projected_particiation_weights: list[float]
+
+
+@dataclass
+class NewPlayerPreMatchPlayersCollection:
+    pre_match_player_ratings: list[PreMatchPlayerRating]
+    player_rating_values: list[float]
+
 
 @dataclass
 class MatchTeam:

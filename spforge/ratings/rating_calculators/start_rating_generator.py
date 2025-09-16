@@ -156,7 +156,7 @@ class StartRatingGenerator:
 
     def _start_rating_value_for_above_threshold(self, player_ratings: List) -> float:
         percentile = np.percentile(player_ratings, self.league_quantile * 100)
-        return percentile
+        return float(percentile)
 
     def update_players_to_leagues(self, rating_change: PlayerRatingChange):
         league = rating_change.league

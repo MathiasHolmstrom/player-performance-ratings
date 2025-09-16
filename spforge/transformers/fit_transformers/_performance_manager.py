@@ -96,6 +96,7 @@ class PerformanceManager(BaseTransformer):
         ] = None,
         custom_transformers: Optional[list[BaseTransformer]] = None,
         prefix: str = "performance__",
+        performance_column: str = 'weighted_performance',
         min_value: float = -0.02,
         max_value: float = 1.02,
     ):
@@ -109,6 +110,7 @@ class PerformanceManager(BaseTransformer):
             if custom_transformers
             else []
         )
+        self.performance_column = performance_column
         self.min_value = min_value
         self.max_value = max_value
         self.custom_transformers = custom_transformers or []
@@ -158,7 +160,7 @@ class PerformanceManager(BaseTransformer):
         df = df.with_columns(
             nw.col(self.performance_column).clip(self.min_value, self.max_value)
         )
-        df = df.with_columns(nw.col("__ori" + f).alias(f) for f in self.features)
+        df = df.with_columns(nw.col("__ori" + f).alias(f) for f in [f for f in self.features if f != self.performance_column])
 
         return df.select(list(set([*input_cols, *self.features_out])))
 
@@ -166,9 +168,7 @@ class PerformanceManager(BaseTransformer):
     def features_out(self) -> list[str]:
         return [self.performance_column]
 
-    @property
-    def performance_column(self) -> str:
-        return self.prefix + "weighted"
+
 
 
 class PerformanceWeightsManager(PerformanceManager):
@@ -182,12 +182,14 @@ class PerformanceWeightsManager(PerformanceManager):
         ] = None,
         max_value: float = 1.02,
         min_value: float = -0.02,
+        performance_column: str = 'weighted_performance',
         prefix: str = "performance__",
         return_all_features: bool = False,
     ):
 
         self.features = [p.name for p in weights]
         self.return_all_features = return_all_features
+        self.performance_column = performance_column
         self.weights = weights
         super().__init__(
             features=self.features,
@@ -210,7 +212,7 @@ class PerformanceWeightsManager(PerformanceManager):
         df = df.with_columns(nw.col(f).alias(self.prefix + f) for f in self.features)
 
         df = self._calculate_weights(df=df)
-        df = df.with_columns(nw.col("__ori" + f).alias(f) for f in self.features)
+        df = df.with_columns(nw.col("__ori" + f).alias(f) for f in [f for f in self.features if f != self.performance_column] )
         df = df.with_columns(
             nw.col(self.performance_column).clip(self.min_value, self.max_value)
         )
