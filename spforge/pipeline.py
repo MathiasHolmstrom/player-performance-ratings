@@ -280,6 +280,7 @@ class Pipeline(BasePredictor):
             expected_feats_added.extend(self.post_lag_transformers[idx].features_out)
 
         self.predictor.train(df=df, features=features)
+        self.multiclassifier = self.predictor.multiclassifier
 
     def reset(self):
 

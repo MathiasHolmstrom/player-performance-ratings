@@ -58,7 +58,7 @@ def _apply_filters_polars(df: pl.DataFrame, filters: list[Filter]) -> pl.DataFra
     for filter in filters:
 
         if df[filter.column_name].dtype in (pl.Datetime, pl.Date) and isinstance(
-            filter.value, str
+                filter.value, str
         ):
             filter_value = datetime.datetime.fromisoformat(filter.value).replace(
                 tzinfo=datetime.timezone.utc
@@ -90,7 +90,7 @@ def apply_filters(df: FrameT, filters: list[Filter]) -> FrameT:
     for filter in filters:
 
         if df[filter.column_name].dtype in (nw.Datetime, nw.Date) and isinstance(
-            filter.value, str
+                filter.value, str
         ):
             filter_value = datetime.datetime.fromisoformat(filter.value).replace(
                 tzinfo=datetime.timezone.utc
@@ -121,12 +121,12 @@ def apply_filters(df: FrameT, filters: list[Filter]) -> FrameT:
 class BaseScorer(ABC):
 
     def __init__(
-        self,
-        target: str,
-        pred_column: str,
-        validation_column: Optional[str],
-        filters: Optional[list[Filter]] = None,
-        granularity: Optional[list[str]] = None,
+            self,
+            target: str,
+            pred_column: str,
+            validation_column: Optional[str],
+            filters: Optional[list[Filter]] = None,
+            granularity: Optional[list[str]] = None,
     ):
         self.target = target
         self.pred_column = pred_column
@@ -149,12 +149,12 @@ class BaseScorer(ABC):
 
 class MeanBiasScorer(BaseScorer):
     def __init__(
-        self,
-        pred_column: str,
-        target: str,
-        validation_column: Optional[str] = None,
-        granularity: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
+            self,
+            pred_column: str,
+            target: str,
+            validation_column: Optional[str] = None,
+            granularity: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
     ):
         """
         :param pred_column: The column name of the predictions
@@ -191,13 +191,16 @@ class MeanBiasScorer(BaseScorer):
 class SklearnScorer(BaseScorer):
 
     def __init__(
-        self,
-        scorer_function: Callable,
-        pred_column: str,
-        target: str,
-        validation_column: Optional[str] = None,
-        granularity: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
+            self,
+            scorer_function: Callable,
+            pred_column: str,
+            target: str,
+            drop_rows_where_target_is_nan: bool = True,
+            validation_column: Optional[str] = None,
+            granularity: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
+            labels: list[int] | None = None
+
     ):
         """
         :param pred_column: The column name of the predictions
@@ -208,9 +211,10 @@ class SklearnScorer(BaseScorer):
         :param granularity: The columns to group by before calculating the score
         :param filters: The filters to apply before calculating
         """
-
+        self.drop_rows_where_target_is_nan = drop_rows_where_target_is_nan
         self.pred_column_name = pred_column
         self.scorer_function = scorer_function
+        self.labels = labels
 
         super().__init__(
             target=target,
@@ -224,6 +228,8 @@ class SklearnScorer(BaseScorer):
     def score(self, df: FrameT) -> float:
 
         df = apply_filters(df=df, filters=self.filters)
+        if self.drop_rows_where_target_is_nan:
+            df = df.filter(~nw.col(self.target).is_nan())
         if isinstance(df[self.pred_column_name].to_list()[0], dict):
             assert (
                 not self.granularity
@@ -245,28 +251,33 @@ class SklearnScorer(BaseScorer):
             )
         else:
             grouped = df
-
+        kwargs = {}
+        if self.labels:
+            kwargs = {
+                'labels': self.labels
+            }
         if isinstance(grouped[self.pred_column_name].to_list()[0], list):
             return self.scorer_function(
                 grouped[self.target],
                 [item for item in grouped[self.pred_column_name].to_list()],
+                **kwargs
             )
 
         return self.scorer_function(
-            grouped[self.target].to_list(), grouped[self.pred_column_name].to_list()
+            grouped[self.target].to_list(), grouped[self.pred_column_name].to_list(), **kwargs
         )
 
 
 class ProbabilisticMeanBias(BaseScorer):
 
     def __init__(
-        self,
-        pred_column: str,
-        target: str,
-        class_column_name: str = "classes",
-        validation_column: Optional[str] = None,
-        granularity: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
+            self,
+            pred_column: str,
+            target: str,
+            class_column_name: str = "classes",
+            validation_column: Optional[str] = None,
+            granularity: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
     ):
 
         self.pred_column_name = pred_column
@@ -291,7 +302,7 @@ class ProbabilisticMeanBias(BaseScorer):
         sum_lrs = [0 for _ in range(len(distinct_classes_variations))]
         sum_lr = 0
         for variation_idx, distinct_class_variation in enumerate(
-            distinct_classes_variations
+                distinct_classes_variations
         ):
 
             if not isinstance(distinct_class_variation, list):
@@ -311,8 +322,8 @@ class ProbabilisticMeanBias(BaseScorer):
 
                 prob_under = "prob_under_" + str(class_ + 0.5)
                 rows_target_group[prob_under] = (
-                    probs.apply(lambda x: x[idx + 1])
-                    + rows_target_group[last_column_name]
+                        probs.apply(lambda x: x[idx + 1])
+                        + rows_target_group[last_column_name]
                 )
 
                 count_exact = len(
@@ -351,15 +362,14 @@ class ProbabilisticMeanBias(BaseScorer):
 
 
 class OrdinalLossScorer(BaseScorer):
-    """TODO: Support different types of probability-class constructions"""
-
     def __init__(
-        self,
-        pred_column: str,
-        target: str,
-        validation_column: Optional[str] = None,
-        granularity: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
+            self,
+            pred_column: str,
+            target: str,
+            validation_column: Optional[str] = None,
+            granularity: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
+            classes: list[int] | None = None,
     ):
         self.pred_column_name = pred_column
         self.granularity = granularity
@@ -370,70 +380,121 @@ class OrdinalLossScorer(BaseScorer):
             granularity=granularity,
             validation_column=validation_column,
         )
+        self.classes = classes
 
     @narwhals.narwhalify
     def score(self, df: FrameT) -> float:
         df = apply_filters(df, self.filters)
         df = df.to_polars()
-        field_names = [int(field) for field in df[self.pred_column].struct.fields]
-        field_names.sort()
-        min_field = min(field_names)
-        df = df.with_columns(
-            [
-                pl.col(self.pred_column).struct.field(str(field)).alias(f"prob_{field}")
-                for field in field_names
-            ]
-        )
-        prob_col_under = "sum_prob_under"
-        df = df.with_columns(pl.col(f"prob_{min_field}").alias(prob_col_under))
-        sum_lr = 0
-        count_higher_rows = len(df.filter(pl.col(self.target) > min_field))
-        for class_ in field_names[1:]:
-            count_exact = len(df.filter(pl.col(self.target) == class_ - 1))
-            weight_class = count_exact / count_higher_rows
 
-            df = df.with_columns(
-                [pl.lit(0.0001).alias("min"), pl.lit(0.9999).alias("max")]
-            )
+        pred_dtype = df.schema[self.pred_column]
 
-            df = df.with_columns(
-                pl.max_horizontal(prob_col_under, "min").alias(prob_col_under),
-            )
-            df = df.with_columns(
-                pl.min_horizontal(prob_col_under, "max").alias(prob_col_under),
-            )
-
+        if pred_dtype == pl.Struct:
+            class_labels = [int(f) for f in df[self.pred_column].struct.fields]
+            class_labels.sort()
             df = df.with_columns(
                 [
-                    pl.when(pl.col(self.target) < class_)
-                    .then(pl.col(prob_col_under).log())
-                    .otherwise((1 - pl.col(prob_col_under)).log())
-                    .alias("log_loss")
+                    pl.col(self.pred_column).struct.field(str(c)).alias(f"prob_{c}")
+                    for c in class_labels
                 ]
             )
+        else:
+            if pred_dtype != pl.List and pred_dtype != pl.Array:
+                raise TypeError(
+                    f"Unsupported pred_column dtype: {pred_dtype}. Expected Struct or List/Array."
+                )
+            if not self.classes:
+                raise ValueError(
+                    "OrdinalLossScorer: `classes` must be provided when pred_column is List/Array (sklearn-style probabilities)."
+                )
 
-            log_loss = df["log_loss"].mean()
-            sum_lr -= log_loss * weight_class
+            class_labels = [int(c) for c in self.classes]
+            class_labels.sort()
+            expected_len = len(class_labels)
+
+            if pred_dtype == pl.Array:
+                width = int(pred_dtype.shape[0])
+                if width != expected_len:
+                    raise ValueError(
+                        f"OrdinalLossScorer: pred_column Array width ({width}) does not match len(classes) ({expected_len})."
+                    )
+                get_expr = lambda i: pl.col(self.pred_column).arr.get(i)
+            else:
+                max_len = df.select(pl.col(self.pred_column).list.len().max()).item()
+                if max_len is not None and int(max_len) != expected_len:
+                    raise ValueError(
+                        f"OrdinalLossScorer: pred_column List length ({int(max_len)}) does not match len(classes) ({expected_len})."
+                    )
+                get_expr = lambda i: pl.col(self.pred_column).list.get(i)
 
             df = df.with_columns(
-                (pl.col(f"prob_{class_}") + pl.col(prob_col_under)).alias(
-                    prob_col_under
-                )
+                [get_expr(i).alias(f"prob_{c}") for i, c in enumerate(class_labels)]
             )
 
-        return sum_lr
+        if len(class_labels) < 2:
+            raise ValueError("OrdinalLossScorer: need at least 2 classes.")
+
+        if class_labels != list(range(class_labels[0], class_labels[0] + len(class_labels))):
+            raise ValueError(
+                f"OrdinalLossScorer: classes must be consecutive integers. Got: {class_labels[:10]}..."
+            )
+
+        min_field = class_labels[0]
+        prob_col_under = "sum_prob_under"
+        df = df.with_columns(pl.col(f"prob_{min_field}").alias(prob_col_under))
+
+        counts = df.group_by(self.target).len().rename({"len": "n"})
+        total = counts.filter(pl.col(self.target) < class_labels[-1])["n"].sum()
+        total = int(total) if total is not None else 0
+        if total <= 0:
+            return 0.0
+
+        sum_lr = 0.0
+
+        for class_ in class_labels[1:]:
+            n_exact = counts.filter(pl.col(self.target) == class_ - 1)["n"].sum()
+            n_exact = int(n_exact) if n_exact is not None else 0
+            weight_class = n_exact / total
+            if weight_class == 0.0:
+                df = df.with_columns(
+                    (pl.col(f"prob_{class_}") + pl.col(prob_col_under))
+                    .clip(0.0, 1.0)
+                    .alias(prob_col_under)
+                )
+                continue
+
+            df = df.with_columns(
+                pl.col(prob_col_under).clip(0.0001, 0.9999).alias(prob_col_under)
+            )
+
+            log_loss = df.select(
+                pl.when(pl.col(self.target) < class_)
+                .then(pl.col(prob_col_under).log())
+                .otherwise((1 - pl.col(prob_col_under)).log())
+                .mean()
+            ).item()
+
+            sum_lr -= float(log_loss) * float(weight_class)
+
+            df = df.with_columns(
+                (pl.col(f"prob_{class_}") + pl.col(prob_col_under))
+                .clip(0.0, 1.0)
+                .alias(prob_col_under)
+            )
+
+        return float(sum_lr)
 
 
 class OrdinalLossScorerOld(BaseScorer):
 
     def __init__(
-        self,
-        pred_column: str,
-        target: str,
-        class_column_name: str = "classes",
-        validation_column: Optional[str] = None,
-        granularity: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
+            self,
+            pred_column: str,
+            target: str,
+            class_column_name: str = "classes",
+            validation_column: Optional[str] = None,
+            granularity: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
     ):
         """
         :param pred_column: The column name of the predictions
@@ -469,7 +530,7 @@ class OrdinalLossScorerOld(BaseScorer):
         sum_lrs = [0 for _ in range(len(distinct_classes_variations))]
         sum_lr = 0
         for variation_idx, distinct_class_variation in enumerate(
-            distinct_classes_variations
+                distinct_classes_variations
         ):
 
             if not isinstance(distinct_class_variation, list):
@@ -489,8 +550,8 @@ class OrdinalLossScorerOld(BaseScorer):
 
                 p_c = "prob_under_" + str(class_ + 0.5)
                 rows_target_group[p_c] = (
-                    probs.apply(lambda x: x[idx + 1])
-                    + rows_target_group[last_column_name]
+                        probs.apply(lambda x: x[idx + 1])
+                        + rows_target_group[last_column_name]
                 )
 
                 count_exact = len(
