@@ -7,8 +7,8 @@ from spforge import ColumnNames
 from spforge.transformers.base_transformer import (
     BaseTransformer,
 )
-import narwhals as nw
-from narwhals.typing import FrameT, IntoFrameT
+import narwhals.stable.v2 as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
 
 from spforge.transformers.lag_transformers import BaseLagTransformer
 
@@ -56,7 +56,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
 
     @nw.narwhalify
     def fit_transform(
-        self, df: FrameT, column_names: Optional[ColumnNames]
+        self, df: IntoFrameT, column_names: Optional[ColumnNames]
     ) -> IntoFrameT:
         ori_cols = df.columns
         self.column_names = column_names
@@ -72,7 +72,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
         return transformed_df.select(list(set(ori_cols + self.features_out)))
 
     @nw.narwhalify
-    def transform(self, df: FrameT, cross_validate: bool = False) -> IntoFrameT:
+    def transform(self, df: IntoFrameT, cross_validate: bool = False) -> IntoFrameT:
         df = self._transform(df)
         for lag_transformer in self.lag_transformers:
             if cross_validate:
@@ -81,7 +81,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
                 df = lag_transformer.transform_future(df)
         return df
 
-    def _transform(self, df: FrameT) -> IntoFrameT:
+    def _transform(self, df: IntoFrameT) -> IntoFrameT:
         input_features = df.columns
         df = nw.from_native(self.predictor.predict(df=df))
 

@@ -1,8 +1,8 @@
 from abc import abstractmethod
 from typing import Optional
 
-from narwhals.typing import FrameT, IntoFrameT
-import narwhals as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
+import narwhals.stable.v2 as nw
 
 from spforge import ColumnNames
 
@@ -61,12 +61,12 @@ class BaseLagTransformer:
 
     @abstractmethod
     def transform_historical(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         pass
 
     @abstractmethod
-    def transform_future(self, df: FrameT) -> IntoFrameT:
+    def transform_future(self, df: IntoFrameT) -> IntoFrameT:
         pass
 
     @property
@@ -80,8 +80,8 @@ class BaseLagTransformer:
         return self._features_out
 
     def _maybe_group(
-        self, df: FrameT, additional_cols: Optional[list[str]] = None
-    ) -> FrameT:
+        self, df: IntoFrameT, additional_cols: Optional[list[str]] = None
+    ) -> IntoFrameT:
         if (
             self.group_to_granularity
             and not self.unique_constraint
@@ -99,14 +99,14 @@ class BaseLagTransformer:
 
     def _concat_with_stored(
         self,
-        group_df: FrameT,
-        ori_df: Optional[FrameT] = None,
+        group_df: IntoFrameT,
+        ori_df: Optional[IntoFrameT] = None,
         additional_cols: Optional[list[str]] = None,
-    ) -> FrameT:
+    ) -> IntoFrameT:
         df = (
             ori_df
             if self.update_column
-            and isinstance(ori_df, nw.DataFrame)
+            and isinstance(ori_df,IntoFrameT)
             and self.group_to_granularity
             and self.update_column not in self.group_to_granularity
             else group_df
@@ -156,14 +156,14 @@ class BaseLagTransformer:
 
     def _store_df(
         self,
-        grouped_df: FrameT,
+        grouped_df: IntoFrameT,
         ori_df: Optional[nw.DataFrame] = None,
         additional_cols: Optional[list[str]] = None,
     ):
         df = (
             ori_df
             if self.update_column
-            and isinstance(ori_df, nw.DataFrame)
+            and isinstance(ori_df,IntoFrameT)
             and self.group_to_granularity
             and self.update_column not in self.group_to_granularity
             else grouped_df
@@ -218,8 +218,8 @@ class BaseLagTransformer:
         return storage_unique_constraint
 
     def _group_to_granularity_level(
-        self, df: FrameT, sort_col, additional_cols: Optional[list[str]] = None
-    ) -> FrameT:
+        self, df: IntoFrameT, sort_col, additional_cols: Optional[list[str]] = None
+    ) -> IntoFrameT:
         if (
             self.group_to_granularity
             and self.unique_constraint
@@ -242,8 +242,8 @@ class BaseLagTransformer:
 
     def _merge_into_input_df(
         self,
-        df: FrameT,
-        concat_df: FrameT,
+        df: IntoFrameT,
+        concat_df: IntoFrameT,
         match_id_join_on: Optional[str] = None,
         features_out: Optional[list[str]] = None,
     ) -> IntoFrameT:
@@ -288,7 +288,7 @@ class BaseLagTransformer:
         )
         return transformed_df.select(list(set(ori_cols + features_out)))
 
-    def _add_opponent_features(self, df: FrameT) -> FrameT:
+    def _add_opponent_features(self, df: IntoFrameT) -> IntoFrameT:
         team_features = df.group_by(
             [self.column_names.team_id, self.column_names.update_match_id]
         ).agg(nw.col(self._entity_features_out).mean())
@@ -336,9 +336,9 @@ class BaseLagTransformer:
 
     def _forward_fill_future_features(
         self,
-        df: FrameT,
+        df: IntoFrameT,
         granularity: Optional[list[str]] = None,
-    ) -> FrameT:
+    ) -> IntoFrameT:
 
         cn = self.column_names
 
@@ -459,7 +459,7 @@ class BaseLagTransformer:
             how="left",
         )
 
-    def _equalize_values_within_update_id(self, df: FrameT, column_name: str) -> FrameT:
+    def _equalize_values_within_update_id(self, df: IntoFrameT, column_name: str) -> IntoFrameT:
         df_ranked = df.with_columns(
             [
                 nw.lit(1).alias("one"),
@@ -488,7 +488,7 @@ class BaseLagTransformer:
             .select(df.columns)
         )
 
-    def _post_features_generated(self, df: FrameT) -> FrameT:
+    def _post_features_generated(self, df: IntoFrameT) -> IntoFrameT:
         df = df.sort("__row_index")
         if self.update_column != self.match_id_column:
             for feature_name in self._entity_features_out:
@@ -506,5 +506,5 @@ class BaseLagTransformer:
         return self
 
     @property
-    def historical_df(self) -> FrameT:
+    def historical_df(self) -> IntoFrameT:
         return self._df

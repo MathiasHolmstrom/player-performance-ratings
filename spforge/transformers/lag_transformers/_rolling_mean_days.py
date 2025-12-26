@@ -2,8 +2,8 @@ from typing import Union, Optional
 
 import pandas as pd
 import polars as pl
-import narwhals as nw
-from narwhals.typing import FrameT, IntoFrameT
+import narwhals.stable.v2 as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
 
 from spforge import ColumnNames
 from spforge.transformers.lag_transformers._utils import (
@@ -62,7 +62,7 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
     @required_lag_column_names
     @transformation_validator
     def transform_historical(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
 
         if not self.column_names and not self.date_column:
@@ -121,7 +121,7 @@ class RollingMeanDaysTransformer(BaseLagTransformer):
     @future_validator
     @future_lag_transformations_wrapper
     @transformation_validator
-    def transform_future(self, df: FrameT) -> IntoFrameT:
+    def transform_future(self, df: IntoFrameT) -> IntoFrameT:
         ori_cols = df.columns
         if self.column_names:
             if df[self.date_column].dtype not in (nw.Date, nw.Datetime):

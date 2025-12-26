@@ -6,7 +6,7 @@ from spforge import ColumnNames
 from spforge.predictor._base import BasePredictor
 from spforge.scorer import BaseScorer
 
-from narwhals.typing import FrameT, IntoFrameT
+from narwhals.typing import IntoFrameT, IntoFrameT
 
 
 class CrossValidator(ABC):
@@ -28,14 +28,14 @@ class CrossValidator(ABC):
     @abstractmethod
     def generate_validation_df(
         self,
-        df: FrameT,
+        df: IntoFrameT,
         return_features: bool = False,
         add_train_prediction: bool = False,
     ) -> IntoFrameT:
         pass
 
     def cross_validation_score(
-        self, validation_df: FrameT, scorer: Optional[BaseScorer] = None
+        self, validation_df: IntoFrameT, scorer: Optional[BaseScorer] = None
     ) -> float:
         if not scorer and not self.scorer:
             raise ValueError(

@@ -1,8 +1,8 @@
 import copy
 import logging
 import polars as pl
-import narwhals as nw
-from narwhals.typing import FrameT, IntoFrameT
+import narwhals.stable.v2 as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
 import pandas as pd
 
 from spforge.predictor_transformer import PredictorTransformer
@@ -69,7 +69,7 @@ class GroupByPredictor(BasePredictor):
         )
 
     @nw.narwhalify
-    def train(self, df: FrameT, features: list[Optional[str]] = None) -> None:
+    def train(self, df: IntoFrameT, features: list[Optional[str]] = None) -> None:
         """
         Performs pre_transformations and trains an Sklearn-like estimator.
 
@@ -97,7 +97,7 @@ class GroupByPredictor(BasePredictor):
 
     @nw.narwhalify
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+        self, df: IntoFrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
         """
         Adds prediction to df
@@ -127,7 +127,7 @@ class GroupByPredictor(BasePredictor):
 
         return df
 
-    def _create_grouped(self, df: FrameT) -> FrameT:
+    def _create_grouped(self, df: IntoFrameT) -> IntoFrameT:
 
         numeric_features = [
             feature for feature in self._features if df[feature].dtype.is_numeric()
@@ -216,7 +216,7 @@ class SklearnPredictor(BasePredictor):
         self.classes_ = None
 
     @nw.narwhalify
-    def train(self, df: FrameT, features: Optional[list[str]] = None) -> None:
+    def train(self, df: IntoFrameT, features: Optional[list[str]] = None) -> None:
 
         self._features = (
             features.copy() if features else self._ori_estimator_features.copy()
@@ -332,7 +332,7 @@ class SklearnPredictor(BasePredictor):
 
     @nw.narwhalify
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+        self, df: IntoFrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
         if self.pred_column in df.columns:
             df = df.drop(self.pred_column)
@@ -497,7 +497,7 @@ class GranularityPredictor(BasePredictor):
         self.classes_ = {}
 
     @nw.narwhalify
-    def train(self, df: FrameT, features: Optional[list[str]] = None) -> None:
+    def train(self, df: IntoFrameT, features: Optional[list[str]] = None) -> None:
         """
         Performs pre_transformations and trains an Sklearn-like estimator.
 
@@ -541,7 +541,7 @@ class GranularityPredictor(BasePredictor):
 
     @nw.narwhalify
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+        self, df: IntoFrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
 
         if isinstance(df.to_native(), pd.DataFrame):
@@ -574,7 +574,7 @@ class GranularityPredictor(BasePredictor):
         return df
 
     def _unify_struct_fields(
-        self, dfs: list[FrameT], struct_col: str
+        self, dfs: list[IntoFrameT], struct_col: str
     ) -> list[IntoFrameT]:
         dfs = [df.to_native() for df in dfs]
         all_fields = set()

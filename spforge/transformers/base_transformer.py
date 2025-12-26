@@ -1,7 +1,7 @@
 from abc import abstractmethod, ABC
 from typing import Optional
 
-from narwhals.typing import FrameT, IntoFrameT
+from narwhals.typing import IntoFrameT, IntoFrameT
 
 from spforge import ColumnNames
 
@@ -24,12 +24,12 @@ class BaseTransformer(ABC):
 
     @abstractmethod
     def fit_transform(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         pass
 
     @abstractmethod
-    def transform(self, df: FrameT, cross_validate: bool = False) -> IntoFrameT:
+    def transform(self, df: IntoFrameT, cross_validate: bool = False) -> IntoFrameT:
         pass
 
     @property

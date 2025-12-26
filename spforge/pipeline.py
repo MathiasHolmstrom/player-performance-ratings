@@ -1,8 +1,8 @@
 import logging
 from typing import List, Optional, Union
 
-import narwhals as nw
-from narwhals.typing import FrameT, IntoFrameT
+import narwhals.stable.v2 as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
 
 from spforge.predictor._base import BasePredictor
 
@@ -165,7 +165,7 @@ class Pipeline(BasePredictor):
         self._pred_columns_added = self.predictor._pred_columns_added
 
     @nw.narwhalify
-    def train(self, df: FrameT, features: Optional[list[str]] = None) -> None:
+    def train(self, df: IntoFrameT, features: Optional[list[str]] = None) -> None:
         """
         Trains the pipeline on the given dataframe and generates and returns predictions.
         :param df: DataFrame with the data to be used for training and prediction
@@ -291,7 +291,7 @@ class Pipeline(BasePredictor):
 
     @nw.narwhalify
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+        self, df: IntoFrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
         """
         Generates either cross-validated or future predictions on the given dataframe.

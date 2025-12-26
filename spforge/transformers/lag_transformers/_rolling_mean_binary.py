@@ -2,8 +2,8 @@ from typing import Optional
 
 import pandas as pd
 import polars as pl
-import narwhals as nw
-from narwhals.typing import FrameT, IntoFrameT
+import narwhals.stable.v2 as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
 
 from spforge import ColumnNames
 from spforge.transformers.lag_transformers._utils import (
@@ -89,7 +89,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
     @required_lag_column_names
     @transformation_validator
     def transform_historical(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
 
         if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
@@ -133,7 +133,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
     @future_lag_transformations_wrapper
     @future_validator
     @transformation_validator
-    def transform_future(self, df: FrameT) -> IntoFrameT:
+    def transform_future(self, df: IntoFrameT) -> IntoFrameT:
 
         if self.binary_column in df.columns:
             if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
@@ -164,7 +164,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
 
         return known_future_features
 
-    def _generate_features(self, df: FrameT, ori_df: FrameT) -> FrameT:
+    def _generate_features(self, df: IntoFrameT, ori_df: IntoFrameT) -> IntoFrameT:
         if self.column_names and self._df is not None:
             sort_col = self.column_names.start_date
             add_cols = (
@@ -231,7 +231,7 @@ class BinaryOutcomeRollingMeanTransformer(BaseLagTransformer):
         )
         return concat_df
 
-    def _add_weighted_prob(self, transformed_df: FrameT) -> FrameT:
+    def _add_weighted_prob(self, transformed_df: IntoFrameT) -> IntoFrameT:
 
         if self.prob_column:
             for idx, feature_name in enumerate(self.features):

@@ -9,9 +9,9 @@ from spforge.utils import validate_sorting
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 from typing import Optional, Any
-from narwhals.typing import FrameT
+from narwhals.typing import IntoFrameT
 import pandas as pd
-import narwhals as nw
+import narwhals.stable.v2 as nw
 
 from spforge.data_structures import (
     MatchTeam,
@@ -27,7 +27,7 @@ HOUR_NUMBER_COLUMN_NAME = "hour_number"
 
 @nw.narwhalify
 def convert_df_to_matches(
-    df: FrameT,
+    df: IntoFrameT,
     column_names: ColumnNames,
     performance_column_name: str,
     separate_player_by_position: bool = False,

@@ -3,8 +3,8 @@ from typing import Optional, Any, Union
 
 import numpy as np
 import polars as pl
-import narwhals as nw
-from narwhals.typing import FrameT, IntoFrameT
+import narwhals.stable.v2 as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
 
 from spforge.ratings import convert_df_to_matches
 
@@ -142,7 +142,7 @@ class PlayerRatingGenerator(RatingGenerator):
     @nw.narwhalify
     def fit_transform(
         self,
-        df: FrameT,
+        df: IntoFrameT,
         column_names: Optional[ColumnNames] = None,
     ) -> IntoFrameT:
         """
@@ -175,7 +175,7 @@ class PlayerRatingGenerator(RatingGenerator):
     @transformation_validator
     @nw.narwhalify
     def transform_historical(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """
         Generate ratings by iterating over the dataframe, calculate predicted performance and update ratings after the match is finished.
@@ -190,8 +190,8 @@ class PlayerRatingGenerator(RatingGenerator):
         return self._transform_historical(df, column_names=column_names)
 
     def _transform_historical(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
-    ) -> FrameT:
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
+    ) -> IntoFrameT:
 
         self.column_names = column_names or self.column_names
         if not self.column_names:
@@ -336,7 +336,7 @@ class PlayerRatingGenerator(RatingGenerator):
             list(set(feats_out))
         )
 
-    def _generate_potential_feature_values(self, matches: list[Match], ori_df: FrameT):
+    def _generate_potential_feature_values(self, matches: list[Match], ori_df: IntoFrameT):
         pre_match_player_rating_values = []
         pre_match_team_rating_values = []
         pre_match_opponent_projected_rating_values = []
@@ -523,7 +523,7 @@ class PlayerRatingGenerator(RatingGenerator):
     @nw.narwhalify
     def transform_future(
         self,
-        df: FrameT,
+        df: IntoFrameT,
         matches: Optional[list[Match]] = None,
     ) -> IntoFrameT:
 
@@ -687,7 +687,7 @@ class PlayerRatingGenerator(RatingGenerator):
         player_ids: list[str],
         projected_participation_weights: list[float],
         team_leagues: list[str],
-        ori_df: FrameT,
+        ori_df: IntoFrameT,
     ) -> dict[Union[RatingKnownFeatures, RatingUnknownFeatures], Any]:
 
         if self.column_names.projected_participation_weight:
@@ -1005,7 +1005,7 @@ class PlayerRatingGenerator(RatingGenerator):
         return pre_match_team_ratings
 
     def _store_df(
-        self, df: nw.DataFrame, additional_cols_to_use: Optional[list[str]] = None
+        self, df:IntoFrameT, additional_cols_to_use: Optional[list[str]] = None
     ):
 
         cols = list(

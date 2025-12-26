@@ -2,8 +2,8 @@ import copy
 from datetime import datetime
 from typing import Optional
 
-import narwhals as nw
-from narwhals.typing import FrameT, IntoFrameT
+import narwhals.stable.v2 as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
 from spforge import ColumnNames
 
 from spforge.scorer import BaseScorer
@@ -45,7 +45,7 @@ class MatchKFoldCrossValidator(CrossValidator):
     @nw.narwhalify
     def generate_validation_df(
         self,
-        df: FrameT,
+        df: IntoFrameT,
         return_features: bool = False,
         add_train_prediction: bool = False,
     ) -> IntoFrameT:

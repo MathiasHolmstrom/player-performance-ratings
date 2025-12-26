@@ -2,8 +2,8 @@ import pandas as pd
 
 from spforge import ColumnNames
 import polars as pl
-import narwhals as nw
-from narwhals.typing import FrameT
+import narwhals.stable.v2 as nw
+from narwhals.typing import IntoFrameT
 
 
 def convert_pandas_to_polars(df: pd.DataFrame) -> pl.DataFrame:
@@ -14,7 +14,7 @@ def convert_pandas_to_polars(df: pd.DataFrame) -> pl.DataFrame:
 
 
 @nw.narwhalify
-def validate_sorting(df: FrameT, column_names: ColumnNames) -> None:
+def validate_sorting(df: IntoFrameT, column_names: ColumnNames) -> None:
     sort_cols = (
         [
             column_names.start_date,

@@ -156,7 +156,7 @@ def test_game_team_predictor_train_input(df):
     predictor.train(data, features=["feature1"])
     feature_team1 = (0.1 * 0.5 + 0.5 * 0.5) / (0.5 + 0.5)
     feature_team2 = (0.3 * 0.5 + 0.4 * 0.5) / (0.5 + 0.5)
-    import narwhals as nw
+    import narwhals.stable.v2 as nw
 
     expeced_train_input = nw.from_dict(
         {

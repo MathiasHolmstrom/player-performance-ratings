@@ -1,7 +1,7 @@
 from typing import Optional, Union, List
 
-from narwhals.typing import FrameT, IntoFrameT
-import narwhals as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
+import narwhals.stable.v2 as nw
 
 from spforge import ColumnNames
 
@@ -43,7 +43,7 @@ class PipelineTransformer:
         self.post_lag_transformers = post_lag_transformers or []
 
     @nw.narwhalify
-    def fit_transform(self, df: FrameT) -> IntoFrameT:
+    def fit_transform(self, df: IntoFrameT) -> IntoFrameT:
         """
         Fit and transform the pipeline on historical data
         :param df: Either polars or Pandas dataframe
@@ -143,7 +143,7 @@ class PipelineTransformer:
         return df
 
     @nw.narwhalify
-    def transform(self, df: FrameT) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         """
         Transform the pipeline on future data
         :param df: Either polars or Pandas dataframe

@@ -3,8 +3,8 @@ from abc import abstractmethod, ABC
 from typing import Literal, Optional
 
 import pandas as pd
-from narwhals.typing import FrameT, IntoFrameT
-import narwhals as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
+import narwhals.stable.v2 as nw
 
 
 class SimpleTransformer(ABC):
@@ -13,7 +13,7 @@ class SimpleTransformer(ABC):
         self.drop_cols = drop_cols or []
 
     @abstractmethod
-    def transform(self, df: FrameT) -> pd.DataFrame:
+    def transform(self, df: IntoFrameT) -> pd.DataFrame:
         pass
 
 
@@ -54,7 +54,7 @@ class OperatorTransformer(SimpleTransformer):
                 self.alias = f"{self.feature1}_divided_by_{self.feature2}"
 
     @nw.narwhalify
-    def transform(self, df: FrameT) -> FrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         if self.feature1 not in df.columns or self.feature2 not in df.columns:
             return df
         if self.operation == "subtract":
@@ -102,7 +102,7 @@ class AggregatorTransformer(SimpleTransformer):
         self.aggregator = aggregator
 
     @nw.narwhalify
-    def transform(self, df: FrameT) -> pd.DataFrame:
+    def transform(self, df: IntoFrameT) -> pd.DataFrame:
         if self.aggregator == "sum":
             if self.granularity:
                 return (
@@ -168,7 +168,7 @@ class NormalizerToColumnTransformer(SimpleTransformer):
         self.drop_cols = drop_cols or []
 
     @nw.narwhalify
-    def transform(self, df: FrameT) -> pd.DataFrame:
+    def transform(self, df: IntoFrameT) -> pd.DataFrame:
         input_cols = df.columns
         df = df.with_columns(
             nw.col(self.column).sum().over(self.granularity).alias("__sum_value")

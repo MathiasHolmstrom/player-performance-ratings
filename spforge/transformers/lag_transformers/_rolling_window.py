@@ -1,7 +1,7 @@
 from typing import Union, Optional, Literal
-import narwhals as nw
+import narwhals.stable.v2 as nw
 
-from narwhals.typing import FrameT, IntoFrameT
+from narwhals.typing import IntoFrameT, IntoFrameT
 
 from spforge import ColumnNames
 from spforge.transformers.lag_transformers._utils import (
@@ -85,7 +85,7 @@ class RollingWindowTransformer(BaseLagTransformer):
     @required_lag_column_names
     @transformation_validator
     def transform_historical(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """
         Generates rolling mean for historical data
@@ -125,7 +125,7 @@ class RollingWindowTransformer(BaseLagTransformer):
     @future_lag_transformations_wrapper
     @future_validator
     @transformation_validator
-    def transform_future(self, df: FrameT) -> IntoFrameT:
+    def transform_future(self, df: IntoFrameT) -> IntoFrameT:
         """
         Generates rolling mean for future data
         Assumes that .generate_historical() has been called before
@@ -141,7 +141,7 @@ class RollingWindowTransformer(BaseLagTransformer):
         df = self._post_features_generated(df)
         return self._forward_fill_future_features(df=df)
 
-    def _generate_features(self, df: FrameT, ori_df: FrameT) -> FrameT:
+    def _generate_features(self, df: IntoFrameT, ori_df: IntoFrameT) -> IntoFrameT:
 
         if self.column_names and self._df is not None:
             sort_col = self.column_names.start_date

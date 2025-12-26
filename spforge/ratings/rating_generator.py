@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Union
 
-from narwhals.typing import FrameT, IntoFrameT
+from narwhals.typing import IntoFrameT, IntoFrameT
 
 from spforge.ratings.rating_calculators import MatchRatingGenerator
 from spforge.ratings.enums import (
@@ -47,13 +47,13 @@ class RatingGenerator(ABC):
         self._calculated_match_ids = []
 
     @abstractmethod
-    def fit_transform(self, df: FrameT, column_names: ColumnNames) -> IntoFrameT:
+    def fit_transform(self, df: IntoFrameT, column_names: ColumnNames) -> IntoFrameT:
         pass
 
     @abstractmethod
     def transform_historical(
         self,
-        df: FrameT,
+        df: IntoFrameT,
         column_names: ColumnNames,
     ) -> IntoFrameT:
         pass
@@ -61,7 +61,7 @@ class RatingGenerator(ABC):
     @abstractmethod
     def transform_future(
         self,
-        df: Optional[FrameT],
+        df: Optional[IntoFrameT],
         matches: Optional[list[Match]] = None,
     ) -> IntoFrameT:
         pass
@@ -150,5 +150,5 @@ class RatingGenerator(ABC):
             raise ValueError(f"{match.id} only contains {len(match.teams)} teams")
 
     @property
-    def historical_df(self) -> FrameT:
+    def historical_df(self) -> IntoFrameT:
         return self._df

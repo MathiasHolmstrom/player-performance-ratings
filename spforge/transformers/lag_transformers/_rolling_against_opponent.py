@@ -1,9 +1,9 @@
 import logging
 from typing import Union, Optional, Literal
-import narwhals as nw
+import narwhals.stable.v2 as nw
 import pandas as pd
 import polars as pl
-from narwhals.typing import FrameT, IntoFrameT
+from narwhals.typing import IntoFrameT, IntoFrameT
 
 from spforge import ColumnNames
 from spforge.transformers.lag_transformers import RollingWindowTransformer
@@ -99,7 +99,7 @@ class RollingAgainstOpponentTransformer(BaseLagTransformer):
     @required_lag_column_names
     @transformation_validator
     def transform_historical(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """
         Generates rolling mean for historical data
@@ -175,7 +175,7 @@ class RollingAgainstOpponentTransformer(BaseLagTransformer):
     @future_lag_transformations_wrapper
     @future_validator
     @transformation_validator
-    def transform_future(self, df: FrameT) -> IntoFrameT:
+    def transform_future(self, df: IntoFrameT) -> IntoFrameT:
         """
         Generates rolling mean opponent for future data
         Assumes that .generate_historical() has been called before
@@ -216,8 +216,8 @@ class RollingAgainstOpponentTransformer(BaseLagTransformer):
         return df.to_native()
 
     def _concat_with_stored_and_calculate_feats(
-        self, df: FrameT, is_future: bool
-    ) -> FrameT:
+        self, df: IntoFrameT, is_future: bool
+    ) -> IntoFrameT:
 
         cols_to_drop = [c for c in self.features_out if c in df.columns]
         df = df.drop(cols_to_drop)
@@ -252,7 +252,7 @@ class RollingAgainstOpponentTransformer(BaseLagTransformer):
         return concat_df
 
     def _merge_into_input_df(
-        self, df: FrameT, concat_df: FrameT, match_id_join_on: Optional[str] = None
+        self, df: IntoFrameT, concat_df: IntoFrameT, match_id_join_on: Optional[str] = None
     ) -> IntoFrameT:
         sort_cols = (
             [
@@ -285,7 +285,7 @@ class RollingAgainstOpponentTransformer(BaseLagTransformer):
             .sort(sort_cols)
         )
 
-    def _rename_features(self, df: FrameT) -> FrameT:
+    def _rename_features(self, df: IntoFrameT) -> IntoFrameT:
         rename_cols = {
             feature: self.features_out[idx]
             for idx, feature in enumerate(self._transformer.features_out)

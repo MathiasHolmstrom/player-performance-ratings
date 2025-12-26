@@ -1,7 +1,6 @@
 from typing import Optional
 
-import narwhals as nw
-from narwhals.dataframe import FrameT
+import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
 
 from ._base import BasePredictor
@@ -22,12 +21,12 @@ class OperatorsPredictor(BasePredictor):
         )
 
     @nw.narwhalify
-    def train(self, df: FrameT, features: Optional[list[str]] = None) -> None:
+    def train(self, df: IntoFrameT, features: Optional[list[str]] = None) -> None:
         pass
 
     @nw.narwhalify
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+        self, df: IntoFrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
         for transformer in self.transformers:
             df = transformer.transform(df)

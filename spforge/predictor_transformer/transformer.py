@@ -1,7 +1,7 @@
 from abc import abstractmethod, ABC
-from narwhals.typing import FrameT, IntoFrameT
+from narwhals.typing import IntoFrameT, IntoFrameT
 
-import narwhals as nw
+import narwhals.stable.v2 as nw
 import numpy as np
 
 
@@ -11,11 +11,11 @@ class PredictorTransformer(ABC):
         self.features = features
 
     @abstractmethod
-    def fit_transform(self, df: FrameT) -> IntoFrameT:
+    def fit_transform(self, df: IntoFrameT) -> IntoFrameT:
         pass
 
     @abstractmethod
-    def transform(self, df: FrameT) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         pass
 
     @property
@@ -33,12 +33,12 @@ class ConvertDataFrameToCategoricalTransformer(PredictorTransformer):
         super().__init__(features=features)
 
     @nw.narwhalify
-    def fit_transform(self, df: FrameT) -> IntoFrameT:
+    def fit_transform(self, df: IntoFrameT) -> IntoFrameT:
         self._features_out = self.features
         return nw.from_native(self.transform(df)).select(self._features_out)
 
     @nw.narwhalify
-    def transform(self, df: FrameT) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         df = df.with_columns(
             nw.col(feature).cast(nw.Categorical) for feature in self.features
         )
@@ -60,7 +60,7 @@ class SkLearnTransformerWrapper(PredictorTransformer):
         self._features_out = []
 
     @nw.narwhalify
-    def fit_transform(self, df: FrameT) -> IntoFrameT:
+    def fit_transform(self, df: IntoFrameT) -> IntoFrameT:
 
         try:
             transformed_values = self.transformer.fit_transform(
@@ -85,7 +85,7 @@ class SkLearnTransformerWrapper(PredictorTransformer):
         ).select(self._features_out)
 
     @nw.narwhalify
-    def transform(self, df: FrameT) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         try:
             transformed_values = self.transformer.transform(
                 df.select(self.features).to_native()

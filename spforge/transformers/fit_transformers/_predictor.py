@@ -5,8 +5,8 @@ from spforge.predictor import BasePredictor
 from spforge.transformers.base_transformer import (
     BaseTransformer,
 )
-import narwhals as nw
-from narwhals.typing import FrameT, IntoFrameT
+import narwhals.stable.v2 as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
 
 
 class PredictorTransformer(BaseTransformer):
@@ -27,11 +27,11 @@ class PredictorTransformer(BaseTransformer):
 
     @nw.narwhalify
     def fit_transform(
-        self, df: FrameT, column_names: Optional[None] = None
+        self, df: IntoFrameT, column_names: Optional[None] = None
     ) -> IntoFrameT:
         self.predictor.train(df=df, features=self.features)
         return self.transform(df)
 
     @nw.narwhalify
-    def transform(self, df: FrameT, cross_validate: bool = False) -> IntoFrameT:
+    def transform(self, df: IntoFrameT, cross_validate: bool = False) -> IntoFrameT:
         return self.predictor.predict(df=df)

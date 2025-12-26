@@ -3,8 +3,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional, Union, Literal, List
 
-from narwhals.typing import FrameT, IntoFrameT
-import narwhals as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
+import narwhals.stable.v2 as nw
 from spforge.transformers.base_transformer import BaseTransformer
 from spforge.transformers.fit_transformers import (
     PartialStandardScaler,
@@ -124,7 +124,7 @@ class PerformanceManager(BaseTransformer):
         super().__init__(features=features, features_out=self.features_out)
 
     @nw.narwhalify
-    def fit_transform(self, df: FrameT) -> IntoFrameT:
+    def fit_transform(self, df: IntoFrameT) -> IntoFrameT:
         input_cols = df.columns
         df = df.with_columns(nw.col(f).alias("__ori" + f) for f in self.features)
 
@@ -139,7 +139,7 @@ class PerformanceManager(BaseTransformer):
         return self._post_transform(df, input_cols)
 
     @nw.narwhalify
-    def transform(self, df: FrameT) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         input_cols = df.columns
         df = df.with_columns(nw.col(f).alias("__ori" + f) for f in self.features)
 
@@ -153,7 +153,7 @@ class PerformanceManager(BaseTransformer):
 
         return self._post_transform(df, input_cols)
 
-    def _post_transform(self, df: FrameT, input_cols: list[str]) -> IntoFrameT:
+    def _post_transform(self, df: IntoFrameT, input_cols: list[str]) -> IntoFrameT:
         df = df.with_columns(
             nw.col(self.transformers[-1].features_out[0]).alias(self.performance_column)
         )
@@ -201,7 +201,7 @@ class PerformanceWeightsManager(PerformanceManager):
         )
 
     @nw.narwhalify
-    def fit_transform(self, df: FrameT) -> IntoFrameT:
+    def fit_transform(self, df: IntoFrameT) -> IntoFrameT:
         input_cols = df.columns
 
         df = df.with_columns(nw.col(f).alias("__ori" + f) for f in self.features)
@@ -219,7 +219,7 @@ class PerformanceWeightsManager(PerformanceManager):
         return df.select(list(set([*input_cols, *self.features_out])))
 
     @nw.narwhalify
-    def transform(self, df: FrameT) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         input_cols = df.columns
         df = df.with_columns(nw.col(f).alias("__ori" + f) for f in self.features)
 
@@ -241,7 +241,7 @@ class PerformanceWeightsManager(PerformanceManager):
         )
         return df.select(list(set([*input_cols, *self.features_out])))
 
-    def _calculate_weights(self, df: FrameT) -> FrameT:
+    def _calculate_weights(self, df: IntoFrameT) -> IntoFrameT:
         if self.transformers:
             max_idx = len(self.transformers) - 1
             column_weighs_mapping = {
@@ -268,9 +268,9 @@ class PerformanceWeightsManager(PerformanceManager):
 
     def _weight_columns(
         self,
-        df: FrameT,
+        df: IntoFrameT,
         column_weighs_mapping: dict[str, str],
-    ) -> FrameT:
+    ) -> IntoFrameT:
         df = df.with_columns(
             [
                 nw.lit(0).alias(self.performance_column),

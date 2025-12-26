@@ -8,8 +8,8 @@ from spforge import ColumnNames
 from spforge.transformers.base_transformer import (
     BaseTransformer,
 )
-import narwhals as nw
-from narwhals.typing import FrameT, IntoFrameT
+import narwhals.stable.v2 as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
 
 from spforge.transformers.lag_transformers import BaseLagTransformer
 
@@ -56,7 +56,7 @@ class NetOverPredictedTransformer(BaseTransformer):
 
     @nw.narwhalify
     def fit_transform(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         ori_cols = df.columns
         self.column_names = column_names
@@ -67,7 +67,7 @@ class NetOverPredictedTransformer(BaseTransformer):
         return df.select(list(set(ori_cols + self.features_out)))
 
     @nw.narwhalify
-    def transform(self, df: FrameT, cross_validate: bool = False) -> IntoFrameT:
+    def transform(self, df: IntoFrameT, cross_validate: bool = False) -> IntoFrameT:
         if cross_validate:
             df = self._transform(df)
 
@@ -80,7 +80,7 @@ class NetOverPredictedTransformer(BaseTransformer):
 
         return df
 
-    def _transform(self, df: FrameT) -> FrameT:
+    def _transform(self, df: IntoFrameT) -> IntoFrameT:
         ori_cols = df.columns
         df = nw.from_native(self.predictor.predict(df))
         new_feature_name = self.prefix + self.predictor.pred_column

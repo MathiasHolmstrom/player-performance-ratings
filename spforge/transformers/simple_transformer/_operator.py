@@ -7,8 +7,8 @@ from spforge import ColumnNames
 from spforge.transformers.base_transformer import (
     BaseTransformer,
 )
-import narwhals as nw
-from narwhals.typing import FrameT, IntoFrameT
+import narwhals.stable.v2 as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
 
 from spforge.transformers.lag_transformers import BaseLagTransformer
 
@@ -66,7 +66,7 @@ class OperatorTransformer(BaseTransformer):
             self.predictor_features_out.extend(lag_transformer.predictor_features_out)
 
     def fit_transform(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         self.column_names = column_names
 
@@ -78,7 +78,7 @@ class OperatorTransformer(BaseTransformer):
         return df
 
     @nw.narwhalify
-    def transform(self, df: FrameT, cross_validate: bool = False) -> IntoFrameT:
+    def transform(self, df: IntoFrameT, cross_validate: bool = False) -> IntoFrameT:
         df = self._transform(df)
         for lag_transformer in self.lag_transformers:
             if cross_validate:
@@ -87,7 +87,7 @@ class OperatorTransformer(BaseTransformer):
                 df = nw.from_native(lag_transformer.transform_future(df))
         return df
 
-    def _transform(self, df: FrameT) -> FrameT:
+    def _transform(self, df: IntoFrameT) -> IntoFrameT:
         if self.feature1 not in df.columns or self.feature2 not in df.columns:
             return df
         if self.operation == Operation.SUBTRACT:

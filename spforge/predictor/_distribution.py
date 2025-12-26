@@ -1,11 +1,11 @@
 import copy
 from typing import Optional
 
-import narwhals as nw
+import narwhals.stable.v2 as nw
 import numpy as np
 import pandas as pd
 import polars as pl
-from narwhals.typing import FrameT, IntoFrameT
+from narwhals.typing import IntoFrameT, IntoFrameT
 from scipy.optimize import minimize
 from scipy.special import gammaln
 from scipy.stats import nbinom, norm
@@ -122,7 +122,7 @@ class NegativeBinomialPredictor(DistributionPredictor):
         self._historical_game_ids = []
 
     @nw.narwhalify
-    def train(self, df: FrameT, features: Optional[list[str]] = None) -> None:
+    def train(self, df: IntoFrameT, features: Optional[list[str]] = None) -> None:
 
         positive_predicted_rows = df.filter(nw.col(self.point_estimate_pred_column) > 0)
         if self.predict_granularity:
@@ -162,7 +162,7 @@ class NegativeBinomialPredictor(DistributionPredictor):
             )
 
             def define_quantile_bins(
-                df: FrameT, column: str, quantiles: list[float]
+                df: IntoFrameT, column: str, quantiles: list[float]
             ) -> list[float]:
                 return [
                     df[column].quantile(q, interpolation="nearest") for q in quantiles
@@ -214,7 +214,7 @@ class NegativeBinomialPredictor(DistributionPredictor):
 
     @nw.narwhalify
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+        self, df: IntoFrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
         input_cols = df.columns
         if self.r_specific_granularity:
@@ -285,7 +285,7 @@ class NegativeBinomialPredictor(DistributionPredictor):
                 [*input_cols, self.pred_column]
             )
 
-    def _grp_to_r_granularity(self, df: FrameT, is_train: bool) -> FrameT:
+    def _grp_to_r_granularity(self, df: IntoFrameT, is_train: bool) -> IntoFrameT:
 
         aggregation = (
             [
@@ -318,7 +318,7 @@ class NegativeBinomialPredictor(DistributionPredictor):
             .sort(self.column_names.start_date)
         )
 
-    def _add_predicted_r(self, df: FrameT) -> FrameT:
+    def _add_predicted_r(self, df: IntoFrameT) -> IntoFrameT:
 
         df = df.with_columns(nw.lit(self._mean_r).alias("__predicted_r"))
         for (mu_bin, var_bin), predicted_r in self._r_estimates.items():
@@ -350,7 +350,7 @@ class NegativeBinomialPredictor(DistributionPredictor):
             )
         return df
 
-    def _add_probabilities(self, df: FrameT) -> FrameT:
+    def _add_probabilities(self, df: IntoFrameT) -> IntoFrameT:
 
         all_outcome_probs = []
         classes_ = []
@@ -459,12 +459,12 @@ class NormalDistributionPredictor(DistributionPredictor):
         )
 
     @nw.narwhalify
-    def train(self, df: FrameT, estimator_features: Optional[list[str]] = None) -> None:
+    def train(self, df: IntoFrameT, estimator_features: Optional[list[str]] = None) -> None:
         self._classes = np.arange(self.min_value, self.max_value + 1)
 
     @nw.narwhalify
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+        self, df: IntoFrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
 
         ori_df = df.select(df.columns[0])
@@ -519,7 +519,7 @@ class DistributionManagerPredictor(BasePredictor):
         ]
 
     @nw.narwhalify
-    def train(self, df: FrameT, features: Optional[list[str]] = None) -> None:
+    def train(self, df: IntoFrameT, features: Optional[list[str]] = None) -> None:
         self._features = features or self.features
 
         df = apply_filters(df=df, filters=self.filters)
@@ -529,7 +529,7 @@ class DistributionManagerPredictor(BasePredictor):
 
     @nw.narwhalify
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+        self, df: IntoFrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
         if self.point_predictor.pred_column not in df.columns:
             df = nw.from_native(self.point_predictor.predict(df))

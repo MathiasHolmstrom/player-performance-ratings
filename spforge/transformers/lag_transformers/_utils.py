@@ -1,18 +1,18 @@
 import logging
 from functools import wraps
-from typing import Optional
+from typing import Optional, Callable, Any, cast, TypeVar
 
 import polars as pl
 import pandas as pd
-from narwhals.typing import FrameT
-import narwhals as nw
+from narwhals.typing import IntoFrameT
+import narwhals.stable.v2 as nw
 
 from spforge import ColumnNames
 
 
 def future_validator(method):
     @wraps(method)
-    def wrapper(self, df: FrameT, *args, **kwargs):
+    def wrapper(self, df: IntoFrameT, *args, **kwargs):
         assert self.column_names is not None, (
             "column names must have been passed to transform_historical() before calling transform_future."
             " Otherwise historical data is not stored"
@@ -22,9 +22,78 @@ def future_validator(method):
     return wrapper
 
 
+
+def _is_duckdb_relation(x: Any) -> bool:
+    """
+    Detect DuckDB relation without importing duckdb.
+    DuckDB relation classes typically live in module 'duckdb'
+    and are named like DuckDBPyRelation.
+    """
+    t = type(x)
+    mod = getattr(t, "__module__", "") or ""
+    name = getattr(t, "__name__", "") or ""
+    return mod.startswith("duckdb") and "Relation" in name
+
+
+def _to_polars_eager(x: Any) -> pl.DataFrame:
+    """
+    Convert *anything* Narwhals supports into eager polars DataFrame.
+    (No collecting here; if the input is genuinely lazy and Narwhals can't
+    materialize without execution, this will fail naturally.)
+    """
+    if isinstance(x, pl.DataFrame):
+        return x
+    if isinstance(x, pl.LazyFrame):
+        raise TypeError("Expected eager input here; got polars LazyFrame.")
+    return cast(pl.DataFrame, nw.from_native(x).to_polars())
+
+
+def _back_to_original_eager_backend(result_pl: pl.DataFrame, original_native: Any) -> Any:
+    """
+    Convert polars DataFrame back to the original eager backend (pandas/cudf/modin/pyarrow/etc)
+    without executing anything extra.
+    """
+    if isinstance(original_native, pl.DataFrame):
+        return result_pl
+
+    ns = nw.get_native_namespace(original_native)
+
+    # Arrow bridge (fast + general)
+    if not hasattr(result_pl, "__arrow_c_stream__"):
+        raise TypeError("Polars result cannot be exported to Arrow; cannot convert back.")
+    return nw.from_arrow(result_pl, backend=ns).to_native()
+
+
+def to_polars(method: Callable[..., Any]):
+    @wraps(method)
+    def wrapper(self, df: IntoFrameT, *args, **kwargs) -> IntoFrameT:
+        if _is_duckdb_relation(df):
+            out = method(self, df, *args, **kwargs)
+            return cast(IntoFrameT, out)
+
+        if isinstance(df, pl.LazyFrame):
+            out = method(self, df, *args, **kwargs)
+            return cast(IntoFrameT, out)
+
+        original_native = df
+        pl_df = _to_polars_eager(df)
+
+        result = method(self, pl_df, *args, **kwargs)
+
+        if not isinstance(result, (pl.DataFrame, pl.LazyFrame)):
+            return cast(IntoFrameT, result)
+
+        if isinstance(result, pl.LazyFrame):
+            return cast(IntoFrameT, result)
+
+        out = _back_to_original_eager_backend(result, original_native)
+        return cast(IntoFrameT, out)
+
+    return wrapper
+
 def future_lag_transformations_wrapper(method):
     @wraps(method)
-    def wrapper(self, df: FrameT, *args, **kwargs):
+    def wrapper(self, df: IntoFrameT, *args, **kwargs):
         df = df.drop([f for f in self.features_out if f in df.columns])
         input_cols = df.columns
         if "__row_index" not in df.columns:
@@ -54,7 +123,7 @@ def future_lag_transformations_wrapper(method):
 def historical_lag_transformations_wrapper(method):
     @wraps(method)
     def wrapper(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None, *args, **kwargs
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None, *args, **kwargs
     ):
         input_cols = df.columns
         if "__row_index" not in df.columns:
@@ -139,7 +208,7 @@ def historical_lag_transformations_wrapper(method):
 
 def transformation_validator(method):
     @wraps(method)
-    def wrapper(self, df: FrameT, *args, **kwargs):
+    def wrapper(self, df: IntoFrameT, *args, **kwargs):
         input_row_count = len(df)
         input_cols = df.columns
         result = method(self, df, *args, **kwargs)
@@ -160,7 +229,7 @@ def transformation_validator(method):
 def required_lag_column_names(method):
     @wraps(method)
     def wrapper(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None, *args, **kwargs
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None, *args, **kwargs
     ):
         self.column_names = column_names or self.column_names
 

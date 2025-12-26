@@ -4,8 +4,8 @@ from typing import Optional, TypeVar, Any
 
 import polars as pl
 import pandas as pd
-from narwhals.typing import FrameT, IntoFrameT
-import narwhals as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
+import narwhals.stable.v2 as nw
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -61,7 +61,7 @@ class BasePredictor(ABC):
     def reset(self) -> None:
         pass
 
-    def _add_features_contain_str(self, df: FrameT) -> None:
+    def _add_features_contain_str(self, df: IntoFrameT) -> None:
         columns = df.columns
         already_added = []
         for contain in self.features_contain_str:
@@ -79,12 +79,12 @@ class BasePredictor(ABC):
                 raise ValueError(f"Feature Contain {contain} not found in df")
 
     @abstractmethod
-    def train(self, df: FrameT, features: Optional[list[str]] = None) -> None:
+    def train(self, df: IntoFrameT, features: Optional[list[str]] = None) -> None:
         pass
 
     @abstractmethod
     def predict(
-        self, df: FrameT, cross_validation: bool = False, **kwargs
+        self, df: IntoFrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
         pass
 
@@ -111,8 +111,8 @@ class BasePredictor(ABC):
         return [*self._pred_columns_added, "classes"]
 
     def _convert_multiclass_predictions_to_struct(
-        self, df: FrameT, classes: list[str]
-    ) -> FrameT:
+        self, df: IntoFrameT, classes: list[str]
+    ) -> IntoFrameT:
         df = df.to_native()
         assert isinstance(df, pl.DataFrame)
 
@@ -199,7 +199,7 @@ class BasePredictor(ABC):
                 return True
         return False
 
-    def _fit_transform_pre_transformers(self, df: FrameT) -> FrameT:
+    def _fit_transform_pre_transformers(self, df: IntoFrameT) -> IntoFrameT:
         if self.auto_pre_transform:
             self.pre_transformers += self._create_pre_transformers(df)
 
@@ -229,7 +229,7 @@ class BasePredictor(ABC):
 
         return df
 
-    def _transform_pre_transformers(self, df: nw.DataFrame) -> IntoFrameT:
+    def _transform_pre_transformers(self, df:IntoFrameT) -> IntoFrameT:
         for pre_transformer in self.pre_transformers:
             values = nw.from_native(pre_transformer.transform(df))
             df = df.with_columns(

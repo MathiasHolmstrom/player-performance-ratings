@@ -2,8 +2,8 @@ import logging
 from typing import Optional, List, Literal
 
 import narwhals
-import narwhals as nw
-from narwhals.typing import FrameT, IntoFrameT
+import narwhals.stable.v2 as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
 import pandas as pd
 from lightgbm import LGBMRegressor
 
@@ -25,7 +25,7 @@ class SklearnEstimatorImputer(BaseTransformer):
 
     @nw.narwhalify
     def fit_transform(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         fit_df = df.filter(
             (nw.col(self.target_name).is_finite())
@@ -35,7 +35,7 @@ class SklearnEstimatorImputer(BaseTransformer):
         return self.transform(df)
 
     @nw.narwhalify
-    def transform(self, df: FrameT) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         df = df.with_columns(
             **{
                 f"imputed_col_{self.target_name}": self.estimator.predict(
@@ -89,7 +89,7 @@ class PartialStandardScaler(BaseTransformer):
 
     @narwhals.narwhalify
     def fit_transform(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         for feature in self.features:
             rows = df.filter(nw.col(feature).is_finite())
@@ -100,7 +100,7 @@ class PartialStandardScaler(BaseTransformer):
         return self.transform(df)
 
     @narwhals.narwhalify
-    def transform(self, df: FrameT) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         for feature in self.features:
             new_feature = self.prefix + feature
             df = df.with_columns(
@@ -152,7 +152,7 @@ class MinMaxTransformer(BaseTransformer):
 
     @nw.narwhalify
     def fit_transform(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
 
         for feature in self.features:
@@ -201,7 +201,7 @@ class MinMaxTransformer(BaseTransformer):
         return df.to_native()
 
     @nw.narwhalify
-    def transform(self, df: FrameT) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         for feature in self.features:
             # Compute normalized feature with optional alignment
             normalized_feature = (
@@ -244,7 +244,7 @@ class DiminishingValueTransformer(BaseTransformer):
 
     @nw.narwhalify
     def fit_transform(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
 
         for feature_name in self.features:
@@ -263,7 +263,7 @@ class DiminishingValueTransformer(BaseTransformer):
         return self.transform(df)
 
     @nw.narwhalify
-    def transform(self, df: FrameT) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         for feature_name in self.features:
             cutoff_value = self._feature_cutoff_value[feature_name]
 
@@ -327,7 +327,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
 
     @nw.narwhalify
     def fit_transform(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
 
         if self.granularity:
@@ -362,7 +362,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
         return self.transform(df)
 
     def _fit(
-        self, rows: FrameT, feature: str, granularity_value: Optional[str]
+        self, rows: IntoFrameT, feature: str, granularity_value: Optional[str]
     ) -> None:
 
         skewness = rows[feature].skew()
@@ -409,7 +409,7 @@ class SymmetricDistributionTransformer(BaseTransformer):
             skewness = transformed_rows[feature].skew()
 
     @nw.narwhalify
-    def transform(self, df: FrameT) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         if self.granularity:
             df = df.with_columns(
                 nw.concat_str(
@@ -487,7 +487,7 @@ class GroupByTransformer(BaseTransformer):
 
     @nw.narwhalify
     def fit_transform(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
 
         if self.aggregation == "sum":
@@ -508,7 +508,7 @@ class GroupByTransformer(BaseTransformer):
         return self.transform(df=df)
 
     @nw.narwhalify
-    def transform(self, df: FrameT) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         return df.join(self._grouped, on=self.granularity, how="left")
 
     @property

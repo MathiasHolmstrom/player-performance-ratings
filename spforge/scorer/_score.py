@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Optional, Callable, Union, Any
-from narwhals.typing import FrameT, IntoFrameT
-import narwhals as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
+import narwhals.stable.v2 as nw
 import narwhals
 import numpy as np
 import pandas as pd
@@ -86,7 +86,7 @@ def _apply_filters_polars(df: pl.DataFrame, filters: list[Filter]) -> pl.DataFra
     return df
 
 
-def apply_filters(df: FrameT, filters: list[Filter]) -> FrameT:
+def apply_filters(df: IntoFrameT, filters: list[Filter]) -> IntoFrameT:
     for filter in filters:
 
         if df[filter.column_name].dtype in (nw.Datetime, nw.Date) and isinstance(
@@ -143,7 +143,7 @@ class BaseScorer(ABC):
         self.granularity = granularity
 
     @abstractmethod
-    def score(self, df: FrameT) -> float:
+    def score(self, df: IntoFrameT) -> float:
         pass
 
 
@@ -175,7 +175,7 @@ class MeanBiasScorer(BaseScorer):
         )
 
     @narwhals.narwhalify
-    def score(self, df: FrameT) -> float:
+    def score(self, df: IntoFrameT) -> float:
         df = apply_filters(df, self.filters)
         if self.granularity:
             grouped = df.group_by(self.granularity).agg(
@@ -221,7 +221,7 @@ class SklearnScorer(BaseScorer):
         )
 
     @narwhals.narwhalify
-    def score(self, df: FrameT) -> float:
+    def score(self, df: IntoFrameT) -> float:
 
         df = apply_filters(df=df, filters=self.filters)
         if isinstance(df[self.pred_column_name].to_list()[0], dict):
@@ -372,7 +372,7 @@ class OrdinalLossScorer(BaseScorer):
         )
 
     @narwhals.narwhalify
-    def score(self, df: FrameT) -> float:
+    def score(self, df: IntoFrameT) -> float:
         df = apply_filters(df, self.filters)
         df = df.to_polars()
         field_names = [int(field) for field in df[self.pred_column].struct.fields]

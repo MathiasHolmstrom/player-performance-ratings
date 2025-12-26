@@ -1,8 +1,8 @@
 import logging
 from typing import Optional
 
-import narwhals as nw
-from narwhals.typing import FrameT, IntoFrameT
+import narwhals.stable.v2 as nw
+from narwhals.typing import IntoFrameT, IntoFrameT
 
 from spforge import ColumnNames
 
@@ -70,7 +70,7 @@ class LagTransformer(BaseLagTransformer):
     @required_lag_column_names
     @transformation_validator
     def transform_historical(
-        self, df: FrameT, column_names: Optional[ColumnNames] = None
+        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """ """
         grouped = self._maybe_group(df)
@@ -103,7 +103,7 @@ class LagTransformer(BaseLagTransformer):
     @future_lag_transformations_wrapper
     @future_validator
     @transformation_validator
-    def transform_future(self, df: FrameT) -> IntoFrameT:
+    def transform_future(self, df: IntoFrameT) -> IntoFrameT:
 
         sort_col = self.column_names.start_date if self.column_names else "__row_index"
         grouped = self._group_to_granularity_level(df=df, sort_col=sort_col)
@@ -113,7 +113,7 @@ class LagTransformer(BaseLagTransformer):
         df = self._post_features_generated(df)
         return self._forward_fill_future_features(df=df)
 
-    def _generate_features(self, df: FrameT, ori_df: FrameT) -> FrameT:
+    def _generate_features(self, df: IntoFrameT, ori_df: IntoFrameT) -> IntoFrameT:
         if self.column_names and self._df is not None:
             concat_df = self._concat_with_stored(group_df=df, ori_df=ori_df).sort(
                 self.column_names.start_date

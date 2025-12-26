@@ -1,6 +1,9 @@
 import math
+import narwhals.stable.v2 as nw
 import polars as pl
 from typing import List, Dict
+
+from narwhals.stable.v1.typing import IntoFrameT
 
 from spforge.data_structures import Match, ColumnNames
 
@@ -11,45 +14,56 @@ class LeagueIdentifer2:
         self.column_names = column_names
         self.matches_back = matches_back
 
-    def add_leagues(self, df: pl.DataFrame) -> pl.DataFrame:
-        # Sample input: df must have these columns
-        # player_id | match_id | league
-        # TODO: Add fallback logic for new players so they default to teams league
-        # TODO: Add proper column naming
+    @nw.narwhalify
+    def add_leagues(self, df:IntoFrameT) ->IntoFrameT:
+        pid = self.column_names.player_id
+        mid = self.column_names.match_id
+        league = self.column_names.league
 
-        df = df.sort([self.column_names.player_id, self.column_names.match_id])
-
-        df = (
-            df.sort([self.column_names.player_id, self.column_names.match_id])
-            .with_columns(pl.int_range(0, pl.len()).over(self.column_names.player_id).alias("match_idx"))
+        df = df.sort([pid, mid]).with_columns(
+            (
+                    nw.lit(1)
+                    .cum_count()
+                    .over(self.column_names.player_id, order_by=self.column_names.match_id)
+                    - 1
+            ).alias("match_idx")
         )
 
-        history = (
-            df
-            .group_by(self.column_names.player_id)
-            .agg([
-                pl.col(self.column_names.league).alias("league_history"),
-                pl.col("match_idx").alias("index_history"),
-            ])
+        cur = df.select([pid, mid, "__match_idx"]).rename(
+            {mid: "__cur_match_id", "__match_idx": "__cur_idx"}
+        )
+        prev = df.select([pid, league, "__match_idx"]).rename(
+            {league: "__prev_league", "__match_idx": "__prev_idx"}
         )
 
-        df = df.join(history, on=self.column_names.player_id, how="left")
-
-        def get_most_common_league(leagues, indices, current_idx):
-            window = [
-                league for league, idx in zip(leagues, indices)
-                if current_idx > idx and current_idx - idx <= self.matches_back
-            ]
-            return max(set(window), key=window.count) if window else None
-
-        # Use map_elements to apply this logic row-wise
-        return df.with_columns(
-            pl.struct(["league_history", "index_history", "match_idx"]).map_elements(
-                lambda x: get_most_common_league(
-                    x["league_history"], x["index_history"], x["match_idx"]
-                )
-            ).alias("game_league")
+        pairs = (
+            cur.join(prev, on=pid, how="inner")
+            .filter(
+                (nw.col("__cur_idx") > nw.col("__prev_idx")) &
+                ((nw.col("__cur_idx") - nw.col("__prev_idx")) <= self.matches_back)
+            )
         )
+
+        counts = (
+            pairs.group_by([pid, "__cur_match_id", "__prev_league"])
+            .agg(
+                nw.len().alias("__league_count"),
+                nw.col("__prev_idx").max().alias("__most_recent_prev_idx"),
+            )
+        )
+
+        winners = (
+            counts.sort(
+                ["__league_count", "__most_recent_prev_idx"],
+                descending=True,
+            )
+            .unique([pid, "__cur_match_id"])
+            .rename({"__cur_match_id": mid, "__prev_league": "game_league"})
+            .select([pid, mid, "game_league"])
+        )
+
+        # 6) Join back onto the original df
+        return df.join(winners, on=[pid, mid], how="left")
 
 
 class LeagueIdentifier:
