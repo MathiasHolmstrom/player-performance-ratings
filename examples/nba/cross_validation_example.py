@@ -3,6 +3,7 @@ from sklearn.metrics import mean_absolute_error
 from lightgbm import LGBMRegressor, LGBMClassifier
 
 from examples import get_sub_sample_nba_data
+from spforge import FeaturesGenerator
 from spforge.cross_validator import MatchKFoldCrossValidator
 
 from spforge.pipeline import Pipeline
@@ -60,6 +61,7 @@ predictor = DistributionManagerPredictor(
         column_names=column_names,
     ),
 )
+features_generator = FeaturesGenerator()
 
 pipeline = Pipeline(
     lag_transformers=[

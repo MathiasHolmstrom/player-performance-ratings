@@ -173,14 +173,7 @@ class SklearnPredictor(BasePredictor):
         features: Optional[list[str]] = None,
         features_contain_str: Optional[list[str]] = None,
         granularity: Optional[list[str]] = None,
-        filters: Optional[list[Filter]] = None,
-        scale_features: bool = False,
-        one_hot_encode_cat_features: bool = False,
-        convert_cat_features_to_cat_dtype: bool = False,
-        impute_missing_values: bool = False,
-        drop_rows_where_target_is_nan: bool = False,
-        pre_transformers: Optional[list[PredictorTransformer]] = None,
-        post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+
         multiclass_output_as_struct: bool = False,
         weight_by_date: bool = False,
         date_column: None | str = None,
@@ -190,7 +183,6 @@ class SklearnPredictor(BasePredictor):
         self._cat_feats = None
         self.granularity = granularity
         self.estimator = estimator
-        self.drop_rows_where_target_is_nan = drop_rows_where_target_is_nan
         self.weight_by_date = weight_by_date
         self.day_weight_epsilon = day_weight_epsilon
         self.date_column = date_column
@@ -205,13 +197,6 @@ class SklearnPredictor(BasePredictor):
             features=features,
             multiclass_output_as_struct=multiclass_output_as_struct,
             features_contain_str=features_contain_str,
-            pre_transformers=pre_transformers,
-            impute_missing_values=impute_missing_values,
-            post_predict_transformers=post_predict_transformers,
-            filters=filters,
-            scale_features=scale_features,
-            one_hot_encode_cat_features=one_hot_encode_cat_features,
-            convert_cat_features_to_cat_dtype=convert_cat_features_to_cat_dtype,
         )
         self.classes_ = None
 
@@ -226,18 +211,12 @@ class SklearnPredictor(BasePredictor):
             raise ValueError(
                 "features not set. Either pass to train or pass when instantiating predictor object"
             )
-
-        self._add_features_contain_str(df)
-
-        filtered_df = apply_filters(df=df, filters=self.filters)
-        if self.drop_rows_where_target_is_nan:
-            filtered_df = filtered_df.filter(~nw.col(self._target).is_nan())
-        filtered_df = self._fit_transform_pre_transformers(df=filtered_df)
+        filtered_df = df
         if self.granularity:
             self._numeric_feats = [
                 f
                 for f in self._modified_features
-                if filtered_df.schema[f]
+                if df.schema[f]
                 in (
                     nw.Float64,
                     nw.Float32,
@@ -336,7 +315,6 @@ class SklearnPredictor(BasePredictor):
     ) -> IntoFrameT:
         if self.pred_column in df.columns:
             df = df.drop(self.pred_column)
-        df = self._transform_pre_transformers(df=df)
 
         if isinstance(df.to_native(), pd.DataFrame):
             df = nw.from_native(pl.DataFrame(df))
@@ -345,7 +323,6 @@ class SklearnPredictor(BasePredictor):
             ori_type = "pl"
 
         if self.granularity:
-            row_count_before_grouping = len(df)
             grouped_df = df.group_by([*self.granularity, *self._cat_feats]).agg(
                 [nw.col(feature).mean() for feature in self._numeric_feats]
             )
@@ -365,7 +342,7 @@ class SklearnPredictor(BasePredictor):
                     values=self.estimator.predict_proba(
                         grouped_df.select(self._modified_features).to_pandas()
                     ).tolist(),
-                    native_namespace=nw.get_native_namespace(df),
+                    backend=nw.get_native_namespace(df),
                 )
             )
 
@@ -383,7 +360,7 @@ class SklearnPredictor(BasePredictor):
                     nw.new_series(
                         name="classes",
                         values=[self.classes_ for _ in range(len(grouped_df))],
-                        native_namespace=nw.get_native_namespace(grouped_df),
+                        backend=nw.get_native_namespace(grouped_df),
                     )
                 )
 
@@ -395,7 +372,7 @@ class SklearnPredictor(BasePredictor):
                     values=self.estimator.predict(
                         grouped_df.select(self._modified_features).to_pandas()
                     ),
-                    native_namespace=nw.get_native_namespace(df),
+                    backend=nw.get_native_namespace(df),
                 )
             )
 
@@ -413,7 +390,7 @@ class SklearnPredictor(BasePredictor):
                 nw.new_series(
                     name=self._pred_column,
                     values=predictions,
-                    native_namespace=nw.get_native_namespace(df),
+                    backend=nw.get_native_namespace(df),
                 )
             )
             if self.multiclass_output_as_struct:

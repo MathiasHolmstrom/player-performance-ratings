@@ -29,7 +29,7 @@ class BaseTransformer(ABC):
         pass
 
     @abstractmethod
-    def transform(self, df: IntoFrameT, cross_validate: bool = False) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         pass
 
     @property

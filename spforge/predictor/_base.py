@@ -84,7 +84,7 @@ class BasePredictor(ABC):
 
     @abstractmethod
     def predict(
-        self, df: IntoFrameT, cross_validation: bool = False, **kwargs
+        self, df: IntoFrameT,  **kwargs
     ) -> IntoFrameT:
         pass
 
@@ -130,117 +130,7 @@ class BasePredictor(ABC):
     def set_target(self, new_target_name: str):
         self._target = new_target_name
 
-    def _create_pre_transformers(self, df: pl.DataFrame) -> list[PredictorTransformer]:
-        pre_transformers = []
-        cat_feats_to_transform = []
 
-        for estimator_feature in self._features.copy():
-            if not df[estimator_feature].dtype.is_numeric():
-                cat_feats_to_transform.append(estimator_feature)
-
-        for estimator_feature in self._features.copy():
-
-            if estimator_feature not in df.columns:
-                self._modified_features.remove(estimator_feature)
-                logging.warning(
-                    f"Feature {estimator_feature} not in df, removing from estimator_features"
-                )
-                continue
-
-        if cat_feats_to_transform:
-            if self.one_hot_encode_cat_features:
-                one_hot_encoder = SkLearnTransformerWrapper(
-                    transformer=OneHotEncoder(handle_unknown="ignore"),
-                    features=cat_feats_to_transform,
-                )
-                pre_transformers.append(one_hot_encoder)
-
-            elif self.convert_cat_features_to_cat_dtype:
-
-                pre_transformers.append(
-                    ConvertDataFrameToCategoricalTransformer(
-                        features=cat_feats_to_transform
-                    )
-                )
-
-        if self.scale_features:
-            numeric_feats = [
-                f for f in self._features if f not in cat_feats_to_transform
-            ]
-            if numeric_feats:
-                pre_transformers.append(
-                    SkLearnTransformerWrapper(
-                        transformer=StandardScaler(),
-                        features=numeric_feats,
-                    )
-                )
-
-        if self.impute_missing_values:
-            numeric_feats = [
-                f for f in self._modified_features if f not in cat_feats_to_transform
-            ]
-            if numeric_feats:
-
-                imputer_transformer = SkLearnTransformerWrapper(
-                    transformer=SimpleImputer(),
-                    features=numeric_feats,
-                )
-                if not self._transformer_exists(imputer_transformer):
-                    pre_transformers.append(imputer_transformer)
-
-        return pre_transformers
-
-    def _transformer_exists(self, transformer: PredictorTransformer) -> bool:
-        for pre_transformer in self.pre_transformers:
-            if (
-                pre_transformer.__class__.__name__ == transformer.__class__.__name__
-                and pre_transformer.features == transformer.features
-            ):
-                return True
-        return False
-
-    def _fit_transform_pre_transformers(self, df: IntoFrameT) -> IntoFrameT:
-        if self.auto_pre_transform:
-            self.pre_transformers += self._create_pre_transformers(df)
-
-        native_namespace = nw.get_native_namespace(df)
-
-        for pre_transformer in self.pre_transformers:
-            values = nw.from_native(pre_transformer.fit_transform(df))
-            features_out = pre_transformer.features_out
-            df = df.with_columns(
-                nw.new_series(
-                    values=values[col].to_native(),
-                    name=features_out[idx],
-                    native_namespace=native_namespace,
-                )
-                for idx, col in enumerate(values.columns)
-            )
-
-            for feature in pre_transformer.features:
-                if (
-                    feature in self._modified_features
-                    and feature not in pre_transformer.features_out
-                ):
-                    self._modified_features.remove(feature)
-            for features_out in pre_transformer.features_out:
-                if features_out not in self._modified_features:
-                    self._modified_features.append(features_out)
-
-        return df
-
-    def _transform_pre_transformers(self, df:IntoFrameT) -> IntoFrameT:
-        for pre_transformer in self.pre_transformers:
-            values = nw.from_native(pre_transformer.transform(df))
-            df = df.with_columns(
-                nw.new_series(
-                    name=col,
-                    values=values[col].to_native(),
-                    native_namespace=nw.get_native_namespace(df),
-                )
-                for col in values.columns
-            )
-        return df
 
     @property
     def features(self) -> list[str]:

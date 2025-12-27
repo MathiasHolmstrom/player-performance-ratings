@@ -4,7 +4,7 @@ from sklearn.linear_model import LogisticRegression
 from examples import get_sub_sample_lol_data
 from spforge import ColumnNames
 from spforge.cross_validator import MatchKFoldCrossValidator
-from spforge.pipeline_transformer import PipelineTransformer
+from spforge.features_generator import FeaturesGenerator
 from spforge.predictor import (
     GroupByPredictor,
     SklearnPredictor,
@@ -82,7 +82,7 @@ lag_generators = [
     ),
 ]
 
-transformer = PipelineTransformer(
+transformer = FeaturesGenerator(
     column_names=column_names,
     rating_generators=[rating_generator_result, rating_generator_player_kills],
     lag_transformers=lag_generators,

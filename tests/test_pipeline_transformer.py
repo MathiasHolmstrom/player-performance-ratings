@@ -3,7 +3,7 @@ import pytest
 import polars as pl
 
 from spforge import ColumnNames
-from spforge.pipeline_transformer import PipelineTransformer
+from spforge.features_generator import FeaturesGenerator
 from spforge.ratings import (
     PlayerRatingGenerator,
     RatingKnownFeatures,
@@ -53,7 +53,7 @@ def test_pipeline_transformer(to_polars):
         performances_generator=PerformanceWeightsManager(weights=column_weights),
     )
 
-    pipeline = PipelineTransformer(
+    pipeline = FeaturesGenerator(
         rating_generators=rating_generator,
         lag_transformers=[
             LagTransformer(

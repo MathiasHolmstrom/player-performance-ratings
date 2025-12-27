@@ -79,7 +79,7 @@ class SkLearnTransformerWrapper(PredictorTransformer):
             nw.new_series(
                 self._features_out[idx],
                 transformed_values[:, idx],
-                native_namespace=nw.get_native_namespace(df),
+                backend=nw.get_native_namespace(df),
             )
             for idx in range(len(self._features_out))
         ).select(self._features_out)
@@ -101,7 +101,7 @@ class SkLearnTransformerWrapper(PredictorTransformer):
             nw.new_series(
                 self._features_out[idx],
                 transformed_values[:, idx],
-                native_namespace=nw.get_native_namespace(df),
+                backend=nw.get_native_namespace(df),
             )
             for idx in range(len(self._features_out))
         ).select(self._features_out)
