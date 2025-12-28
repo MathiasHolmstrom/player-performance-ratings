@@ -14,7 +14,7 @@ def future_validator(method):
     @wraps(method)
     def wrapper(self, df: IntoFrameT, *args, **kwargs):
         assert self.column_names is not None, (
-            "column names must have been passed to transform_historical() before calling transform_future."
+            "column names must have been passed to fit_transform() before calling transform."
             " Otherwise historical data is not stored"
         )
         return method(self, df, *args, **kwargs)

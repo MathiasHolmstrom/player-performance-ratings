@@ -45,17 +45,17 @@ class MatchPerformance:
     opponent_players_playing_time: Optional[dict[str, float]] = None
 
 
+
 @dataclass
-class PlayerRating:
+class RatingState:
+    """Generic rating state (works for players or teams)."""
     id: str
     rating_value: float
-    name: Optional[str] = None
-    games_played: Union[float, int] = 0
-    last_match_day_number: int = None
-    confidence_sum: float = 0
+    confidence_sum: float = 0.0
+    games_played: float = 0.0
+    last_match_day_number: Optional[int] = None
+    most_recent_group_id: Optional[str] = None  # e.g. team_id for players, league, etc.
     prev_rating_changes: List[float] = None
-    most_recent_team_id: Optional[str] = None
-
 
 @dataclass
 class Team:
@@ -64,6 +64,10 @@ class Team:
     last_match_day_number: int
     name: Optional[str] = None
 
+
+@dataclass
+class PlayerRating(RatingState):
+    most_recent_team_id: Optional[str] = None
 
 @dataclass
 class TeamRating:

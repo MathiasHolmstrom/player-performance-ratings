@@ -63,7 +63,7 @@ class NetOverPredictedTransformer(BaseTransformer):
         self.predictor.train(df, features=self.features)
         df = self._transform(df)
         for lag_generator in self.lag_transformers:
-            df = lag_generator.transform_historical(df, column_names=self.column_names)
+            df = lag_generator.fit_transform(df, column_names=self.column_names)
         return df.select(list(set(ori_cols + self.features_out)))
 
     @nw.narwhalify
@@ -73,10 +73,10 @@ class NetOverPredictedTransformer(BaseTransformer):
 
         if cross_validate:
             for lag_generator in self.lag_transformers:
-                df = lag_generator.transform_historical(df)
+                df = lag_generator.fit_transform(df)
         else:
             for lag_generator in self.lag_transformers:
-                df = lag_generator.transform_future(df)
+                df = lag_generator.transform(df)
 
         return df
 

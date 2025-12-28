@@ -267,7 +267,7 @@ def test_update_rating_generator_historical_and_future(df):
 
     _ = rating_generator.fit_transform(df=historical_df, column_names=column_names)
     player_ratings = rating_generator.player_ratings
-    future_df_with_ratings = rating_generator.transform_future(df=future_df)
+    future_df_with_ratings = rating_generator.transform(df=future_df)
 
     player_rating_1 = player_ratings[1].rating_value
     player_rating_2 = player_ratings[2].rating_value
@@ -528,7 +528,7 @@ def test_rating_generator_prefix_suffix(df):
         }
     )
 
-    future_df_ratings = rating_generator.transform_future(future_df)
+    future_df_ratings = rating_generator.transform(future_df)
     for (
         non_estimator_known_features_out
     ) in rating_generator._non_estimator_known_features_out:

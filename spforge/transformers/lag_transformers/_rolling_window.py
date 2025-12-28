@@ -84,8 +84,8 @@ class RollingWindowTransformer(BaseLagTransformer):
     @historical_lag_transformations_wrapper
     @required_lag_column_names
     @transformation_validator
-    def transform_historical(
-        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
+    def fit_transform(
+        self, df: IntoFrameT, column_names: ColumnNames | None = None
     ) -> IntoFrameT:
         """
         Generates rolling mean for historical data
@@ -125,7 +125,7 @@ class RollingWindowTransformer(BaseLagTransformer):
     @future_lag_transformations_wrapper
     @future_validator
     @transformation_validator
-    def transform_future(self, df: IntoFrameT) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         """
         Generates rolling mean for future data
         Assumes that .generate_historical() has been called before

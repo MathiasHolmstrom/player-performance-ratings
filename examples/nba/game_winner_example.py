@@ -6,6 +6,7 @@ from spforge.predictor import GroupByPredictor, SklearnPredictor
 
 
 from spforge.data_structures import ColumnNames
+from spforge.ratings import RatingUnknownFeatures, RatingKnownFeatures
 from spforge.ratings._player_rating import PlayerRatingGenerator
 
 df = pd.read_parquet("data/game_player_subsample.parquet")
@@ -50,7 +51,8 @@ future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(
 
 
 rating_generator = PlayerRatingGenerator(
-    performance_column="won", rating_change_multiplier=30, column_names=column_names
+    performance_column="won", rating_change_multiplier=30, column_names=column_names,
+    non_predictor_features_out=[RatingKnownFeatures.PLAYER_RATING]
 )
 historical_df = rating_generator.fit_transform(historical_df)
 
@@ -75,7 +77,7 @@ pipeline = Pipeline(
 pipeline.train(df=historical_df)
 
 # Future predictions on future results
-future_df = rating_generator.transform(future_df)
+future_df = rating_generator.future_transform(future_df)
 future_predictions = pipeline.predict(df=future_df)
 
 # Grouping predictions from game-player level to game-level.

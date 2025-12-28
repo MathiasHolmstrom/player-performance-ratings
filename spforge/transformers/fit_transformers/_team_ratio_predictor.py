@@ -64,7 +64,7 @@ class RatioTeamPredictorTransformer(BaseTransformer):
         transformed_df = nw.from_native(self._transform(df))
         for lag_generator in self.lag_transformers:
             transformed_df = nw.from_native(
-                lag_generator.transform_historical(
+                lag_generator.fit_transform(
                     transformed_df, column_names=self.column_names
                 )
             )
@@ -76,9 +76,9 @@ class RatioTeamPredictorTransformer(BaseTransformer):
         df = self._transform(df)
         for lag_transformer in self.lag_transformers:
             if cross_validate:
-                df = lag_transformer.transform_historical(df)
+                df = lag_transformer.fit_transform(df)
             else:
-                df = lag_transformer.transform_future(df)
+                df = lag_transformer.transform(df)
         return df
 
     def _transform(self, df: IntoFrameT) -> IntoFrameT:

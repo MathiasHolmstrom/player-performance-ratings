@@ -7,23 +7,17 @@ from abc import abstractmethod, ABC
 from narwhals import DataFrame
 from narwhals.stable.v1.typing import IntoFrameT
 from spforge import ColumnNames
+from spforge.data_structures import RatingState
 from spforge.ratings.league_identifier import LeagueIdentifer2
+from spforge.transformers.base_transformer import BaseTransformer
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 EXPECTED_MEAN_CONFIDENCE_SUM = 30
 
-@dataclass
-class RatingState:
-    """Generic rating state (works for players or teams)."""
-    id: str
-    rating_value: float
-    confidence_sum: float = 0.0
-    games_played: float = 0.0
-    last_match_day_number: Optional[int] = None
-    most_recent_group_id: Optional[str] = None  # e.g. team_id for players, league, etc.
 
 
-class RatingGenerator(ABC):
+
+class RatingGenerator(BaseTransformer):
     """
     Template-method base class for rating generators.
 
@@ -43,6 +37,7 @@ class RatingGenerator(ABC):
         self,
         performance_column: str,
         column_names: ColumnNames,
+        features_out: list[str],
         rating_change_multiplier: float = 50,
         confidence_days_ago_multiplier: float = 0.06,
         confidence_max_days: int = 90,
@@ -53,6 +48,7 @@ class RatingGenerator(ABC):
         team_id_change_confidence_sum_decrease: float = 0.0,  # useful for players, usually 0 for teams
         **kwargs: Any,
     ):
+        super().__init__(features_out=features_out, features=[])
         self.performance_column = performance_column
         self.column_names = column_names
         self.kwargs = kwargs
@@ -74,8 +70,9 @@ class RatingGenerator(ABC):
         )
 
     @abstractmethod
-    def fit_transform(self, df: IntoFrameT) -> DataFrame:
+    def future_transform(self, df: IntoFrameT) -> IntoFrameT:
         pass
+
 
     def _add_day_number(self, df: pl.DataFrame) -> pl.DataFrame:
         cn = self.column_names
@@ -102,4 +99,12 @@ class RatingGenerator(ABC):
             + MATCH_CONTRIBUTION_TO_SUM_VALUE * participation_weight
         )
         return max(0.0, min(float(val), self.confidence_max_sum))
+
+    def _calculate_days_ago_since_last_match(
+            self, last_match_day_number, day_number: int
+    ) -> float:
+        match_day_number = day_number
+        if last_match_day_number is None:
+            return 0.0
+        return match_day_number - last_match_day_number
 

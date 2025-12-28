@@ -67,7 +67,7 @@ def test_rolling_mean_transform_historical_game_team(
             add_opponent=add_opponent,
         )
 
-    df_with_rolling_mean = rolling_mean_transformation.transform_historical(
+    df_with_rolling_mean = rolling_mean_transformation.fit_transform(
         data, column_names=column_names
     )
     if isinstance(data, pd.DataFrame):
@@ -154,7 +154,7 @@ def test_rolling_mean_transform_historical_player(df, column_names):
         granularity=["player"],
     )
 
-    df_with_rolling_mean = rolling_mean_transformation.transform_historical(
+    df_with_rolling_mean = rolling_mean_transformation.fit_transform(
         data, column_names=column_names
     )
     if isinstance(data, pd.DataFrame):
@@ -213,7 +213,7 @@ def test_rolling_mean_historical_participation_weight(df, column_names):
         scale_by_participation_weight=True,
     )
 
-    transformed_df = rolling_mean_transformation.transform_historical(
+    transformed_df = rolling_mean_transformation.fit_transform(
         df=historical_df, column_names=column_names
     )
 
@@ -284,10 +284,10 @@ def test_rolling_mean_transform_historical_and_transform_future(df, column_names
         add_opponent=True,
     )
 
-    _ = rolling_mean_transformation.transform_historical(
+    _ = rolling_mean_transformation.fit_transform(
         df=historical_df, column_names=column_names
     )
-    transformed_future_df = rolling_mean_transformation.transform_future(future_df)
+    transformed_future_df = rolling_mean_transformation.transform(future_df)
 
     if isinstance(future_df, pd.DataFrame):
         expected_df = original_future_df.assign(
@@ -358,7 +358,7 @@ def test_rolling_mean_transform_update_id_different_from_game_id(
         )
         column_names = None
 
-    transformed_df = transformer.transform_historical(
+    transformed_df = transformer.fit_transform(
         historical_df, column_names=column_names
     )
 
@@ -405,7 +405,7 @@ def test_rolling_mean_transform_historical_group_to_granularity(
         column_names = None
 
     expected_df = data.copy()
-    transformed_df = transformer.transform_historical(
+    transformed_df = transformer.fit_transform(
         df=data, column_names=column_names
     )
     expected_df[transformer.features_out[0]] = [None] * 4 + [1, 1, 2, 2, 2, 2, 3, 3]
@@ -443,8 +443,8 @@ def test_rolling_mean_transform_future_game_team_granularity(column_names: Colum
     )
 
     expected_df = future_data.copy()
-    _ = transformer.transform_historical(df=hist_data, column_names=column_names)
-    transformed_future_df = transformer.transform_future(future_data)
+    _ = transformer.fit_transform(df=hist_data, column_names=column_names)
+    transformed_future_df = transformer.transform(future_data)
 
     expected_df[transformer.features_out[0]] = [2, 2, 3, 3]
     pd.testing.assert_frame_equal(
@@ -489,7 +489,7 @@ def test_rolling_mean_transform_historical_group_to_granularity_and_update_id(
         column_names = None
 
     expected_df = data.copy()
-    transformed_df = transformer.transform_historical(
+    transformed_df = transformer.fit_transform(
         df=data, column_names=column_names
     )
     expected_df[transformer.features_out[0]] = [None] * 4 + [1, 1, 2, 2] * 2
@@ -558,7 +558,7 @@ def test_rolling_mean_transform_historical_different_unique_constraint(
         column_names = None
 
     expected_df = data.copy()
-    transformed_df = transformer.transform_historical(
+    transformed_df = transformer.fit_transform(
         df=data, column_names=column_names
     )
 
@@ -632,9 +632,9 @@ def test_rolling_mean_transform_future_granularity_differs_from_input_granularit
     )
 
     expected_df = future_df.copy()
-    _ = transformer.transform_historical(df=historical_df, column_names=column_names)
+    _ = transformer.fit_transform(df=historical_df, column_names=column_names)
 
-    transformed_future_df = transformer.transform_future(future_df)
+    transformed_future_df = transformer.transform(future_df)
 
     expected_df = expected_df.assign(
         **{
@@ -699,7 +699,7 @@ def test_rolling_mean_historical_transform_higher_granularity(
         column_names = None
 
     expected_df = data.copy()
-    transformed_df = transformer.transform_historical(
+    transformed_df = transformer.fit_transform(
         df=data, column_names=column_names
     )
 

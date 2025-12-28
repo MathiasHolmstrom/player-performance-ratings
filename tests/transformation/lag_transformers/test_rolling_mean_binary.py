@@ -60,7 +60,7 @@ def test_binary_granularity_rolling_mean_transformer(
             granularity=["player"],
             prob_column="prob",
         )
-        transformed_data = transformer.transform_historical(
+        transformed_data = transformer.fit_transform(
             df=historical_df, column_names=column_names
         )
     else:
@@ -74,7 +74,7 @@ def test_binary_granularity_rolling_mean_transformer(
             match_id_column=column_names.match_id,
             update_column=column_names.update_match_id,
         )
-        transformed_data = transformer.transform_historical(
+        transformed_data = transformer.fit_transform(
             df=historical_df, column_names=None
         )
 
@@ -230,7 +230,7 @@ def test_binary_granularity_rolling_mean_transformer_update_id_differ_from_game_
             granularity=["player"],
             prob_column="prob",
         )
-        transformed_data = transformer.transform_historical(
+        transformed_data = transformer.fit_transform(
             df=historical_df, column_names=column_names
         )
     else:
@@ -244,7 +244,7 @@ def test_binary_granularity_rolling_mean_transformer_update_id_differ_from_game_
             match_id_column=column_names.match_id,
             update_column=column_names.update_match_id,
         )
-        transformed_data = transformer.transform_historical(
+        transformed_data = transformer.fit_transform(
             df=historical_df, column_names=None
         )
 
@@ -327,7 +327,7 @@ def test_binary_granularity_rolling_mean_generate_future(df, column_names, min_p
         prob_column="prob",
     )
 
-    historical_df = transformer.transform_historical(
+    historical_df = transformer.fit_transform(
         historical_df, column_names=column_names
     )
     expected_historical_df[transformer.features_out[0]] = [
@@ -401,7 +401,7 @@ def test_binary_granularity_rolling_mean_generate_future(df, column_names, min_p
     except:
         expected_future_df = future_df.to_pandas()
 
-    future_df = transformer.transform_future(future_df)
+    future_df = transformer.transform(future_df)
     expected_future_df[transformer.features_out[0]] = [12.5, 2, 12.5, 2]
     expected_future_df[transformer.features_out[1]] = [-2, -15, -2, -15]
     expected_future_df[transformer.features_out[2]] = [2, 12.5, 2, 12.5]
@@ -467,7 +467,7 @@ def test_binary_granularity_rolling_mean_generate_historical_opponent(df, column
         prob_column="prob",
     )
 
-    df = rolling_mean_transformation.transform_historical(df, column_names=column_names)
+    df = rolling_mean_transformation.fit_transform(df, column_names=column_names)
 
     expected_historical_df[rolling_mean_transformation.features_out[0]] = [
         None,

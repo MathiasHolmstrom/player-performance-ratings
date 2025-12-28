@@ -151,12 +151,12 @@ class NegativeBinomialPredictor(DistributionPredictor):
             if self.column_names.player_id not in self.r_specific_granularity:
                 column_names_lag.player_id = None
             gran_grp = nw.from_native(
-                self._rolling_mean.transform_historical(
+                self._rolling_mean.fit_transform(
                     gran_grp, column_names=column_names_lag
                 )
             )
             gran_grp = nw.from_native(
-                self._rolling_var.transform_historical(
+                self._rolling_var.fit_transform(
                     gran_grp, column_names=column_names_lag
                 )
             )
@@ -227,17 +227,17 @@ class NegativeBinomialPredictor(DistributionPredictor):
             )
             if len(historical_gran_group) > 0:
                 historical_gran_group = nw.from_native(
-                    self._rolling_mean.transform_historical(historical_gran_group)
+                    self._rolling_mean.fit_transform(historical_gran_group)
                 )
                 historical_gran_group = nw.from_native(
-                    self._rolling_var.transform_historical(historical_gran_group)
+                    self._rolling_var.fit_transform(historical_gran_group)
                 )
             if len(future_gran_group) > 0:
                 future_gran_group = nw.from_native(
-                    self._rolling_mean.transform_future(future_gran_group)
+                    self._rolling_mean.transform(future_gran_group)
                 )
                 future_gran_group = nw.from_native(
-                    self._rolling_var.transform_future(future_gran_group)
+                    self._rolling_var.transform(future_gran_group)
                 )
 
             if len(historical_gran_group) > 0 and len(future_gran_group) > 0:
@@ -415,7 +415,7 @@ class NegativeBinomialPredictor(DistributionPredictor):
                 nw.new_series(
                     name="classes",
                     values=classes_,
-                    native_namespace=nw.get_native_namespace(df),
+                    backend=nw.get_native_namespace(df),
                 )
             )
         else:
@@ -423,7 +423,7 @@ class NegativeBinomialPredictor(DistributionPredictor):
                 nw.new_series(
                     name=self.pred_column,
                     values=all_outcome_probs,
-                    native_namespace=nw.get_native_namespace(df),
+                    backend=nw.get_native_namespace(df),
                 )
             )
         if self.predict_granularity:

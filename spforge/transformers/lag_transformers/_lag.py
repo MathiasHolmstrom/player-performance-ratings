@@ -69,7 +69,7 @@ class LagTransformer(BaseLagTransformer):
     @historical_lag_transformations_wrapper
     @required_lag_column_names
     @transformation_validator
-    def transform_historical(
+    def fit_transform(
         self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """ """
@@ -103,7 +103,7 @@ class LagTransformer(BaseLagTransformer):
     @future_lag_transformations_wrapper
     @future_validator
     @transformation_validator
-    def transform_future(self, df: IntoFrameT) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
 
         sort_col = self.column_names.start_date if self.column_names else "__row_index"
         grouped = self._group_to_granularity_level(df=df, sort_col=sort_col)

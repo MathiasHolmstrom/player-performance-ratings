@@ -2,7 +2,7 @@ from lightgbm import LGBMRegressor
 from sklearn.linear_model import LogisticRegression
 
 from examples import get_sub_sample_lol_data
-from spforge import ColumnNames
+from spforge import ColumnNames, Pipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
 from spforge.features_generator import FeaturesGenerator
 from spforge.predictor import (
@@ -47,7 +47,7 @@ df = df.assign(team_count=df.groupby("gameid")["teamname"].transform("nunique"))
     lambda x: x.team_count == 2
 ]
 
-df = df.drop_duplicates(subset=["gameid", "playername"])
+df = df.drop_duplicates(subset=["gameid", "playername","teamname"])
 
 # Pretends the last 10 games are future games. The most will be trained on everything before that.
 most_recent_10_games = df[column_names.match_id].unique()[-10:]
@@ -55,20 +55,20 @@ historical_df = df[~df[column_names.match_id].isin(most_recent_10_games)]
 future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(
     columns=["result"]
 )
-
+rating_generator_player_kills = PlayerRatingGenerator(
+    features_out=[RatingKnownFeatures.RATING_MEAN_PROJECTED],
+    performance_column='performance_kills',
+    auto_scale_performance=True,
+    performance_weights=[
+            ColumnWeight(name="kills", weight=1)
+        ]
+)
 rating_generator_result = PlayerRatingGenerator(
     features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
     performance_column="result",
 )
 
-rating_generator_player_kills = PlayerRatingGenerator(
-    features_out=[RatingKnownFeatures.RATING_MEAN_PROJECTED],
-    performances_generator=PerformanceWeightsManager(
-        weights=[
-            ColumnWeight(name="kills", weight=1),
-        ],
-    ),
-)
+
 
 lag_generators = [
     LagTransformer(
@@ -82,21 +82,23 @@ lag_generators = [
     ),
 ]
 
-transformer = FeaturesGenerator(
+features_generator = FeaturesGenerator(
     column_names=column_names,
-    rating_generators=[rating_generator_result, rating_generator_player_kills],
-    lag_transformers=lag_generators,
+    transformers=[rating_generator_player_kills, rating_generator_result, *lag_generators],
 )
 
-historical_df = transformer.fit_transform(historical_df)
+historical_df = features_generator.fit_transform(historical_df)
 
 game_winner_predictor = SklearnPredictor(
     estimator=LogisticRegression(),
     target="result",
     features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
     granularity=[column_names.match_id, column_names.team_id],
+)
+game_winner_pipeline = Pipeline(
+    predictor=game_winner_predictor,
     one_hot_encode_cat_features=True,
-    impute_missing_values=True,
+    impute_missing_values=True
 )
 
 player_kills_predictor = SklearnPredictor(
@@ -125,7 +127,7 @@ player_kills_predictor.train(historical_df)
 print(player_kills_predictor.features)
 historical_df = cross_validator_player_kills.generate_validation_df(historical_df)
 
-future_df = transformer.transform(future_df)
+future_df = features_generator.future_transform(future_df)
 future_df = game_winner_predictor.predict(future_df)
 future_df = player_kills_predictor.predict(future_df)
 

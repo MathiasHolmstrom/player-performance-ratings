@@ -15,18 +15,17 @@ class LeagueIdentifer2:
         self.matches_back = matches_back
 
     @nw.narwhalify
-    def add_leagues(self, df:IntoFrameT) ->IntoFrameT:
+    def add_leagues(self, df: IntoFrameT) -> IntoFrameT:
         pid = self.column_names.player_id
         mid = self.column_names.match_id
         league = self.column_names.league
 
         df = df.sort([pid, mid]).with_columns(
-            (
-                    nw.lit(1)
-                    .cum_count()
-                    .over(self.column_names.player_id, order_by=self.column_names.match_id)
-                    - 1
-            ).alias("match_idx")
+            (nw.col(mid)
+             .cum_count()
+             .over(self.column_names.player_id, order_by=self.column_names.start_date)
+             - 1
+             ).alias("__match_idx")
         )
 
         cur = df.select([pid, mid, "__match_idx"]).rename(

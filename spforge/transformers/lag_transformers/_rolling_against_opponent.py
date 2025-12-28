@@ -43,9 +43,9 @@ class RollingAgainstOpponentTransformer(BaseLagTransformer):
         )
         df = transformer.generate_historical(df)
 
-    Use .transform_historical() to generate rolling mean for historical data.
+    Use .fit_transform() to generate rolling mean for historical data.
         The historical data is stored as instance-variables after calling .generate_historical()
-    Use .transform_future() to generate rolling mean for future data after having called .generate_historical()
+    Use .transform() to generate rolling mean for future data after having called .generate_historical()
     """
 
     def __init__(
@@ -98,7 +98,7 @@ class RollingAgainstOpponentTransformer(BaseLagTransformer):
     @historical_lag_transformations_wrapper
     @required_lag_column_names
     @transformation_validator
-    def transform_historical(
+    def fit_transform(
         self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
     ) -> IntoFrameT:
         """
@@ -175,7 +175,7 @@ class RollingAgainstOpponentTransformer(BaseLagTransformer):
     @future_lag_transformations_wrapper
     @future_validator
     @transformation_validator
-    def transform_future(self, df: IntoFrameT) -> IntoFrameT:
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
         """
         Generates rolling mean opponent for future data
         Assumes that .generate_historical() has been called before
@@ -241,11 +241,11 @@ class RollingAgainstOpponentTransformer(BaseLagTransformer):
             ).sort("__row_index")
 
         if is_future:
-            concat_df = nw.from_native(self._transformer.transform_future(concat_df))
+            concat_df = nw.from_native(self._transformer.transform(concat_df))
 
         else:
             concat_df = nw.from_native(
-                self._transformer.transform_historical(
+                self._transformer.fit_transform(
                     concat_df, column_names=self.column_names
                 )
             )

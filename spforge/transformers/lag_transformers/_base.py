@@ -1,13 +1,13 @@
-from abc import abstractmethod
 from typing import Optional
 
-from narwhals.typing import IntoFrameT, IntoFrameT
+from narwhals.typing import IntoFrameT
 import narwhals.stable.v2 as nw
 
 from spforge import ColumnNames
+from spforge.transformers.base_transformer import BaseTransformer
 
 
-class BaseLagTransformer:
+class BaseLagTransformer(BaseTransformer):
 
     def __init__(
         self,
@@ -24,20 +24,26 @@ class BaseLagTransformer:
         match_id_column: Optional[str] = None,
         scale_by_participation_weight: bool = False,
     ):
-        self.column_names = column_names
-        self.features = features
-        self.iterations = iterations
+
         self._features_out = []
+        self._entity_features_out = []
+        for feature_name in features:
+            for lag in iterations:
+                self._features_out.append(f"{prefix}_{feature_name}{lag}")
+                self._entity_features_out.append(f"{prefix}_{feature_name}{lag}")
+                if add_opponent:
+                    self._features_out.append(f"{prefix}_{feature_name}{lag}_opponent")
+        super().__init__(features_out=self._features_out, features=features)
+        self.column_names = column_names
+        self.iterations = iterations
         self._are_estimator_features = are_estimator_features
         self.match_id_column = match_id_column
         self.granularity = granularity
         if isinstance(self.granularity, str):
             self.granularity = [self.granularity]
-        self._entity_features_out = []
         self.add_opponent = add_opponent
         self.prefix = prefix
         self._df = None
-        self._entity_features_out = []
         cn = self.column_names
         self.group_to_granularity = group_to_granularity or []
         self.update_column = update_column or self.match_id_column
@@ -52,22 +58,6 @@ class BaseLagTransformer:
             )
         )
 
-        for feature_name in self.features:
-            for lag in iterations:
-                self._features_out.append(f"{prefix}_{feature_name}{lag}")
-                self._entity_features_out.append(f"{prefix}_{feature_name}{lag}")
-                if self.add_opponent:
-                    self._features_out.append(f"{prefix}_{feature_name}{lag}_opponent")
-
-    @abstractmethod
-    def transform_historical(
-        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
-    ) -> IntoFrameT:
-        pass
-
-    @abstractmethod
-    def transform_future(self, df: IntoFrameT) -> IntoFrameT:
-        pass
 
     @property
     def predictor_features_out(self) -> list[str]:
@@ -106,7 +96,7 @@ class BaseLagTransformer:
         df = (
             ori_df
             if self.update_column
-            and isinstance(ori_df,IntoFrameT)
+            and isinstance(ori_df,nw.DataFrame)
             and self.group_to_granularity
             and self.update_column not in self.group_to_granularity
             else group_df
@@ -163,7 +153,7 @@ class BaseLagTransformer:
         df = (
             ori_df
             if self.update_column
-            and isinstance(ori_df,IntoFrameT)
+            and isinstance(ori_df,nw.DataFrame)
             and self.group_to_granularity
             and self.update_column not in self.group_to_granularity
             else grouped_df

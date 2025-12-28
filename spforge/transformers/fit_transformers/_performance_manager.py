@@ -186,19 +186,18 @@ class PerformanceWeightsManager(PerformanceManager):
         prefix: str = "performance__",
         return_all_features: bool = False,
     ):
-
-        self.features = [p.name for p in weights]
         self.return_all_features = return_all_features
-        self.performance_column = performance_column
-        self.weights = weights
         super().__init__(
-            features=self.features,
+            features=[p.name for p in weights],
             custom_transformers=custom_transformers,
             transformer_names=transformer_names,
             prefix=prefix,
             max_value=max_value,
             min_value=min_value,
         )
+        self.performance_column = performance_column
+        self.weights = weights
+
 
     @nw.narwhalify
     def fit_transform(self, df: IntoFrameT) -> IntoFrameT:

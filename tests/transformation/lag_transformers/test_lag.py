@@ -60,7 +60,7 @@ def test_team_lag_transform_historical_group_to_team_granularity(
             group_to_granularity=["team", "game"],
         )
 
-        df_with_lags = lag_transformation.transform_historical(
+        df_with_lags = lag_transformation.fit_transform(
             data, column_names=column_names
         )
     else:
@@ -73,7 +73,7 @@ def test_team_lag_transform_historical_group_to_team_granularity(
             match_id_column="game",
         )
 
-        df_with_lags = lag_transformation.transform_historical(data, column_names=None)
+        df_with_lags = lag_transformation.fit_transform(data, column_names=None)
 
     if isinstance(data, pl.DataFrame):
         expected_df = original_df.with_columns(
@@ -130,7 +130,7 @@ def test_lag_fit_tranform_group_to_team_granularity(column_names, use_column_nam
         column_names = None
 
     expected_df = data.copy()
-    transformed_df = transformer.transform_historical(
+    transformed_df = transformer.fit_transform(
         df=data, column_names=column_names
     )
     expected_df[transformer.features_out[0]] = [None] * 4 + [1, 1, 2, 2, 3, 3, 4, 4]
@@ -195,7 +195,7 @@ def test_lag_fit_transform_group_to_team_granularity_update_match_id(
             add_opponent=True,
         )
 
-    df_with_lags = lag_transformation.transform_historical(
+    df_with_lags = lag_transformation.fit_transform(
         data, column_names=column_names
     )
     if isinstance(data, pl.DataFrame):
@@ -284,7 +284,7 @@ def test_lag_transform_historical_2_features_update_match_id(
         )
         column_names = None
 
-    df_with_lags = lag_transformation.transform_historical(
+    df_with_lags = lag_transformation.fit_transform(
         data, column_names=column_names
     )
     if isinstance(data, pd.DataFrame):
@@ -340,7 +340,7 @@ def test_lag_transform_historical_lag_length_2(df, column_names):
         granularity=["player"],
     )
 
-    df_with_lags = lag_transformation.transform_historical(
+    df_with_lags = lag_transformation.fit_transform(
         data, column_names=column_names
     )
 
@@ -411,10 +411,10 @@ def test_lag_transform_historical_and_transform_future(df, column_names):
         granularity=["player"],
     )
 
-    _ = lag_transformation.transform_historical(
+    _ = lag_transformation.fit_transform(
         historical_df, column_names=column_names
     )
-    future_transformed_df = lag_transformation.transform_future(future_df)
+    future_transformed_df = lag_transformation.transform(future_df)
 
     if isinstance(future_df, pd.DataFrame):
         expected_df = future_df_copy.assign(
@@ -479,10 +479,10 @@ def test_lag_transformation_transform_2_lags(df, column_names):
         granularity=["player"],
     )
 
-    _ = lag_transformation.transform_historical(
+    _ = lag_transformation.fit_transform(
         historical_df, column_names=column_names
     )
-    future_transformed_df = lag_transformation.transform_future(future_df)
+    future_transformed_df = lag_transformation.transform(future_df)
 
     if isinstance(future_df, pd.DataFrame):
         expected_df = future_df_copy.assign(
@@ -537,7 +537,7 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
         features=["points"], lag_length=2, granularity=["player"], add_opponent=True
     )
 
-    df_with_lags = lag_transformation.transform_historical(
+    df_with_lags = lag_transformation.fit_transform(
         data, column_names=column_names
     )
 
@@ -588,7 +588,7 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
     except:
         expected_future_df = future_df.clone()
 
-    future_df = lag_transformation.transform_future(future_df)
+    future_df = lag_transformation.transform(future_df)
 
     if isinstance(future_df, pd.DataFrame):
         expected_future_df = expected_future_df.assign(

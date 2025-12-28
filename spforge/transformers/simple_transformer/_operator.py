@@ -73,7 +73,7 @@ class OperatorTransformer(BaseTransformer):
         df = self._transform(df)
         for lag_transformer in self.lag_transformers:
             df = nw.from_native(
-                lag_transformer.transform_historical(df, column_names=self.column_names)
+                lag_transformer.fit_transform(df, column_names=self.column_names)
             )
         return df
 
@@ -82,9 +82,9 @@ class OperatorTransformer(BaseTransformer):
         df = self._transform(df)
         for lag_transformer in self.lag_transformers:
             if cross_validate:
-                df = nw.from_native(lag_transformer.transform_historical(df))
+                df = nw.from_native(lag_transformer.fit_transform(df))
             else:
-                df = nw.from_native(lag_transformer.transform_future(df))
+                df = nw.from_native(lag_transformer.transform(df))
         return df
 
     def _transform(self, df: IntoFrameT) -> IntoFrameT:

@@ -70,7 +70,7 @@ def test_rolling_mean_transform_historical(column_names, df, use_column_names):
             features=["points"],
             window=20,
         )
-        transformed_data = rolling_mean.transform_historical(
+        transformed_data = rolling_mean.fit_transform(
             data, column_names=column_names
         )
 
@@ -82,7 +82,7 @@ def test_rolling_mean_transform_historical(column_names, df, use_column_names):
             match_id_column="game",
             team_column="team",
         )
-        transformed_data = rolling_mean.transform_historical(data)
+        transformed_data = rolling_mean.fit_transform(data)
     expected_values = [
         None,
         None,
@@ -161,9 +161,9 @@ def test_rolling_mean_transform_future(column_names, df):
         features=["points"],
         window=20,
     )
-    _ = rolling_mean.transform_historical(historical_df, column_names=column_names)
+    _ = rolling_mean.fit_transform(historical_df, column_names=column_names)
 
-    transformed_future_data = rolling_mean.transform_future(future_df)
+    transformed_future_data = rolling_mean.transform(future_df)
 
     if isinstance(transformed_future_data, pd.DataFrame):
         expected_data = transformed_future_data.copy()
