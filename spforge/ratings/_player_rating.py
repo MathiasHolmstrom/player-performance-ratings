@@ -27,7 +27,6 @@ from spforge.transformers.lag_transformers._utils import to_polars
 PLAYER_STATS = '__PLAYER_STATS'
 
 
-
 class PlayerRatingGenerator(RatingGenerator):
 
     def __init__(self,
@@ -35,7 +34,7 @@ class PlayerRatingGenerator(RatingGenerator):
                  performance_weights: Optional[
                      list[Union[ColumnWeight, dict[str, float]]]
                  ] = None,
-                 performanc_manager: PerformanceManager | None = None,
+                 performance_manager: PerformanceManager | None = None,
                  auto_scale_performance: bool = False,
                  performance_predictor: Literal['difference', 'mean', 'ignore_opponent'] = 'difference',
                  rating_change_multiplier: float = 50,
@@ -59,22 +58,39 @@ class PlayerRatingGenerator(RatingGenerator):
                  start_min_match_count_team_rating: int = 2,
                  start_harcoded_start_rating: float | None = None,
                  column_names: Optional[ColumnNames] = None,
+                 output_suffix: Optional[str] = None,
                  **kwargs):
 
-        if performance_predictor == 'mean':
-            _performance_predictor_class = RatingMeanPerformancePredictor
-            features_out = [
-                RatingKnownFeatures.RATING_MEAN_PROJECTED] if features_out is None else features_out
-        elif performance_predictor == 'difference':
-            _performance_predictor_class = RatingDifferencePerformancePredictor
-            features_out = [
-                RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED] if features_out is None else features_out
-        elif performance_predictor == 'ignore_opponent':
-            _performance_predictor_class = RatingNonOpponentPerformancePredictor
-            features_out = [
-                RatingKnownFeatures.TEAM_RATING_PROJECTED] if features_out is None else features_out
-        else:
-            raise ValueError(f"performance_predictor {performance_predictor} is not supported")
+        # ---- NEW: output suffix (defaults to performance_column) ----
+        self.output_suffix = performance_column if output_suffix is None else output_suffix
+
+        def _suffix(col: str) -> str:
+            # Empty string / falsy suffix => no suffix
+            if not self.output_suffix:
+                return col
+            return f"{col}_{self.output_suffix}"
+
+        def _suffix_feature_list(feats: Optional[list]) -> Optional[list[str]]:
+            if not feats:
+                return feats
+            return [_suffix(str(f)) for f in feats]
+
+        # canonical suffixed columns used throughout this generator
+        self._suffix_col = _suffix
+
+        self.PLAYER_RATING_COL = _suffix(str(RatingKnownFeatures.PLAYER_RATING))
+        self.PLAYER_PRED_PERF_COL = _suffix(str(RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE))
+
+        self.TEAM_RATING_PROJ_COL = _suffix(str(RatingKnownFeatures.TEAM_RATING_PROJECTED))
+        self.OPP_RATING_PROJ_COL = _suffix(str(RatingKnownFeatures.OPPONENT_RATING_PROJECTED))
+        self.DIFF_PROJ_COL = _suffix(str(RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED))
+        self.MEAN_PROJ_COL = _suffix(str(RatingKnownFeatures.RATING_MEAN_PROJECTED))
+
+        self.TEAM_RATING_COL = _suffix(str(RatingUnknownFeatures.TEAM_RATING))
+        self.OPP_RATING_COL = _suffix(str(RatingUnknownFeatures.OPPONENT_RATING))
+        self.DIFF_COL = _suffix(str(RatingUnknownFeatures.RATING_DIFFERENCE))
+        # ------------------------------------------------------------
+
         super().__init__(
             performance_column=performance_column,
             column_names=column_names,
@@ -86,31 +102,16 @@ class PlayerRatingGenerator(RatingGenerator):
             confidence_weight=confidence_weight,
             min_rating_change_multiplier_ratio=min_rating_change_multiplier_ratio,
             team_id_change_confidence_sum_decrease=team_id_change_confidence_sum_decrease,
-            features_out=features_out
+            features_out=_suffix_feature_list(features_out),
+            performance_manager=performance_manager,
+            auto_scale_performance=auto_scale_performance,
+            performance_predictor=performance_predictor,
+            performance_weights=performance_weights,
+            non_predictor_features_out=_suffix_feature_list(non_predictor_features_out),
+            league_rating_adjustor_multiplier=league_rating_adjustor_multiplier,
+            league_rating_change_update_threshold=league_rating_change_update_threshold
         )
 
-        self.performance_predictor = performance_predictor
-
-        sig = inspect.signature(_performance_predictor_class.__init__)
-
-        init_params = [
-            name for name, param in sig.parameters.items()
-            if name != "self"
-        ]
-
-        performance_predictor_params = {k: v for k, v in kwargs.items() if k in init_params}
-        self._performance_predictor = _performance_predictor_class(**performance_predictor_params)
-
-        self.non_predictor_features_out = non_predictor_features_out
-        self.min_rating_change_multiplier_ratio = min_rating_change_multiplier_ratio
-        self.rating_change_multiplier = rating_change_multiplier
-        self.confidence_max_sum = confidence_max_sum
-        self.league_rating_adjustor_multiplier = league_rating_adjustor_multiplier
-        self.league_rating_change_update_threshold = (
-            league_rating_change_update_threshold
-        )
-        self.performance_manager = performanc_manager
-        self.league_identifier = None
         self.start_league_ratings = start_league_ratings
         self.start_league_quantile = start_league_quantile
         self.start_min_count_for_percentiles = start_min_count_for_percentiles
@@ -119,19 +120,12 @@ class PlayerRatingGenerator(RatingGenerator):
         self.start_max_days_ago_league_entities = start_max_days_ago_league_entities
         self.start_min_match_count_team_rating = start_min_match_count_team_rating
         self.start_hardcoded_start_rating = start_harcoded_start_rating
-        self.confidence_max_days = confidence_max_days
-        self._league_rating_changes: dict[Optional[str], float] = {}
-        self._league_rating_changes_count: dict[str, float] = {}
-        self.performance_weights = performance_weights
-        self.auto_scale_performance = auto_scale_performance
 
         self.team_id_change_confidence_sum_decrease = (
             team_id_change_confidence_sum_decrease
         )
         self.column_names = column_names
         self._player_ratings: dict[str, PlayerRating] = {}
-
-        self._create_performance_manager()
 
         self.start_rating_generator = StartRatingGenerator(
             league_ratings=self.start_league_ratings,
@@ -143,95 +137,6 @@ class PlayerRatingGenerator(RatingGenerator):
             min_count_for_percentiles=self.start_min_count_for_percentiles,
             harcoded_start_rating=self.start_hardcoded_start_rating,
         )
-
-    def _create_performance_manager(self) -> None:
-        if self.performance_manager:
-            if self.performance_column and self.performance_column != self.performance_manager.performance_column:
-                self.performance_manager.performance_column = self.performance_column
-                logging.info(f"Renamed performance column to performance_{self.performance_column}")
-            elif not self.performance_column:
-                self.performance_column = self.performance_manager.performance_column
-            return
-
-        if self.performance_weights:
-            if isinstance(self.performance_weights[0], dict):
-                self.performance_weights = [
-                    ColumnWeight(**weight) for weight in self.performance_weights
-                ]
-
-            self.performance_manager = PerformanceWeightsManager(
-                weights=self.performance_weights,
-                performance_column=self.performance_column,
-            )
-
-        if self.auto_scale_performance and not self.performance_manager:
-            assert self.performance_column, (
-                "performance_column must be set if auto_scale_performance is True"
-            )
-            if not self.performance_weights:
-                self.performance_manager = PerformanceManager(
-                    features=[self.performance_column],
-                    performance_column=self.performance_column,
-                )
-            else:
-                self.performance_manager = PerformanceWeightsManager(
-                    weights=self.performance_weights,
-                    performance_column=self.performance_column,
-                )
-            logging.info(f"Renamed performance column to performance_{self.performance_column}")
-
-    @to_polars
-    @nw.narwhalify
-    def fit_transform(
-            self,
-            df: IntoFrameT,
-            column_names: Optional[ColumnNames] = None,
-    ) -> DataFrame | IntoFrameT:
-        if not self.performance_manager:
-            assert (
-                    self.performance_column in df.columns
-            ), (
-                f"{self.performance_column} not in df. If performance_weights are not set, "
-                "performance_column must exist in dataframe"
-            )
-        self.column_names = column_names if column_names else self.column_names
-
-        if self.column_names.league:
-            self.league_identifier = LeagueIdentifer2(column_names=self.column_names)
-
-        if self.performance_manager:
-            df = nw.from_native(self.performance_manager.fit_transform(df))
-
-        perf = df[self.performance_column]
-        if perf.max() > 1.02 or perf.min() < -0.02:
-            raise ValueError(
-                f"Max {self.performance_column} must be less than than 1.02 and min value larger than -0.02. "
-                "Either transform it manually or set auto_scale_performance to True"
-            )
-
-        if perf.mean() < 0.42 or perf.mean() > 0.58:
-            raise ValueError(
-                f"Mean {self.performance_column} must be between 0.42 and 0.58. "
-                "Either transform it manually or set auto_scale_performance to True"
-            )
-
-        pl_df: pl.DataFrame
-        if df.implementation.is_polars():
-            pl_df = df.to_native()
-        else:
-            pl_df = df.to_polars().to_native()
-
-        return self._historical_transform(pl_df)
-
-    def transform(self, df: IntoFrameT) -> IntoFrameT:
-        pl_df: pl.DataFrame
-        if df.implementation.is_polars():
-            pl_df = df.to_native()
-        else:
-            pl_df = df.to_polars().to_native()
-
-        return self._historical_transform(pl_df)
-
 
     def _calculate_applied_rating_change_multiplier(
             self,
@@ -255,15 +160,14 @@ class PlayerRatingGenerator(RatingGenerator):
             participation_weight=particpation_weight,
         )
 
-
-
     def _historical_transform(self, df: pl.DataFrame) -> pl.DataFrame:
         match_df = self._create_match_df(df)
-
         ratings = self._calculate_ratings(match_df)
 
-        cols = [c for c in df.columns if
-                c not in (RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE, RatingKnownFeatures.PLAYER_RATING)]
+        cols = [
+            c for c in df.columns
+            if c not in (self.PLAYER_PRED_PERF_COL, self.PLAYER_RATING_COL)
+        ]
         df = (
             df.select(cols)
             .join(
@@ -281,8 +185,8 @@ class PlayerRatingGenerator(RatingGenerator):
             self.column_names.player_id: [],
             self.column_names.match_id: [],
             self.column_names.team_id: [],
-            RatingKnownFeatures.PLAYER_RATING: [],
-            RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE: []
+            self.PLAYER_RATING_COL: [],
+            self.PLAYER_PRED_PERF_COL: [],
         }
         for r in match_df.iter_rows(named=True):
             team1 = r[self.column_names.team_id]
@@ -360,10 +264,10 @@ class PlayerRatingGenerator(RatingGenerator):
             predicted_player_performances = match_team_rating_changes[0].predicted_player_performances + \
                                             match_team_rating_changes[1].predicted_player_performances
             player_ids = pre_match_players_collection_team1.player_ids + pre_match_players_collection_team2.player_ids
-            new_ratings_data[RatingKnownFeatures.PLAYER_RATING].extend(player_ratings)
+            new_ratings_data[self.PLAYER_RATING_COL].extend(player_ratings)
             new_ratings_data[self.column_names.match_id].extend(match_ids)
             new_ratings_data[self.column_names.team_id].extend(team_ids)
-            new_ratings_data[RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE].extend(predicted_player_performances)
+            new_ratings_data[self.PLAYER_PRED_PERF_COL].extend(predicted_player_performances)
 
             new_ratings_data[self.column_names.player_id].extend(player_ids)
 
@@ -372,41 +276,47 @@ class PlayerRatingGenerator(RatingGenerator):
     def _add_rating_columns(self, df: pl.DataFrame, known_features_to_return: list[str],
                             unknown_features_to_return: list[str]) -> pl.DataFrame:
         input_cols = df.columns
+
+        player_rating_col = self.PLAYER_RATING_COL
+
         if self.column_names.participation_weight:
             df = (df
                   .with_columns(
-                (pl.col(self.column_names.participation_weight) * (pl.col(RatingKnownFeatures.PLAYER_RATING)).alias(
+                (pl.col(self.column_names.participation_weight) * (pl.col(player_rating_col)).alias(
                     '__raw_player_rating')))
                   .with_columns(pl.col(self.column_names.participation_weight).sum().over(
                 [self.column_names.match_id, self.column_names.team_id]).alias('__sum_participation_weight'))
                   ).with_columns(
                 (pl.col('__raw_player_rating') / pl.col('__sum_participation_weight')).alias(
-                    RatingUnknownFeatures.TEAM_RATING)
+                    self.TEAM_RATING_COL
+                )
             ).drop(['__raw_player_rating', '__sum_participation_weight'])
         else:
-            df = df.with_columns(pl.col(RatingKnownFeatures.PLAYER_RATING).mean().over(
-                [self.column_names.team_id, self.column_names.match_id]).alias(RatingUnknownFeatures.TEAM_RATING))
+            df = df.with_columns(pl.col(player_rating_col).mean().over(
+                [self.column_names.team_id, self.column_names.match_id]).alias(self.TEAM_RATING_COL))
 
         if self.column_names.projected_participation_weight:
             df = (df
                   .with_columns(
-                (pl.col(self.column_names.participation_weight) * (pl.col(RatingKnownFeatures.PLAYER_RATING)).alias(
+                (pl.col(self.column_names.participation_weight) * (pl.col(player_rating_col)).alias(
                     '__raw_player_rating')))
                   .with_columns(pl.col(self.column_names.projected_participation_weight).sum().over(
                 [self.column_names.match_id, self.column_names.team_id]).alias('__sum_participation_weight'))
                   ).with_columns(
                 (pl.col('__raw_player_rating') / pl.col('__sum_participation_weight')).alias(
-                    RatingKnownFeatures.TEAM_RATING_PROJECTED)
+                    self.TEAM_RATING_PROJ_COL
+                )
             )
         else:
             df = df.with_columns(
-                pl.col(RatingUnknownFeatures.TEAM_RATING).alias(RatingKnownFeatures.TEAM_RATING_PROJECTED))
+                pl.col(self.TEAM_RATING_COL).alias(self.TEAM_RATING_PROJ_COL))
 
-        if RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED in known_features_to_return:
-            df = df.with_columns((pl.col(RatingKnownFeatures.TEAM_RATING_PROJECTED) - pl.col(
-                RatingKnownFeatures.OPPONENT_RATING_PROJECTED)).alias(RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED))
+        if self.DIFF_PROJ_COL in known_features_to_return:
+            df = df.with_columns((pl.col(self.TEAM_RATING_PROJ_COL) - pl.col(
+                self.OPP_RATING_PROJ_COL)).alias(self.DIFF_PROJ_COL))
 
-        return df.select(list(set([input_cols + known_features_to_return + unknown_features_to_return])))
+        # fixed: don't wrap list-of-cols inside another list
+        return df.select(list(dict.fromkeys(input_cols + known_features_to_return + unknown_features_to_return)))
 
     def _create_pre_match_players_collection(
             self, r: dict, stats_col: str
@@ -695,12 +605,12 @@ class PlayerRatingGenerator(RatingGenerator):
 
         cn = self.column_names  # ColumnNames instance
 
-        player_rating = RatingKnownFeatures.PLAYER_RATING
+        player_rating = self.PLAYER_RATING_COL
 
-        team_col = RatingKnownFeatures.TEAM_RATING_PROJECTED
-        opp_rating_col = RatingKnownFeatures.OPPONENT_RATING_PROJECTED
-        diff_col = RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED
-        mean_col = RatingKnownFeatures.RATING_MEAN_PROJECTED
+        team_col = self.TEAM_RATING_PROJ_COL
+        opp_rating_col = self.OPP_RATING_PROJ_COL
+        diff_col = self.DIFF_PROJ_COL
+        mean_col = self.MEAN_PROJ_COL
 
         if _needs_any(all_feats_out, team_col, opp_rating_col, diff_col):
             df = add_team_rating_projected(
@@ -718,21 +628,20 @@ class PlayerRatingGenerator(RatingGenerator):
                 opp_team_rating_out=opp_rating_col,
             )
 
-        if _needs_any(all_feats_out, RatingUnknownFeatures.OPPONENT_RATING, RatingUnknownFeatures.RATING_DIFFERENCE,
-                      RatingUnknownFeatures.TEAM_RATING):
+        if _needs_any(all_feats_out, self.OPP_RATING_COL, self.DIFF_COL, self.TEAM_RATING_COL):
             df = add_team_rating(
                 df=df,
                 column_names=cn,
                 player_rating_col=player_rating,
-                team_rating_out=RatingUnknownFeatures.TEAM_RATING,
+                team_rating_out=self.TEAM_RATING_COL,
             )
 
-        if _needs_any(all_feats_out, RatingUnknownFeatures.OPPONENT_RATING, RatingUnknownFeatures.RATING_DIFFERENCE):
+        if _needs_any(all_feats_out, self.OPP_RATING_COL, self.DIFF_COL):
             df = add_opp_team_rating(
                 df=df,
                 column_names=cn,
-                team_rating_col=RatingUnknownFeatures.TEAM_RATING,
-                opp_team_rating_out=RatingUnknownFeatures.OPPONENT_RATING,
+                team_rating_col=self.TEAM_RATING_COL,
+                opp_team_rating_out=self.OPP_RATING_COL,
             )
 
         if diff_col in all_feats_out:
@@ -750,34 +659,19 @@ class PlayerRatingGenerator(RatingGenerator):
                 player_rating_col=player_rating,
                 rating_mean_out=mean_col,
             )
-        cols_to_eval = [
-                           v for k, v in RatingKnownFeatures.__dict__.items()
-                           if not k.startswith("_")
-                       ] + [
-                           v for k, v in RatingUnknownFeatures.__dict__.items()
-                           if not k.startswith("_")
-                       ]
+
+        base_known = [
+            v for k, v in RatingKnownFeatures.__dict__.items()
+            if not k.startswith("_")
+        ]
+        base_unknown = [
+            v for k, v in RatingUnknownFeatures.__dict__.items()
+            if not k.startswith("_")
+        ]
+        cols_to_eval = [self._suffix_col(str(c)) for c in (base_known + base_unknown)]
         cols_to_drop = [c for c in cols_to_eval if c not in all_feats_out and c in df.columns]
+
         return df.drop(cols_to_drop)
-
-
-    @to_polars
-    @nw.narwhalify
-    def future_transform(self, df: IntoFrameT) -> IntoFrameT:
-
-        """
-        Called only for future fixtures:
-        - use existing player ratings to compute pre-match ratings/features
-        - do NOT update ratings
-        """
-        pl_df: pl.DataFrame
-        if df.implementation.is_polars():
-            pl_df = df.to_native()
-        else:
-            pl_df = df.to_polars().to_native()
-
-        return self._future_transform(pl_df)
-
 
     def _future_transform(self, df: pl.DataFrame) -> pl.DataFrame:
         match_df = self._create_match_df(df)
@@ -785,7 +679,7 @@ class PlayerRatingGenerator(RatingGenerator):
 
         cols = [
             c for c in df.columns
-            if c not in (RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE, RatingKnownFeatures.PLAYER_RATING)
+            if c not in (self.PLAYER_PRED_PERF_COL, self.PLAYER_RATING_COL)
         ]
 
         df = (
@@ -875,8 +769,8 @@ class PlayerRatingGenerator(RatingGenerator):
             self.column_names.player_id: [],
             self.column_names.match_id: [],
             self.column_names.team_id: [],
-            RatingKnownFeatures.PLAYER_RATING: [],
-            RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE: [],
+            self.PLAYER_RATING_COL: [],
+            self.PLAYER_PRED_PERF_COL: [],
         }
 
         cn = self.column_names
@@ -962,8 +856,6 @@ class PlayerRatingGenerator(RatingGenerator):
                     team_pre_match_player_ratings=c1.pre_match_player_ratings,
                 )
                 # _generate_new_player_pre_match_ratings writes to self._player_ratings; prevent that:
-                # overwrite those additions back into *local_ratings* and restore self._player_ratings after loop.
-                # Instead, we immediately copy from self._player_ratings into local_ratings, then remove from self._player_ratings.
                 for p in c1.new_players:
                     local_ratings[p.id] = self._player_ratings[p.id]
                     del self._player_ratings[p.id]
@@ -1039,7 +931,7 @@ class PlayerRatingGenerator(RatingGenerator):
             new_ratings_data[cn.player_id].extend(player_ids)
             new_ratings_data[cn.match_id].extend(match_ids)
             new_ratings_data[cn.team_id].extend(team_ids)
-            new_ratings_data[RatingKnownFeatures.PLAYER_RATING].extend(player_ratings)
-            new_ratings_data[RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE].extend(predicted_player_performances)
+            new_ratings_data[self.PLAYER_RATING_COL].extend(player_ratings)
+            new_ratings_data[self.PLAYER_PRED_PERF_COL].extend(predicted_player_performances)
 
         return pl.DataFrame(new_ratings_data, strict=False)

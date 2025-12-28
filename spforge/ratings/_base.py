@@ -1,5 +1,9 @@
+import inspect
+
+import narwhals as nw
+import logging
 from dataclasses import dataclass
-from typing import Optional, Any
+from typing import Optional, Any, Literal, Union
 
 import polars as pl
 from abc import abstractmethod, ABC
@@ -8,8 +12,14 @@ from narwhals import DataFrame
 from narwhals.stable.v1.typing import IntoFrameT
 from spforge import ColumnNames
 from spforge.data_structures import RatingState
+from spforge.ratings import RatingKnownFeatures, RatingUnknownFeatures
 from spforge.ratings.league_identifier import LeagueIdentifer2
+from spforge.ratings.performance_predictor import RatingMeanPerformancePredictor, RatingDifferencePerformancePredictor, \
+    RatingNonOpponentPerformancePredictor
 from spforge.transformers.base_transformer import BaseTransformer
+from spforge.transformers.fit_transformers import PerformanceWeightsManager, PerformanceManager
+from spforge.transformers.fit_transformers._performance_manager import ColumnWeight
+from spforge.transformers.lag_transformers._utils import to_polars
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 EXPECTED_MEAN_CONFIDENCE_SUM = 30
@@ -36,24 +46,74 @@ class RatingGenerator(BaseTransformer):
     def __init__(
         self,
         performance_column: str,
+        performance_weights: Optional[
+                list[Union[ColumnWeight, dict[str, float]]]
+            ],
         column_names: ColumnNames,
         features_out: list[str],
-        rating_change_multiplier: float = 50,
-        confidence_days_ago_multiplier: float = 0.06,
-        confidence_max_days: int = 90,
-        confidence_value_denom: float = 140,
-        confidence_max_sum: float = 150,
-        confidence_weight: float = 0.9,
-        min_rating_change_multiplier_ratio: float = 0.1,
-        team_id_change_confidence_sum_decrease: float = 0.0,  # useful for players, usually 0 for teams
+        performance_manager: PerformanceManager | None,
+        auto_scale_performance: bool,
+        performance_predictor: Literal['difference', 'mean', 'ignore_opponent'],
+        rating_change_multiplier: float,
+        confidence_days_ago_multiplier: float ,
+        confidence_max_days: int ,
+        confidence_value_denom: float ,
+        confidence_max_sum: float,
+        confidence_weight: float ,
+        non_predictor_features_out: Optional[list[RatingKnownFeatures | RatingUnknownFeatures]],
+        min_rating_change_multiplier_ratio: float,
+        league_rating_change_update_threshold: float,
+        league_rating_adjustor_multiplier: float,
         **kwargs: Any,
     ):
+        self.performance_predictor = performance_predictor
+        self.performance_weights = performance_weights
+
+        self.league_rating_adjustor_multiplier = league_rating_adjustor_multiplier
+        self.league_rating_change_update_threshold = (
+            league_rating_change_update_threshold
+        )
+        self.confidence_max_days = confidence_max_days
+        self._league_rating_changes: dict[Optional[str], float] = {}
+        self._league_rating_changes_count: dict[str, float] = {}
+        self.min_rating_change_multiplier_ratio = min_rating_change_multiplier_ratio
+        self.rating_change_multiplier = rating_change_multiplier
+        self.confidence_max_sum = confidence_max_sum
+        self.league_identifier = None
+        if performance_predictor == 'mean':
+            _performance_predictor_class = RatingMeanPerformancePredictor
+            self._features_out = [
+                RatingKnownFeatures.RATING_MEAN_PROJECTED] if features_out is None else features_out
+        elif performance_predictor == 'difference':
+            _performance_predictor_class = RatingDifferencePerformancePredictor
+            self._features_out = [
+                RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED] if features_out is None else features_out
+        elif performance_predictor == 'ignore_opponent':
+            _performance_predictor_class = RatingNonOpponentPerformancePredictor
+            self._features_out = [
+                RatingKnownFeatures.TEAM_RATING_PROJECTED] if features_out is None else features_out
+        else:
+            raise ValueError(f"performance_predictor {performance_predictor} is not supported")
+        sig = inspect.signature(_performance_predictor_class.__init__)
+
+        init_params = [
+            name for name, param in sig.parameters.items()
+            if name != "self"
+        ]
+
+        performance_predictor_params = {k: v for k, v in kwargs.items() if k in init_params}
+        self._performance_predictor = _performance_predictor_class(**performance_predictor_params)
+
+        self.non_predictor_features_out = non_predictor_features_out
+        self.auto_scale_performance = auto_scale_performance
+        self.performance_manager = performance_manager
+        self.non_predictor_features_out = non_predictor_features_out
         super().__init__(features_out=features_out, features=[])
         self.performance_column = performance_column
         self.column_names = column_names
         self.kwargs = kwargs
 
-        # update knobs
+        self.performance_manager = self._create_performance_manager()
         self.rating_change_multiplier = rating_change_multiplier
         self.confidence_days_ago_multiplier = confidence_days_ago_multiplier
         self.confidence_max_days = confidence_max_days
@@ -61,7 +121,6 @@ class RatingGenerator(BaseTransformer):
         self.confidence_max_sum = confidence_max_sum
         self.confidence_weight = confidence_weight
         self.min_rating_change_multiplier_ratio = min_rating_change_multiplier_ratio
-        self.team_id_change_confidence_sum_decrease = team_id_change_confidence_sum_decrease
 
         self.league_identifier = (
             LeagueIdentifer2(column_names=self.column_names)
@@ -69,9 +128,174 @@ class RatingGenerator(BaseTransformer):
             else None
         )
 
-    @abstractmethod
+    @to_polars
+    @nw.narwhalify
+    def fit_transform(
+            self,
+            df: IntoFrameT,
+            column_names: Optional[ColumnNames] = None,
+    ) -> DataFrame | IntoFrameT:
+        if not self.performance_manager:
+            assert (
+                    self.performance_column in df.columns
+            ), (
+                f"{self.performance_column} not in df. If performance_weights are not set, "
+                "performance_column must exist in dataframe"
+            )
+        self.column_names = column_names if column_names else self.column_names
+
+        if self.column_names.league:
+            self.league_identifier = LeagueIdentifer2(column_names=self.column_names)
+
+        if self.performance_manager:
+            df = nw.from_native(self.performance_manager.fit_transform(df))
+
+        perf = df[self.performance_column]
+        if perf.max() > 1.02 or perf.min() < -0.02:
+            raise ValueError(
+                f"Max {self.performance_column} must be less than than 1.02 and min value larger than -0.02. "
+                "Either transform it manually or set auto_scale_performance to True"
+            )
+
+        if perf.mean() < 0.42 or perf.mean() > 0.58:
+            raise ValueError(
+                f"Mean {self.performance_column} must be between 0.42 and 0.58. "
+                "Either transform it manually or set auto_scale_performance to True"
+            )
+
+        pl_df: pl.DataFrame
+        if df.implementation.is_polars():
+            pl_df = df.to_native()
+        else:
+            pl_df = df.to_polars().to_native()
+
+        return self._historical_transform(pl_df)
+
+    @to_polars
+    @nw.narwhalify
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
+        pl_df: pl.DataFrame
+        if df.implementation.is_polars():
+            pl_df = df.to_native()
+        else:
+            pl_df = df.to_polars().to_native()
+
+        return self._historical_transform(pl_df)
+
+
+    @to_polars
+    @nw.narwhalify
     def future_transform(self, df: IntoFrameT) -> IntoFrameT:
+
+        """
+        Called only for future fixtures:
+        - use existing player ratings to compute pre-match ratings/features
+        - do NOT update ratings
+        """
+        pl_df: pl.DataFrame
+        if df.implementation.is_polars():
+            pl_df = df.to_native()
+        else:
+            pl_df = df.to_polars().to_native()
+
+        return self._future_transform(pl_df)
+
+    @abstractmethod
+    def _future_transform(self, df: pl.DataFrame):
         pass
+
+    @abstractmethod
+    def _historical_transform(self, df: pl.DataFrame):
+        pass
+
+    def _create_performance_manager(self) -> PerformanceManager | None:
+        if self.performance_manager:
+            if self.performance_column and self.performance_column != self.performance_manager.performance_column:
+                self.performance_manager.performance_column = self.performance_column
+                logging.info(f"Renamed performance column to performance_{self.performance_column}")
+            elif not self.performance_column:
+                self.performance_column = self.performance_manager.performance_column
+            return self.performance_manager
+
+        if self.performance_weights:
+            if isinstance(self.performance_weights[0], dict):
+                self.performance_weights = [
+                    ColumnWeight(**weight) for weight in self.performance_weights
+                ]
+
+            return PerformanceWeightsManager(
+                weights=self.performance_weights,
+                performance_column=self.performance_column,
+            )
+
+        if self.auto_scale_performance and not self.performance_manager:
+            assert self.performance_column, (
+                "performance_column must be set if auto_scale_performance is True"
+            )
+            if not self.performance_weights:
+                return PerformanceManager(
+                    features=[self.performance_column],
+                    performance_column=self.performance_column,
+                )
+            else:
+                return PerformanceWeightsManager(
+                    weights=self.performance_weights,
+                    performance_column=self.performance_column,
+                )
+
+        return None
+
+    @to_polars
+    @nw.narwhalify
+    def fit_transform(
+            self,
+            df: IntoFrameT,
+            column_names: Optional[ColumnNames] = None,
+    ) -> DataFrame | IntoFrameT:
+        if not self.performance_manager:
+            assert (
+                    self.performance_column in df.columns
+            ), (
+                f"{self.performance_column} not in df. If performance_weights are not set, "
+                "performance_column must exist in dataframe"
+            )
+        self.column_names = column_names if column_names else self.column_names
+
+        if self.column_names.league:
+            self.league_identifier = LeagueIdentifer2(column_names=self.column_names)
+
+        if self.performance_manager:
+            df = nw.from_native(self.performance_manager.fit_transform(df))
+
+        perf = df[self.performance_column]
+        if perf.max() > 1.02 or perf.min() < -0.02:
+            raise ValueError(
+                f"Max {self.performance_column} must be less than than 1.02 and min value larger than -0.02. "
+                "Either transform it manually or set auto_scale_performance to True"
+            )
+
+        if perf.mean() < 0.42 or perf.mean() > 0.58:
+            raise ValueError(
+                f"Mean {self.performance_column} must be between 0.42 and 0.58. "
+                "Either transform it manually or set auto_scale_performance to True"
+            )
+
+        pl_df: pl.DataFrame
+        if df.implementation.is_polars():
+            pl_df = df.to_native()
+        else:
+            pl_df = df.to_polars().to_native()
+
+        return self._historical_transform(pl_df)
+
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
+        pl_df: pl.DataFrame
+        if df.implementation.is_polars():
+            pl_df = df.to_native()
+        else:
+            pl_df = df.to_polars().to_native()
+
+        return self._historical_transform(pl_df)
 
 
     def _add_day_number(self, df: pl.DataFrame) -> pl.DataFrame:

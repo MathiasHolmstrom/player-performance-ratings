@@ -42,18 +42,14 @@ class Pipeline(BasePredictor):
             impute_missing_values=impute_missing_values,
             convert_cat_features_to_cat_dtype=convert_cat_features_to_cat_dtype,
             pre_transformers=pre_transformers,
-            post_predict_transformers=post_predict_transformers
+            post_predict_transformers=post_predict_transformers,
+            lag_features=predictor.lag_features
         )
         self.filters = filters or []
         self.drop_rows_where_target_is_nan = drop_rows_where_target_is_nan
         self._predictor_features = predictor.features.copy()
 
-        if predictor.features_contain_str:
-            logging.info(
-                f"Using estimator features {self._predictor_features} and {predictor.features_contain_str}"
-            )
-        else:
-            logging.info(f"Using estimator features {self._predictor_features}")
+        logging.info(f"Using estimator features {self._predictor_features}")
         self.predictor = predictor
         self._pred_columns_added = self.predictor._pred_columns_added
 

@@ -1,5 +1,6 @@
 import logging
 from abc import abstractmethod, ABC
+from dataclasses import dataclass
 from typing import Optional, TypeVar, Any
 
 import polars as pl
@@ -20,6 +21,11 @@ from spforge.predictor_transformer._simple_transformer import (
 
 DataFrameType = TypeVar("DataFrameType", pd.DataFrame, pl.DataFrame)
 
+@dataclass
+class LagFeature:
+    base_name: str
+    min_lag: int
+    max_lag:int
 
 class BasePredictor(ABC):
 
@@ -27,7 +33,7 @@ class BasePredictor(ABC):
         self,
         features: list[str],
         target: str,
-        features_contain_str: Optional[list[str]] = None,
+        lag_features: list[LagFeature] | None = None,
         scale_features: bool = False,
         one_hot_encode_cat_features: bool = False,
         convert_cat_features_to_cat_dtype: bool = False,
@@ -43,7 +49,7 @@ class BasePredictor(ABC):
         self._modified_features = self._features.copy()
         self._ori_estimator_features = self._features.copy()
         self._target = target
-        self.features_contain_str = features_contain_str or []
+        self.lag_features = lag_features or []
         self.post_predict_transformers = post_predict_transformers or []
         self.convert_cat_features_to_cat_dtype = convert_cat_features_to_cat_dtype
         self.impute_missing_values = impute_missing_values
@@ -58,25 +64,14 @@ class BasePredictor(ABC):
         self.auto_pre_transform = auto_pre_transform
         self.multiclass_output_as_struct = multiclass_output_as_struct
 
+        for lag_feature in self.lag_features:
+            for iter in range(lag_feature.min_lag, lag_feature.max_lag):
+                self._features.append(
+                    f"lag_{lag_feature.base_name}{iter}"
+                )
+
     def reset(self) -> None:
         pass
-
-    def _add_features_contain_str(self, df: IntoFrameT) -> None:
-        columns = df.columns
-        already_added = []
-        for contain in self.features_contain_str:
-            estimator_feature_count = len(self._features)
-            for column in columns:
-                if column not in self._features and contain in column:
-                    self._features.append(column)
-                    self._modified_features.append(column)
-                elif contain in column:
-                    already_added.append(column)
-            if (
-                len(self._features) == estimator_feature_count
-                and len(already_added) == 0
-            ):
-                raise ValueError(f"Feature Contain {contain} not found in df")
 
     @abstractmethod
     def train(self, df: IntoFrameT, features: Optional[list[str]] = None) -> None:

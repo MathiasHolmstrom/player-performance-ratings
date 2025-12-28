@@ -56,7 +56,7 @@ future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(
     columns=["result"]
 )
 rating_generator_player_kills = PlayerRatingGenerator(
-    features_out=[RatingKnownFeatures.RATING_MEAN_PROJECTED],
+    features_out=[RatingKnownFeatures.PLAYER_RATING],
     performance_column='performance_kills',
     auto_scale_performance=True,
     performance_weights=[
@@ -66,8 +66,8 @@ rating_generator_player_kills = PlayerRatingGenerator(
 rating_generator_result = PlayerRatingGenerator(
     features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
     performance_column="result",
+    non_predictor_features_out=[RatingKnownFeatures.PLAYER_RATING]
 )
-
 
 
 lag_generators = [
@@ -92,7 +92,7 @@ historical_df = features_generator.fit_transform(historical_df)
 game_winner_predictor = SklearnPredictor(
     estimator=LogisticRegression(),
     target="result",
-    features=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+    features=rating_generator_result.features_out,
     granularity=[column_names.match_id, column_names.team_id],
 )
 game_winner_pipeline = Pipeline(
@@ -104,8 +104,7 @@ game_winner_pipeline = Pipeline(
 player_kills_predictor = SklearnPredictor(
     estimator=LGBMRegressor(verbose=-100),
     target="kills",
-    features=[game_winner_predictor.pred_column],
-    features_contain_str=["rolling_mean_kills", "lag_kills"],
+    features=[game_winner_predictor.pred_column, *features_generator.features_out],
 )
 
 cross_validator_game_winner = MatchKFoldCrossValidator(

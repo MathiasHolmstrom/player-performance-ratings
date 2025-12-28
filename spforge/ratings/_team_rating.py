@@ -167,9 +167,6 @@ class TeamRatingGenerator(RatingGenerator):
             strict=False,
         )
 
-    def _join_ratings_back(self, original_df: pl.DataFrame, ratings_df: pl.DataFrame) -> pl.DataFrame:
-        cn = self.column_names
-        return original_df.join(ratings_df, on=[cn.match_id, cn.team_id], how="left")
 
     def _add_features(self, df: pl.DataFrame) -> pl.DataFrame:
         cn = self.column_names

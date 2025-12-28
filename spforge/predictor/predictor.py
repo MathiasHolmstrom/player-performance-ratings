@@ -14,7 +14,7 @@ from spforge.scorer import Filter, apply_filters
 from typing import Optional
 
 from spforge.data_structures import ColumnNames
-from spforge.predictor._base import BasePredictor
+from spforge.predictor._base import BasePredictor, LagFeature
 
 
 class GroupByPredictor(BasePredictor):
@@ -169,9 +169,9 @@ class SklearnPredictor(BasePredictor):
         self,
         estimator,
         target: str,
+        lag_features: list[LagFeature] | None = None,
         pred_column: Optional[str] = None,
         features: Optional[list[str]] = None,
-        features_contain_str: Optional[list[str]] = None,
         granularity: Optional[list[str]] = None,
 
         multiclass_output_as_struct: bool = False,
@@ -196,7 +196,7 @@ class SklearnPredictor(BasePredictor):
             pred_column=pred_column,
             features=features,
             multiclass_output_as_struct=multiclass_output_as_struct,
-            features_contain_str=features_contain_str,
+            lag_features=lag_features
         )
         self.classes_ = None
 
@@ -206,6 +206,9 @@ class SklearnPredictor(BasePredictor):
         self._features = (
             features.copy() if features else self._ori_estimator_features.copy()
         )
+        for f in self._features:
+            if f not in df.columns:
+                raise ValueError(f"{f} not in dataframe")
         self._modified_features = self._features.copy()
         if not self._features:
             raise ValueError(
