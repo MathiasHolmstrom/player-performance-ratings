@@ -43,7 +43,6 @@ class BasePredictor(ABC):
         pred_column: Optional[str] = None,
         filters: Optional[dict] = None,
         auto_pre_transform: bool = True,
-        multiclass_output_as_struct: bool = False,
     ):
         self._features = features or []
         self._modified_features = self._features.copy()
@@ -62,7 +61,6 @@ class BasePredictor(ABC):
         self.multiclassifier = False
         self._classes_ = None
         self.auto_pre_transform = auto_pre_transform
-        self.multiclass_output_as_struct = multiclass_output_as_struct
 
         for lag_feature in self.lag_features:
             for iter in range(lag_feature.min_lag, lag_feature.max_lag):
@@ -101,26 +99,10 @@ class BasePredictor(ABC):
 
     @property
     def columns_added(self) -> list[str]:
-        if not self.multiclassifier or self.multiclass_output_as_struct:
+        if not self.multiclassifier:
             return self._pred_columns_added
         return [*self._pred_columns_added, "classes"]
 
-    def _convert_multiclass_predictions_to_struct(
-        self, df: IntoFrameT, classes: list[str]
-    ) -> IntoFrameT:
-        df = df.to_native()
-        assert isinstance(df, pl.DataFrame)
-
-        return nw.from_native(
-            df.with_columns(
-                pl.struct(
-                    *[
-                        pl.col(self.pred_column).list.get(i).alias(str(cls))
-                        for i, cls in enumerate(classes)
-                    ]
-                ).alias(self.pred_column)
-            )
-        )
 
     def set_target(self, new_target_name: str):
         self._target = new_target_name
@@ -143,16 +125,15 @@ class DistributionPredictor(BasePredictor):
         pred_column: Optional[str] = None,
         filters: Optional[dict] = None,
         auto_pre_transform: bool = True,
-        multiclass_output_as_struct: bool = False,
     ):
-        self.point_estimate_pred_column = point_estimate_pred_column
-        self.min_value = min_value
-        self.max_value = max_value
+
         super().__init__(
             target=target,
             features=[],
-            pred_column=pred_column,
+            pred_column=pred_column or f"{target}_probabilities",
             filters=filters or {},
             auto_pre_transform=auto_pre_transform,
-            multiclass_output_as_struct=multiclass_output_as_struct,
         )
+        self.point_estimate_pred_column = point_estimate_pred_column
+        self.min_value = min_value
+        self.max_value = max_value

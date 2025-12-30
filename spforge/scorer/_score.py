@@ -1,17 +1,19 @@
-import math
 import datetime
-from dataclasses import dataclass
+import logging
+import math
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Callable, Union, Any
-from narwhals.typing import IntoFrameT, IntoFrameT
-import narwhals.stable.v2 as nw
+
 import narwhals
+import narwhals.stable.v2 as nw
 import numpy as np
 import pandas as pd
-from polars.polars import col
-
 import polars as pl
+from narwhals.typing import IntoFrameT
+
+_logger = logging.getLogger(__name__)
 
 
 class Operator(Enum):
@@ -147,6 +149,46 @@ class BaseScorer(ABC):
         pass
 
 
+class PWMSE(BaseScorer):
+    def __init__(
+            self,
+            pred_column: str,
+            target: str,
+            validation_column: Optional[str] = None,
+            granularity: Optional[list[str]] = None,
+            filters: Optional[list[Filter]] = None,
+            labels: list[int] | None= None
+    ):
+        self.pred_column_name = pred_column
+        super().__init__(
+            target=target,
+            pred_column=pred_column,
+            granularity=granularity,
+            filters=filters,
+            validation_column=validation_column,
+        )
+        self.labels = labels
+
+    @narwhals.narwhalify
+    def score(self, df: IntoFrameT) -> float:
+        before = len(df)
+        df = df.filter(~nw.col(self.target).is_null())
+        after = len(df)
+        _logger.info(
+            "Dropped %d rows with NaN target (%d → %d)",
+            before - after,
+            before,
+            after,
+        )
+        df = df.filter(~nw.col(self.target).is_null())
+        labels = np.asarray(self.labels, dtype=np.float64)
+        targets = df[self.target].to_numpy().astype(np.float64)
+        preds = np.asarray(df[self.pred_column].to_list(), dtype=np.float64)
+
+        diffs_sqd = (labels[None, :] - targets[:, None]) ** 2
+        return (diffs_sqd * preds).sum(axis=1).mean()
+
+
 class MeanBiasScorer(BaseScorer):
     def __init__(
         self,
@@ -224,17 +266,6 @@ class SklearnScorer(BaseScorer):
     def score(self, df: IntoFrameT) -> float:
 
         df = apply_filters(df=df, filters=self.filters)
-        if isinstance(df[self.pred_column_name].to_list()[0], dict):
-            assert (
-                not self.granularity
-            ), "Granularity is not supported for dict predictions"
-            df = df.to_polars()
-            df = df.with_columns(
-                pl.col(self.pred_column)
-                .struct.unnest()
-                .pipe(pl.concat_list)
-                .alias(self.pred_column)
-            )
 
         if self.granularity:
             grouped = df.group_by(self.granularity).agg(

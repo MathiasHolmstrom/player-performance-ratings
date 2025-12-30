@@ -16,6 +16,7 @@ from typing import Optional
 from spforge.data_structures import ColumnNames
 from spforge.predictor._base import BasePredictor, LagFeature
 
+_logger = logging.getLogger(__name__)
 
 class GroupByPredictor(BasePredictor):
     """
@@ -57,7 +58,6 @@ class GroupByPredictor(BasePredictor):
             convert_cat_features_to_cat_dtype=convert_cat_features_to_cat_dtype,
             scale_features=scale_features,
             one_hot_encode_cat_features=one_hot_encode_cat_features,
-            multiclass_output_as_struct=predictor.multiclass_output_as_struct,
             target=predictor.target,
             pred_column=predictor.pred_column,
             pre_transformers=pre_transformers,
@@ -65,7 +65,6 @@ class GroupByPredictor(BasePredictor):
             impute_missing_values=impute_missing_values,
             filters=filters,
             post_predict_transformers=post_predict_transformers,
-            features_contain_str=predictor.features_contain_str,
         )
 
     @nw.narwhalify
@@ -88,9 +87,7 @@ class GroupByPredictor(BasePredictor):
             )
         else:
             self._features = []
-        self._add_features_contain_str(df)
         df = apply_filters(df=df, filters=self.filters)
-        df = self._fit_transform_pre_transformers(df=df)
         grouped = self._create_grouped(df)
         logging.info(f"Training with features: {self._features}")
         self.predictor.train(grouped, features=self._features)
@@ -112,7 +109,6 @@ class GroupByPredictor(BasePredictor):
             raise ValueError("features not set. Please train first")
         if "__row_index" not in df.columns:
             df = df.with_row_index(name="__row_index")
-        df = self._transform_pre_transformers(df=df)
         grouped = self._create_grouped(df)
 
         grouped = nw.from_native(self.predictor.predict(grouped))
@@ -174,7 +170,6 @@ class SklearnPredictor(BasePredictor):
         features: Optional[list[str]] = None,
         granularity: Optional[list[str]] = None,
 
-        multiclass_output_as_struct: bool = False,
         weight_by_date: bool = False,
         date_column: None | str = None,
         day_weight_epsilon: float = 400,
@@ -195,7 +190,6 @@ class SklearnPredictor(BasePredictor):
             target=target,
             pred_column=pred_column,
             features=features,
-            multiclass_output_as_struct=multiclass_output_as_struct,
             lag_features=lag_features
         )
         self.classes_ = None
@@ -205,6 +199,15 @@ class SklearnPredictor(BasePredictor):
 
         self._features = (
             features.copy() if features else self._ori_estimator_features.copy()
+        )
+        before = len(df)
+        df = df.filter(~nw.col(self.target).is_null())
+        after = len(df)
+        _logger.info(
+            "Dropped %d rows with NaN target (%d → %d)",
+            before - after,
+            before,
+            after,
         )
         for f in self._features:
             if f not in df.columns:
@@ -234,7 +237,6 @@ class SklearnPredictor(BasePredictor):
             self._cat_feats = [
                 f for f in self._modified_features if f not in self._numeric_feats
             ]
-            row_count_before_grouping = len(filtered_df)
             filtered_df = filtered_df.group_by(
                 [*self.granularity, *self._cat_feats]
             ).agg(
@@ -354,18 +356,14 @@ class SklearnPredictor(BasePredictor):
                     "Too many unique values in relation to rows in the training dataset causes multiclassifier to not train properly."
                     "Either limit unique classes or explicitly make the estimator a Regressor"
                 )
-            if self.multiclass_output_as_struct:
-                grouped_df = self._convert_multiclass_predictions_to_struct(
-                    df=grouped_df, classes=self.classes_
+
+            grouped_df = grouped_df.with_columns(
+                nw.new_series(
+                    name="classes",
+                    values=[self.classes_ for _ in range(len(grouped_df))],
+                    backend=nw.get_native_namespace(grouped_df),
                 )
-            else:
-                grouped_df = grouped_df.with_columns(
-                    nw.new_series(
-                        name="classes",
-                        values=[self.classes_ for _ in range(len(grouped_df))],
-                        backend=nw.get_native_namespace(grouped_df),
-                    )
-                )
+            )
 
         elif not hasattr(self.estimator, "predict_proba"):
 
@@ -381,13 +379,8 @@ class SklearnPredictor(BasePredictor):
 
         else:
             predictions = self.estimator.predict_proba(
-                grouped_df.select(self._modified_features).to_pandas()
+                grouped_df.select(self._modified_features).to_pandas()[:, 1].tolist()
             )
-
-            if self.multiclass_output_as_struct:
-                predictions = predictions.tolist()
-            else:
-                predictions = predictions[:, 1].tolist()
 
             grouped_df = grouped_df.with_columns(
                 nw.new_series(
@@ -396,10 +389,7 @@ class SklearnPredictor(BasePredictor):
                     backend=nw.get_native_namespace(df),
                 )
             )
-            if self.multiclass_output_as_struct:
-                grouped_df = self._convert_multiclass_predictions_to_struct(
-                    df=grouped_df, classes=self.classes_
-                )
+
 
         if self.granularity:
             df = df.join(
@@ -469,7 +459,6 @@ class GranularityPredictor(BasePredictor):
             pre_transformers=pre_transformers,
             filters=filters,
             features=features,
-            multiclass_output_as_struct=predictor.multiclass_output_as_struct,
             post_predict_transformers=[],
             impute_missing_values=impute_missing_values,
             features_contain_str=features_contain_str,
@@ -499,13 +488,10 @@ class GranularityPredictor(BasePredictor):
         if len(df) == 0:
             raise ValueError("df is empty")
 
-        self._add_features_contain_str(df)
         assert self._features
 
         filtered_df = apply_filters(df=df, filters=self.filters)
 
-        filtered_df = self._fit_transform_pre_transformers(df=filtered_df)
-        self._granularities = filtered_df[self.granularity_column_name].unique()
         logging.info(f"Training with features: {self._features}")
         for granularity in self._granularities:
             self._granularity_predictors[granularity] = copy.deepcopy(self.predictor)
@@ -533,17 +519,12 @@ class GranularityPredictor(BasePredictor):
         if not self._features:
             raise ValueError("estimator_features not set. Please train first")
 
-        df = self._transform_pre_transformers(df=df)
         dfs = []
         for granularity, predictor in self._granularity_predictors.items():
             rows = df.filter(nw.col(self.granularity_column_name) == granularity)
             rows = nw.from_native(predictor.predict(rows))
             dfs.append(rows)
 
-        if self.predictor.multiclass_output_as_struct:
-            dfs = self._unify_struct_fields(
-                dfs=dfs, struct_col=self.predictor.pred_column
-            )
 
         df = nw.concat(dfs)
         for simple_transformer in self.post_predict_transformers:
@@ -553,48 +534,3 @@ class GranularityPredictor(BasePredictor):
             return df.to_pandas()
         return df
 
-    def _unify_struct_fields(
-        self, dfs: list[IntoFrameT], struct_col: str
-    ) -> list[IntoFrameT]:
-        dfs = [df.to_native() for df in dfs]
-        all_fields = set()
-        for df in dfs:
-            sample = (
-                df.lazy()
-                .filter(pl.col(struct_col).is_not_null())
-                .select(struct_col)
-                .limit(1)
-                .collect()
-            )
-            if sample.height > 0:
-                row_dict = sample.to_dicts()[0][struct_col]
-                all_fields.update(row_dict.keys())
-
-        all_fields = list(all_fields)
-
-        updated_dfs = []
-        for df in dfs:
-            sample = (
-                df.lazy()
-                .filter(pl.col(struct_col).is_not_null())
-                .select(struct_col)
-                .limit(1)
-                .collect()
-            )
-            fields_present = set()
-            if sample.height > 0:
-                row_dict = sample.to_dicts()[0][struct_col]
-                fields_present = set(row_dict.keys())
-
-            field_exprs = []
-            for f in all_fields:
-                if f in fields_present:
-                    field_exprs.append(pl.col(struct_col).struct.field(f).alias(f))
-                else:
-                    field_exprs.append(pl.lit(0.0).alias(f))
-
-            df = df.with_columns(pl.struct(field_exprs).alias(struct_col))
-
-            updated_dfs.append(nw.from_native(df))
-
-        return updated_dfs

@@ -10,4 +10,5 @@ from ._distribution import (
     NegativeBinomialPredictor,
     DistributionManagerPredictor,
     NormalDistributionPredictor,
+
 )

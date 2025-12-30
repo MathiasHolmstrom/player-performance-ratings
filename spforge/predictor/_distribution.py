@@ -19,7 +19,7 @@ from spforge.predictor._base import DistributionPredictor
 from spforge.predictor_transformer._simple_transformer import SimpleTransformer
 from spforge.scorer import apply_filters, Filter
 from spforge.transformers import RollingWindowTransformer
-
+from scipy.stats import t as student_t
 
 def neg_binom_log_likelihood(r, actual_points, predicted_points):
     if r <= 0:
@@ -54,14 +54,12 @@ class NegativeBinomialPredictor(DistributionPredictor):
         pred_column: Optional[str] = None,
         predicted_r_iterations: int = 6,
         predict_granularity: Optional[list[str]] = None,
-        multiclass_output_as_struct: bool = True,
         r_specific_granularity: Optional[list[str]] = None,
         r_rolling_mean_window: int = 40,
         predicted_r_weight: float = 1.0,
         column_names: Optional[ColumnNames] = None,
     ):
         pred_column = pred_column or f"{target}_probabilities"
-        self.multiclass_output_as_struct = multiclass_output_as_struct
         self.r_specific_granularity = r_specific_granularity
         self.predicted_r_weight = predicted_r_weight
         self.r_rolling_mean_window = r_rolling_mean_window
@@ -101,7 +99,6 @@ class NegativeBinomialPredictor(DistributionPredictor):
         super().__init__(
             target=target,
             pred_column=pred_column,
-            multiclass_output_as_struct=multiclass_output_as_struct,
             max_value=max_value,
             min_value=min_value,
             point_estimate_pred_column=point_estimate_pred_column,
@@ -401,24 +398,11 @@ class NegativeBinomialPredictor(DistributionPredictor):
             r = row["__predicted_r"]
             p = row["__predicted_p"]
             prob = nbinom.pmf(point_range, r, p)
-            if self.multiclass_output_as_struct:
-                outcome_probs = {
-                    str(i + self.min_value): float(prob[i]) for i in range(len(prob))
-                }
-            else:
-                outcome_probs = prob
-                classes_.append(np.argmax(prob))
+
+            outcome_probs = prob
+            classes_.append(np.argmax(prob))
             all_outcome_probs.append(outcome_probs)
 
-        if not self.multiclass_output_as_struct:
-            pred_grp = pred_grp.with_columns(
-                nw.new_series(
-                    name="classes",
-                    values=classes_,
-                    backend=nw.get_native_namespace(df),
-                )
-            )
-        else:
             pred_grp = pred_grp.with_columns(
                 nw.new_series(
                     name=self.pred_column,
@@ -426,6 +410,7 @@ class NegativeBinomialPredictor(DistributionPredictor):
                     backend=nw.get_native_namespace(df),
                 )
             )
+
         if self.predict_granularity:
             return df.join(
                 pred_grp.select([*self.predict_granularity, *self._pred_columns_added]),
@@ -445,14 +430,12 @@ class NormalDistributionPredictor(DistributionPredictor):
         target: str,
         sigma: float = 10.0,
         pred_column: Optional[str] = None,
-        multiclass_output_as_struct: bool = True,
     ):
         self.sigma = sigma
 
         super().__init__(
             target=target,
             pred_column=pred_column,
-            multiclass_output_as_struct=multiclass_output_as_struct,
             max_value=max_value,
             min_value=min_value,
             point_estimate_pred_column=point_estimate_pred_column,
@@ -476,8 +459,6 @@ class NormalDistributionPredictor(DistributionPredictor):
             cdf_upper = norm.cdf(upper_bounds, loc=mu, scale=self.sigma)
             cdf_lower = norm.cdf(lower_bounds, loc=mu, scale=self.sigma)
             probs = cdf_upper - cdf_lower
-            if self.multiclass_output_as_struct:
-                return {str(k): float(p) for k, p in zip(self._classes, probs)}
             return probs
 
         df = df.with_columns(
@@ -485,12 +466,152 @@ class NormalDistributionPredictor(DistributionPredictor):
             .map_elements(compute_struct_probs, return_dtype=pl.Struct)
             .alias(self.pred_column)
         )
-        if not self.multiclass_output_as_struct:
-            df = df.with_columns(pl.lit(list(range(self._classes_))).alias("classes"))
+        df = df.with_columns(pl.lit(list(range(self._classes_))).alias("classes"))
         if isinstance(ori_df, pd.DataFrame):
             df = df.to_pandas()
         return df
 
+class StudentTDistributionPredictor(DistributionPredictor):
+    """
+    Discretized Student-t distribution over integer outcomes [min_value, max_value].
+
+    Design:
+      - Supports negative integer outcomes naturally.
+      - If df and/or sigma are provided explicitly, they are used as-is.
+      - If df and/or sigma are None, they are fitted in train().
+
+    Fitting:
+      - sigma is estimated robustly from residuals via MAD (recommended for heavy tails).
+      - df defaults to a sensible value (5.0) when not specified (can be extended to MLE later).
+    """
+
+    def __init__(
+            self,
+            point_estimate_pred_column: str,
+            max_value: int,
+            min_value: int,
+            target: str,
+            df: float | None = None,
+            sigma: float | None = None,
+            pred_column: Optional[str] = None,
+            min_sigma: float = 1.0,
+            min_df: float = 2.1,
+            default_df_if_fit: float = 5.0,
+            min_train_rows: int = 25,
+    ):
+        super().__init__(
+            target=target,
+            pred_column=pred_column,
+            max_value=max_value,
+            min_value=min_value,
+            point_estimate_pred_column=point_estimate_pred_column,
+        )
+
+        # None => fit in train(); otherwise use explicit value
+        self.df: Optional[float] = float(df) if df is not None else None
+        self.sigma: Optional[float] = float(sigma) if sigma is not None else None
+
+        self.min_sigma = float(min_sigma)
+        self.min_df = float(min_df)
+        self.default_df_if_fit = float(default_df_if_fit)
+        self.min_train_rows = int(min_train_rows)
+
+        self._classes: Optional[np.ndarray] = None
+
+    @staticmethod
+    def _mad_scale(x: np.ndarray) -> float:
+        med = np.median(x)
+        mad = np.median(np.abs(x - med))
+        return float(1.4826 * mad)
+
+    @nw.narwhalify
+    def train(self, df: nw.DataFrame, estimator_features: Optional[list[str]] = None) -> None:
+        self._classes = np.arange(self.min_value, self.max_value + 1)
+
+        need_fit_sigma = self.sigma is None
+        need_fit_df = self.df is None
+
+        if not (need_fit_sigma or need_fit_df):
+            self.sigma = max(self.min_sigma, float(self.sigma))
+            self.df = max(self.min_df, float(self.df))
+            return
+
+        if self.point_estimate_pred_column not in df.columns:
+            raise ValueError(
+                f"Expected '{self.point_estimate_pred_column}' column to exist for fitting."
+            )
+        if self.target not in df.columns:
+            raise ValueError(f"Expected '{self.target}' column to exist for fitting.")
+
+        y = df[self.target].to_numpy()
+        mu = df[self.point_estimate_pred_column].to_numpy()
+        mask = np.isfinite(y) & np.isfinite(mu)
+
+        if mask.sum() < self.min_train_rows:
+            if need_fit_sigma:
+                self.sigma = max(self.min_sigma, 10.0)
+            else:
+                self.sigma = max(self.min_sigma, float(self.sigma))
+
+            if need_fit_df:
+                self.df = max(self.min_df, self.default_df_if_fit)
+            else:
+                self.df = max(self.min_df, float(self.df))
+            return
+
+        resid = (y[mask] - mu[mask]).astype(float)
+
+        if need_fit_sigma:
+            sigma_hat = self._mad_scale(resid)
+            if not np.isfinite(sigma_hat) or sigma_hat <= 0:
+                sigma_hat = float(np.std(resid, ddof=1)) if resid.size > 1 else 0.0
+            self.sigma = max(self.min_sigma, float(sigma_hat))
+        else:
+            self.sigma = max(self.min_sigma, float(self.sigma))
+
+        if need_fit_df:
+            self.df = max(self.min_df, self.default_df_if_fit)
+        else:
+            self.df = max(self.min_df, float(self.df))
+
+    @nw.narwhalify
+    def predict(
+            self, df: nw.DataFrame, cross_validation: bool = False, **kwargs
+    ) -> nw.DataFrame:
+        if self._classes is None:
+            self._classes = np.arange(self.min_value, self.max_value + 1)
+
+        classes = self._classes
+        lower_bounds = classes - 0.5
+        upper_bounds = classes + 0.5
+        df_param = float(self.df)
+        sigma = max(self.min_sigma, float(self.sigma))
+
+        ori_df = df.select(df.columns[0])
+        df_pl = df.to_polars()
+
+        def compute_probs(mu: float):
+            cdf_upper = student_t.cdf(upper_bounds, df=df_param, loc=mu, scale=sigma)
+            cdf_lower = student_t.cdf(lower_bounds, df=df_param, loc=mu, scale=sigma)
+            probs = cdf_upper - cdf_lower
+
+            probs = np.clip(probs, 0.0, 1.0)
+            s = probs.sum()
+            if s > 0:
+                probs = probs / s
+            return probs.tolist()
+
+        return_dtype = pl.List(pl.Float64)
+
+        out = df_pl.with_columns(
+            pl.col(self.point_estimate_pred_column)
+            .map_elements(compute_probs, return_dtype=return_dtype)
+            .alias(self.pred_column)
+        )
+
+        if isinstance(ori_df, pd.DataFrame):
+            return out.to_pandas()
+        return out
 
 class DistributionManagerPredictor(BasePredictor):
 
@@ -500,7 +621,6 @@ class DistributionManagerPredictor(BasePredictor):
         distribution_predictor: DistributionPredictor,
         filters: Optional[list[Filter]] = None,
         post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-        multiclass_output_as_struct: bool = False,
     ):
         self.point_predictor = point_predictor
         self.distribution_predictor = distribution_predictor
@@ -509,7 +629,6 @@ class DistributionManagerPredictor(BasePredictor):
             target=point_predictor.target,
             pred_column=distribution_predictor.pred_column,
             features=point_predictor.features,
-            multiclass_output_as_struct=multiclass_output_as_struct,
             post_predict_transformers=post_predict_transformers,
             filters=filters,
         )
@@ -531,9 +650,13 @@ class DistributionManagerPredictor(BasePredictor):
     def predict(
         self, df: IntoFrameT, cross_validation: bool = False, **kwargs
     ) -> IntoFrameT:
-        if self.point_predictor.pred_column not in df.columns:
-            df = nw.from_native(self.point_predictor.predict(df))
-        df = self.distribution_predictor.predict(df)
+        if self.point_predictor.pred_column in df.columns:
+            df = df.drop([self.point_predictor.pred_column])
+        df = nw.from_native(self.point_predictor.predict(df))
+        if self.distribution_predictor.pred_column in df.columns:
+           df = df.drop([self.distribution_predictor.pred_column])
+        df = nw.from_native(self.distribution_predictor.predict(df))
         for post_predict_transformer in self.post_predict_transformers:
             df = nw.from_native(post_predict_transformer.transform(df))
         return df
+

@@ -30,6 +30,8 @@ class Pipeline(BasePredictor):
             drop_rows_where_target_is_nan: bool = False,
             pre_transformers: Optional[list[PredictorTransformer]] = None,
             post_predict_transformers: Optional[list[SimpleTransformer]] = None,
+            min_target: int | None = None,
+            max_target: int | None = None,
 
     ):
         super().__init__(
@@ -45,6 +47,8 @@ class Pipeline(BasePredictor):
             post_predict_transformers=post_predict_transformers,
             lag_features=predictor.lag_features
         )
+        self.min_target = min_target
+        self.max_target = max_target
         self.filters = filters or []
         self.drop_rows_where_target_is_nan = drop_rows_where_target_is_nan
         self._predictor_features = predictor.features.copy()
@@ -63,6 +67,10 @@ class Pipeline(BasePredictor):
             raise ValueError(
                 f"Target {self.predictor.target} not in df columns. Available columns: {df.columns}"
             )
+        if self.min_target:
+            df = df.with_columns(nw.col(self.target).clip(lower_bound=self.min_target))
+        if self.max_target:
+            df = df.with_columns(nw.col(self.target).clip(upper_bound=self.max_target))
 
         features = features or self._predictor_features
         self._features = (
