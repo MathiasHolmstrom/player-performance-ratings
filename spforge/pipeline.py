@@ -74,7 +74,6 @@ class Pipeline(BasePredictor):
                 "features not set. Either pass to train or pass when instantiating predictor object"
             )
 
-        self._add_features_contain_str(df)
 
         filtered_df = apply_filters(df=df, filters=self.filters)
         if self.drop_rows_where_target_is_nan:

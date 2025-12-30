@@ -15,7 +15,7 @@ class BaseTransformer(ABC):
         are_estimator_features: bool = True,
     ):
         self._features_out = features_out
-        self.features = features
+        self.features = features or []
         self._are_estimator_features = are_estimator_features
         self.column_names = None
         self._predictor_features_out = (

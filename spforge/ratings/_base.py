@@ -1,15 +1,13 @@
 import inspect
-
-import narwhals as nw
 import logging
-from dataclasses import dataclass
+from abc import abstractmethod
 from typing import Optional, Any, Literal, Union
 
+import narwhals.stable.v2 as nw
 import polars as pl
-from abc import abstractmethod, ABC
+from narwhals.stable.v2 import DataFrame
+from narwhals.stable.v2.typing import IntoFrameT
 
-from narwhals import DataFrame
-from narwhals.stable.v1.typing import IntoFrameT
 from spforge import ColumnNames
 from spforge.data_structures import RatingState
 from spforge.ratings import RatingKnownFeatures, RatingUnknownFeatures
@@ -25,47 +23,34 @@ MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 EXPECTED_MEAN_CONFIDENCE_SUM = 30
 
 
-
-
 class RatingGenerator(BaseTransformer):
-    """
-    Template-method base class for rating generators.
-
-    Shared:
-      - narwhals -> native polars conversion
-      - optional league enrichment
-      - day_number creation
-      - confidence + applied multiplier logic
-
-    Subclasses implement:
-      - how to build match_df (the "work unit" frame that gets iterated)
-      - how to compute ratings outputs + join back
-      - feature augmentation / column dropping rules
-    """
 
     def __init__(
-        self,
-        performance_column: str,
-        performance_weights: Optional[
+            self,
+            performance_column: str,
+            performance_weights: Optional[
                 list[Union[ColumnWeight, dict[str, float]]]
             ],
-        column_names: ColumnNames,
-        features_out: list[str],
-        performance_manager: PerformanceManager | None,
-        auto_scale_performance: bool,
-        performance_predictor: Literal['difference', 'mean', 'ignore_opponent'],
-        rating_change_multiplier: float,
-        confidence_days_ago_multiplier: float ,
-        confidence_max_days: int ,
-        confidence_value_denom: float ,
-        confidence_max_sum: float,
-        confidence_weight: float ,
-        non_predictor_features_out: Optional[list[RatingKnownFeatures | RatingUnknownFeatures]],
-        min_rating_change_multiplier_ratio: float,
-        league_rating_change_update_threshold: float,
-        league_rating_adjustor_multiplier: float,
-        **kwargs: Any,
+            column_names: ColumnNames,
+            features_out: list[str],
+            performance_manager: PerformanceManager | None,
+            auto_scale_performance: bool,
+            performance_predictor: Literal['difference', 'mean', 'ignore_opponent'],
+            rating_change_multiplier: float,
+            confidence_days_ago_multiplier: float,
+            confidence_max_days: int,
+            confidence_value_denom: float,
+            confidence_max_sum: float,
+            confidence_weight: float,
+            non_predictor_features_out: Optional[list[RatingKnownFeatures | RatingUnknownFeatures]],
+            min_rating_change_multiplier_ratio: float,
+            league_rating_change_update_threshold: float,
+            league_rating_adjustor_multiplier: float,
+            output_suffix: str | None = None,
+            **kwargs: Any,
     ):
+        self.output_suffix = performance_column if output_suffix is None else output_suffix
+
         self.performance_predictor = performance_predictor
         self.performance_weights = performance_weights
 
@@ -79,21 +64,23 @@ class RatingGenerator(BaseTransformer):
         self.min_rating_change_multiplier_ratio = min_rating_change_multiplier_ratio
         self.rating_change_multiplier = rating_change_multiplier
         self.confidence_max_sum = confidence_max_sum
+        self.non_predictor_features_out = non_predictor_features_out or []
+        self.non_predictor_features_out = [self._suffix(c) for c in self.non_predictor_features_out]
         self.league_identifier = None
         if performance_predictor == 'mean':
             _performance_predictor_class = RatingMeanPerformancePredictor
-            self._features_out = [
-                RatingKnownFeatures.RATING_MEAN_PROJECTED] if features_out is None else features_out
+            self._features_out = [self._suffix(
+                col=RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED)] if features_out is None else [self._suffix(f) for f in features_out]
         elif performance_predictor == 'difference':
             _performance_predictor_class = RatingDifferencePerformancePredictor
             self._features_out = [
-                RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED] if features_out is None else features_out
+                self._suffix(RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED)] if features_out is None else [self._suffix(f) for f in features_out]
         elif performance_predictor == 'ignore_opponent':
             _performance_predictor_class = RatingNonOpponentPerformancePredictor
-            self._features_out = [
-                RatingKnownFeatures.TEAM_RATING_PROJECTED] if features_out is None else features_out
+            self._features_out = [self._suffix(RatingKnownFeatures.TEAM_RATING_PROJECTED)] if features_out is None else [self._suffix(f) for f in features_out]
         else:
             raise ValueError(f"performance_predictor {performance_predictor} is not supported")
+        super().__init__(features_out=self._features_out, features=[])
         sig = inspect.signature(_performance_predictor_class.__init__)
 
         init_params = [
@@ -104,11 +91,8 @@ class RatingGenerator(BaseTransformer):
         performance_predictor_params = {k: v for k, v in kwargs.items() if k in init_params}
         self._performance_predictor = _performance_predictor_class(**performance_predictor_params)
 
-        self.non_predictor_features_out = non_predictor_features_out
         self.auto_scale_performance = auto_scale_performance
         self.performance_manager = performance_manager
-        self.non_predictor_features_out = non_predictor_features_out
-        super().__init__(features_out=features_out, features=[])
         self.performance_column = performance_column
         self.column_names = column_names
         self.kwargs = kwargs
@@ -127,6 +111,11 @@ class RatingGenerator(BaseTransformer):
             if getattr(self.column_names, "league", None)
             else None
         )
+
+    def _suffix(self, col: str) -> str:
+        if not self.output_suffix:
+            return col
+        return f"{col}_{self.output_suffix}"
 
     @to_polars
     @nw.narwhalify
@@ -181,7 +170,6 @@ class RatingGenerator(BaseTransformer):
             pl_df = df.to_polars().to_native()
 
         return self._historical_transform(pl_df)
-
 
     @to_polars
     @nw.narwhalify
@@ -297,7 +285,6 @@ class RatingGenerator(BaseTransformer):
 
         return self._historical_transform(pl_df)
 
-
     def _add_day_number(self, df: pl.DataFrame) -> pl.DataFrame:
         cn = self.column_names
         start_as_int = (
@@ -310,7 +297,7 @@ class RatingGenerator(BaseTransformer):
     def _applied_multiplier(self, state: RatingState) -> float:
         min_mult = self.rating_change_multiplier * self.min_rating_change_multiplier_ratio
         conf_mult = self.rating_change_multiplier * (
-            (EXPECTED_MEAN_CONFIDENCE_SUM - state.confidence_sum) / self.confidence_value_denom + 1
+                (EXPECTED_MEAN_CONFIDENCE_SUM - state.confidence_sum) / self.confidence_value_denom + 1
         )
         applied = conf_mult * self.confidence_weight + (1 - self.confidence_weight) * self.rating_change_multiplier
         return max(float(min_mult), float(applied))
@@ -318,9 +305,9 @@ class RatingGenerator(BaseTransformer):
     def _post_match_confidence_sum(self, state: RatingState, day_number: int, participation_weight: float) -> float:
         days_ago = 0.0 if state.last_match_day_number is None else float(day_number - state.last_match_day_number)
         val = (
-            -min(days_ago, self.confidence_max_days) * self.confidence_days_ago_multiplier
-            + state.confidence_sum
-            + MATCH_CONTRIBUTION_TO_SUM_VALUE * participation_weight
+                -min(days_ago, self.confidence_max_days) * self.confidence_days_ago_multiplier
+                + state.confidence_sum
+                + MATCH_CONTRIBUTION_TO_SUM_VALUE * participation_weight
         )
         return max(0.0, min(float(val), self.confidence_max_sum))
 
@@ -331,4 +318,3 @@ class RatingGenerator(BaseTransformer):
         if last_match_day_number is None:
             return 0.0
         return match_day_number - last_match_day_number
-

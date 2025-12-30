@@ -1,28 +1,18 @@
 import copy
-import inspect
-import logging
 import math
 from typing import Optional, Union, Literal
 
-import narwhals as nw
 import polars as pl
-from narwhals import DataFrame
-from narwhals.typing import IntoFrameT
 
 from spforge.data_structures import PlayerRating, \
     ColumnNames, PlayerRatingChange, TeamRatingChange, PreMatchTeamRating, PreMatchPlayerRating, \
     PreMatchPlayersCollection, MatchPerformance, MatchPlayer
 from spforge.ratings import RatingKnownFeatures, RatingUnknownFeatures
 from spforge.ratings._base import RatingGenerator
-from spforge.ratings.league_identifier import LeagueIdentifer2
-from spforge.ratings.performance_predictor import RatingMeanPerformancePredictor, RatingNonOpponentPerformancePredictor, \
-    RatingDifferencePerformancePredictor
 from spforge.ratings.start_rating_generator import StartRatingGenerator
 from spforge.ratings.utils import add_team_rating_projected, add_opp_team_rating, add_team_rating, \
     add_rating_difference_projected, add_rating_mean_projected
-from spforge.transformers.fit_transformers import PerformanceWeightsManager
 from spforge.transformers.fit_transformers._performance_manager import ColumnWeight, PerformanceManager
-from spforge.transformers.lag_transformers._utils import to_polars
 
 PLAYER_STATS = '__PLAYER_STATS'
 
@@ -61,39 +51,10 @@ class PlayerRatingGenerator(RatingGenerator):
                  output_suffix: Optional[str] = None,
                  **kwargs):
 
-        # ---- NEW: output suffix (defaults to performance_column) ----
-        self.output_suffix = performance_column if output_suffix is None else output_suffix
-
-        def _suffix(col: str) -> str:
-            # Empty string / falsy suffix => no suffix
-            if not self.output_suffix:
-                return col
-            return f"{col}_{self.output_suffix}"
-
-        def _suffix_feature_list(feats: Optional[list]) -> Optional[list[str]]:
-            if not feats:
-                return feats
-            return [_suffix(str(f)) for f in feats]
-
-        # canonical suffixed columns used throughout this generator
-        self._suffix_col = _suffix
-
-        self.PLAYER_RATING_COL = _suffix(str(RatingKnownFeatures.PLAYER_RATING))
-        self.PLAYER_PRED_PERF_COL = _suffix(str(RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE))
-
-        self.TEAM_RATING_PROJ_COL = _suffix(str(RatingKnownFeatures.TEAM_RATING_PROJECTED))
-        self.OPP_RATING_PROJ_COL = _suffix(str(RatingKnownFeatures.OPPONENT_RATING_PROJECTED))
-        self.DIFF_PROJ_COL = _suffix(str(RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED))
-        self.MEAN_PROJ_COL = _suffix(str(RatingKnownFeatures.RATING_MEAN_PROJECTED))
-
-        self.TEAM_RATING_COL = _suffix(str(RatingUnknownFeatures.TEAM_RATING))
-        self.OPP_RATING_COL = _suffix(str(RatingUnknownFeatures.OPPONENT_RATING))
-        self.DIFF_COL = _suffix(str(RatingUnknownFeatures.RATING_DIFFERENCE))
-        # ------------------------------------------------------------
-
         super().__init__(
             performance_column=performance_column,
             column_names=column_names,
+            output_suffix=output_suffix,
             rating_change_multiplier=rating_change_multiplier,
             confidence_days_ago_multiplier=confidence_days_ago_multiplier,
             confidence_max_days=confidence_max_days,
@@ -102,15 +63,29 @@ class PlayerRatingGenerator(RatingGenerator):
             confidence_weight=confidence_weight,
             min_rating_change_multiplier_ratio=min_rating_change_multiplier_ratio,
             team_id_change_confidence_sum_decrease=team_id_change_confidence_sum_decrease,
-            features_out=_suffix_feature_list(features_out),
+            features_out=features_out,  # unsuffixed
             performance_manager=performance_manager,
             auto_scale_performance=auto_scale_performance,
             performance_predictor=performance_predictor,
             performance_weights=performance_weights,
-            non_predictor_features_out=_suffix_feature_list(non_predictor_features_out),
+            non_predictor_features_out=non_predictor_features_out,  # unsuffixed
             league_rating_adjustor_multiplier=league_rating_adjustor_multiplier,
-            league_rating_change_update_threshold=league_rating_change_update_threshold
+            league_rating_change_update_threshold=league_rating_change_update_threshold,
         )
+
+        self.PLAYER_RATING_COL = self._suffix(str(RatingKnownFeatures.PLAYER_RATING))
+        self.PLAYER_PRED_PERF_COL = self._suffix(str(RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE))
+
+        self.TEAM_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.TEAM_RATING_PROJECTED))
+        self.OPP_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.OPPONENT_RATING_PROJECTED))
+        self.DIFF_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED))
+        self.MEAN_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_MEAN_PROJECTED))
+
+        self.TEAM_RATING_COL = self._suffix(str(RatingUnknownFeatures.TEAM_RATING))
+        self.OPP_RATING_COL = self._suffix(str(RatingUnknownFeatures.OPPONENT_RATING))
+        self.DIFF_COL = self._suffix(str(RatingUnknownFeatures.RATING_DIFFERENCE))
+        # ------------------------------------------------------------
+
 
         self.start_league_ratings = start_league_ratings
         self.start_league_quantile = start_league_quantile
@@ -596,39 +571,33 @@ class PlayerRatingGenerator(RatingGenerator):
             self._league_rating_changes[league] = 0
 
     def _add_rating_features(self, df: pl.DataFrame) -> pl.DataFrame:
+        non_predictor_features_out = self.non_predictor_features_out or []
+        cols_to_add = set((self.features_out or []) + non_predictor_features_out)
 
-        def _needs_any(all_feats_out, *names) -> bool:
-            return any(n in all_feats_out for n in names)
-
-        non_predictor_features_out = self.non_predictor_features_out if self.non_predictor_features_out else []
-        all_feats_out = [*self.features_out, *non_predictor_features_out]
-
-        cn = self.column_names  # ColumnNames instance
-
+        cn = self.column_names
         player_rating = self.PLAYER_RATING_COL
+        team_proj_col = self.TEAM_RATING_PROJ_COL
+        opp_proj_col = self.OPP_RATING_PROJ_COL
+        diff_proj_col = self.DIFF_PROJ_COL
+        mean_proj_col = self.MEAN_PROJ_COL
 
-        team_col = self.TEAM_RATING_PROJ_COL
-        opp_rating_col = self.OPP_RATING_PROJ_COL
-        diff_col = self.DIFF_PROJ_COL
-        mean_col = self.MEAN_PROJ_COL
-
-        if _needs_any(all_feats_out, team_col, opp_rating_col, diff_col):
+        if (self.TEAM_RATING_PROJ_COL in cols_to_add) or (self.OPP_RATING_PROJ_COL in cols_to_add) or (self.DIFF_PROJ_COL in cols_to_add):
             df = add_team_rating_projected(
                 df=df,
                 column_names=cn,
                 player_rating_col=player_rating,
-                team_rating_out=team_col,
+                team_rating_out=team_proj_col,
             )
 
-        if _needs_any(all_feats_out, opp_rating_col, diff_col):
+        if (self.OPP_RATING_PROJ_COL in cols_to_add) or (self.DIFF_PROJ_COL in cols_to_add):
             df = add_opp_team_rating(
                 df=df,
                 column_names=cn,
-                team_rating_col=team_col,
-                opp_team_rating_out=opp_rating_col,
+                team_rating_col=team_proj_col,
+                opp_team_rating_out=opp_proj_col,
             )
 
-        if _needs_any(all_feats_out, self.OPP_RATING_COL, self.DIFF_COL, self.TEAM_RATING_COL):
+        if (self.TEAM_RATING_COL in cols_to_add) or (self.OPP_RATING_COL in cols_to_add) or (self.DIFF_PROJ_COL in cols_to_add):
             df = add_team_rating(
                 df=df,
                 column_names=cn,
@@ -636,7 +605,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 team_rating_out=self.TEAM_RATING_COL,
             )
 
-        if _needs_any(all_feats_out, self.OPP_RATING_COL, self.DIFF_COL):
+        if (self.OPP_RATING_COL in cols_to_add) or (self.DIFF_COL in cols_to_add):
             df = add_opp_team_rating(
                 df=df,
                 column_names=cn,
@@ -644,32 +613,28 @@ class PlayerRatingGenerator(RatingGenerator):
                 opp_team_rating_out=self.OPP_RATING_COL,
             )
 
-        if diff_col in all_feats_out:
+        if self.DIFF_PROJ_COL in cols_to_add:
             df = add_rating_difference_projected(
                 df=df,
-                team_rating_col=team_col,
-                rating_diff_out=diff_col,
-                opp_team_rating_col=opp_rating_col
+                team_rating_col=team_proj_col,
+                rating_diff_out=diff_proj_col,
+                opp_team_rating_col=opp_proj_col,
             )
 
-        if mean_col in all_feats_out:
+        if self.MEAN_PROJ_COL in cols_to_add:
             df = add_rating_mean_projected(
                 df=df,
                 column_names=cn,
                 player_rating_col=player_rating,
-                rating_mean_out=mean_col,
+                rating_mean_out=mean_proj_col,
             )
 
-        base_known = [
-            v for k, v in RatingKnownFeatures.__dict__.items()
-            if not k.startswith("_")
-        ]
-        base_unknown = [
-            v for k, v in RatingUnknownFeatures.__dict__.items()
-            if not k.startswith("_")
-        ]
-        cols_to_eval = [self._suffix_col(str(c)) for c in (base_known + base_unknown)]
-        cols_to_drop = [c for c in cols_to_eval if c not in all_feats_out and c in df.columns]
+        base_known = [v for k, v in RatingKnownFeatures.__dict__.items() if not k.startswith("_")]
+        base_unknown = [v for k, v in RatingUnknownFeatures.__dict__.items() if not k.startswith("_")]
+
+        cols_to_eval = [self._suffix(str(c)) for c in (base_known + base_unknown)]
+
+        cols_to_drop = [c for c in cols_to_eval if (c in df.columns and c not in cols_to_add)]
 
         return df.drop(cols_to_drop)
 

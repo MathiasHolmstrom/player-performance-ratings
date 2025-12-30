@@ -1,9 +1,8 @@
 import math
-import narwhals.stable.v2 as nw
-import polars as pl
 from typing import List, Dict
 
-from narwhals.stable.v1.typing import IntoFrameT
+import narwhals.stable.v2 as nw
+from narwhals.stable.v2.typing import IntoFrameT
 
 from spforge.data_structures import Match, ColumnNames
 

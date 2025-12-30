@@ -17,6 +17,30 @@ def add_team_rating(
     )
 
 
+
+
+def add_day_number_utc(
+    df: pl.DataFrame,
+    start_date_col: str,
+    out_col: str = "__day_number",
+) -> pl.DataFrame:
+    dtype = df.schema[start_date_col]
+    c = pl.col(start_date_col)
+
+    if dtype == pl.Utf8:
+        dt = c.cast(pl.Datetime(time_zone="UTC"), strict=False).dt.replace_time_zone(None)
+    elif isinstance(dtype, pl.Datetime) and dtype.time_zone is None:
+        dt = c.dt.replace_time_zone("UTC").dt.replace_time_zone(None)
+    elif isinstance(dtype, pl.Datetime) and dtype.time_zone is not None:
+        dt = c.dt.convert_time_zone("UTC").dt.replace_time_zone(None)
+    else:
+        raise TypeError(f"Unsupported dtype for {start_date_col}: {dtype}")
+
+    start_as_int = dt.cast(pl.Date).cast(pl.Int32)
+    return df.with_columns((start_as_int - start_as_int.min() + 1).alias(out_col))
+
+
+
 def add_team_rating_projected(
     df: pl.DataFrame,
     column_names: ColumnNames,  # ColumnNames
