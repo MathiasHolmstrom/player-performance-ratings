@@ -20,10 +20,11 @@ from spforge.ratings.performance_predictor import (
     RatingDifferencePerformancePredictor,
     RatingNonOpponentPerformancePredictor,
 )
+from spforge.performance_transformers._performance_manager import PerformanceManager, PerformanceWeightsManager
+from spforge.performance_transformers._performance_manager import ColumnWeight
 from spforge.transformers.base_transformer import BaseTransformer
-from spforge.transformers.fit_transformers import PerformanceWeightsManager, PerformanceManager
-from spforge.transformers.fit_transformers._performance_manager import ColumnWeight
-from spforge.transformers.lag_transformers._utils import to_polars
+
+from spforge.feature_generator._utils import to_polars
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 EXPECTED_MEAN_CONFIDENCE_SUM = 30
@@ -73,7 +74,7 @@ class RatingGenerator(BaseTransformer):
 
         self.confidence_max_sum = float(confidence_max_sum)
         self.non_predictor_features_out = non_predictor_features_out or []
-        self.non_predictor_features_out = [self._suffix(c) for c in self.non_predictor_features_out]
+        self.non_predictor_features_out = [self._suffix(str(c)) for c in self.non_predictor_features_out]
 
         if performance_predictor == "mean":
             _performance_predictor_class = RatingMeanPerformancePredictor
@@ -106,6 +107,9 @@ class RatingGenerator(BaseTransformer):
         self.kwargs = kwargs
 
         self.performance_manager = self._create_performance_manager()
+        
+        # Backward compatibility alias
+        self.performances_generator = self.performance_manager
 
         self.confidence_days_ago_multiplier = float(confidence_days_ago_multiplier)
         self.confidence_value_denom = float(confidence_value_denom)
@@ -208,7 +212,14 @@ class RatingGenerator(BaseTransformer):
 
         if self.performance_weights:
             if isinstance(self.performance_weights[0], dict):
-                self.performance_weights = [ColumnWeight(**weight) for weight in self.performance_weights]
+                # Map 'col' to 'name' for backward compatibility
+                converted_weights = []
+                for weight in self.performance_weights:
+                    weight_dict = dict(weight)
+                    if 'col' in weight_dict and 'name' not in weight_dict:
+                        weight_dict['name'] = weight_dict.pop('col')
+                    converted_weights.append(ColumnWeight(**weight_dict))
+                self.performance_weights = converted_weights
             return PerformanceWeightsManager(
                 weights=self.performance_weights,
                 performance_column=self.performance_column,
@@ -228,12 +239,69 @@ class RatingGenerator(BaseTransformer):
 
         return None
 
-    def _add_day_number(self, df: pl.DataFrame) -> pl.DataFrame:
+    def _add_day_number(self, df: pl.DataFrame, date_col: str | None = None, out_col: str = "__day_number") -> pl.DataFrame:
+        """
+        Add day_number column to dataframe based on start_date.
+        Supports various date formats: string, Date, Datetime (with or without timezone).
+        
+        Args:
+            df: Input dataframe
+            date_col: Column name containing dates (defaults to column_names.start_date)
+            out_col: Output column name (defaults to "__day_number")
+        
+        Returns:
+            DataFrame with added day_number column
+        """
         cn = self.column_names
-        start_as_int = pl.col(cn.start_date).str.strptime(pl.Date, "%Y-%m-%d").cast(pl.Int32)
-        return df.with_columns((start_as_int - start_as_int.min() + 1).alias("__day_number"))
+        date_column = date_col if date_col else cn.start_date
+        
+        if date_column not in df.columns:
+            raise ValueError(f"Date column '{date_column}' not found in dataframe columns: {df.columns}")
+        
+        dtype = df.schema.get(date_column)
+        c = pl.col(date_column)
+        
+        # Handle different date types - normalize all to datetime first
+        # This handles mixed types by converting everything to a common format
+        if dtype == pl.Utf8 or (hasattr(pl, 'String') and dtype == pl.String):
+            # String format - use polars' flexible parsing with strict=False
+            # Try date-only format first (most common), then datetime formats
+            dt = (
+                c.str.strptime(pl.Datetime(time_zone=None), "%Y-%m-%d", strict=False)
+                .fill_null(
+                    c.str.strptime(pl.Datetime(time_zone=None), "%Y-%m-%d %H:%M:%S", strict=False)
+                    .fill_null(
+                        c.str.strptime(pl.Datetime(time_zone=None), "%Y-%m-%dT%H:%M:%S", strict=False)
+                        .fill_null(c.cast(pl.Datetime(time_zone=None), strict=False))
+                    )
+                )
+            )
+            dt = dt.dt.replace_time_zone(None)
+        elif dtype == pl.Date:
+            # Already a Date type - convert to datetime for consistency
+            dt = c.cast(pl.Datetime(time_zone=None))
+        elif isinstance(dtype, pl.Datetime):
+            if dtype.time_zone is None:
+                # Datetime without timezone
+                dt = c
+            else:
+                # Datetime with timezone - convert to UTC then remove timezone
+                dt = c.dt.convert_time_zone("UTC").dt.replace_time_zone(None)
+        else:
+            # Unknown type - try to cast to datetime as fallback
+            # This handles edge cases where dtype might be something unexpected
+            dt = c.cast(pl.Datetime(time_zone=None), strict=False).dt.replace_time_zone(None)
+        
+        # Convert to Date, then to Int32 for day number calculation
+        start_as_int = dt.cast(pl.Date).cast(pl.Int32)
+        
+        # Calculate day_number: (date - min_date + 1) so earliest date is day 1
+        # Ensure no None values - fill with min if needed
+        min_date = start_as_int.min()
+        day_number = (start_as_int - min_date + 1).fill_null(1)
+        
+        return df.with_columns(day_number.alias(out_col))
 
-    # NEW: accept base_multiplier so you can use different values for off/def
     def _applied_multiplier(self, state: RatingState, base_multiplier: float) -> float:
         min_mult = base_multiplier * self.min_rating_change_multiplier_ratio
         conf_mult = base_multiplier * (

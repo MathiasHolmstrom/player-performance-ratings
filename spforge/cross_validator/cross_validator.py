@@ -3,83 +3,136 @@ from datetime import datetime
 from typing import Optional
 
 import narwhals.stable.v2 as nw
-from narwhals.typing import IntoFrameT, IntoFrameT
-from spforge import ColumnNames
+from narwhals.typing import IntoFrameT
 
 from spforge.scorer import BaseScorer
-
 from spforge.cross_validator._base import CrossValidator
-from spforge.predictor._base import BasePredictor
-from spforge.utils import validate_sorting
 
 
 class MatchKFoldCrossValidator(CrossValidator):
     """
-    Performs cross-validation by splitting the data into n_splits based on match_ids.
+    Cross-validation by splitting on match order (derived from match_id transitions),
+    training on past matches and validating on future matches.
+
+    - Always keeps all original columns.
+    - Adds exactly one prediction column:
+        * regression / label-predict: prediction values
+        * classifier with predict_proba:
+            - binary: p(class 1)
+            - multiclass: list[float] per row with probs for each class in estimator.classes_
     """
 
     def __init__(
         self,
         match_id_column_name: str,
         date_column_name: str,
-        predictor: BasePredictor,
+        estimator,
+        prediction_column_name: str,
         scorer: Optional[BaseScorer] = None,
         min_validation_date: Optional[str] = None,
         n_splits: int = 3,
     ):
-        """
-        :param match_id_column_name: The column name of the match_id
-        :param date_column_name: The column name of the date
-        :param scorer: The scorer to use for measuring the accuracy of the predictions on the validation dataset
-        :param min_validation_date: The minimum date for which the cross-validation should start
-        :param n_splits: The number of splits to perform
-        """
         super().__init__(
-            scorer=scorer, min_validation_date=min_validation_date, predictor=predictor
+            scorer=scorer,
+            min_validation_date=min_validation_date,
+            estimator=estimator,
         )
         self.match_id_column_name = match_id_column_name
         self.date_column_name = date_column_name
         self.n_splits = n_splits
         self.min_validation_date = min_validation_date
+        self.prediction_column_name = prediction_column_name
+
+    @staticmethod
+    def _to_native_pandas(df: IntoFrameT) -> "pd.DataFrame":
+        import pandas as pd
+        import polars as pl
+
+        native = df.to_native() if hasattr(df, "to_native") else df
+        if isinstance(native, pd.DataFrame):
+            return native
+        if isinstance(native, pl.DataFrame):
+            return native.to_pandas()
+        if hasattr(df, "to_pandas"):
+            return df.to_pandas()
+        return pd.DataFrame(native)
+
+    @staticmethod
+    def _is_numpy_array(x) -> bool:
+        import numpy as np
+
+        return isinstance(x, np.ndarray)
+
+    def _fit_estimator(self, est, train_df: IntoFrameT):
+        X_pd = self._to_native_pandas(train_df.select(self.features))
+        y = train_df[self.target].to_list()
+        est.fit(X_pd, y)
+
+    def _predict_smart(self, est, df: IntoFrameT) -> IntoFrameT:
+        import numpy as np
+
+        X_pd = self._to_native_pandas(df.select(self.features))
+        ns = nw.get_native_namespace(df)
+
+        proba = None
+        if hasattr(est, "predict_proba"):
+            try:
+                proba = est.predict_proba(X_pd)
+            except AttributeError:
+                proba = None
+
+        if proba is not None:
+            if not isinstance(proba, np.ndarray):
+                proba = np.asarray(proba)
+
+            if proba.ndim != 2:
+                raise ValueError(f"predict_proba must return 2D array, got shape={proba.shape}")
+
+            n_classes = proba.shape[1]
+
+            if n_classes == 2:
+                values = proba[:, 1].tolist()  # binary: P(class idx 1)
+            else:
+                values = [row.tolist() for row in proba]  # multiclass: store full vector per row
+
+            return df.with_columns(
+                nw.new_series(
+                    name=self.prediction_column_name,
+                    values=values,
+                    backend=ns,
+                )
+            )
+
+        preds = est.predict(X_pd)
+        if not isinstance(preds, np.ndarray):
+            preds = np.asarray(preds)
+
+        return df.with_columns(
+            nw.new_series(
+                name=self.prediction_column_name,
+                values=preds.tolist(),
+                backend=ns,
+            )
+        )
 
     @nw.narwhalify
     def generate_validation_df(
         self,
         df: IntoFrameT,
-        return_features: bool = False,
+        return_features: bool = True,
         add_train_prediction: bool = False,
     ) -> IntoFrameT:
-        """
-        Generate predictions on validation dataset.
-        Training is performed N times on previous match_ids and predictions are made on match_ids that take place in the future.
-        :param df: The dataframe to generate the validation dataset from
-        :param predictor: The predictor to use for generating the predictions
-        :param column_names: The column names to use for the match_id, team_id, and player_id
-        :param estimator_features: The features to use for the estimator. If passed in, it will override the estimator_features in the predictor
-        :param pre_lag_transformers: The transformers to use before the lag generators
-        :param lag_generators: The lag generators to use
-        :param post_lag_transformers: The transformers to use after the lag generators
-        :param return_features: Whether to return the features generated by the generators and the lags. If false it will only return the original columns and the predictions
-        :param add_train_prediction: Whether to also calculate and return predictions for the training dataset.
-            This can be beneficial for 2 purposes:
-            1. To see how well the model is fitting the training data
-            2. If the output of the predictions is used as input for another model
-
-            If set to false it will only return the predictions for the validation dataset
-        """
-        ori_cols = df.columns
+        # keep all original columns; just add prediction + validation flag
         if "__cv_row_index" not in df.columns:
             df = df.with_row_index("__cv_row_index")
-        if self.predictor.pred_column in df.columns:
-            df = df.drop(self.predictor.pred_column)
+
+        if self.prediction_column_name in df.columns:
+            df = df.drop(self.prediction_column_name)
 
         df = df.sort([self.date_column_name, self.match_id_column_name])
 
         if self.validation_column_name in df.columns:
             df = df.drop(self.validation_column_name)
-
-        predictor = copy.deepcopy(self.predictor)
-        validation_dfs = []
 
         if not self.min_validation_date:
             unique_dates = df[self.date_column_name].unique(maintain_order=True)
@@ -101,9 +154,7 @@ class MatchKFoldCrossValidator(CrossValidator):
         if isinstance(self.min_validation_date, str) and df.schema.get(
             self.date_column_name
         ) in (nw.Date, nw.Datetime):
-            min_validation_date = datetime.strptime(
-                self.min_validation_date, "%Y-%m-%d"
-            )
+            min_validation_date = datetime.strptime(self.min_validation_date, "%Y-%m-%d")
         else:
             min_validation_date = self.min_validation_date
 
@@ -121,7 +172,8 @@ class MatchKFoldCrossValidator(CrossValidator):
         train_df = df.filter(nw.col("__cv_match_number") < train_cut_off_match_number)
         if len(train_df) == 0:
             raise ValueError(
-                f"train_df is empty. train_cut_off_day_number: {train_cut_off_match_number}. Select a lower validation_match value."
+                f"train_df is empty. train_cut_off_match_number: {train_cut_off_match_number}. "
+                f"Select a lower validation_match value."
             )
 
         validation_df = df.filter(
@@ -129,74 +181,39 @@ class MatchKFoldCrossValidator(CrossValidator):
             & (nw.col("__cv_match_number") <= train_cut_off_match_number + step_matches)
         )
 
-        for idx in range(self.n_splits):
+        validation_dfs = []
 
-            predictor.train(train_df)
+        for idx in range(self.n_splits):
+            est = copy.deepcopy(self.estimator)
+            self._fit_estimator(est, train_df)
 
             if idx == 0 and add_train_prediction:
-                columns_to_keep = [
-                    c for c in train_df.columns if c not in predictor.columns_added
-                ]
-                train_df = train_df.select(columns_to_keep)
-                train_df = nw.from_native(
-                    predictor.predict(
-                        train_df, cross_validation=True, return_features=return_features
-                    )
-                )
-                train_df = train_df.with_columns(
-                    nw.lit(0).alias(self.validation_column_name)
-                )
-                validation_dfs.append(train_df)
+                train_pred = self._predict_smart(est, train_df.drop("__cv_match_number"))
+                train_pred = train_pred.with_columns(nw.lit(0).alias(self.validation_column_name))
+                validation_dfs.append(train_pred)
 
-            columns_to_keep = [
-                c for c in validation_df.columns if c not in predictor.columns_added
-            ]
-            validation_df = validation_df.select(columns_to_keep)
-            validation_df = nw.from_native(
-                predictor.predict(
-                    validation_df,
-                    cross_validation=True,
-                    return_features=return_features,
-                )
-            )
-            validation_df = validation_df.with_columns(
-                nw.lit(1).alias(self.validation_column_name)
-            )
-            if validation_dfs:
-                validation_dfs.append(validation_df.select(validation_dfs[0].columns))
-            else:
-                validation_dfs.append(validation_df)
+            val_pred = self._predict_smart(est, validation_df.drop("__cv_match_number"))
+            val_pred = val_pred.with_columns(nw.lit(1).alias(self.validation_column_name))
+            validation_dfs.append(val_pred)
 
             train_cut_off_match_number += step_matches
-            train_df = df.filter(
-                nw.col("__cv_match_number") < train_cut_off_match_number
-            )
+            train_df = df.filter(nw.col("__cv_match_number") < train_cut_off_match_number)
 
             if idx == self.n_splits - 2:
-                validation_df = df.filter(
-                    nw.col("__cv_match_number") >= train_cut_off_match_number
-                )
+                validation_df = df.filter(nw.col("__cv_match_number") >= train_cut_off_match_number)
             else:
                 validation_df = df.filter(
                     (nw.col("__cv_match_number") >= train_cut_off_match_number)
-                    & (
-                        nw.col("__cv_match_number")
-                        < train_cut_off_match_number + step_matches
-                    )
+                    & (nw.col("__cv_match_number") < train_cut_off_match_number + step_matches)
                 )
 
-        concat_validation_df = nw.concat(validation_dfs).drop("__cv_match_number")
-        return_feats = (
-            concat_validation_df.columns
-            if return_features
-            else [*ori_cols, *predictor.columns_added]
-        )
+        out = nw.concat(validation_dfs)
 
-        return (
-            concat_validation_df.unique(
-                subset=["__cv_row_index"],
-                keep="first",
-            )
-            .sort("__cv_row_index")
-            .select(return_feats)
-        )
+        # de-dupe (train/val overlap from add_train_prediction) and restore original order
+        out = out.unique(subset=["__cv_row_index"], keep="first").sort("__cv_row_index")
+
+        if "__cv_row_index" in out.columns:
+            out = out.drop("__cv_row_index")
+
+        # "return_features" kept for API compatibility; now always returns full df anyway
+        return out

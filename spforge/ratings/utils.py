@@ -83,7 +83,18 @@ def add_opp_team_rating(
         )
     )
 
-    return df.join(opp_map, on=[mid, tid], how="left")
+    # Ensure we don't create duplicate columns - use coalesce to handle existing columns
+    result = df.join(opp_map, on=[mid, tid], how="left", coalesce=True)
+    return result
+
+
+def add_opponent_rating_projected(
+    df: pl.DataFrame,
+    opp_team_rating_col: str,
+    opponent_rating_out: str,
+) -> pl.DataFrame:
+    """Alias for add_opp_team_rating - returns the opponent team rating column with a new name."""
+    return df.with_columns(pl.col(opp_team_rating_col).alias(opponent_rating_out))
 
 
 

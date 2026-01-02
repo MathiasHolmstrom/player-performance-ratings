@@ -5,6 +5,8 @@ from enum import Enum, StrEnum
 @dataclass
 class RatingKnownFeatures(StrEnum):
     PLAYER_RATING = "player_rating"
+    PLAYER_OFF_RATING = "player_off_rating"
+    PLAYER_DEF_RATING = "player_def_rating"
     PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED = (
         "player_rating_difference_from_team_projected"
     )
@@ -31,6 +33,8 @@ class RatingUnknownFeatures(StrEnum):
     PLAYER_RATING_CHANGE = "player_rating_change"
     RATING_MEAN = "rating_mean"
     PLAYER_PREDICTED_PERFORMANCE = "player_predicted_performance"
+    PLAYER_PREDICTED_OFF_PERFORMANCE = "player_predicted_off_performance"
+    PLAYER_PREDICTED_DEF_PERFORMANCE = "player_predicted_def_performance"
 
 
 class PredictedRatingMethod(Enum):

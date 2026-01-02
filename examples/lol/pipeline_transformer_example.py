@@ -2,13 +2,13 @@ from lightgbm import LGBMRegressor
 from sklearn.linear_model import LogisticRegression
 
 from examples import get_sub_sample_lol_data
-from spforge import ColumnNames, Pipeline
+from spforge import ColumnNames, Pipeline, FeatureGeneratorPipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
-from spforge.features_generator import FeaturesGenerator
-from spforge.predictor import (
-    GroupByPredictor,
+from spforge.feature_generator import LagTransformer, RollingWindowTransformer
+from spforge.performance_transformers._performance_manager import ColumnWeight
+from spforge.estimator import (
     SklearnPredictor,
-    NegativeBinomialPredictor,
+    NegativeBinomialEstimator,
 )
 
 from spforge.ratings import (
@@ -16,12 +16,7 @@ from spforge.ratings import (
     RatingKnownFeatures,
 )
 
-from spforge.transformers import LagTransformer
-from spforge.transformers import (
-    RollingWindowTransformer,
-)
-from spforge.transformers.fit_transformers import PerformanceWeightsManager
-from spforge.transformers.fit_transformers._performance_manager import ColumnWeight
+
 
 column_names = ColumnNames(
     team_id="teamname",
@@ -82,7 +77,7 @@ lag_generators = [
     ),
 ]
 
-features_generator = FeaturesGenerator(
+features_generator = FeatureGeneratorPipeline(
     column_names=column_names,
     transformers=[rating_generator_player_kills, rating_generator_result, *lag_generators],
 )
@@ -110,7 +105,7 @@ player_kills_predictor = SklearnPredictor(
 cross_validator_game_winner = MatchKFoldCrossValidator(
     date_column_name=column_names.start_date,
     match_id_column_name=column_names.match_id,
-    predictor=game_winner_predictor,
+    estimator=game_winner_predictor,
 )
 
 game_winner_predictor.train(historical_df)
@@ -119,7 +114,7 @@ historical_df = cross_validator_game_winner.generate_validation_df(historical_df
 cross_validator_player_kills = MatchKFoldCrossValidator(
     date_column_name=column_names.start_date,
     match_id_column_name=column_names.match_id,
-    predictor=player_kills_predictor,
+    estimator=player_kills_predictor,
 )
 
 player_kills_predictor.train(historical_df)
@@ -130,7 +125,7 @@ future_df = features_generator.future_transform(future_df)
 future_df = game_winner_predictor.predict(future_df)
 future_df = player_kills_predictor.predict(future_df)
 
-probability_predictor = NegativeBinomialPredictor(
+probability_predictor = NegativeBinomialEstimator(
     target="kills",
     point_estimate_pred_column=player_kills_predictor.pred_column,
     max_value=15,

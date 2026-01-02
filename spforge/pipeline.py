@@ -1,221 +1,245 @@
 import polars as pl
 import logging
-from typing import Optional
 
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline as SkPipeline
+from typing import Optional, Any
+
+import numpy as np
+import pandas as pd
 import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.base import BaseEstimator
 
-from spforge.features_generator import FeaturesGenerator
-from spforge.predictor._base import BasePredictor
-from spforge.predictor_transformer import PredictorTransformer, SkLearnTransformerWrapper, \
-    ConvertDataFrameToCategoricalTransformer
-from spforge.predictor_transformer._simple_transformer import SimpleTransformer
+from spforge.transformers.base_transformer import BaseTransformer
+from spforge.transformers import ConvertDataFrameToCategoricalTransformer
 
 from spforge.scorer import Filter, apply_filters
 
 
-class Pipeline(BasePredictor):
-
-
+class Pipeline(BaseEstimator):
     def __init__(
             self,
-            predictor: BasePredictor,
+            estimator: Any,
+            target: str,
+            features: Optional[list[str]] = None,
+            pred_column: Optional[str] = None,
             filters: list[Filter] | None = None,
             scale_features: bool = False,
             one_hot_encode_cat_features: bool = False,
-            convert_cat_features_to_cat_dtype: bool = False,
             impute_missing_values: bool = False,
             drop_rows_where_target_is_nan: bool = False,
-            pre_transformers: Optional[list[PredictorTransformer]] = None,
-            post_predict_transformers: Optional[list[SimpleTransformer]] = None,
-            min_target: int | None = None,
-            max_target: int | None = None,
-
+            min_target: int | float | None = None,
+            max_target: int | float | None = None,
+            categorical_features: list[str] | None = None,
+            numeric_features: list[str] | None = None,
+            remainder: str = "drop",
     ):
-        super().__init__(
-            features=predictor.features,
-            target=predictor.target,
-            pred_column=predictor.pred_column,
-            filters=filters,
-            scale_features=scale_features,
-            one_hot_encode_cat_features=one_hot_encode_cat_features,
-            impute_missing_values=impute_missing_values,
-            convert_cat_features_to_cat_dtype=convert_cat_features_to_cat_dtype,
-            pre_transformers=pre_transformers,
-            post_predict_transformers=post_predict_transformers,
-            lag_features=predictor.lag_features
-        )
+        self.estimator = estimator
+        self._target = target
+        self._features = features or []
+        self._pred_column = pred_column or f"{target}_prediction"
+        self.filters = filters or []
+        self.scale_features = scale_features
+        self.one_hot_encode_cat_features = one_hot_encode_cat_features
+        self.impute_missing_values = impute_missing_values
+        self.drop_rows_where_target_is_nan = drop_rows_where_target_is_nan
         self.min_target = min_target
         self.max_target = max_target
-        self.filters = filters or []
-        self.drop_rows_where_target_is_nan = drop_rows_where_target_is_nan
-        self._predictor_features = predictor.features.copy()
+        self.categorical_features = categorical_features
+        self.numeric_features = numeric_features
+        self.remainder = remainder
+        self._sk: SkPipeline | None = None
+        self._fitted_features: list[str] = []
 
-        logging.info(f"Using estimator features {self._predictor_features}")
-        self.predictor = predictor
-        self._pred_columns_added = self.predictor._pred_columns_added
+    @property
+    def target(self) -> str:
+        return self._target
 
-    @nw.narwhalify
-    def train(self, df: IntoFrameT, features: Optional[list[str]] = None) -> None:
-        """
-        Trains the pipeline on the given dataframe and generates and returns predictions.
-        :param df: DataFrame with the data to be used for training and prediction
-        """
-        if self.predictor.target not in df.columns:
-            raise ValueError(
-                f"Target {self.predictor.target} not in df columns. Available columns: {df.columns}"
-            )
-        if self.min_target:
-            df = df.with_columns(nw.col(self.target).clip(lower_bound=self.min_target))
-        if self.max_target:
-            df = df.with_columns(nw.col(self.target).clip(upper_bound=self.max_target))
+    @property
+    def pred_column(self) -> str:
+        return self._pred_column
 
-        features = features or self._predictor_features
-        self._features = (
-            features.copy() if features else self._ori_estimator_features.copy()
-        )
-        self._modified_features = self._features.copy()
-        if not self._features:
-            raise ValueError(
-                "features not set. Either pass to train or pass when instantiating predictor object"
-            )
+    @property
+    def features(self) -> list[str]:
+        return self._features
 
+    def _reject_numpy(self, X: Any):
+        native = X.to_native() if hasattr(X, "to_native") else X
+        if isinstance(native, np.ndarray):
+            raise TypeError("X must be a DataFrame (pandas/polars/narwhals), not a numpy array")
 
-        filtered_df = apply_filters(df=df, filters=self.filters)
-        if self.drop_rows_where_target_is_nan:
-            filtered_df = filtered_df.filter(~nw.col(self._target).is_nan())
-        filtered_df = self._fit_transform_pre_transformers(df=filtered_df)
-        self.predictor.train(df=filtered_df, features=self._modified_features)
+    def _to_pandas(self, df: Any) -> pd.DataFrame:
+        native = df.to_native() if hasattr(df, "to_native") else df
+        if isinstance(native, pd.DataFrame):
+            return native
+        if isinstance(native, pl.DataFrame):
+            return native.to_pandas()
+        if hasattr(df, "to_pandas"):
+            return df.to_pandas()
+        return pd.DataFrame(native)
 
-    @nw.narwhalify
-    def predict(
-            self, df: IntoFrameT, **kwargs
-    ) -> IntoFrameT:
-        """
-        Generates either cross-validated or future predictions on the given dataframe.
-        If cross_validation is set to True, lag-generators will continue to be calculated on the historical data.
-        If cross_validation is set to False, it is assumed that df only contains future data, in which the transformed lag-values will be the same for all rows for the given granularity.
+    def _infer_feature_types(self, df_pd: pd.DataFrame, features: list[str]) -> tuple[list[str], list[str]]:
+        if self.numeric_features is not None or self.categorical_features is not None:
+            num = self.numeric_features or []
+            cat = self.categorical_features or []
+            return list(num), list(cat)
 
-        :param df: DataFrame with the data to be used for training and prediction
-        :param return_features: If True, the features generated by the pipeline will be returned in the output dataframe.
-        """
-        input_cols = df.columns
+        num = []
+        cat = []
+        for c in features:
+            s = df_pd[c]
+            if pd.api.types.is_numeric_dtype(s):
+                num.append(c)
+            else:
+                cat.append(c)
+        return num, cat
 
-        df = nw.from_native(self._transform_pre_transformers(df=df))
-        df = nw.from_native(self.predictor.predict(df))
+    def _build_sklearn_pipeline(self, df_pd: pd.DataFrame, features: list[str]) -> SkPipeline:
+        num_feats, cat_feats = self._infer_feature_types(df_pd, features)
 
-        return df.select(input_cols + self.columns_added)
-
-    def _create_pre_transformers(self, df: pl.DataFrame) -> list[PredictorTransformer]:
-        pre_transformers = []
-        cat_feats_to_transform = []
-
-        for estimator_feature in self._features.copy():
-            if not df[estimator_feature].dtype.is_numeric():
-                cat_feats_to_transform.append(estimator_feature)
-
-        for estimator_feature in self._features.copy():
-
-            if estimator_feature not in df.columns:
-                self._modified_features.remove(estimator_feature)
-                logging.warning(
-                    f"Feature {estimator_feature} not in df, removing from estimator_features"
-                )
-                continue
-
-        if cat_feats_to_transform:
-            if self.one_hot_encode_cat_features:
-                one_hot_encoder = SkLearnTransformerWrapper(
-                    transformer=OneHotEncoder(handle_unknown="ignore"),
-                    features=cat_feats_to_transform,
-                )
-                pre_transformers.append(one_hot_encoder)
-
-            elif self.convert_cat_features_to_cat_dtype:
-
-                pre_transformers.append(
-                    ConvertDataFrameToCategoricalTransformer(
-                        features=cat_feats_to_transform
-                    )
-                )
-
-        if self.scale_features:
-            numeric_feats = [
-                f for f in self._features if f not in cat_feats_to_transform
-            ]
-            if numeric_feats:
-                pre_transformers.append(
-                    SkLearnTransformerWrapper(
-                        transformer=StandardScaler(),
-                        features=numeric_feats,
-                    )
-                )
+        num_steps = []
+        cat_steps = []
 
         if self.impute_missing_values:
-            numeric_feats = [
-                f for f in self._modified_features if f not in cat_feats_to_transform
-            ]
-            if numeric_feats:
+            num_steps.append(("impute", SimpleImputer()))
+            cat_steps.append(("impute", SimpleImputer(strategy="most_frequent")))
 
-                imputer_transformer = SkLearnTransformerWrapper(
-                    transformer=SimpleImputer(),
-                    features=numeric_feats,
-                )
-                if not self._transformer_exists(imputer_transformer):
-                    pre_transformers.append(imputer_transformer)
+        if self.scale_features:
+            num_steps.append(("scale", StandardScaler()))
 
-        return pre_transformers
+        if self.one_hot_encode_cat_features:
+            cat_steps.append(("ohe", OneHotEncoder(handle_unknown="ignore")))
 
-    def _transformer_exists(self, transformer: PredictorTransformer) -> bool:
-        for pre_transformer in self.pre_transformers:
-            if (
-                    pre_transformer.__class__.__name__ == transformer.__class__.__name__
-                    and pre_transformer.features == transformer.features
-            ):
-                return True
-        return False
+        if num_feats:
+            if num_steps:
+                num_pipe = SkPipeline(steps=num_steps)
+            else:
+                num_pipe = "passthrough"
+            num_tr = ("num", num_pipe, num_feats)
+        else:
+            num_tr = None
 
-    def _fit_transform_pre_transformers(self, df: IntoFrameT) -> IntoFrameT:
-        if self.auto_pre_transform:
-            self.pre_transformers += self._create_pre_transformers(df)
+        if cat_feats:
+            if cat_steps:
+                cat_pipe = SkPipeline(steps=cat_steps)
+            else:
+                cat_pipe = "passthrough"
+            cat_tr = ("cat", cat_pipe, cat_feats)
+        else:
+            cat_tr = None
 
-        native_namespace = nw.get_native_namespace(df)
+        transformers = [t for t in [num_tr, cat_tr] if t is not None]
+        pre = ColumnTransformer(transformers=transformers, remainder=self.remainder)
 
-        for pre_transformer in self.pre_transformers:
-            values = nw.from_native(pre_transformer.fit_transform(df))
-            features_out = pre_transformer.features_out
-            df = df.with_columns(
-                nw.new_series(
-                    values=values[col].to_native(),
-                    name=features_out[idx],
-                    backend=native_namespace,
-                )
-                for idx, col in enumerate(values.columns)
-            )
+        return SkPipeline(steps=[("pre", pre), ("est", self.estimator)])
 
-            for feature in pre_transformer.features:
-                if (
-                        feature in self._modified_features
-                        and feature not in pre_transformer.features_out
-                ):
-                    self._modified_features.remove(feature)
-            for features_out in pre_transformer.features_out:
-                if features_out not in self._modified_features:
-                    self._modified_features.append(features_out)
+    def _narwhals_preprocess(self, df: Any) -> Any:
+        if self.min_target is not None:
+            df = df.with_columns(nw.col(self._target).clip(lower_bound=self.min_target))
+        if self.max_target is not None:
+            df = df.with_columns(nw.col(self._target).clip(upper_bound=self.max_target))
+
+        df = apply_filters(df=df, filters=self.filters)
+        if not hasattr(df, "to_native"):
+            df = nw.from_native(df)
+
+        if self.drop_rows_where_target_is_nan:
+            df = df.filter(~nw.col(self._target).is_nan())
 
         return df
 
-    def _transform_pre_transformers(self, df: IntoFrameT) -> IntoFrameT:
-        for pre_transformer in self.pre_transformers:
-            values = nw.from_native(pre_transformer.transform(df))
-            df = df.with_columns(
+    @nw.narwhalify
+    def fit(self, X: IntoFrameT, y=None, features: Optional[list[str]] = None,
+            sample_weight: Optional[np.ndarray] = None):
+        self._reject_numpy(X)
+
+        original_native = X.to_native()
+        is_sklearn_style = y is not None
+
+        if is_sklearn_style:
+            y_values = y.to_list() if hasattr(y, "to_list") else y
+            df = X.with_columns(
                 nw.new_series(
-                    name=col,
-                    values=values[col].to_native(),
-                    backend=nw.get_native_namespace(df),
+                    name=self._target,
+                    values=y_values,
+                    backend=nw.get_native_namespace(X),
                 )
-                for col in values.columns
             )
-        return df
+            feats = features or list(X.columns)
+        else:
+            df = X
+            if self._target not in df.columns:
+                raise ValueError(f"Target {self._target} not in columns: {df.columns}")
+            feats = features or self._features
+
+        if not feats:
+            raise ValueError("features not set. Pass features to fit() or constructor")
+
+        df = self._narwhals_preprocess(df)
+        df_pd = self._to_pandas(df)
+
+        self._fitted_features = list(feats)
+        self._sk = self._build_sklearn_pipeline(df_pd, self._fitted_features)
+
+        X_fit = df_pd[self._fitted_features]
+        y_fit = df_pd[self._target]
+
+        if sample_weight is not None:
+            self._sk.fit(X_fit, y_fit, est__sample_weight=sample_weight)
+        else:
+            self._sk.fit(X_fit, y_fit)
+
+        if hasattr(self._sk[-1], "classes_"):
+            self.classes_ = self._sk[-1].classes_
+
+        return self
+
+    @nw.narwhalify
+    def predict(self, X: IntoFrameT, return_features: bool = False, **kwargs) -> IntoFrameT:
+        self._reject_numpy(X)
+        if self._sk is None:
+            raise RuntimeError("Pipeline not fitted. Call fit() first.")
+
+        native_in = X.to_native()
+        is_pandas_in = isinstance(native_in, pd.DataFrame)
+
+        df = nw.from_native(X) if not hasattr(X, "to_native") else X
+        df_pd = self._to_pandas(df)
+
+        X_pred = df_pd[self._fitted_features]
+        preds = self._sk.predict(X_pred)
+
+        if is_pandas_in:
+            return preds
+
+        out = df.with_columns(
+            nw.new_series(
+                name=self._pred_column,
+                values=preds.tolist() if isinstance(preds, np.ndarray) else list(preds),
+                backend=nw.get_native_namespace(df),
+            )
+        )
+
+        if return_features:
+            return out
+
+        input_cols = list(X.columns)
+        cols = [c for c in input_cols if c in out.columns] + [self._pred_column]
+        return out.select(cols)
+
+    @nw.narwhalify
+    def predict_proba(self, X: IntoFrameT) -> np.ndarray:
+        self._reject_numpy(X)
+        if self._sk is None:
+            raise RuntimeError("Pipeline not fitted. Call fit() first.")
+
+        if not hasattr(self._sk[-1], "predict_proba"):
+            raise AttributeError(f"{type(self._sk[-1]).__name__} does not support predict_proba")
+
+        df = nw.from_native(X) if not hasattr(X, "to_native") else X
+        df_pd = self._to_pandas(df)
+        X_pred = df_pd[self._fitted_features]
+        return self._sk.predict_proba(X_pred)

@@ -1,21 +1,5 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
-with open("requirements.txt") as f:
-    required = f.read().splitlines()
-
-setup(
-    name="spforge",
-    version="0.5.7",
-    packages=find_packages(),
-    install_requires=required,
-    author="Mathias Holmstrøm",
-    author_email="mathiasholmstom@gmail.com",
-    description="A flexible framework for generating features, ratings, and building machine learning or other models for training and inference on sports data.",
-    package_data={
-        "examples.nba": ["data/*.parquet"],
-        "examples.lol": ["data/*.parquet"],
-    },
-    long_description=open("README.md").read(),
-    long_description_content_type="text/markdown",
-    url="https://github.com/Hiderdk/player-performance-ratings",
-)
+# Configuration is now in pyproject.toml
+# This file is kept for backward compatibility
+setup()

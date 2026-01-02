@@ -9,8 +9,7 @@ import polars as pl
 from spforge.data_structures import ColumnNames
 from spforge.ratings._base import RatingGenerator, RatingState
 from spforge.ratings import RatingKnownFeatures, RatingUnknownFeatures
-from spforge.ratings.utils import add_day_number_utc
-from spforge.transformers.fit_transformers._performance_manager import ColumnWeight, PerformanceManager
+from spforge.performance_transformers._performance_manager import ColumnWeight, PerformanceManager
 
 TEAM_PRED_OFF_COL = "__TEAM_PREDICTED_OFF_PERFORMANCE"
 TEAM_PRED_DEF_COL = "__TEAM_PREDICTED_DEF_PERFORMANCE"
@@ -90,6 +89,9 @@ class TeamRatingGenerator(RatingGenerator):
         self.OPP_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.OPPONENT_RATING_PROJECTED))
         self.DIFF_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED))
         self.MEAN_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_MEAN_PROJECTED))
+        
+        # Non-predictor features
+        self.DIFF_COL = self._suffix(str(RatingUnknownFeatures.RATING_DIFFERENCE))
 
         self.start_team_rating = float(start_team_rating)
         self.rating_center = float(self.start_team_rating if rating_center is None else rating_center)
@@ -131,7 +133,7 @@ class TeamRatingGenerator(RatingGenerator):
             .sort(list(set([cn.start_date, cn.match_id, cn.update_match_id])))
         )
 
-        match_df = add_day_number_utc(match_df, cn.start_date, "__day_number")
+        match_df = self._add_day_number(match_df, cn.start_date, "__day_number")
         return match_df
 
     def _predict_performance(self, team_rating: float, opp_rating: float) -> float:
@@ -261,8 +263,20 @@ class TeamRatingGenerator(RatingGenerator):
           - OPPONENT_RATING_PROJECTED := opponent DEF projected (when needed)
           - TEAM_RATING_PROJECTED := team OFF projected (already present)
         """
-        cols_to_add = set((self.features_out or []) + (self.non_predictor_features_out or []))
+        # self._features_out and self.non_predictor_features_out are already suffixed from __init__
+        # So we can use them directly
+        cols_to_add = set((self._features_out or []) + (self.non_predictor_features_out or []))
         cn = self.column_names
+
+        # Add PERFORMANCE column if requested
+        perf_col_name = self._suffix(str(RatingUnknownFeatures.PERFORMANCE))
+        if perf_col_name in cols_to_add and perf_col_name not in df.columns:
+            # Use the performance_column from input, but with suffix applied
+            if self.performance_column in df.columns:
+                df = df.with_columns(pl.col(self.performance_column).alias(perf_col_name))
+            elif RatingUnknownFeatures.PERFORMANCE in (self.non_predictor_features_out or []):
+                # If performance column doesn't exist, create it (shouldn't happen, but handle it)
+                df = df.with_columns(pl.lit(0.0).alias(perf_col_name))
 
         # Map requested opponent rating to opponent DEF by default
         need_opp = (
@@ -290,6 +304,20 @@ class TeamRatingGenerator(RatingGenerator):
                 ((pl.col(self.TEAM_RATING_PROJ_COL) + pl.col(self.OPP_RATING_PROJ_COL)) / 2.0).alias(self.MEAN_PROJ_COL)
             )
 
+        # Compute non-predictor RATING_DIFFERENCE if requested
+        # For team ratings, this is computed from projected ratings (same as DIFF_PROJ_COL)
+        if self.DIFF_COL in cols_to_add and self.DIFF_COL not in df.columns:
+            # Ensure we have the required columns
+            if self.TEAM_RATING_PROJ_COL not in df.columns:
+                # Use TEAM_OFF_RATING_PROJ_COL as fallback
+                df = df.with_columns(pl.col(self.TEAM_OFF_RATING_PROJ_COL).alias(self.TEAM_RATING_PROJ_COL))
+            if self.OPP_RATING_PROJ_COL not in df.columns and self.OPP_DEF_RATING_PROJ_COL in df.columns:
+                df = df.with_columns(pl.col(self.OPP_DEF_RATING_PROJ_COL).alias(self.OPP_RATING_PROJ_COL))
+            if self.OPP_RATING_PROJ_COL in df.columns:
+                df = df.with_columns(
+                    (pl.col(self.TEAM_RATING_PROJ_COL) - pl.col(self.OPP_RATING_PROJ_COL)).alias(self.DIFF_COL)
+                )
+
         candidates = {
             self.TEAM_OFF_RATING_PROJ_COL,
             self.TEAM_DEF_RATING_PROJ_COL,
@@ -300,11 +328,20 @@ class TeamRatingGenerator(RatingGenerator):
             self.TEAM_RATING_PROJ_COL,
             self.OPP_RATING_PROJ_COL,
             self.DIFF_PROJ_COL,
+            self.DIFF_COL,
             self.MEAN_PROJ_COL,
+            perf_col_name,
         }
 
+        # Only drop columns that are in candidates and NOT in cols_to_add
+        # This ensures that columns from _calculate_ratings are only kept if they're requested
         drop_cols = [c for c in candidates if (c in df.columns and c not in cols_to_add)]
-        return df.drop(drop_cols)
+        result = df.drop(drop_cols)
+        
+        # Also ensure that any columns not in candidates (like input columns) are preserved
+        # This is already handled by only dropping columns in candidates
+        
+        return result
 
     def _future_transform(self, df: pl.DataFrame) -> pl.DataFrame:
         cn = self.column_names

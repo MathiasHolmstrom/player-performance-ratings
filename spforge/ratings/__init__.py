@@ -4,5 +4,5 @@ from .enums import (
     PredictedRatingMethod,
 )
 from .league_identifier import LeagueIdentifier
-from ._player_rating import PlayerRatingGenerator, PlayerRating
+from ._player_rating import PlayerRatingGenerator
 from ._team_rating import TeamRatingGenerator

@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
 from spforge.pipeline import Pipeline
-from spforge.predictor import GroupByPredictor, SklearnPredictor
+from spforge.estimator import GroupByPredictor, SklearnPredictor
 
 
 from spforge.data_structures import ColumnNames

@@ -1,7 +1,7 @@
 from abc import abstractmethod, ABC
 from typing import Optional
 
-from narwhals.typing import IntoFrameT, IntoFrameT
+from narwhals.typing import IntoFrameT
 
 from spforge import ColumnNames
 

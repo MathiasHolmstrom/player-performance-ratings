@@ -3,7 +3,11 @@ from typing import Optional
 
 from spforge import ColumnNames
 
-from spforge.predictor._base import BasePredictor
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from spforge.pipeline import Pipeline
+
 from spforge.scorer import BaseScorer
 
 from narwhals.typing import IntoFrameT, IntoFrameT
@@ -15,11 +19,11 @@ class CrossValidator(ABC):
         self,
         scorer: Optional[BaseScorer],
         min_validation_date: str,
-        predictor: BasePredictor,
+        estimator: "Pipeline",
     ):
         self.scorer = scorer
         self.min_validation_date = min_validation_date
-        self.predictor = predictor
+        self.estimator = estimator
 
     @property
     def validation_column_name(self) -> str:
