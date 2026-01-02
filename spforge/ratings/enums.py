@@ -1,13 +1,17 @@
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, StrEnum
 
 
 @dataclass
-class RatingKnownFeatures:
+class RatingKnownFeatures(StrEnum):
     PLAYER_RATING = "player_rating"
     PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED = (
         "player_rating_difference_from_team_projected"
     )
+    TEAM_OFF_RATING_PROJECTED = "team_off_rating_projected"
+    TEAM_DEF_RATING_PROJECTED = "team_def_rating_projected"
+    OPPONENT_OFF_RATING_PROJECTED = "opponent_off_rating_projected"
+    OPPONENT_DEF_RATING_PROJECTED = "opponent_def_rating_projected"
     OPPONENT_RATING_PROJECTED = "opponent_rating_projected"
     TEAM_RATING_PROJECTED = "team_rating_projected"
     PLAYER_RATING_DIFFERENCE_PROJECTED = "player_rating_difference_projected"
@@ -17,9 +21,7 @@ class RatingKnownFeatures:
     PLAYER_LEAGUE = "player_league"
     OPPONENT_LEAGUE = "opponent_league"
 
-
-@dataclass
-class RatingUnknownFeatures:
+class RatingUnknownFeatures(StrEnum):
     PERFORMANCE = "performance"
     RATING_DIFFERENCE = "rating_difference"
     PLAYER_RATING_DIFFERENCE = "player_rating_difference"

@@ -17,8 +17,6 @@ def add_team_rating(
     )
 
 
-
-
 def add_day_number_utc(
     df: pl.DataFrame,
     start_date_col: str,

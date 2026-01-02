@@ -240,6 +240,7 @@ class SklearnScorer(BaseScorer):
         validation_column: Optional[str] = None,
         granularity: Optional[list[str]] = None,
         filters: Optional[list[Filter]] = None,
+        params: dict[str, Any] = None
     ):
         """
         :param pred_column: The column name of the predictions
@@ -253,7 +254,7 @@ class SklearnScorer(BaseScorer):
 
         self.pred_column_name = pred_column
         self.scorer_function = scorer_function
-
+        self.params = params or {}
         super().__init__(
             target=target,
             pred_column=pred_column,
@@ -284,7 +285,7 @@ class SklearnScorer(BaseScorer):
             )
 
         return self.scorer_function(
-            grouped[self.target].to_list(), grouped[self.pred_column_name].to_list()
+            grouped[self.target].to_list(), grouped[self.pred_column_name].to_list(),**self.params
         )
 
 

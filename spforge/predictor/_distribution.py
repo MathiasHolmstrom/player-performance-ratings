@@ -471,33 +471,36 @@ class NormalDistributionPredictor(DistributionPredictor):
             df = df.to_pandas()
         return df
 
+
 class StudentTDistributionPredictor(DistributionPredictor):
     """
-    Discretized Student-t distribution over integer outcomes [min_value, max_value].
+    Discretized Student-t over integer outcomes [min_value, max_value].
 
-    Design:
-      - Supports negative integer outcomes naturally.
-      - If df and/or sigma are provided explicitly, they are used as-is.
-      - If df and/or sigma are None, they are fitted in train().
+    Improvements:
+      - Heteroskedastic sigma: sigma is learned as a function of the point estimate (mu)
+        using quantile bins over mu, and a robust MAD-based scale per bin.
+      - Reset semantics: every train() resets learned state and refits using ONLY data passed in.
 
-    Fitting:
-      - sigma is estimated robustly from residuals via MAD (recommended for heavy tails).
-      - df defaults to a sensible value (5.0) when not specified (can be extended to MLE later).
+    Params:
+      - df: fixed tail parameter (not learned).
+      - sigma: if provided, fixed global sigma (disables heteroskedastic fitting).
+      - sigma_bins: number of mu-quantile bins for conditional sigma (ignored if sigma is provided).
     """
 
     def __init__(
-            self,
-            point_estimate_pred_column: str,
-            max_value: int,
-            min_value: int,
-            target: str,
-            df: float | None = None,
-            sigma: float | None = None,
-            pred_column: Optional[str] = None,
-            min_sigma: float = 1.0,
-            min_df: float = 2.1,
-            default_df_if_fit: float = 5.0,
-            min_train_rows: int = 25,
+        self,
+        point_estimate_pred_column: str,
+        max_value: int,
+        min_value: int,
+        target: str,
+        df: float = 5.0,
+        sigma: float | None = None,
+        pred_column: Optional[str] = None,
+        min_sigma: float = 1.0,
+        min_train_rows: int = 50,
+        sigma_fallback_if_no_data: float = 10.0,
+        sigma_bins: int = 8,
+        min_bin_rows: int = 25,
     ):
         super().__init__(
             target=target,
@@ -507,16 +510,32 @@ class StudentTDistributionPredictor(DistributionPredictor):
             point_estimate_pred_column=point_estimate_pred_column,
         )
 
-        # None => fit in train(); otherwise use explicit value
-        self.df: Optional[float] = float(df) if df is not None else None
-        self.sigma: Optional[float] = float(sigma) if sigma is not None else None
+        self.df = float(df)
+        if self.df <= 2.0:
+            raise ValueError(f"df must be > 2.0 for finite variance; got df={self.df}")
+
+        # fixed sigma if provided; else fit conditional sigmas by mu bins
+        self._sigma_init: float | None = float(sigma) if sigma is not None else None
+        self.sigma_global: float | None = None
 
         self.min_sigma = float(min_sigma)
-        self.min_df = float(min_df)
-        self.default_df_if_fit = float(default_df_if_fit)
         self.min_train_rows = int(min_train_rows)
+        self.sigma_fallback_if_no_data = float(sigma_fallback_if_no_data)
+
+        self.sigma_bins = int(sigma_bins)
+        self.min_bin_rows = int(min_bin_rows)
+
+        # learned conditional sigma: bin edges on mu + sigma per bin
+        self._mu_bin_edges: Optional[np.ndarray] = None  # len = sigma_bins+1
+        self._sigma_by_bin: Optional[np.ndarray] = None  # len = sigma_bins
 
         self._classes: Optional[np.ndarray] = None
+
+    def _reset_state(self) -> None:
+        self._classes = None
+        self._mu_bin_edges = None
+        self._sigma_by_bin = None
+        self.sigma_global = self._sigma_init  # fixed sigma if provided else None
 
     @staticmethod
     def _mad_scale(x: np.ndarray) -> float:
@@ -524,60 +543,94 @@ class StudentTDistributionPredictor(DistributionPredictor):
         mad = np.median(np.abs(x - med))
         return float(1.4826 * mad)
 
+    def _fit_sigma_global(self, resid: np.ndarray) -> float:
+        sigma_hat = self._mad_scale(resid)
+        if not np.isfinite(sigma_hat) or sigma_hat <= 0:
+            sigma_hat = float(np.std(resid, ddof=1)) if resid.size > 1 else 0.0
+        return max(self.min_sigma, float(sigma_hat))
+
     @nw.narwhalify
     def train(self, df: nw.DataFrame, estimator_features: Optional[list[str]] = None) -> None:
+        self._reset_state()
         self._classes = np.arange(self.min_value, self.max_value + 1)
 
-        need_fit_sigma = self.sigma is None
-        need_fit_df = self.df is None
-
-        if not (need_fit_sigma or need_fit_df):
-            self.sigma = max(self.min_sigma, float(self.sigma))
-            self.df = max(self.min_df, float(self.df))
+        # If sigma explicitly set, keep it fixed and stop.
+        if self.sigma_global is not None:
+            self.sigma_global = max(self.min_sigma, float(self.sigma_global))
             return
 
         if self.point_estimate_pred_column not in df.columns:
             raise ValueError(
-                f"Expected '{self.point_estimate_pred_column}' column to exist for fitting."
+                f"Expected '{self.point_estimate_pred_column}' column to exist for sigma fitting."
             )
         if self.target not in df.columns:
-            raise ValueError(f"Expected '{self.target}' column to exist for fitting.")
+            raise ValueError(f"Expected '{self.target}' column to exist for sigma fitting.")
 
         y = df[self.target].to_numpy()
         mu = df[self.point_estimate_pred_column].to_numpy()
         mask = np.isfinite(y) & np.isfinite(mu)
-
         if mask.sum() < self.min_train_rows:
-            if need_fit_sigma:
-                self.sigma = max(self.min_sigma, 10.0)
-            else:
-                self.sigma = max(self.min_sigma, float(self.sigma))
-
-            if need_fit_df:
-                self.df = max(self.min_df, self.default_df_if_fit)
-            else:
-                self.df = max(self.min_df, float(self.df))
+            # Not enough data for conditional fitting; use fallback global sigma
+            self.sigma_global = max(self.min_sigma, self.sigma_fallback_if_no_data)
             return
 
-        resid = (y[mask] - mu[mask]).astype(float)
+        y = y[mask].astype(float)
+        mu = mu[mask].astype(float)
+        resid = y - mu
 
-        if need_fit_sigma:
-            sigma_hat = self._mad_scale(resid)
-            if not np.isfinite(sigma_hat) or sigma_hat <= 0:
-                sigma_hat = float(np.std(resid, ddof=1)) if resid.size > 1 else 0.0
-            self.sigma = max(self.min_sigma, float(sigma_hat))
-        else:
-            self.sigma = max(self.min_sigma, float(self.sigma))
+        # Fit mu-quantile bin edges
+        # If mu has too few unique values, quantiles can collapse -> handle that.
+        qs = np.linspace(0.0, 1.0, self.sigma_bins + 1)
+        edges = np.quantile(mu, qs)
 
-        if need_fit_df:
-            self.df = max(self.min_df, self.default_df_if_fit)
-        else:
-            self.df = max(self.min_df, float(self.df))
+        # Ensure strictly increasing edges (avoid empty/degenerate bins)
+        edges = np.unique(edges)
+        if edges.size < 3:
+            # can't bin; fall back to global sigma
+            self.sigma_global = self._fit_sigma_global(resid)
+            return
+
+        # If unique edges < desired bins+1, reduce bin count accordingly
+        # bins = len(edges)-1
+        self._mu_bin_edges = edges
+
+        # Compute sigma per bin (MAD), fallback to global if bin too small
+        sigma_global = self._fit_sigma_global(resid)
+        sigmas = []
+        for i in range(len(edges) - 1):
+            lo, hi = edges[i], edges[i + 1]
+            if i == len(edges) - 2:
+                in_bin = (mu >= lo) & (mu <= hi)
+            else:
+                in_bin = (mu >= lo) & (mu < hi)
+
+            if in_bin.sum() < self.min_bin_rows:
+                sigmas.append(sigma_global)
+                continue
+
+            sigma_hat = self._fit_sigma_global(resid[in_bin])
+            sigmas.append(sigma_hat)
+
+        self._sigma_by_bin = np.asarray(sigmas, dtype=float)
+
+        # If binning produced something weird, fallback
+        if not np.all(np.isfinite(self._sigma_by_bin)) or self._sigma_by_bin.size == 0:
+            self._mu_bin_edges = None
+            self._sigma_by_bin = None
+            self.sigma_global = sigma_global
+
+    def _sigma_for_mu(self, mu_val: float) -> float:
+        if self._mu_bin_edges is not None and self._sigma_by_bin is not None:
+            idx = int(np.searchsorted(self._mu_bin_edges, mu_val, side="right") - 1)
+            idx = max(0, min(idx, len(self._sigma_by_bin) - 1))
+            return max(self.min_sigma, float(self._sigma_by_bin[idx]))
+
+        if self.sigma_global is not None:
+            return max(self.min_sigma, float(self.sigma_global))
+        return max(self.min_sigma, float(self.sigma_fallback_if_no_data))
 
     @nw.narwhalify
-    def predict(
-            self, df: nw.DataFrame, cross_validation: bool = False, **kwargs
-    ) -> nw.DataFrame:
+    def predict(self, df: nw.DataFrame, cross_validation: bool = False, **kwargs) -> nw.DataFrame:
         if self._classes is None:
             self._classes = np.arange(self.min_value, self.max_value + 1)
 
@@ -585,33 +638,31 @@ class StudentTDistributionPredictor(DistributionPredictor):
         lower_bounds = classes - 0.5
         upper_bounds = classes + 0.5
         df_param = float(self.df)
-        sigma = max(self.min_sigma, float(self.sigma))
 
         ori_df = df.select(df.columns[0])
         df_pl = df.to_polars()
 
-        def compute_probs(mu: float):
-            cdf_upper = student_t.cdf(upper_bounds, df=df_param, loc=mu, scale=sigma)
-            cdf_lower = student_t.cdf(lower_bounds, df=df_param, loc=mu, scale=sigma)
-            probs = cdf_upper - cdf_lower
+        def compute_probs(mu_val: float) -> list[float]:
+            sigma = self._sigma_for_mu(mu_val)
 
-            probs = np.clip(probs, 0.0, 1.0)
+            cdf_upper = student_t.cdf(upper_bounds, df=df_param, loc=mu_val, scale=sigma)
+            cdf_lower = student_t.cdf(lower_bounds, df=df_param, loc=mu_val, scale=sigma)
+            probs = np.clip(cdf_upper - cdf_lower, 0.0, 1.0)
             s = probs.sum()
             if s > 0:
                 probs = probs / s
             return probs.tolist()
 
-        return_dtype = pl.List(pl.Float64)
-
         out = df_pl.with_columns(
             pl.col(self.point_estimate_pred_column)
-            .map_elements(compute_probs, return_dtype=return_dtype)
+            .map_elements(compute_probs, return_dtype=pl.List(pl.Float64))
             .alias(self.pred_column)
         )
 
         if isinstance(ori_df, pd.DataFrame):
             return out.to_pandas()
         return out
+
 
 class DistributionManagerPredictor(BasePredictor):
 
