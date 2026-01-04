@@ -3,14 +3,17 @@ Unit tests for TeamRatingGenerator.
 
 These tests follow the pattern: "when X is the input then we should expect to see Y because of XXX reasons"
 """
+
+from datetime import datetime
+
 import pandas as pd
 import polars as pl
 import pytest
-from datetime import datetime
 
 from spforge.data_structures import ColumnNames
 from spforge.ratings import TeamRatingGenerator
 from spforge.ratings.enums import RatingKnownFeatures, RatingUnknownFeatures
+
 
 @pytest.fixture
 def column_names():
@@ -22,6 +25,7 @@ def column_names():
         update_match_id="match_id",
     )
 
+
 @pytest.fixture
 def basic_rating_generator(column_names):
     """Basic TeamRatingGenerator with minimal configuration."""
@@ -31,10 +35,16 @@ def basic_rating_generator(column_names):
         start_team_rating=1000.0,
         confidence_weight=0.0,
         output_suffix="",
-        features_out=[RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED, RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED],
+        features_out=[
+            RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
+            RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED,
+        ],
     )
 
-def test_init_when_default_params_are_used_then_generator_initializes_with_expected_values(column_names):
+
+def test_init_when_default_params_are_used_then_generator_initializes_with_expected_values(
+    column_names,
+):
     """
     When default parameters are used, then we should expect to see:
     - start_team_rating = 1000.0 (default)
@@ -55,8 +65,11 @@ def test_init_when_default_params_are_used_then_generator_initializes_with_expec
     assert generator.rating_change_multiplier_offense == 50.0
     assert generator.rating_change_multiplier_defense == 50.0
 
+
 @pytest.mark.parametrize("start_rating", [500.0, 1000.0, 1500.0, 2000.0])
-def test_init_when_custom_start_rating_is_provided_then_it_is_used_for_new_teams(column_names, start_rating):
+def test_init_when_custom_start_rating_is_provided_then_it_is_used_for_new_teams(
+    column_names, start_rating
+):
     """
     When a custom start_team_rating is provided, then we should expect to see
     new teams initialized with that rating value because _ensure_team_off and
@@ -71,7 +84,10 @@ def test_init_when_custom_start_rating_is_provided_then_it_is_used_for_new_teams
     team_state = generator._ensure_team_off("team_1")
     assert team_state.rating_value == start_rating
 
-def test_init_when_custom_rating_center_is_provided_then_it_is_used_for_mean_predictor(column_names):
+
+def test_init_when_custom_rating_center_is_provided_then_it_is_used_for_mean_predictor(
+    column_names,
+):
     """
     When a custom rating_center is provided, then we should expect to see
     it used in the mean performance predictor calculation because the mean
@@ -85,15 +101,18 @@ def test_init_when_custom_rating_center_is_provided_then_it_is_used_for_mean_pre
     )
 
     assert generator.rating_center == 1200.0
-    
+
     pred = generator._predict_performance(team_rating=1200.0, opp_rating=1200.0)
     assert pred == pytest.approx(0.5)
 
     pred2 = generator._predict_performance(team_rating=1400.0, opp_rating=1200.0)
     assert pred2 > 0.5
 
+
 @pytest.mark.parametrize("predictor", ["difference", "mean", "ignore_opponent"])
-def test_init_when_performance_predictor_is_set_then_it_is_stored_correctly(column_names, predictor):
+def test_init_when_performance_predictor_is_set_then_it_is_stored_correctly(
+    column_names, predictor
+):
     """
     When a performance_predictor is set, then we should expect to see
     it stored correctly because the predictor type determines how performance
@@ -107,8 +126,11 @@ def test_init_when_performance_predictor_is_set_then_it_is_stored_correctly(colu
 
     assert generator.performance_predictor == predictor
 
+
 @pytest.mark.parametrize("off_mult,def_mult", [(25.0, 50.0), (50.0, 25.0), (100.0, 100.0)])
-def test_init_when_different_multipliers_are_set_then_they_are_stored_correctly(column_names, off_mult, def_mult):
+def test_init_when_different_multipliers_are_set_then_they_are_stored_correctly(
+    column_names, off_mult, def_mult
+):
     """
     When different offense and defense multipliers are set, then we should expect to see
     they are stored separately because offense and defense ratings can have different
@@ -124,8 +146,11 @@ def test_init_when_different_multipliers_are_set_then_they_are_stored_correctly(
     assert generator.rating_change_multiplier_offense == off_mult
     assert generator.rating_change_multiplier_defense == def_mult
 
+
 @pytest.mark.parametrize("suffix", ["", "_custom", "_test"])
-def test_init_when_output_suffix_is_provided_then_it_is_applied_to_column_names(column_names, suffix):
+def test_init_when_output_suffix_is_provided_then_it_is_applied_to_column_names(
+    column_names, suffix
+):
     """
     When output_suffix is provided, then we should expect to see
     all output column names suffixed with that value because _suffix
@@ -143,6 +168,7 @@ def test_init_when_output_suffix_is_provided_then_it_is_applied_to_column_names(
     else:
         assert generator.TEAM_OFF_RATING_PROJ_COL == "team_off_rating_projected"
 
+
 @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
 def test_fit_transform_when_called_then_ratings_are_updated(df_type, basic_rating_generator):
     """
@@ -150,17 +176,20 @@ def test_fit_transform_when_called_then_ratings_are_updated(df_type, basic_ratin
     team ratings updated based on match results because _historical_transform
     processes matches and applies rating changes through _apply_team_updates.
     """
-    df = df_type({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    df = df_type(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     result = basic_rating_generator.fit_transform(df)
 
     team_a_off = basic_rating_generator._team_off_ratings["team_a"]
     assert team_a_off.rating_value != 1000.0
+
 
 @pytest.mark.parametrize("performance", [0.0, 0.5, 1.0])
 def test_fit_transform_when_team_performance_varies_then_rating_changes_accordingly(
@@ -180,12 +209,14 @@ def test_fit_transform_when_team_performance_varies_then_rating_changes_accordin
         output_suffix="",
     )
 
-    df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [performance, 1.0 - performance],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [performance, 1.0 - performance],
+        }
+    )
 
     generator.fit_transform(df)
     team_a_off = generator._team_off_ratings["team_a"]
@@ -197,43 +228,54 @@ def test_fit_transform_when_team_performance_varies_then_rating_changes_accordin
     else:
         assert abs(team_a_off.rating_value - 1000.0) < 1.0
 
-def test_fit_transform_when_team_wins_against_equal_opponent_then_offense_rating_increases(basic_rating_generator):
+
+def test_fit_transform_when_team_wins_against_equal_opponent_then_offense_rating_increases(
+    basic_rating_generator,
+):
     """
     When a team wins (performance=1.0) against an opponent with equal rating,
     then we should expect to see the team's offense rating increase because
     the observed performance (1.0) exceeds the predicted performance (~0.5),
     resulting in a positive rating change.
     """
-    df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     result = basic_rating_generator.fit_transform(df)
 
     team_a_off = basic_rating_generator._team_off_ratings["team_a"]
     assert team_a_off.rating_value > 1000.0
 
-def test_fit_transform_when_team_loses_against_equal_opponent_then_offense_rating_decreases(basic_rating_generator):
+
+def test_fit_transform_when_team_loses_against_equal_opponent_then_offense_rating_decreases(
+    basic_rating_generator,
+):
     """
     When a team loses (performance=0.0) against an opponent with equal rating,
     then we should expect to see the team's offense rating decrease because
     the observed performance (0.0) is below the predicted performance (~0.5),
     resulting in a negative rating change.
     """
-    df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [0.0, 1.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [0.0, 1.0],
+        }
+    )
 
     result = basic_rating_generator.fit_transform(df)
 
     team_a_off = basic_rating_generator._team_off_ratings["team_a"]
     assert team_a_off.rating_value < 1000.0
+
 
 def test_fit_transform_when_opponent_wins_then_defense_rating_decreases(basic_rating_generator):
     """
@@ -242,17 +284,20 @@ def test_fit_transform_when_opponent_wins_then_defense_rating_decreases(basic_ra
     1.0 - opponent_offense_performance, so when opponent scores 1.0, defense gets 0.0,
     which is below the predicted defense performance, resulting in negative change.
     """
-    df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [0.0, 1.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [0.0, 1.0],
+        }
+    )
 
     result = basic_rating_generator.fit_transform(df)
 
     team_a_def = basic_rating_generator._team_def_ratings["team_a"]
     assert team_a_def.rating_value < 1000.0
+
 
 @pytest.mark.parametrize("off_mult,def_mult", [(100.0, 25.0), (25.0, 100.0)])
 def test_fit_transform_when_multipliers_differ_then_offense_and_defense_change_differently(
@@ -274,12 +319,14 @@ def test_fit_transform_when_multipliers_differ_then_offense_and_defense_change_d
         output_suffix="",
     )
 
-    df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     result = generator.fit_transform(df)
 
@@ -288,11 +335,12 @@ def test_fit_transform_when_multipliers_differ_then_offense_and_defense_change_d
 
     off_change = abs(team_a_off.rating_value - 1000.0)
     def_change = abs(team_a_def.rating_value - 1000.0)
-    
+
     if off_mult > def_mult:
         assert off_change > def_change
     elif def_mult > off_mult:
         assert def_change > off_change
+
 
 def test_fit_transform_when_called_then_output_contains_requested_features(column_names):
     """
@@ -310,12 +358,14 @@ def test_fit_transform_when_called_then_output_contains_requested_features(colum
         output_suffix="",
     )
 
-    df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     result = generator.fit_transform(df)
 
@@ -323,19 +373,24 @@ def test_fit_transform_when_called_then_output_contains_requested_features(colum
     assert "team_def_rating_projected" in result.columns
     assert "opponent_off_rating_projected" not in result.columns
 
-def test_fit_transform_when_single_match_with_two_teams_then_match_df_has_one_row_per_team(basic_rating_generator):
+
+def test_fit_transform_when_single_match_with_two_teams_then_match_df_has_one_row_per_team(
+    basic_rating_generator,
+):
     """
     When input has a single match with two teams, then we should expect to see
     match_df with exactly 2 rows (one per team) because _create_match_df joins
     teams on match_id and filters out self-matches, creating one row per team
     showing the team and its opponent.
     """
-    df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     result = basic_rating_generator.fit_transform(df)
 
@@ -343,8 +398,11 @@ def test_fit_transform_when_single_match_with_two_teams_then_match_df_has_one_ro
     assert set(result["team_id"].to_list()) == {"team_a", "team_b"}
     assert all(result["match_id"] == 1)
 
+
 @pytest.mark.parametrize("num_matches", [1, 2, 5])
-def test_fit_transform_when_multiple_matches_then_each_match_creates_two_rows(basic_rating_generator, num_matches):
+def test_fit_transform_when_multiple_matches_then_each_match_creates_two_rows(
+    basic_rating_generator, num_matches
+):
     """
     When input has multiple matches, then we should expect to see
     match_df with 2 rows per match because each match has two teams
@@ -354,49 +412,57 @@ def test_fit_transform_when_multiple_matches_then_each_match_creates_two_rows(ba
     team_ids = []
     dates = []
     performances = []
-    
+
     for i in range(num_matches):
-        match_ids.extend([i+1, i+1])
+        match_ids.extend([i + 1, i + 1])
         team_ids.extend([f"team_{i*2+1}", f"team_{i*2+2}"])
-        dates.extend([datetime(2024, 1, i+1), datetime(2024, 1, i+1)])
+        dates.extend([datetime(2024, 1, i + 1), datetime(2024, 1, i + 1)])
         performances.extend([1.0, 0.0])
 
-    df = pl.DataFrame({
-        "match_id": match_ids,
-        "team_id": team_ids,
-        "start_date": dates,
-        "won": performances,
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": match_ids,
+            "team_id": team_ids,
+            "start_date": dates,
+            "won": performances,
+        }
+    )
 
     result = basic_rating_generator.fit_transform(df)
 
     assert len(result) == num_matches * 2
     assert result["match_id"].n_unique() == num_matches
 
-def test_fit_transform_when_teams_have_different_dates_then_day_number_is_calculated_correctly(basic_rating_generator):
+
+def test_fit_transform_when_teams_have_different_dates_then_day_number_is_calculated_correctly(
+    basic_rating_generator,
+):
     """
     When teams have different start dates, then we should expect to see
     __day_number column calculated correctly with the earliest date as day 1
     because add_day_number_utc calculates relative day numbers from the minimum date.
     """
-    df = pl.DataFrame({
-        "match_id": [1, 1, 2, 2],
-        "team_id": ["team_a", "team_b", "team_a", "team_c"],
-        "start_date": [
-            datetime(2024, 1, 1),
-            datetime(2024, 1, 1),
-            datetime(2024, 1, 5),
-            datetime(2024, 1, 5),
-        ],
-        "won": [1.0, 0.0, 1.0, 0.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1, 2, 2],
+            "team_id": ["team_a", "team_b", "team_a", "team_c"],
+            "start_date": [
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 5),
+                datetime(2024, 1, 5),
+            ],
+            "won": [1.0, 0.0, 1.0, 0.0],
+        }
+    )
 
     result = basic_rating_generator.fit_transform(df)
 
     assert len(result) == 4
 
+
 def test_fit_transform_when_difference_predictor_used_then_rating_changes_reflect_prediction(
-    column_names
+    column_names,
 ):
     """
     When using difference predictor, then we should expect to see
@@ -416,24 +482,28 @@ def test_fit_transform_when_difference_predictor_used_then_rating_changes_reflec
     )
 
     for i in range(5):
-        df_setup = pl.DataFrame({
-            "match_id": [i+1, i+1],
-            "team_id": ["team_a", f"opp_{i}"],
-            "start_date": [datetime(2024, 1, i+1), datetime(2024, 1, i+1)],
-            "won": [1.0, 0.0],
-        })
+        df_setup = pl.DataFrame(
+            {
+                "match_id": [i + 1, i + 1],
+                "team_id": ["team_a", f"opp_{i}"],
+                "start_date": [datetime(2024, 1, i + 1), datetime(2024, 1, i + 1)],
+                "won": [1.0, 0.0],
+            }
+        )
         generator.fit_transform(df_setup)
-    
+
     team_a_rating_before = generator._team_off_ratings["team_a"].rating_value
     assert team_a_rating_before > 1000.0
 
-    df_test = pl.DataFrame({
-        "match_id": [100, 100],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 20), datetime(2024, 1, 20)],
-        "won": [1.0, 0.0],
-    })
-    
+    df_test = pl.DataFrame(
+        {
+            "match_id": [100, 100],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 20), datetime(2024, 1, 20)],
+            "won": [1.0, 0.0],
+        }
+    )
+
     generator.fit_transform(df_test)
     team_a_rating_after = generator._team_off_ratings["team_a"].rating_value
     rating_change_strong = team_a_rating_after - team_a_rating_before
@@ -450,32 +520,37 @@ def test_fit_transform_when_difference_predictor_used_then_rating_changes_reflec
     )
 
     for i in range(5):
-        df_setup = pl.DataFrame({
-            "match_id": [i+1, i+1],
-            "team_id": ["team_a", f"opp_{i}"],
-            "start_date": [datetime(2024, 1, i+1), datetime(2024, 1, i+1)],
-            "won": [0.0, 1.0],
-        })
+        df_setup = pl.DataFrame(
+            {
+                "match_id": [i + 1, i + 1],
+                "team_id": ["team_a", f"opp_{i}"],
+                "start_date": [datetime(2024, 1, i + 1), datetime(2024, 1, i + 1)],
+                "won": [0.0, 1.0],
+            }
+        )
         generator2.fit_transform(df_setup)
-    
+
     team_a_rating_before_weak = generator2._team_off_ratings["team_a"].rating_value
     assert team_a_rating_before_weak < 1000.0
 
-    df_test2 = pl.DataFrame({
-        "match_id": [100, 100],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 20), datetime(2024, 1, 20)],
-        "won": [1.0, 0.0],
-    })
-    
+    df_test2 = pl.DataFrame(
+        {
+            "match_id": [100, 100],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 20), datetime(2024, 1, 20)],
+            "won": [1.0, 0.0],
+        }
+    )
+
     generator2.fit_transform(df_test2)
     team_a_rating_after_weak = generator2._team_off_ratings["team_a"].rating_value
     rating_change_weak = team_a_rating_after_weak - team_a_rating_before_weak
 
     assert rating_change_weak > rating_change_strong
 
+
 def test_fit_transform_when_mean_predictor_used_then_prediction_reflects_mean_vs_center(
-    column_names
+    column_names,
 ):
     """
     When using mean predictor, then we should expect to see
@@ -496,42 +571,49 @@ def test_fit_transform_when_mean_predictor_used_then_prediction_reflects_mean_vs
     )
 
     for i in range(3):
-        df_setup = pl.DataFrame({
-            "match_id": [i+1, i+1],
-            "team_id": ["team_a", f"opp_{i}"],
-            "start_date": [datetime(2024, 1, i+1), datetime(2024, 1, i+1)],
-            "won": [1.0, 0.0],
-        })
+        df_setup = pl.DataFrame(
+            {
+                "match_id": [i + 1, i + 1],
+                "team_id": ["team_a", f"opp_{i}"],
+                "start_date": [datetime(2024, 1, i + 1), datetime(2024, 1, i + 1)],
+                "won": [1.0, 0.0],
+            }
+        )
         generator.fit_transform(df_setup)
-        df_setup2 = pl.DataFrame({
-            "match_id": [i+10, i+10],
-            "team_id": ["team_b", f"opp_b_{i}"],
-            "start_date": [datetime(2024, 1, i+10), datetime(2024, 1, i+10)],
-            "won": [1.0, 0.0],
-        })
+        df_setup2 = pl.DataFrame(
+            {
+                "match_id": [i + 10, i + 10],
+                "team_id": ["team_b", f"opp_b_{i}"],
+                "start_date": [datetime(2024, 1, i + 10), datetime(2024, 1, i + 10)],
+                "won": [1.0, 0.0],
+            }
+        )
         generator.fit_transform(df_setup2)
-    
+
     team_a_rating_before = generator._team_off_ratings["team_a"].rating_value
     team_b_rating_before = generator._team_off_ratings["team_b"].rating_value
     mean_rating = (team_a_rating_before + team_b_rating_before) / 2.0
 
     assert mean_rating > 1000.0
 
-    df_test = pl.DataFrame({
-        "match_id": [100, 100],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 20), datetime(2024, 1, 20)],
-        "won": [1.0, 0.0],
-    })
-    
+    df_test = pl.DataFrame(
+        {
+            "match_id": [100, 100],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 20), datetime(2024, 1, 20)],
+            "won": [1.0, 0.0],
+        }
+    )
+
     generator.fit_transform(df_test)
     team_a_rating_after = generator._team_off_ratings["team_a"].rating_value
     rating_change = team_a_rating_after - team_a_rating_before
 
     assert rating_change < 30.0
 
+
 def test_fit_transform_when_ignore_opponent_predictor_used_then_opponent_rating_does_not_matter(
-    column_names
+    column_names,
 ):
     """
     When using ignore_opponent predictor, then we should expect to see
@@ -552,43 +634,52 @@ def test_fit_transform_when_ignore_opponent_predictor_used_then_opponent_rating_
     )
 
     for i in range(5):
-        df_setup = pl.DataFrame({
-            "match_id": [i+1, i+1],
-            "team_id": ["team_b", f"opp_{i}"],
-            "start_date": [datetime(2024, 1, i+1), datetime(2024, 1, i+1)],
-            "won": [1.0, 0.0],
-        })
+        df_setup = pl.DataFrame(
+            {
+                "match_id": [i + 1, i + 1],
+                "team_id": ["team_b", f"opp_{i}"],
+                "start_date": [datetime(2024, 1, i + 1), datetime(2024, 1, i + 1)],
+                "won": [1.0, 0.0],
+            }
+        )
         generator.fit_transform(df_setup)
-    
+
     team_b_rating = generator._team_off_ratings["team_b"].rating_value
     assert team_b_rating > 1000.0
 
-    team_a_rating_before_strong = generator._team_off_ratings.get("team_a", type('RatingState', (), {'rating_value': 1000.0})()).rating_value
-    df1 = pl.DataFrame({
-        "match_id": [100, 100],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 20), datetime(2024, 1, 20)],
-        "won": [1.0, 0.0],
-    })
+    team_a_rating_before_strong = generator._team_off_ratings.get(
+        "team_a", type("RatingState", (), {"rating_value": 1000.0})()
+    ).rating_value
+    df1 = pl.DataFrame(
+        {
+            "match_id": [100, 100],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 20), datetime(2024, 1, 20)],
+            "won": [1.0, 0.0],
+        }
+    )
     generator.fit_transform(df1)
     team_a_rating_after_strong = generator._team_off_ratings["team_a"].rating_value
-    change_strong = team_a_rating_after_strong - (team_a_rating_before_strong if hasattr(team_a_rating_before_strong, '__float__') else 1000.0)
+    change_strong = team_a_rating_after_strong - (
+        team_a_rating_before_strong if hasattr(team_a_rating_before_strong, "__float__") else 1000.0
+    )
 
-    df2 = pl.DataFrame({
-        "match_id": [101, 101],
-        "team_id": ["team_a", "team_c"],
-        "start_date": [datetime(2024, 1, 21), datetime(2024, 1, 21)],
-        "won": [1.0, 0.0],
-    })
+    df2 = pl.DataFrame(
+        {
+            "match_id": [101, 101],
+            "team_id": ["team_a", "team_c"],
+            "start_date": [datetime(2024, 1, 21), datetime(2024, 1, 21)],
+            "won": [1.0, 0.0],
+        }
+    )
     generator.fit_transform(df2)
     team_a_rating_after_weak = generator._team_off_ratings["team_a"].rating_value
     change_weak = team_a_rating_after_weak - team_a_rating_after_strong
 
     assert abs(change_strong - change_weak) < 5.0
 
-def test_fit_transform_when_prediction_would_exceed_bounds_then_it_is_clamped_to_0_1(
-    column_names
-):
+
+def test_fit_transform_when_prediction_would_exceed_bounds_then_it_is_clamped_to_0_1(column_names):
     """
     When prediction calculation would exceed [0, 1] bounds, then we should
     expect to see the prediction clamped to [0.0, 1.0] because the method
@@ -608,30 +699,37 @@ def test_fit_transform_when_prediction_would_exceed_bounds_then_it_is_clamped_to
     )
 
     for i in range(15):
-        df_setup = pl.DataFrame({
-            "match_id": [i+1, i+1],
-            "team_id": ["team_a", f"opp_{i}"],
-            "start_date": [datetime(2024, 1, i+1), datetime(2024, 1, i+1)],
-            "won": [1.0, 0.0],
-        })
+        df_setup = pl.DataFrame(
+            {
+                "match_id": [i + 1, i + 1],
+                "team_id": ["team_a", f"opp_{i}"],
+                "start_date": [datetime(2024, 1, i + 1), datetime(2024, 1, i + 1)],
+                "won": [1.0, 0.0],
+            }
+        )
         generator.fit_transform(df_setup)
-    
+
     team_a_rating_before = generator._team_off_ratings["team_a"].rating_value
 
-    df_test = pl.DataFrame({
-        "match_id": [100, 100],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 30), datetime(2024, 1, 30)],
-        "won": [1.0, 0.0],
-    })
-    
+    df_test = pl.DataFrame(
+        {
+            "match_id": [100, 100],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 30), datetime(2024, 1, 30)],
+            "won": [1.0, 0.0],
+        }
+    )
+
     generator.fit_transform(df_test)
     team_a_rating_after = generator._team_off_ratings["team_a"].rating_value
     rating_change = team_a_rating_after - team_a_rating_before
 
     assert abs(rating_change) < 5.0
 
-def test_fit_transform_when_rating_difference_requested_then_it_is_calculated_correctly(column_names):
+
+def test_fit_transform_when_rating_difference_requested_then_it_is_calculated_correctly(
+    column_names,
+):
     """
     When RATING_DIFFERENCE_PROJECTED is requested, then we should expect to see
     it calculated as TEAM_RATING_PROJECTED - OPPONENT_RATING_PROJECTED because
@@ -650,12 +748,14 @@ def test_fit_transform_when_rating_difference_requested_then_it_is_calculated_co
         output_suffix="",
     )
 
-    df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     result = generator.fit_transform(df)
 
@@ -665,6 +765,7 @@ def test_fit_transform_when_rating_difference_requested_then_it_is_calculated_co
     team_rating = team_a_row["team_rating_projected"][0]
     opp_rating = team_a_row["opponent_rating_projected"][0]
     assert diff == pytest.approx(team_rating - opp_rating)
+
 
 def test_fit_transform_when_rating_mean_requested_then_it_is_calculated_correctly(column_names):
     """
@@ -683,12 +784,14 @@ def test_fit_transform_when_rating_mean_requested_then_it_is_calculated_correctl
         output_suffix="",
     )
 
-    df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     result = generator.fit_transform(df)
 
@@ -700,12 +803,16 @@ def test_fit_transform_when_rating_mean_requested_then_it_is_calculated_correctl
     expected_mean = (team_rating + opp_rating) / 2.0
     assert mean == pytest.approx(expected_mean)
 
-@pytest.mark.parametrize("feature", [
-    RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
-    RatingKnownFeatures.TEAM_DEF_RATING_PROJECTED,
-    RatingKnownFeatures.OPPONENT_OFF_RATING_PROJECTED,
-    RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED,
-])
+
+@pytest.mark.parametrize(
+    "feature",
+    [
+        RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
+        RatingKnownFeatures.TEAM_DEF_RATING_PROJECTED,
+        RatingKnownFeatures.OPPONENT_OFF_RATING_PROJECTED,
+        RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED,
+    ],
+)
 def test_fit_transform_when_individual_rating_features_requested_then_they_appear_in_output(
     column_names, feature
 ):
@@ -721,17 +828,20 @@ def test_fit_transform_when_individual_rating_features_requested_then_they_appea
         output_suffix="",
     )
 
-    df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     result = generator.fit_transform(df)
 
     feature_name = str(feature)
     assert feature_name in result.columns
+
 
 def test_fit_transform_when_match_has_three_teams_then_assertion_fails(basic_rating_generator):
     """
@@ -739,15 +849,18 @@ def test_fit_transform_when_match_has_three_teams_then_assertion_fails(basic_rat
     an assertion error because _historical_transform asserts that each
     match_id has exactly 2 unique teams.
     """
-    df = pl.DataFrame({
-        "match_id": [1, 1, 1],
-        "team_id": ["team_a", "team_b", "team_c"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0, 0.5],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1, 1],
+            "team_id": ["team_a", "team_b", "team_c"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0, 0.5],
+        }
+    )
 
     with pytest.raises(AssertionError):
         basic_rating_generator.fit_transform(df)
+
 
 def test_fit_transform_when_performance_mean_out_of_range_then_error_is_raised(column_names):
     """
@@ -761,15 +874,18 @@ def test_fit_transform_when_performance_mean_out_of_range_then_error_is_raised(c
         output_suffix="",
     )
 
-    df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 1.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 1.0],
+        }
+    )
 
     with pytest.raises(ValueError, match="Mean.*must be between 0.42 and 0.58"):
         generator.fit_transform(df)
+
 
 def test_fit_transform_when_performance_out_of_range_then_error_is_raised(column_names):
     """
@@ -783,15 +899,18 @@ def test_fit_transform_when_performance_out_of_range_then_error_is_raised(column
         output_suffix="",
     )
 
-    df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.5, 0.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.5, 0.0],
+        }
+    )
 
     with pytest.raises(ValueError, match="Max.*must be less than than 1.02"):
         generator.fit_transform(df)
+
 
 @pytest.mark.parametrize("confidence_weight", [0.0, 0.5, 1.0])
 def test_fit_transform_when_confidence_weight_varies_then_new_teams_have_different_rating_changes(
@@ -814,30 +933,41 @@ def test_fit_transform_when_confidence_weight_varies_then_new_teams_have_differe
     )
 
     for match_num in range(1, 11):
-        df_experience = pl.DataFrame({
-            "match_id": [match_num, match_num],
-            "team_id": ["experienced_team", f"opp_{match_num}"],
-            "start_date": [datetime(2024, 1, match_num), datetime(2024, 1, match_num)],
-            "won": [1.0, 0.0],
-        })
+        df_experience = pl.DataFrame(
+            {
+                "match_id": [match_num, match_num],
+                "team_id": ["experienced_team", f"opp_{match_num}"],
+                "start_date": [datetime(2024, 1, match_num), datetime(2024, 1, match_num)],
+                "won": [1.0, 0.0],
+            }
+        )
         generator.fit_transform(df_experience)
 
     experienced_rating_before = generator._team_off_ratings["experienced_team"].rating_value
 
-    df_opponent_setup = pl.DataFrame({
-        "match_id": [99, 99],
-        "team_id": ["standard_opponent", "opp_setup"],
-        "start_date": [datetime(2024, 1, 19), datetime(2024, 1, 19)],
-        "won": [0.0, 1.0],
-    })
+    df_opponent_setup = pl.DataFrame(
+        {
+            "match_id": [99, 99],
+            "team_id": ["standard_opponent", "opp_setup"],
+            "start_date": [datetime(2024, 1, 19), datetime(2024, 1, 19)],
+            "won": [0.0, 1.0],
+        }
+    )
     generator.fit_transform(df_opponent_setup)
 
-    df_test = pl.DataFrame({
-        "match_id": [100, 100, 101, 101],
-        "team_id": ["new_team", "standard_opponent", "experienced_team", "standard_opponent"],
-        "start_date": [datetime(2024, 1, 20), datetime(2024, 1, 20), datetime(2024, 1, 20), datetime(2024, 1, 20)],
-        "won": [1.0, 0.0, 1.0, 0.0],
-    })
+    df_test = pl.DataFrame(
+        {
+            "match_id": [100, 100, 101, 101],
+            "team_id": ["new_team", "standard_opponent", "experienced_team", "standard_opponent"],
+            "start_date": [
+                datetime(2024, 1, 20),
+                datetime(2024, 1, 20),
+                datetime(2024, 1, 20),
+                datetime(2024, 1, 20),
+            ],
+            "won": [1.0, 0.0, 1.0, 0.0],
+        }
+    )
 
     generator.fit_transform(df_test)
 
@@ -848,7 +978,7 @@ def test_fit_transform_when_confidence_weight_varies_then_new_teams_have_differe
     experienced_change = experienced_rating_after - experienced_rating_before
 
     change_difference = new_team_change - experienced_change
-    
+
     if confidence_weight == 0.0:
 
         assert change_difference > 0
@@ -861,34 +991,40 @@ def test_fit_transform_when_confidence_weight_varies_then_new_teams_have_differe
         assert change_difference > 0
         assert change_difference >= 5.0
 
+
 def test_fit_transform_when_team_plays_more_games_then_confidence_increases(basic_rating_generator):
     """
     When a team plays more games, then we should expect to see
     confidence_sum increase because each match adds MATCH_CONTRIBUTION_TO_SUM_VALUE
     to the confidence_sum, making the team's rating more stable over time.
     """
-    
-    df1 = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+
+    df1 = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     basic_rating_generator.fit_transform(df1)
     conf_after_1 = basic_rating_generator._team_off_ratings["team_a"].confidence_sum
 
-    df2 = pl.DataFrame({
-        "match_id": [2, 2],
-        "team_id": ["team_a", "team_c"],
-        "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
-        "won": [1.0, 0.0],
-    })
+    df2 = pl.DataFrame(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_c"],
+            "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     basic_rating_generator.fit_transform(df2)
     conf_after_2 = basic_rating_generator._team_off_ratings["team_a"].confidence_sum
 
     assert conf_after_2 > conf_after_1
+
 
 def test_fit_transform_when_days_between_matches_increase_then_confidence_decreases(column_names):
     """
@@ -903,29 +1039,36 @@ def test_fit_transform_when_days_between_matches_increase_then_confidence_decrea
         output_suffix="",
     )
 
-    df1 = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    df1 = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     generator.fit_transform(df1)
     conf_after_1 = generator._team_off_ratings["team_a"].confidence_sum
 
-    df2 = pl.DataFrame({
-        "match_id": [2, 2],
-        "team_id": ["team_a", "team_c"],
-        "start_date": [datetime(2024, 4, 10), datetime(2024, 4, 10)],
-        "won": [1.0, 0.0],
-    })
+    df2 = pl.DataFrame(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_c"],
+            "start_date": [datetime(2024, 4, 10), datetime(2024, 4, 10)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     generator.fit_transform(df2)
     conf_after_2 = generator._team_off_ratings["team_a"].confidence_sum
 
     assert conf_after_2 <= conf_after_1 + 1.5
 
-def test_fit_transform_when_team_wins_multiple_matches_then_rating_increases_consistently(basic_rating_generator):
+
+def test_fit_transform_when_team_wins_multiple_matches_then_rating_increases_consistently(
+    basic_rating_generator,
+):
     """
     When a team wins multiple matches, then we should expect to see
     rating increase consistently after each win because each match applies
@@ -934,12 +1077,14 @@ def test_fit_transform_when_team_wins_multiple_matches_then_rating_increases_con
     ratings_after_each_match = [1000.0]
 
     for match_num in range(1, 4):
-        df = pl.DataFrame({
-            "match_id": [match_num, match_num],
-            "team_id": ["team_a", f"team_{match_num+1}"],
-            "start_date": [datetime(2024, 1, match_num), datetime(2024, 1, match_num)],
-            "won": [1.0, 0.0],
-        })
+        df = pl.DataFrame(
+            {
+                "match_id": [match_num, match_num],
+                "team_id": ["team_a", f"team_{match_num+1}"],
+                "start_date": [datetime(2024, 1, match_num), datetime(2024, 1, match_num)],
+                "won": [1.0, 0.0],
+            }
+        )
 
         basic_rating_generator.fit_transform(df)
         current_rating = basic_rating_generator._team_off_ratings["team_a"].rating_value
@@ -949,44 +1094,54 @@ def test_fit_transform_when_team_wins_multiple_matches_then_rating_increases_con
     assert ratings_after_each_match[2] > ratings_after_each_match[1]
     assert ratings_after_each_match[3] > ratings_after_each_match[2]
 
-def test_fit_transform_when_team_plays_different_opponents_then_ratings_reflect_opponent_strength(basic_rating_generator):
+
+def test_fit_transform_when_team_plays_different_opponents_then_ratings_reflect_opponent_strength(
+    basic_rating_generator,
+):
     """
     When a team plays different opponents, then we should expect to see
     rating changes reflect opponent strength because the prediction depends
     on opponent rating, so beating a strong opponent gives more rating
     than beating a weak opponent.
     """
-    
-    df1 = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_b", "team_c"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+
+    df1 = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_b", "team_c"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
     basic_rating_generator.fit_transform(df1)
     team_b_rating = basic_rating_generator._team_off_ratings["team_b"].rating_value
 
-    df2 = pl.DataFrame({
-        "match_id": [2, 2],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
-        "won": [1.0, 0.0],
-    })
+    df2 = pl.DataFrame(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
+            "won": [1.0, 0.0],
+        }
+    )
     basic_rating_generator.fit_transform(df2)
     team_a_rating_after_strong = basic_rating_generator._team_off_ratings["team_a"].rating_value
     change_after_strong = team_a_rating_after_strong - 1000.0
 
-    df3 = pl.DataFrame({
-        "match_id": [3, 3],
-        "team_id": ["team_a", "team_d"],
-        "start_date": [datetime(2024, 1, 3), datetime(2024, 1, 3)],
-        "won": [1.0, 0.0],
-    })
+    df3 = pl.DataFrame(
+        {
+            "match_id": [3, 3],
+            "team_id": ["team_a", "team_d"],
+            "start_date": [datetime(2024, 1, 3), datetime(2024, 1, 3)],
+            "won": [1.0, 0.0],
+        }
+    )
     basic_rating_generator.fit_transform(df3)
     team_a_rating_after_weak = basic_rating_generator._team_off_ratings["team_a"].rating_value
     change_after_weak = team_a_rating_after_weak - team_a_rating_after_strong
 
     assert change_after_strong > change_after_weak
+
 
 def test_fit_transform_when_same_update_match_id_then_updates_are_batched(column_names):
     """
@@ -1011,24 +1166,29 @@ def test_fit_transform_when_same_update_match_id_then_updates_are_batched(column
     )
     generator.column_names = cn
 
-    df = pl.DataFrame({
-        "match_id": [1, 1, 2, 2],
-        "batch_id": [1, 1, 1, 1],
-        "team_id": ["team_a", "team_b", "team_a", "team_c"],
-        "start_date": [
-            datetime(2024, 1, 1),
-            datetime(2024, 1, 1),
-            datetime(2024, 1, 1),
-            datetime(2024, 1, 1),
-        ],
-        "won": [1.0, 0.0, 1.0, 0.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1, 2, 2],
+            "batch_id": [1, 1, 1, 1],
+            "team_id": ["team_a", "team_b", "team_a", "team_c"],
+            "start_date": [
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 1),
+            ],
+            "won": [1.0, 0.0, 1.0, 0.0],
+        }
+    )
 
     result = generator.fit_transform(df)
 
     assert len(generator._team_off_ratings) >= 3
 
-def test_fit_transform_when_different_update_match_ids_then_updates_applied_separately(column_names):
+
+def test_fit_transform_when_different_update_match_ids_then_updates_applied_separately(
+    column_names,
+):
     """
     When matches have different update_match_ids, then we should expect to see
     rating updates applied after each batch because the batching logic detects
@@ -1051,24 +1211,29 @@ def test_fit_transform_when_different_update_match_ids_then_updates_applied_sepa
     )
     generator.column_names = cn
 
-    df = pl.DataFrame({
-        "match_id": [1, 1, 2, 2],
-        "batch_id": [1, 1, 2, 2],
-        "team_id": ["team_a", "team_b", "team_a", "team_c"],
-        "start_date": [
-            datetime(2024, 1, 1),
-            datetime(2024, 1, 1),
-            datetime(2024, 1, 2),
-            datetime(2024, 1, 2),
-        ],
-        "won": [1.0, 0.0, 1.0, 0.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1, 2, 2],
+            "batch_id": [1, 1, 2, 2],
+            "team_id": ["team_a", "team_b", "team_a", "team_c"],
+            "start_date": [
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 2),
+                datetime(2024, 1, 2),
+            ],
+            "won": [1.0, 0.0, 1.0, 0.0],
+        }
+    )
 
     result = generator.fit_transform(df)
 
     assert len(generator._team_off_ratings) >= 3
 
-def test_fit_transform_when_opponent_rating_requested_then_it_uses_opponent_def_rating(column_names):
+
+def test_fit_transform_when_opponent_rating_requested_then_it_uses_opponent_def_rating(
+    column_names,
+):
     """
     When OPPONENT_RATING_PROJECTED is requested, then we should expect to see
     it aliased from OPP_DEF_RATING_PROJECTED because _add_rating_features
@@ -1084,21 +1249,28 @@ def test_fit_transform_when_opponent_rating_requested_then_it_uses_opponent_def_
         output_suffix="",
     )
 
-    df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     result = generator.fit_transform(df)
 
     assert "opponent_rating_projected" in result.columns
     team_a_row = result.filter(pl.col("team_id") == "team_a")
-    
-    assert team_a_row["opponent_rating_projected"][0] == team_a_row["opponent_def_rating_projected"][0]
 
-def test_fit_transform_when_team_rating_projected_requested_then_it_equals_team_off_rating(column_names):
+    assert (
+        team_a_row["opponent_rating_projected"][0] == team_a_row["opponent_def_rating_projected"][0]
+    )
+
+
+def test_fit_transform_when_team_rating_projected_requested_then_it_equals_team_off_rating(
+    column_names,
+):
     """
     When TEAM_RATING_PROJECTED is requested, then we should expect to see
     it equals TEAM_OFF_RATING_PROJECTED because _calculate_ratings sets
@@ -1114,19 +1286,22 @@ def test_fit_transform_when_team_rating_projected_requested_then_it_equals_team_
         output_suffix="",
     )
 
-    df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     result = generator.fit_transform(df)
 
     assert "team_rating_projected" in result.columns
     team_a_row = result.filter(pl.col("team_id") == "team_a")
-    
+
     assert team_a_row["team_rating_projected"][0] == team_a_row["team_off_rating_projected"][0]
+
 
 @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
 def test_transform_when_called_then_ratings_are_updated(df_type, basic_rating_generator):
@@ -1135,46 +1310,56 @@ def test_transform_when_called_then_ratings_are_updated(df_type, basic_rating_ge
     team ratings updated because transform calls _historical_transform
     which processes matches and applies rating changes.
     """
-    df = df_type({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    df = df_type(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     result = basic_rating_generator.transform(df)
 
     team_a_off = basic_rating_generator._team_off_ratings["team_a"]
     assert team_a_off.rating_value != 1000.0
 
-def test_transform_when_called_after_fit_transform_then_uses_updated_ratings(basic_rating_generator):
+
+def test_transform_when_called_after_fit_transform_then_uses_updated_ratings(
+    basic_rating_generator,
+):
     """
     When transform is called after fit_transform, then we should expect to see
     predictions use the updated ratings from fit_transform because the rating
     states persist between calls and are used for subsequent predictions.
     """
-    
-    df1 = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+
+    df1 = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     basic_rating_generator.fit_transform(df1)
     team_a_rating_after_first = basic_rating_generator._team_off_ratings["team_a"].rating_value
 
-    df2 = pl.DataFrame({
-        "match_id": [2, 2],
-        "team_id": ["team_a", "team_c"],
-        "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
-        "won": [1.0, 0.0],
-    })
+    df2 = pl.DataFrame(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_c"],
+            "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     result = basic_rating_generator.transform(df2)
 
     team_a_row = result.filter(pl.col("team_id") == "team_a")
     assert team_a_row["team_off_rating_projected"][0] == pytest.approx(team_a_rating_after_first)
+
 
 def test_transform_when_called_without_performance_column_then_defaults_to_zero(column_names):
     """
@@ -1191,26 +1376,31 @@ def test_transform_when_called_without_performance_column_then_defaults_to_zero(
         output_suffix="",
     )
 
-    fit_df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    fit_df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
     generator.fit_transform(fit_df)
-    
+
     team_a_rating_before = generator._team_off_ratings["team_a"].rating_value
 
-    df = pl.DataFrame({
-        "match_id": [2, 2],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
+        }
+    )
 
     result = generator.transform(df)
     team_a_rating_after = generator._team_off_ratings["team_a"].rating_value
 
     assert team_a_rating_after < team_a_rating_before
+
 
 def test_future_transform_when_called_then_ratings_not_updated(basic_rating_generator):
     """
@@ -1218,13 +1408,15 @@ def test_future_transform_when_called_then_ratings_not_updated(basic_rating_gene
     ratings remain unchanged because _calculate_future_ratings only computes
     predictions using existing ratings without applying any updates.
     """
-    
-    historical_df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+
+    historical_df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     basic_rating_generator.fit_transform(historical_df)
 
@@ -1232,11 +1424,13 @@ def test_future_transform_when_called_then_ratings_not_updated(basic_rating_gene
     team_a_def_before = basic_rating_generator._team_def_ratings["team_a"].rating_value
     team_a_games_before = basic_rating_generator._team_off_ratings["team_a"].games_played
 
-    future_df = pl.DataFrame({
-        "match_id": [2, 2],
-        "team_id": ["team_a", "team_c"],
-        "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
-    })
+    future_df = pl.DataFrame(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_c"],
+            "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
+        }
+    )
 
     result = basic_rating_generator.future_transform(future_df)
 
@@ -1248,6 +1442,7 @@ def test_future_transform_when_called_then_ratings_not_updated(basic_rating_gene
     assert team_a_def_after == team_a_def_before
     assert team_a_games_after == team_a_games_before
 
+
 def test_future_transform_when_called_then_predictions_use_current_ratings(basic_rating_generator):
     """
     When future_transform is called, then we should expect to see
@@ -1255,30 +1450,35 @@ def test_future_transform_when_called_then_predictions_use_current_ratings(basic
     _calculate_future_ratings uses existing RatingState objects to compute
     predictions without modifying them.
     """
-    
-    historical_df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+
+    historical_df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     basic_rating_generator.fit_transform(historical_df)
 
     team_a_off_rating = basic_rating_generator._team_off_ratings["team_a"].rating_value
     team_b_def_rating = basic_rating_generator._team_def_ratings["team_b"].rating_value
 
-    future_df = pl.DataFrame({
-        "match_id": [2, 2],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
-    })
+    future_df = pl.DataFrame(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
+        }
+    )
 
     result = basic_rating_generator.future_transform(future_df)
 
     team_a_row = result.filter(pl.col("team_id") == "team_a")
     assert team_a_row["team_off_rating_projected"][0] == team_a_off_rating
     assert team_a_row["opponent_def_rating_projected"][0] == team_b_def_rating
+
 
 @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
 def test_future_transform_when_called_with_different_df_types_then_works_correctly(
@@ -1295,23 +1495,28 @@ def test_future_transform_when_called_with_different_df_types_then_works_correct
         output_suffix="",
     )
 
-    fit_df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    fit_df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
     generator.fit_transform(fit_df)
 
-    future_df = df_type({
-        "match_id": [2, 2],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
-    })
+    future_df = df_type(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
+        }
+    )
 
     result = generator.future_transform(future_df)
     assert result is not None
     assert len(result) == 2
+
 
 def test_future_transform_when_called_without_performance_column_then_works_correctly(column_names):
     """
@@ -1326,26 +1531,33 @@ def test_future_transform_when_called_without_performance_column_then_works_corr
         features_out=[RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
     )
 
-    fit_df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    fit_df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
     generator.fit_transform(fit_df)
 
-    future_df = pl.DataFrame({
-        "match_id": [2, 2],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
-    })
+    future_df = pl.DataFrame(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
+        }
+    )
 
     result = generator.future_transform(future_df)
     assert result is not None
     assert len(result) == 2
     assert "team_off_rating_projected" in result.columns
 
-def test_transform_vs_future_transform_when_same_match_then_transform_updates_ratings_but_future_transform_does_not(column_names):
+
+def test_transform_vs_future_transform_when_same_match_then_transform_updates_ratings_but_future_transform_does_not(
+    column_names,
+):
     """
     When the same match is processed with transform vs future_transform,
     then we should expect to see transform updates ratings while future_transform
@@ -1360,7 +1572,7 @@ def test_transform_vs_future_transform_when_same_match_then_transform_updates_ra
         confidence_weight=0.0,
         output_suffix="",
     )
-    
+
     generator2 = TeamRatingGenerator(
         performance_column="won",
         column_names=column_names,
@@ -1369,27 +1581,31 @@ def test_transform_vs_future_transform_when_same_match_then_transform_updates_ra
         output_suffix="",
     )
 
-    historical_df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
-    
+    historical_df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
+
     generator1.fit_transform(historical_df)
     generator2.fit_transform(historical_df)
 
     team_a_rating_before_1 = generator1._team_off_ratings["team_a"].rating_value
     team_a_rating_before_2 = generator2._team_off_ratings["team_a"].rating_value
-    
+
     assert team_a_rating_before_1 == team_a_rating_before_2
 
-    test_df = pl.DataFrame({
-        "match_id": [2, 2],
-        "team_id": ["team_a", "team_c"],
-        "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
-        "won": [1.0, 0.0],
-    })
+    test_df = pl.DataFrame(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_c"],
+            "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     generator1.transform(test_df)
     generator2.future_transform(test_df)
@@ -1400,7 +1616,10 @@ def test_transform_vs_future_transform_when_same_match_then_transform_updates_ra
     team_a_rating_after_future = generator2._team_off_ratings["team_a"].rating_value
     assert team_a_rating_after_future == team_a_rating_before_2
 
-def test_transform_vs_future_transform_when_performance_column_missing_then_both_work_but_transform_defaults_performance(column_names):
+
+def test_transform_vs_future_transform_when_performance_column_missing_then_both_work_but_transform_defaults_performance(
+    column_names,
+):
     """
     When performance column is missing, then we should expect to see
     both future_transform and transform work, but transform defaults performance
@@ -1416,41 +1635,50 @@ def test_transform_vs_future_transform_when_performance_column_missing_then_both
         features_out=[RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
     )
 
-    fit_df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
+    fit_df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
     generator.fit_transform(fit_df)
-    
+
     team_a_rating_before = generator._team_off_ratings["team_a"].rating_value
 
-    future_df = pl.DataFrame({
-        "match_id": [2, 2],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
-    })
+    future_df = pl.DataFrame(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
+        }
+    )
 
     result_future = generator.future_transform(future_df)
     assert result_future is not None
     assert "team_off_rating_projected" in result_future.columns
-    
+
     assert generator._team_off_ratings["team_a"].rating_value == team_a_rating_before
 
-    transform_df = pl.DataFrame({
-        "match_id": [3, 3],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 3), datetime(2024, 1, 3)],
-    })
+    transform_df = pl.DataFrame(
+        {
+            "match_id": [3, 3],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 3), datetime(2024, 1, 3)],
+        }
+    )
 
     result_transform = generator.transform(transform_df)
     assert result_transform is not None
-    
+
     team_a_rating_after_transform = generator._team_off_ratings["team_a"].rating_value
     assert team_a_rating_after_transform < team_a_rating_before
 
-def test_transform_vs_future_transform_when_games_played_then_transform_increments_but_future_transform_does_not(column_names):
+
+def test_transform_vs_future_transform_when_games_played_then_transform_increments_but_future_transform_does_not(
+    column_names,
+):
     """
     When matches are processed, then we should expect to see
     transform increments games_played counter because it applies rating updates,
@@ -1464,7 +1692,7 @@ def test_transform_vs_future_transform_when_games_played_then_transform_incremen
         confidence_weight=0.0,
         output_suffix="",
     )
-    
+
     generator2 = TeamRatingGenerator(
         performance_column="won",
         column_names=column_names,
@@ -1473,27 +1701,31 @@ def test_transform_vs_future_transform_when_games_played_then_transform_incremen
         output_suffix="",
     )
 
-    historical_df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
-    
+    historical_df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
+
     generator1.fit_transform(historical_df)
     generator2.fit_transform(historical_df)
 
     games_before_1 = generator1._team_off_ratings["team_a"].games_played
     games_before_2 = generator2._team_off_ratings["team_a"].games_played
-    
+
     assert games_before_1 == games_before_2
 
-    test_df = pl.DataFrame({
-        "match_id": [2, 2],
-        "team_id": ["team_a", "team_c"],
-        "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
-        "won": [1.0, 0.0],
-    })
+    test_df = pl.DataFrame(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_c"],
+            "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     generator1.transform(test_df)
     generator2.future_transform(test_df)
@@ -1504,7 +1736,10 @@ def test_transform_vs_future_transform_when_games_played_then_transform_incremen
     games_after_future = generator2._team_off_ratings["team_a"].games_played
     assert games_after_future == games_before_2
 
-def test_transform_vs_future_transform_when_confidence_changes_then_transform_updates_but_future_transform_does_not(column_names):
+
+def test_transform_vs_future_transform_when_confidence_changes_then_transform_updates_but_future_transform_does_not(
+    column_names,
+):
     """
     When matches are processed, then we should expect to see
     transform updates confidence_sum because it applies rating updates including
@@ -1518,7 +1753,7 @@ def test_transform_vs_future_transform_when_confidence_changes_then_transform_up
         confidence_weight=0.0,
         output_suffix="",
     )
-    
+
     generator2 = TeamRatingGenerator(
         performance_column="won",
         column_names=column_names,
@@ -1527,39 +1762,46 @@ def test_transform_vs_future_transform_when_confidence_changes_then_transform_up
         output_suffix="",
     )
 
-    historical_df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
-    
+    historical_df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
+
     generator1.fit_transform(historical_df)
     generator2.fit_transform(historical_df)
 
     conf_before_1 = generator1._team_off_ratings["team_a"].confidence_sum
     conf_before_2 = generator2._team_off_ratings["team_a"].confidence_sum
-    
+
     assert conf_before_1 == conf_before_2
 
-    test_df = pl.DataFrame({
-        "match_id": [2, 2],
-        "team_id": ["team_a", "team_c"],
-        "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
-        "won": [1.0, 0.0],
-    })
+    test_df = pl.DataFrame(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_c"],
+            "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     generator1.transform(test_df)
     generator2.future_transform(test_df)
 
     conf_after_transform = generator1._team_off_ratings["team_a"].confidence_sum
-    
+
     assert conf_after_transform != conf_before_1
 
     conf_after_future = generator2._team_off_ratings["team_a"].confidence_sum
     assert conf_after_future == conf_before_2
 
-def test_transform_vs_future_transform_when_predictions_calculated_then_both_use_same_ratings(column_names):
+
+def test_transform_vs_future_transform_when_predictions_calculated_then_both_use_same_ratings(
+    column_names,
+):
     """
     When predictions are calculated, then we should expect to see
     both transform and future_transform use the same current ratings for
@@ -1574,7 +1816,7 @@ def test_transform_vs_future_transform_when_predictions_calculated_then_both_use
         output_suffix="",
         features_out=[RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
     )
-    
+
     generator2 = TeamRatingGenerator(
         performance_column="won",
         column_names=column_names,
@@ -1584,34 +1826,44 @@ def test_transform_vs_future_transform_when_predictions_calculated_then_both_use
         features_out=[RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
     )
 
-    historical_df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
-        "won": [1.0, 0.0],
-    })
-    
+    historical_df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [1.0, 0.0],
+        }
+    )
+
     generator1.fit_transform(historical_df)
     generator2.fit_transform(historical_df)
 
     team_a_rating = generator1._team_off_ratings["team_a"].rating_value
     assert generator2._team_off_ratings["team_a"].rating_value == team_a_rating
 
-    test_df = pl.DataFrame({
-        "match_id": [2, 2],
-        "team_id": ["team_a", "team_c"],
-        "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
-        "won": [1.0, 0.0],
-    })
+    test_df = pl.DataFrame(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_c"],
+            "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
+            "won": [1.0, 0.0],
+        }
+    )
 
     result_transform = generator1.transform(test_df)
-    result_future = generator2.future_transform(test_df.select(["match_id", "team_id", "start_date"]))
+    result_future = generator2.future_transform(
+        test_df.select(["match_id", "team_id", "start_date"])
+    )
 
     team_a_row_transform = result_transform.filter(pl.col("team_id") == "team_a")
     team_a_row_future = result_future.filter(pl.col("team_id") == "team_a")
 
-    assert team_a_row_transform["team_off_rating_projected"][0] == team_a_row_future["team_off_rating_projected"][0]
+    assert (
+        team_a_row_transform["team_off_rating_projected"][0]
+        == team_a_row_future["team_off_rating_projected"][0]
+    )
     assert team_a_row_transform["team_off_rating_projected"][0] == team_a_rating
+
 
 def _create_date_column(date_format: str, dates: list) -> pl.Series:
     """Helper to create date column with specified format."""
@@ -1626,6 +1878,7 @@ def _create_date_column(date_format: str, dates: list) -> pl.Series:
         return pl.Series("start_date", date_strings)
     elif date_format == "date_type":
         from datetime import date
+
         date_objs = [date(2024, 1, d) if isinstance(d, int) else d for d in dates]
         return pl.Series("start_date", date_objs, dtype=pl.Date)
     elif date_format == "datetime_type":
@@ -1637,15 +1890,21 @@ def _create_date_column(date_format: str, dates: list) -> pl.Series:
     else:
         raise ValueError(f"Unknown date_format: {date_format}")
 
-@pytest.mark.parametrize("date_format", [
-    "string_iso_date",
-    "string_datetime_space", 
-    "string_datetime_iso",
-    "date_type",
-    "datetime_type",
-    "datetime_timezone",
-])
-def test_fit_transform_when_date_formats_vary_then_processes_successfully(column_names, date_format):
+
+@pytest.mark.parametrize(
+    "date_format",
+    [
+        "string_iso_date",
+        "string_datetime_space",
+        "string_datetime_iso",
+        "date_type",
+        "datetime_type",
+        "datetime_timezone",
+    ],
+)
+def test_fit_transform_when_date_formats_vary_then_processes_successfully(
+    column_names, date_format
+):
     """
     When date formats vary (string, date, datetime, timezone-aware), then we should expect to see
     fit_transform processes successfully because _add_day_number handles all these formats
@@ -1662,24 +1921,30 @@ def test_fit_transform_when_date_formats_vary_then_processes_successfully(column
 
     dates = [1, 2]
     date_col = _create_date_column(date_format, dates)
-    
-    df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": date_col,
-        "won": [1.0, 0.0],
-    })
+
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": date_col,
+            "won": [1.0, 0.0],
+        }
+    )
 
     result = generator.fit_transform(df)
 
     assert len(result) == 2
-    
+
     assert generator._team_off_ratings["team_a"].rating_value != 1000.0
 
-@pytest.mark.parametrize("date_format", [
-    "string_iso_date",
-    "datetime_type",
-])
+
+@pytest.mark.parametrize(
+    "date_format",
+    [
+        "string_iso_date",
+        "datetime_type",
+    ],
+)
 def test_transform_when_date_formats_vary_then_processes_successfully(column_names, date_format):
     """
     When date formats vary, then we should expect to see
@@ -1694,38 +1959,48 @@ def test_transform_when_date_formats_vary_then_processes_successfully(column_nam
         auto_scale_performance=True,
     )
 
-    fit_df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": _create_date_column("string_iso_date", [1, 1]),
-        "won": [1.0, 0.0],
-    })
+    fit_df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": _create_date_column("string_iso_date", [1, 1]),
+            "won": [1.0, 0.0],
+        }
+    )
     generator.fit_transform(fit_df)
-    
+
     team_a_rating_before = generator._team_off_ratings["team_a"].rating_value
 
     dates = [2, 2]
     date_col = _create_date_column(date_format, dates)
-    
-    df = pl.DataFrame({
-        "match_id": [2, 2],
-        "team_id": ["team_a", "team_c"],
-        "start_date": date_col,
-        "won": [1.0, 0.0],
-    })
+
+    df = pl.DataFrame(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_c"],
+            "start_date": date_col,
+            "won": [1.0, 0.0],
+        }
+    )
 
     result = generator.transform(df)
 
     assert len(result) == 2
-    
+
     assert generator._team_off_ratings["team_a"].rating_value != team_a_rating_before
 
-@pytest.mark.parametrize("date_format", [
-    "string_iso_date",
-    "datetime_type",
-    "datetime_timezone",
-])
-def test_future_transform_when_date_formats_vary_then_processes_successfully(column_names, date_format):
+
+@pytest.mark.parametrize(
+    "date_format",
+    [
+        "string_iso_date",
+        "datetime_type",
+        "datetime_timezone",
+    ],
+)
+def test_future_transform_when_date_formats_vary_then_processes_successfully(
+    column_names, date_format
+):
     """
     When date formats vary, then we should expect to see
     future_transform processes successfully because _add_day_number handles all these formats.
@@ -1740,40 +2015,51 @@ def test_future_transform_when_date_formats_vary_then_processes_successfully(col
         features_out=[RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
     )
 
-    fit_df = pl.DataFrame({
-        "match_id": [1, 1],
-        "team_id": ["team_a", "team_b"],
-        "start_date": _create_date_column("string_iso_date", [1, 1]),
-        "won": [1.0, 0.0],
-    })
+    fit_df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": _create_date_column("string_iso_date", [1, 1]),
+            "won": [1.0, 0.0],
+        }
+    )
     generator.fit_transform(fit_df)
-    
+
     team_a_rating_before = generator._team_off_ratings["team_a"].rating_value
 
     dates = [2, 2]
     if date_format == "datetime_timezone":
         date_values = [datetime(2024, 1, 2), datetime(2024, 1, 2)]
-        df = pl.DataFrame({
-            "match_id": [2, 2],
-            "team_id": ["team_a", "team_b"],
-            "start_date": pl.Series("start_date", date_values, dtype=pl.Datetime(time_zone="UTC")),
-        })
+        df = pl.DataFrame(
+            {
+                "match_id": [2, 2],
+                "team_id": ["team_a", "team_b"],
+                "start_date": pl.Series(
+                    "start_date", date_values, dtype=pl.Datetime(time_zone="UTC")
+                ),
+            }
+        )
     else:
         date_col = _create_date_column(date_format, dates)
-        df = pl.DataFrame({
-            "match_id": [2, 2],
-            "team_id": ["team_a", "team_b"],
-            "start_date": date_col,
-        })
+        df = pl.DataFrame(
+            {
+                "match_id": [2, 2],
+                "team_id": ["team_a", "team_b"],
+                "start_date": date_col,
+            }
+        )
 
     result = generator.future_transform(df)
 
     assert len(result) == 2
     assert "team_off_rating_projected" in result.columns
-    
+
     assert generator._team_off_ratings["team_a"].rating_value == team_a_rating_before
 
-def test_fit_transform_when_dates_span_multiple_months_then_day_number_increments_correctly(column_names):
+
+def test_fit_transform_when_dates_span_multiple_months_then_day_number_increments_correctly(
+    column_names,
+):
     """
     When dates span multiple months, then we should expect to see
     day_number increments correctly based on actual day differences,
@@ -1789,23 +2075,26 @@ def test_fit_transform_when_dates_span_multiple_months_then_day_number_increment
         auto_scale_performance=True,
     )
 
-    df = pl.DataFrame({
-        "match_id": [1, 1, 2, 2, 3, 3],
-        "team_id": ["team_a", "team_b", "team_a", "team_c", "team_b", "team_c"],
-        "start_date": [
-            "2024-01-01",
-            "2024-01-01",
-            "2024-01-15",
-            "2024-01-15",
-            "2024-02-01",
-            "2024-02-01",
-        ],
-        "won": [1.0, 0.0, 1.0, 0.0, 1.0, 0.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1, 2, 2, 3, 3],
+            "team_id": ["team_a", "team_b", "team_a", "team_c", "team_b", "team_c"],
+            "start_date": [
+                "2024-01-01",
+                "2024-01-01",
+                "2024-01-15",
+                "2024-01-15",
+                "2024-02-01",
+                "2024-02-01",
+            ],
+            "won": [1.0, 0.0, 1.0, 0.0, 1.0, 0.0],
+        }
+    )
 
     result = generator.fit_transform(df)
 
     assert len(result) == 6
+
 
 def test_fit_transform_when_single_date_then_day_number_is_one(column_names):
     """
@@ -1821,12 +2110,14 @@ def test_fit_transform_when_single_date_then_day_number_is_one(column_names):
         auto_scale_performance=True,
     )
 
-    df = pl.DataFrame({
-        "match_id": [1, 1, 2, 2],
-        "team_id": ["team_a", "team_b", "team_a", "team_c"],
-        "start_date": ["2024-01-01"] * 4,
-        "won": [1.0, 0.0, 1.0, 0.0],
-    })
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1, 2, 2],
+            "team_id": ["team_a", "team_b", "team_a", "team_c"],
+            "start_date": ["2024-01-01"] * 4,
+            "won": [1.0, 0.0, 1.0, 0.0],
+        }
+    )
 
     result = generator.fit_transform(df)
 
@@ -1835,77 +2126,96 @@ def test_fit_transform_when_single_date_then_day_number_is_one(column_names):
 
 # --- Feature Output Tests ---
 
+
 @pytest.fixture
 def sample_team_df(column_names):
     """Sample dataframe for team rating tests."""
-    return pl.DataFrame({
-        "match_id": ["M1", "M1", "M2", "M2"],
-        "team_id": ["T1", "T2", "T1", "T2"],
-        "start_date": ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
-        "won": [1.0, 0.0, 1.0, 0.0]
-    })
+    return pl.DataFrame(
+        {
+            "match_id": ["M1", "M1", "M2", "M2"],
+            "team_id": ["T1", "T2", "T1", "T2"],
+            "start_date": ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
+            "won": [1.0, 0.0, 1.0, 0.0],
+        }
+    )
 
 
-@pytest.mark.parametrize("features_out,non_predictor_features_out,output_suffix,expected_cols", [
-    # Test 1: Single known feature, no suffix (defaults to performance_column="won")
-    (
-        [RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
-        None,
-        None,
-        ["team_off_rating_projected_won"]
-    ),
-    # Test 2: Multiple known features, no suffix (defaults to performance_column="won")
-    (
-        [RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED, RatingKnownFeatures.TEAM_DEF_RATING_PROJECTED],
-        None,
-        None,
-        ["team_off_rating_projected_won", "team_def_rating_projected_won"]
-    ),
-    # Test 3: Known and unknown features, no suffix (defaults to performance_column="won")
-    (
-        [RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
-        [RatingUnknownFeatures.PERFORMANCE],
-        None,
-        ["team_off_rating_projected_won", "performance_won"]
-    ),
-    # Test 4: Single known feature with suffix
-    (
-        [RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
-        None,
-        "v2",
-        ["team_off_rating_projected_v2"]
-    ),
-    # Test 5: Multiple features with suffix
-    (
-        [RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED, RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED],
-        [RatingUnknownFeatures.RATING_DIFFERENCE],
-        "custom",
-        ["team_off_rating_projected_custom", "opponent_def_rating_projected_custom", "rating_difference_custom"]
-    ),
-    # Test 6: Rating difference features (defaults to performance_column="won")
-    (
-        [RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
-        [RatingUnknownFeatures.RATING_DIFFERENCE],
-        None,
-        ["rating_difference_projected_won", "rating_difference_won"]
-    ),
-    # Test 7: Rating mean features
-    (
-        [RatingKnownFeatures.RATING_MEAN_PROJECTED],
-        None,
-        "mean",
-        ["rating_mean_projected_mean"]
-    ),
-    # Test 8: Empty features_out (should use defaults, defaults to performance_column="won")
-    (
-        None,
-        [RatingUnknownFeatures.PERFORMANCE],
-        None,
-        ["rating_difference_projected_won", "performance_won"]  # Default is RATING_DIFFERENCE_PROJECTED
-    ),
-])
+@pytest.mark.parametrize(
+    "features_out,non_predictor_features_out,output_suffix,expected_cols",
+    [
+        # Test 1: Single known feature, no suffix (defaults to performance_column="won")
+        (
+            [RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
+            None,
+            None,
+            ["team_off_rating_projected_won"],
+        ),
+        # Test 2: Multiple known features, no suffix (defaults to performance_column="won")
+        (
+            [
+                RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
+                RatingKnownFeatures.TEAM_DEF_RATING_PROJECTED,
+            ],
+            None,
+            None,
+            ["team_off_rating_projected_won", "team_def_rating_projected_won"],
+        ),
+        # Test 3: Known and unknown features, no suffix (defaults to performance_column="won")
+        (
+            [RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
+            [RatingUnknownFeatures.PERFORMANCE],
+            None,
+            ["team_off_rating_projected_won", "performance_won"],
+        ),
+        # Test 4: Single known feature with suffix
+        (
+            [RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
+            None,
+            "v2",
+            ["team_off_rating_projected_v2"],
+        ),
+        # Test 5: Multiple features with suffix
+        (
+            [
+                RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
+                RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED,
+            ],
+            [RatingUnknownFeatures.RATING_DIFFERENCE],
+            "custom",
+            [
+                "team_off_rating_projected_custom",
+                "opponent_def_rating_projected_custom",
+                "rating_difference_custom",
+            ],
+        ),
+        # Test 6: Rating difference features (defaults to performance_column="won")
+        (
+            [RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+            [RatingUnknownFeatures.RATING_DIFFERENCE],
+            None,
+            ["rating_difference_projected_won", "rating_difference_won"],
+        ),
+        # Test 7: Rating mean features
+        ([RatingKnownFeatures.RATING_MEAN_PROJECTED], None, "mean", ["rating_mean_projected_mean"]),
+        # Test 8: Empty features_out (should use defaults, defaults to performance_column="won")
+        (
+            None,
+            [RatingUnknownFeatures.PERFORMANCE],
+            None,
+            [
+                "rating_difference_projected_won",
+                "performance_won",
+            ],  # Default is RATING_DIFFERENCE_PROJECTED
+        ),
+    ],
+)
 def test_team_rating_features_out_combinations(
-    column_names, sample_team_df, features_out, non_predictor_features_out, output_suffix, expected_cols
+    column_names,
+    sample_team_df,
+    features_out,
+    non_predictor_features_out,
+    output_suffix,
+    expected_cols,
 ):
     """Test that correct features are output for different combinations of features_out, non_predictor_features_out, and suffixes."""
     gen = TeamRatingGenerator(
@@ -1914,15 +2224,19 @@ def test_team_rating_features_out_combinations(
         features_out=features_out,
         non_predictor_features_out=non_predictor_features_out,
         output_suffix=output_suffix,
-        confidence_weight=0.0  # Disable confidence for simpler testing
+        confidence_weight=0.0,  # Disable confidence for simpler testing
     )
     result = gen.fit_transform(sample_team_df)
-    
+
     # Check that all expected columns are present
-    result_cols = result.columns.tolist() if hasattr(result.columns, 'tolist') else list(result.columns)
+    result_cols = (
+        result.columns.tolist() if hasattr(result.columns, "tolist") else list(result.columns)
+    )
     for col in expected_cols:
-        assert col in result_cols, f"Expected column '{col}' not found in output. Columns: {result_cols}"
-    
+        assert (
+            col in result_cols
+        ), f"Expected column '{col}' not found in output. Columns: {result_cols}"
+
     # Check that result has data
     assert len(result) > 0
 
@@ -1933,23 +2247,20 @@ def test_team_rating_suffix_applied_to_all_features(column_names, sample_team_df
     features = [
         RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
         RatingKnownFeatures.TEAM_DEF_RATING_PROJECTED,
-        RatingKnownFeatures.OPPONENT_OFF_RATING_PROJECTED
+        RatingKnownFeatures.OPPONENT_OFF_RATING_PROJECTED,
     ]
-    non_predictor = [
-        RatingUnknownFeatures.RATING_DIFFERENCE,
-        RatingUnknownFeatures.PERFORMANCE
-    ]
-    
+    non_predictor = [RatingUnknownFeatures.RATING_DIFFERENCE, RatingUnknownFeatures.PERFORMANCE]
+
     gen = TeamRatingGenerator(
         performance_column="won",
         column_names=column_names,
         features_out=features,
         non_predictor_features_out=non_predictor,
         output_suffix=output_suffix,
-        confidence_weight=0.0
+        confidence_weight=0.0,
     )
     result = gen.fit_transform(sample_team_df)
-    
+
     # Build expected column names
     if output_suffix:
         expected_cols = [
@@ -1957,7 +2268,7 @@ def test_team_rating_suffix_applied_to_all_features(column_names, sample_team_df
             f"team_def_rating_projected_{output_suffix}",
             f"opponent_off_rating_projected_{output_suffix}",
             f"rating_difference_{output_suffix}",
-            f"performance_{output_suffix}"
+            f"performance_{output_suffix}",
         ]
     else:
         # When output_suffix=None, it defaults to performance column name ("won")
@@ -1966,11 +2277,13 @@ def test_team_rating_suffix_applied_to_all_features(column_names, sample_team_df
             "team_def_rating_projected_won",
             "opponent_off_rating_projected_won",
             "rating_difference_won",
-            "performance_won"
+            "performance_won",
         ]
-    
+
     for col in expected_cols:
-        result_cols = result.columns.tolist() if hasattr(result.columns, 'tolist') else list(result.columns)
+        result_cols = (
+            result.columns.tolist() if hasattr(result.columns, "tolist") else list(result.columns)
+        )
     assert col in result_cols, f"Expected column '{col}' not found. Columns: {result_cols}"
 
 
@@ -1982,30 +2295,32 @@ def test_team_rating_only_requested_features_present(column_names, sample_team_d
         features_out=[RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
         non_predictor_features_out=None,
         output_suffix=None,
-        confidence_weight=0.0
+        confidence_weight=0.0,
     )
     result = gen.fit_transform(sample_team_df)
-    
+
     # Should have input columns + requested feature
     input_cols = set(sample_team_df.columns)
     result_cols = set(result.columns)
-    
+
     # Check that input columns are preserved
     for col in input_cols:
         assert col in result_cols, f"Input column '{col}' missing from output"
-    
+
     # Check that requested feature is present (with performance column suffix)
     assert "team_off_rating_projected_won" in result_cols
-    
+
     # Check that other rating features are NOT present (unless they're input columns)
     unwanted_features = [
         "team_def_rating_projected",
         "opponent_off_rating_projected",
-        "rating_difference"
+        "rating_difference",
     ]
     for feature in unwanted_features:
         if feature not in input_cols:
-            assert feature not in result_cols, f"Unrequested feature '{feature}' should not be in output"
+            assert (
+                feature not in result_cols
+            ), f"Unrequested feature '{feature}' should not be in output"
 
 
 def test_team_rating_combined_features_out_and_non_predictor(column_names, sample_team_df):
@@ -2015,26 +2330,28 @@ def test_team_rating_combined_features_out_and_non_predictor(column_names, sampl
         column_names=column_names,
         features_out=[
             RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
-            RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED
+            RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED,
         ],
         non_predictor_features_out=[
             RatingUnknownFeatures.RATING_DIFFERENCE,
-            RatingUnknownFeatures.PERFORMANCE
+            RatingUnknownFeatures.PERFORMANCE,
         ],
         output_suffix=None,
-        confidence_weight=0.0
+        confidence_weight=0.0,
     )
     result = gen.fit_transform(sample_team_df)
-    
+
     # All requested features should be present (with performance column suffix)
     expected_cols = [
         "team_off_rating_projected_won",
         "rating_difference_projected_won",
         "rating_difference_won",
-        "performance_won"
+        "performance_won",
     ]
-    
-    result_cols = result.columns.tolist() if hasattr(result.columns, 'tolist') else list(result.columns)
+
+    result_cols = (
+        result.columns.tolist() if hasattr(result.columns, "tolist") else list(result.columns)
+    )
     for col in expected_cols:
         assert col in result_cols, f"Expected column '{col}' not found. Columns: {result_cols}"
 
@@ -2046,19 +2363,19 @@ def test_team_rating_backward_compat_team_rating_projected(column_names, sample_
         column_names=column_names,
         features_out=[RatingKnownFeatures.TEAM_RATING_PROJECTED],
         output_suffix=None,
-        confidence_weight=0.0
+        confidence_weight=0.0,
     )
     result = gen.fit_transform(sample_team_df)
-    
+
     # TEAM_RATING_PROJECTED should be present and equal to TEAM_OFF_RATING_PROJECTED (with performance column suffix)
-    result_cols = result.columns.tolist() if hasattr(result.columns, 'tolist') else list(result.columns)
+    result_cols = (
+        result.columns.tolist() if hasattr(result.columns, "tolist") else list(result.columns)
+    )
     assert "team_rating_projected_won" in result_cols
-    
+
     # Check that it has the same values as team_off_rating_projected (if that's also requested)
     # Actually, TEAM_RATING_PROJECTED is an alias for TEAM_OFF_RATING_PROJECTED
     if "team_off_rating_projected_won" in result_cols:
         team_rating = result["team_rating_projected_won"].to_list()
         team_off = result["team_off_rating_projected_won"].to_list()
         assert team_rating == team_off
-
-

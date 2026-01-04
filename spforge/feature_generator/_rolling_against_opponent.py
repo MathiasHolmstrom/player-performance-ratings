@@ -1,23 +1,21 @@
-import logging
-from typing import Union, Optional, Literal
+from typing import Literal
+
 import narwhals.stable.v2 as nw
 import pandas as pd
 import polars as pl
-from narwhals.typing import IntoFrameT, IntoFrameT
+from narwhals.typing import IntoFrameT
 
 from spforge import ColumnNames
-from spforge.feature_generator import RollingWindowTransformer
+from spforge.feature_generator._base import LagGenerator
+from spforge.feature_generator._rolling_window import RollingWindowTransformer
 from spforge.feature_generator._utils import (
+    future_lag_transformations_wrapper,
+    future_validator,
     historical_lag_transformations_wrapper,
     required_lag_column_names,
     transformation_validator,
-    future_validator,
-    future_lag_transformations_wrapper,
 )
-from spforge.transformers.base_transformer import (
-    BaseTransformer,
-)
-from spforge.feature_generator._base import LagGenerator
+
 
 
 class RollingAgainstOpponentTransformer(LagGenerator):
@@ -52,13 +50,13 @@ class RollingAgainstOpponentTransformer(LagGenerator):
         self,
         features: list[str],
         window: int,
-        granularity: Union[list[str], str],
+        granularity: list[str] | str,
         min_periods: int = 1,
         are_estimator_features=True,
         prefix: str = "rolling_against_opponent",
-        update_column: Optional[str] = None,
-        match_id_column: Optional[str] = None,
-        team_column: Optional[str] = None,
+        update_column: str | None = None,
+        match_id_column: str | None = None,
+        team_column: str | None = None,
         opponent_column: str = "__opponent",
         transformation: Literal["rolling_mean"] = "rolling_mean",
     ):
@@ -92,15 +90,13 @@ class RollingAgainstOpponentTransformer(LagGenerator):
         self.team_column = team_column
         self.opponent_column = opponent_column
         self.transformation = transformation
-        self._transformer: BaseTransformer
+        self._transformer: LagGenerator
 
     @nw.narwhalify
     @historical_lag_transformations_wrapper
     @required_lag_column_names
     @transformation_validator
-    def fit_transform(
-        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
-    ) -> IntoFrameT:
+    def fit_transform(self, df: IntoFrameT, column_names: ColumnNames | None = None) -> IntoFrameT:
         """
         Generates rolling mean for historical data
 
@@ -137,18 +133,16 @@ class RollingAgainstOpponentTransformer(LagGenerator):
 
         if self.column_names:
             self._store_df(df, ori_df=df)
-            concat_df = self._concat_with_stored_and_calculate_feats(
-                df, is_future=False
-            )
+            concat_df = self._concat_with_stored_and_calculate_feats(df, is_future=False)
             concat_df = self._rename_features(concat_df)
             return self._merge_into_input_df(
                 df=df, concat_df=concat_df, match_id_join_on=self.update_column
             )
 
         else:
-            concat_df = self._concat_with_stored_and_calculate_feats(
-                df, is_future=False
-            ).sort("__row_index")
+            concat_df = self._concat_with_stored_and_calculate_feats(df, is_future=False).sort(
+                "__row_index"
+            )
             concat_df = self._rename_features(concat_df)
             return (
                 df.join(
@@ -203,9 +197,7 @@ class RollingAgainstOpponentTransformer(LagGenerator):
         cn = self.column_names
 
         df = df.join(
-            transformed_df.select(
-                cn.player_id, cn.team_id, cn.match_id, *self.features_out
-            ),
+            transformed_df.select(cn.player_id, cn.team_id, cn.match_id, *self.features_out),
             on=[cn.player_id, cn.team_id, cn.match_id],
             how="left",
         )
@@ -245,14 +237,12 @@ class RollingAgainstOpponentTransformer(LagGenerator):
 
         else:
             concat_df = nw.from_native(
-                self._transformer.fit_transform(
-                    concat_df, column_names=self.column_names
-                )
+                self._transformer.fit_transform(concat_df, column_names=self.column_names)
             )
         return concat_df
 
     def _merge_into_input_df(
-        self, df: IntoFrameT, concat_df: IntoFrameT, match_id_join_on: Optional[str] = None
+        self, df: IntoFrameT, concat_df: IntoFrameT, match_id_join_on: str | None = None
     ) -> IntoFrameT:
         sort_cols = (
             [

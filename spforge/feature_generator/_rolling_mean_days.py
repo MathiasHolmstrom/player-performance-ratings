@@ -1,19 +1,17 @@
-from typing import Union, Optional
-
+import narwhals.stable.v2 as nw
 import pandas as pd
 import polars as pl
-import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
 
 from spforge import ColumnNames
+from spforge.feature_generator._base import LagGenerator
 from spforge.feature_generator._utils import (
-    historical_lag_transformations_wrapper,
     future_lag_transformations_wrapper,
+    future_validator,
+    historical_lag_transformations_wrapper,
     required_lag_column_names,
     transformation_validator,
-    future_validator,
 )
-from spforge.feature_generator._base import LagGenerator
 
 
 class RollingMeanDaysTransformer(LagGenerator):
@@ -22,15 +20,15 @@ class RollingMeanDaysTransformer(LagGenerator):
         self,
         features: list[str],
         days: int,
-        granularity: Union[list[str], str],
+        granularity: list[str] | str,
         scale_by_participation_weight: bool = False,
         add_count: bool = False,
         add_opponent: bool = False,
         prefix: str = "rolling_mean_days",
-        column_names: Optional[ColumnNames] = None,
-        date_column: Optional[str] = None,
-        update_column: Optional[str] = None,
-        unique_constraint: Optional[list[str]] = None,
+        column_names: ColumnNames | None = None,
+        date_column: str | None = None,
+        update_column: str | None = None,
+        unique_constraint: list[str] | None = None,
     ):
         self.days = days
         self.scale_by_participation_weight = scale_by_participation_weight
@@ -61,18 +59,14 @@ class RollingMeanDaysTransformer(LagGenerator):
     @historical_lag_transformations_wrapper
     @required_lag_column_names
     @transformation_validator
-    def fit_transform(
-        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
-    ) -> IntoFrameT:
+    def fit_transform(self, df: IntoFrameT, column_names: ColumnNames | None = None) -> IntoFrameT:
 
         if not self.column_names and not self.date_column:
             raise ValueError("column_names or date_column must be provided")
 
         if self.column_names:
             self.date_column = self.column_names.start_date or self.date_column
-            self.match_id_update_column = (
-                self.column_names.update_match_id or self.update_column
-            )
+            self.match_id_update_column = self.column_names.update_match_id or self.update_column
 
         if self.column_names:
             if df[self.date_column].dtype not in (nw.Date, nw.Datetime):
@@ -84,9 +78,7 @@ class RollingMeanDaysTransformer(LagGenerator):
                         .alias(self.date_column)
                     )
                 except nw.exceptions.InvalidOperationError:
-                    df = df.with_columns(
-                        nw.col("__ori_date").cast(nw.Date).alias(self.date_column)
-                    )
+                    df = df.with_columns(nw.col("__ori_date").cast(nw.Date).alias(self.date_column))
             self._store_df(nw.from_native(df))
 
             concat_df = self._concat_with_stored_and_calculate_feats(df.to_polars())
@@ -99,9 +91,7 @@ class RollingMeanDaysTransformer(LagGenerator):
             )
 
         else:
-            concat_df = nw.from_native(
-                self._concat_with_stored_and_calculate_feats(df.to_polars())
-            )
+            concat_df = nw.from_native(self._concat_with_stored_and_calculate_feats(df.to_polars()))
             transformed_df = df.join(
                 concat_df.select(["__row_index", *self.features_out]),
                 on="__row_index",
@@ -133,9 +123,7 @@ class RollingMeanDaysTransformer(LagGenerator):
                         .alias(self.date_column)
                     )
                 except nw.exceptions.InvalidOperationError:
-                    df = df.with_columns(
-                        nw.col("__ori_date").cast(nw.Date).alias(self.date_column)
-                    )
+                    df = df.with_columns(nw.col("__ori_date").cast(nw.Date).alias(self.date_column))
 
         if isinstance(df.to_native(), pd.DataFrame):
             ori_type = "pd"
@@ -151,9 +139,7 @@ class RollingMeanDaysTransformer(LagGenerator):
             )
         )
         concat_df = self._post_features_generated(nw.from_native(concat_df))
-        transformed_future = self._forward_fill_future_features(
-            df=nw.from_native(concat_df)
-        )
+        transformed_future = self._forward_fill_future_features(df=nw.from_native(concat_df))
         transformed_future = transformed_future.select(ori_cols + self.features_out)
 
         if ori_type == "pd":
@@ -187,16 +173,11 @@ class RollingMeanDaysTransformer(LagGenerator):
             .over(self.granularity)
             .alias(self._count_column_name)
         ).with_columns(
-            (pl.col(self._count_column_name) - pl.col("__count1")).alias(
-                self._count_column_name
-            )
+            (pl.col(self._count_column_name) - pl.col("__count1")).alias(self._count_column_name)
         )
 
         grp = grp.with_columns(
-            pl.col(col)
-            .sum()
-            .over([self.date_column, *self.granularity])
-            .alias(f"days_sum_{col}")
+            pl.col(col).sum().over([self.date_column, *self.granularity]).alias(f"days_sum_{col}")
             for col in self.features
         )
 
@@ -227,9 +208,7 @@ class RollingMeanDaysTransformer(LagGenerator):
         df = df.join(grp, on=grp_cols, how="left")
         if self.add_count:
             df = df.with_columns(
-                pl.col(self._count_column_name)
-                .fill_null(0)
-                .alias(self._count_column_name)
+                pl.col(self._count_column_name).fill_null(0).alias(self._count_column_name)
             )
         if "__ori_date" in df.columns:
             return df.with_columns(pl.col("__ori_date").alias(self.date_column))

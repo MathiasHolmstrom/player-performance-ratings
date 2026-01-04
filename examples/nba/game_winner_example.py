@@ -1,12 +1,10 @@
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
-from spforge.pipeline import Pipeline
-from spforge.estimator import GroupByPredictor, SklearnPredictor
-
-
 from spforge.data_structures import ColumnNames
-from spforge.ratings import RatingUnknownFeatures, RatingKnownFeatures
+from spforge.estimator import SkLearnEnhancerEstimator
+from spforge.pipeline import Pipeline
+from spforge.ratings import RatingKnownFeatures
 from spforge.ratings._player_rating import PlayerRatingGenerator
 
 df = pd.read_parquet("data/game_player_subsample.parquet")
@@ -31,9 +29,7 @@ df = df.sort_values(
 # Drops games with less or more than 2 teams
 df = (
     df.assign(
-        team_count=df.groupby(column_names.match_id)[column_names.team_id].transform(
-            "nunique"
-        )
+        team_count=df.groupby(column_names.match_id)[column_names.team_id].transform("nunique")
     )
     .loc[lambda x: x.team_count == 2]
     .drop(columns=["team_count"])
@@ -42,43 +38,41 @@ df = (
 # Pretends the last 10 games are future games. The most will be trained on everything before that.
 most_recent_10_games = df[column_names.match_id].unique()[-10:]
 historical_df = df[~df[column_names.match_id].isin(most_recent_10_games)]
-future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(
-    columns=["won"]
-)
+future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(columns=["won"])
 
 # Defining a simple rating-generator. It will use the "won" column to update the ratings.
 # In contrast to a typical Elo, ratings will follow players.
 
 
 rating_generator = PlayerRatingGenerator(
-    performance_column="won", rating_change_multiplier=30, column_names=column_names,
-    non_predictor_features_out=[RatingKnownFeatures.PLAYER_RATING]
+    performance_column="won",
+    rating_change_multiplier=30,
+    column_names=column_names,
+    non_predictor_features_out=[RatingKnownFeatures.PLAYER_RATING],
 )
 historical_df = rating_generator.fit_transform(historical_df)
 
 # Defines the predictor. A machine-learning model will be used to predict game winner on a game-team-level.
 # Mean team-ratings will be calculated (from player-level) and rating-difference between the 2 teams calculated.
 # It will also use the location of the game as a feature.
-predictor = SklearnPredictor(
-    features=["location", *rating_generator.features_out],
-    target="won",
-    estimator=LogisticRegression(),
-    granularity=[column_names.match_id, column_names.team_id],
-)
+
+
 
 # Pipeline is whether we define all the steps. Other transformations can take place as well.
 # However, in our simple example we only have a simple rating-generator and a predictor.
 pipeline = Pipeline(
-    predictor=predictor,
+    estimator=LogisticRegression(),
+    granularity=['game_id', 'team_id'],
     one_hot_encode_cat_features=True,
+    categorical_features=['location'],
+    feature_names=rating_generator.features_out + ['location']
 )
 
-# Trains the model and returns historical predictions
-pipeline.train(df=historical_df)
+pipeline.fit(X=historical_df, y=historical_df['won'])
 
 # Future predictions on future results
 future_df = rating_generator.future_transform(future_df)
-future_predictions = pipeline.predict(df=future_df)
+future_predictions = pipeline.predict_proba(future_df)
 
 # Grouping predictions from game-player level to game-level.
 team_grouped_predictions = future_predictions.groupby(column_names.match_id).first()[

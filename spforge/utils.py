@@ -1,9 +1,9 @@
+import narwhals.stable.v2 as nw
 import pandas as pd
+import polars as pl
+from narwhals.typing import IntoFrameT
 
 from spforge import ColumnNames
-import polars as pl
-import narwhals.stable.v2 as nw
-from narwhals.typing import IntoFrameT
 
 
 def convert_pandas_to_polars(df: pd.DataFrame) -> pl.DataFrame:

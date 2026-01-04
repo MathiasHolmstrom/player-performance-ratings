@@ -1,7 +1,7 @@
 import pandas as pd
 import polars as pl
-from polars.testing import assert_frame_equal
 import pytest
+from polars.testing import assert_frame_equal
 
 from spforge import ColumnNames
 from spforge.feature_generator import BinaryOutcomeRollingMeanTransformer
@@ -60,9 +60,7 @@ def test_binary_granularity_rolling_mean_transformer(
             granularity=["player"],
             prob_column="prob",
         )
-        transformed_data = transformer.fit_transform(
-            df=historical_df, column_names=column_names
-        )
+        transformed_data = transformer.fit_transform(df=historical_df, column_names=column_names)
     else:
         transformer = BinaryOutcomeRollingMeanTransformer(
             features=["score_difference"],
@@ -74,9 +72,7 @@ def test_binary_granularity_rolling_mean_transformer(
             match_id_column=column_names.match_id,
             update_column=column_names.update_match_id,
         )
-        transformed_data = transformer.fit_transform(
-            df=historical_df, column_names=None
-        )
+        transformed_data = transformer.fit_transform(df=historical_df, column_names=None)
 
     if isinstance(historical_df, pd.DataFrame):
         if min_periods == 1:
@@ -230,9 +226,7 @@ def test_binary_granularity_rolling_mean_transformer_update_id_differ_from_game_
             granularity=["player"],
             prob_column="prob",
         )
-        transformed_data = transformer.fit_transform(
-            df=historical_df, column_names=column_names
-        )
+        transformed_data = transformer.fit_transform(df=historical_df, column_names=column_names)
     else:
         transformer = BinaryOutcomeRollingMeanTransformer(
             features=["score_difference"],
@@ -244,9 +238,7 @@ def test_binary_granularity_rolling_mean_transformer_update_id_differ_from_game_
             match_id_column=column_names.match_id,
             update_column=column_names.update_match_id,
         )
-        transformed_data = transformer.fit_transform(
-            df=historical_df, column_names=None
-        )
+        transformed_data = transformer.fit_transform(df=historical_df, column_names=None)
 
     expected_df[transformer.features_out[0]] = [
         None,
@@ -327,9 +319,7 @@ def test_binary_granularity_rolling_mean_generate_future(df, column_names, min_p
         prob_column="prob",
     )
 
-    historical_df = transformer.fit_transform(
-        historical_df, column_names=column_names
-    )
+    historical_df = transformer.fit_transform(historical_df, column_names=column_names)
     expected_historical_df[transformer.features_out[0]] = [
         None,
         None,

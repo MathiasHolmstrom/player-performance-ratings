@@ -1,16 +1,14 @@
-from typing import Optional
-
 import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
 
 from spforge import ColumnNames
 from spforge.feature_generator._base import LagGenerator
 from spforge.feature_generator._utils import (
+    future_lag_transformations_wrapper,
+    future_validator,
     historical_lag_transformations_wrapper,
     required_lag_column_names,
     transformation_validator,
-    future_validator,
-    future_lag_transformations_wrapper,
 )
 
 
@@ -22,13 +20,13 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
         window: int,
         binary_column: str,
         granularity: list[str] = None,
-        prob_column: Optional[str] = None,
+        prob_column: str | None = None,
         min_periods: int = 1,
         add_opponent: bool = False,
         prefix: str = "rolling_mean_binary",
-        match_id_column: Optional[str] = None,
-        update_column: Optional[str] = None,
-        column_names: Optional[ColumnNames] = None,
+        match_id_column: str | None = None,
+        update_column: str | None = None,
+        column_names: ColumnNames | None = None,
     ):
         super().__init__(
             match_id_column=match_id_column,
@@ -53,12 +51,8 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
             self._entity_features_out.append(feature2)
 
             if self.add_opponent:
-                self._features_out.append(
-                    f"{self.prefix}_{feature_name}{self.window}_1_opponent"
-                )
-                self._features_out.append(
-                    f"{self.prefix}_{feature_name}{self.window}_0_opponent"
-                )
+                self._features_out.append(f"{self.prefix}_{feature_name}{self.window}_1_opponent")
+                self._features_out.append(f"{self.prefix}_{feature_name}{self.window}_0_opponent")
 
         if self.prob_column:
             self._weighted_features_out = {}
@@ -86,17 +80,13 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
     @historical_lag_transformations_wrapper
     @required_lag_column_names
     @transformation_validator
-    def fit_transform(
-        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
-    ) -> IntoFrameT:
+    def fit_transform(self, df: IntoFrameT, column_names: ColumnNames | None = None) -> IntoFrameT:
 
         if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
             df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
 
         add_cols = (
-            [self.binary_column, self.prob_column]
-            if self.prob_column
-            else [self.binary_column]
+            [self.binary_column, self.prob_column] if self.prob_column else [self.binary_column]
         )
         grouped = self._maybe_group(df, additional_cols=add_cols)
         if self.column_names:
@@ -110,14 +100,8 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
 
         else:
             join_on_cols = self.group_to_granularity
-            grouped_with_feats = self._generate_features(grouped, ori_df=df).sort(
-                "__row_index"
-            )
-            feats = [
-                f
-                for f in self.features_out
-                if f not in self._weighted_features_out.values()
-            ]
+            grouped_with_feats = self._generate_features(grouped, ori_df=df).sort("__row_index")
+            feats = [f for f in self.features_out if f not in self._weighted_features_out.values()]
             df = df.join(
                 grouped_with_feats.select([*join_on_cols, *feats]),
                 on=join_on_cols,
@@ -137,9 +121,7 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
             if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
                 df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
         add_cols = (
-            [self.binary_column, self.prob_column]
-            if self.prob_column
-            else [self.binary_column]
+            [self.binary_column, self.prob_column] if self.prob_column else [self.binary_column]
         )
         sort_col = self.column_names.start_date if self.column_names else "__row_index"
         grouped = self._group_to_granularity_level(
@@ -166,9 +148,7 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
         if self.column_names and self._df is not None:
             sort_col = self.column_names.start_date
             add_cols = (
-                [self.binary_column, self.prob_column]
-                if self.prob_column
-                else [self.binary_column]
+                [self.binary_column, self.prob_column] if self.prob_column else [self.binary_column]
             )
             concat_df = self._concat_with_stored(
                 group_df=df, ori_df=ori_df, additional_cols=add_cols
@@ -245,13 +225,9 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
                 if self.add_opponent:
                     transformed_df = transformed_df.with_columns(
                         (
-                            nw.col(
-                                f"{self.prefix}_{feature_name}{self.window}_1_opponent"
-                            )
+                            nw.col(f"{self.prefix}_{feature_name}{self.window}_1_opponent")
                             * (1 - nw.col(self.prob_column))
-                            + nw.col(
-                                f"{self.prefix}_{feature_name}{self.window}_0_opponent"
-                            )
+                            + nw.col(f"{self.prefix}_{feature_name}{self.window}_0_opponent")
                             * nw.col(self.prob_column)
                         ).alias(self._weighted_features_out_opponent[feature_name])
                     )

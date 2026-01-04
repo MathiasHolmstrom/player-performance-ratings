@@ -44,9 +44,7 @@ def test_rolling_mean_days_transform_historical(column_names, use_column_names):
             granularity=["player"],
             add_count=True,
         )
-        transformed_df = rolling_mean_transformation.fit_transform(
-            df, column_names=column_names
-        )
+        transformed_df = rolling_mean_transformation.fit_transform(df, column_names=column_names)
     else:
         rolling_mean_transformation = RollingMeanDaysTransformer(
             features=["points", "points2"],
@@ -56,9 +54,7 @@ def test_rolling_mean_days_transform_historical(column_names, use_column_names):
             date_column=column_names.start_date,
             update_column=column_names.update_match_id,
         )
-        transformed_df = rolling_mean_transformation.fit_transform(
-            df, column_names=None
-        )
+        transformed_df = rolling_mean_transformation.fit_transform(df, column_names=None)
 
     expected_df = original_df.assign(
         **{
@@ -68,9 +64,7 @@ def test_rolling_mean_days_transform_historical(column_names, use_column_names):
         }
     )
 
-    pd.testing.assert_frame_equal(
-        transformed_df, expected_df, check_like=True, check_dtype=False
-    )
+    pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
 @pytest.mark.parametrize("use_column_names", [True, False])
@@ -123,9 +117,7 @@ def test_rolling_mean_days_update_id_different_from_game_id(
         }
     )
 
-    pd.testing.assert_frame_equal(
-        transformed_df, expected_df, check_like=True, check_dtype=False
-    )
+    pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
 @pytest.mark.parametrize("use_column_names", [True, False])
@@ -155,9 +147,7 @@ def test_rolling_mean_days_transform_historical_40_days(use_column_names, column
             granularity=["player"],
         )
 
-        transformed_df = rolling_mean_transformation.fit_transform(
-            df, column_names=column_names
-        )
+        transformed_df = rolling_mean_transformation.fit_transform(df, column_names=column_names)
     else:
         rolling_mean_transformation = RollingMeanDaysTransformer(
             features=["points"],
@@ -166,9 +156,7 @@ def test_rolling_mean_days_transform_historical_40_days(use_column_names, column
             update_column=column_names.update_match_id,
         )
 
-        transformed_df = rolling_mean_transformation.fit_transform(
-            df, column_names=column_names
-        )
+        transformed_df = rolling_mean_transformation.fit_transform(df, column_names=column_names)
 
     expected_df = original_df.assign(
         **{
@@ -176,9 +164,7 @@ def test_rolling_mean_days_transform_historical_40_days(use_column_names, column
         }
     )
 
-    pd.testing.assert_frame_equal(
-        transformed_df, expected_df, check_like=True, check_dtype=False
-    )
+    pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
 def test_rolling_mean_days_transform_future_40_days_update_id_differs_from_match_id(
@@ -233,9 +219,7 @@ def test_rolling_mean_days_transform_future_40_days_update_id_differs_from_match
         granularity=["player"],
     )
 
-    _ = rolling_mean_transformation.fit_transform(
-        historical_df, column_names=column_names
-    )
+    _ = rolling_mean_transformation.fit_transform(historical_df, column_names=column_names)
     transformed_future_df = rolling_mean_transformation.transform(future_df)
 
     expected_df = original_df.assign(
@@ -275,9 +259,7 @@ def test_rolling_mean_days_generate_historical_opponent(column_names):
         features=["points"], days=10, granularity=["player"], add_opponent=True
     )
 
-    transformed_df = rolling_mean_transformation.fit_transform(
-        df, column_names=column_names
-    )
+    transformed_df = rolling_mean_transformation.fit_transform(df, column_names=column_names)
 
     expected_df = original_df.assign(
         **{
@@ -304,9 +286,7 @@ def test_rolling_mean_days_generate_historical_opponent(column_names):
         }
     )
 
-    pd.testing.assert_frame_equal(
-        transformed_df, expected_df, check_like=True, check_dtype=False
-    )
+    pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
 def test_rolling_mean_days_transformer_future_transform(column_names):
@@ -347,9 +327,7 @@ def test_rolling_mean_days_transformer_future_transform(column_names):
         add_count=True,
     )
     expected_historical_df = historical_df.copy()
-    historical_df = transformer.fit_transform(
-        historical_df, column_names=column_names
-    )
+    historical_df = transformer.fit_transform(historical_df, column_names=column_names)
     expected_historical_df = expected_historical_df.assign(
         **{
             transformer.features_out[0]: [None, None, 1, 2],
@@ -407,9 +385,7 @@ def test_rolling_mean_days_tranformer_transform_first_future_beyond_window(
         add_count=True,
     )
     expected_historical_df = historical_df.copy()
-    historical_df = transformer.fit_transform(
-        historical_df, column_names=column_names
-    )
+    historical_df = transformer.fit_transform(historical_df, column_names=column_names)
 
     expected_historical_df = expected_historical_df.assign(
         **{
@@ -516,9 +492,7 @@ def test_rolling_mean_days_transform_historical_granularity_differs_from_input_g
         column_names = None
 
     expected_df = data.copy()
-    transformed_df = transformer.fit_transform(
-        df=data, column_names=column_names
-    )
+    transformed_df = transformer.fit_transform(df=data, column_names=column_names)
 
     expected_df = expected_df.assign(
         **{
@@ -538,9 +512,7 @@ def test_rolling_mean_days_transform_historical_granularity_differs_from_input_g
             ]
         }
     )
-    pd.testing.assert_frame_equal(
-        transformed_df, expected_df, check_like=True, check_dtype=False
-    )
+    pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
 def test_rolling_mean__days_transform_future_granularity_differs_from_input_granularity(

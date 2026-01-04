@@ -1,11 +1,12 @@
 import logging
+from collections.abc import Callable
 from functools import wraps
-from typing import Optional, Callable, Any, cast, TypeVar
+from typing import Any, cast
 
-import polars as pl
-import pandas as pd
-from narwhals.typing import IntoFrameT
 import narwhals.stable.v2 as nw
+import pandas as pd
+import polars as pl
+from narwhals.typing import IntoFrameT
 
 from spforge import ColumnNames
 
@@ -20,7 +21,6 @@ def future_validator(method):
         return method(self, df, *args, **kwargs)
 
     return wrapper
-
 
 
 def _is_duckdb_relation(x: Any) -> bool:
@@ -91,6 +91,7 @@ def to_polars(method: Callable[..., Any]):
 
     return wrapper
 
+
 def future_lag_transformations_wrapper(method):
     @wraps(method)
     def wrapper(self, df: IntoFrameT, *args, **kwargs):
@@ -122,18 +123,14 @@ def future_lag_transformations_wrapper(method):
 
 def historical_lag_transformations_wrapper(method):
     @wraps(method)
-    def wrapper(
-        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None, *args, **kwargs
-    ):
+    def wrapper(self, df: IntoFrameT, column_names: ColumnNames | None = None, *args, **kwargs):
         input_cols = df.columns
         if "__row_index" not in df.columns:
             df = df.with_row_index(name="__row_index")
         self.column_names = column_names or self.column_names
         if not self.__class__.__name__ == "RollingMeanDaysTransformer":
             if self.match_id_column is None and not self.column_names:
-                raise ValueError(
-                    "Either match_id_column or column_names must be passed"
-                )
+                raise ValueError("Either match_id_column or column_names must be passed")
             self.match_id_column = self.match_id_column or self.column_names.match_id
             if self.group_to_granularity:
                 self.group_to_granularity = self.group_to_granularity
@@ -157,12 +154,10 @@ def historical_lag_transformations_wrapper(method):
                     self.column_names.player_id,
                     self.column_names.team_id,
                 ]
-                if self.column_names.player_id
-                and self.column_names.player_id in df.columns
+                if self.column_names.player_id and self.column_names.player_id in df.columns
                 else (
                     [self.column_names.match_id, self.column_names.team_id]
-                    if self.column_names.team_id
-                    and self.column_names.team_id in df.columns
+                    if self.column_names.team_id and self.column_names.team_id in df.columns
                     else None
                 )
             )
@@ -181,9 +176,7 @@ def historical_lag_transformations_wrapper(method):
             or self.scale_by_participation_weight
             and not self.column_names.participation_weight
         ):
-            raise ValueError(
-                "scale_by_participation_weight requires column_names to be provided"
-            )
+            raise ValueError("scale_by_participation_weight requires column_names to be provided")
         if not self.column_names and not self.update_column:
             raise ValueError("column_names or update_column must be provided")
         self.update_column = self.update_column or self.column_names.update_match_id
@@ -228,9 +221,7 @@ def transformation_validator(method):
 
 def required_lag_column_names(method):
     @wraps(method)
-    def wrapper(
-        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None, *args, **kwargs
-    ):
+    def wrapper(self, df: IntoFrameT, column_names: ColumnNames | None = None, *args, **kwargs):
         self.column_names = column_names or self.column_names
 
         if not self.column_names:
@@ -239,9 +230,7 @@ def required_lag_column_names(method):
                 df = df.with_row_index(name="__row_index")
 
             if hasattr(self, "days_between_lags") and self.days_between_lags:
-                raise ValueError(
-                    "column names must be passed if days_between_lags is set"
-                )
+                raise ValueError("column names must be passed if days_between_lags is set")
 
             assert (
                 self.update_column is not None or self.group_to_granularity is not None

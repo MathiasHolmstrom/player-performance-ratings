@@ -15,20 +15,21 @@ def test_net_over_predicted():
         }
     )
     predict_return = fit_df.copy()
-    predict_return["pred"] = [0.4, 0.8, 2, 3]
-    mock_predictor.pred_column = "pred"
+    predict_return["target_prediction"] = [0.4, 0.8, 2, 3]
+    mock_predictor.pred_column = "target_prediction"
     mock_predictor.predict.return_value = predict_return
     mock_predictor.target = "target"
-    transformer = NetOverPredictedTransformer(predictor=mock_predictor)
+    mock_predictor.fit.return_value = None
+    # Mock is a Pipeline (has target and pred_column attributes)
+    transformer = NetOverPredictedTransformer(estimator=mock_predictor)
 
     expected_df = fit_df.copy()
-    fit_df = transformer.fit_transform(fit_df)
+    # y is passed separately (or can be None for Pipeline which extracts from df)
+    fit_df = transformer.fit_transform(fit_df, y=fit_df["target"])
     expected_df[transformer.features_out[0]] = [0.4, 0.8, 2, 3]
     expected_df[transformer.features_out[1]] = [0.1, 0.2, 0, 0]
 
-    pd.testing.assert_frame_equal(
-        fit_df, expected_df[fit_df.columns], check_dtype=False
-    )
+    pd.testing.assert_frame_equal(fit_df, expected_df[fit_df.columns], check_dtype=False)
 
     transform_df = pd.DataFrame(
         {

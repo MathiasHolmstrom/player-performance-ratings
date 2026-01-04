@@ -1,10 +1,9 @@
 import math
-from typing import List, Dict
 
 import narwhals.stable.v2 as nw
 from narwhals.stable.v2.typing import IntoFrameT
 
-from spforge.data_structures import Match, ColumnNames
+from spforge.data_structures import ColumnNames, Match
 
 
 class LeagueIdentifer2:
@@ -20,11 +19,12 @@ class LeagueIdentifer2:
         league = self.column_names.league
 
         df = df.sort([pid, mid]).with_columns(
-            (nw.col(mid)
-             .cum_count()
-             .over(self.column_names.player_id, order_by=self.column_names.start_date)
-             - 1
-             ).alias("__match_idx")
+            (
+                nw.col(mid)
+                .cum_count()
+                .over(self.column_names.player_id, order_by=self.column_names.start_date)
+                - 1
+            ).alias("__match_idx")
         )
 
         cur = df.select([pid, mid, "__match_idx"]).rename(
@@ -34,20 +34,14 @@ class LeagueIdentifer2:
             {league: "__prev_league", "__match_idx": "__prev_idx"}
         )
 
-        pairs = (
-            cur.join(prev, on=pid, how="inner")
-            .filter(
-                (nw.col("__cur_idx") > nw.col("__prev_idx")) &
-                ((nw.col("__cur_idx") - nw.col("__prev_idx")) <= self.matches_back)
-            )
+        pairs = cur.join(prev, on=pid, how="inner").filter(
+            (nw.col("__cur_idx") > nw.col("__prev_idx"))
+            & ((nw.col("__cur_idx") - nw.col("__prev_idx")) <= self.matches_back)
         )
 
-        counts = (
-            pairs.group_by([pid, "__cur_match_id", "__prev_league"])
-            .agg(
-                nw.len().alias("__league_count"),
-                nw.col("__prev_idx").max().alias("__most_recent_prev_idx"),
-            )
+        counts = pairs.group_by([pid, "__cur_match_id", "__prev_league"]).agg(
+            nw.len().alias("__league_count"),
+            nw.col("__prev_idx").max().alias("__most_recent_prev_idx"),
         )
 
         winners = (
@@ -68,10 +62,10 @@ class LeagueIdentifier:
 
     def __init__(self, matches_back: int = 25):
         self.matches_back = matches_back
-        self.entity_to_match_leagues: Dict[str, List[str]] = {}
-        self.entity_to_match_league_counts: Dict[str, Dict[str, int]] = {}
-        self.entity_id_to_most_league_count: Dict[str, int] = {}
-        self.entity_id_to_most_league_name: Dict[str, str] = {}
+        self.entity_to_match_leagues: dict[str, list[str]] = {}
+        self.entity_to_match_league_counts: dict[str, dict[str, int]] = {}
+        self.entity_id_to_most_league_count: dict[str, int] = {}
+        self.entity_id_to_most_league_name: dict[str, str] = {}
 
     def identify(self, player_id: str, league_match: str) -> str:
         if player_id not in self.entity_to_match_leagues:
@@ -87,16 +81,14 @@ class LeagueIdentifier:
         if len(self.entity_to_match_leagues[player_id]) > self.matches_back:
             league_drop_out = self.entity_to_match_leagues[player_id][0]
             self.entity_to_match_league_counts[player_id][league_drop_out] -= 1
-            self.entity_to_match_leagues[player_id] = self.entity_to_match_leagues[
-                                                          player_id
-                                                      ][1:]
+            self.entity_to_match_leagues[player_id] = self.entity_to_match_leagues[player_id][1:]
             if league_drop_out == self.entity_id_to_most_league_name[player_id]:
                 self.entity_id_to_most_league_count[player_id] -= 1
 
         self.entity_to_match_league_counts[player_id][league_match] += 1
         if (
-                self.entity_to_match_league_counts[player_id][league_match]
-                > self.entity_id_to_most_league_count[player_id]
+            self.entity_to_match_league_counts[player_id][league_match]
+            > self.entity_id_to_most_league_count[player_id]
         ):
             self.entity_id_to_most_league_name[player_id] = league_match
 
@@ -106,16 +98,16 @@ class LeagueIdentifier:
         return self.entity_id_to_most_league_name[player_id]
 
     def _generate_teams_to_leagues(
-            self, team_ids: List[str], team_league_counts: Dict[str, Dict[str, int]]
-    ) -> Dict[str, str]:
-        team_leagues: Dict[str, str] = {}
+        self, team_ids: list[str], team_league_counts: dict[str, dict[str, int]]
+    ) -> dict[str, str]:
+        team_leagues: dict[str, str] = {}
         for team_id in team_ids:
             league = self._identify_primary_league_for_team(team_league_counts[team_id])
             team_leagues[team_id] = league
 
         return team_leagues
 
-    def _identify_primary_league_for_team(self, league_counts: Dict[str, int]) -> str:
+    def _identify_primary_league_for_team(self, league_counts: dict[str, int]) -> str:
         max_league: str = ""
         max_count = -math.inf
         for league, count in league_counts.items():
@@ -125,7 +117,7 @@ class LeagueIdentifier:
 
         return max_league
 
-    def _get_opponent_league(self, team_id: str, team_leagues: Dict[str, str]) -> str:
+    def _get_opponent_league(self, team_id: str, team_leagues: dict[str, str]) -> str:
 
         for team_id2, league in team_leagues.items():
             if team_id2 != team_id:
@@ -133,9 +125,9 @@ class LeagueIdentifier:
 
         raise KeyError
 
-    def _generate_team_league_counts(self, match: Match) -> Dict[str, Dict[str, int]]:
+    def _generate_team_league_counts(self, match: Match) -> dict[str, dict[str, int]]:
 
-        team_league_counts: Dict[str, Dict[str, int]] = {}
+        team_league_counts: dict[str, dict[str, int]] = {}
         for team in match.teams:
             for player in team.players:
                 if team.id not in team_league_counts:

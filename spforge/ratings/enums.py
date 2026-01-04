@@ -7,9 +7,7 @@ class RatingKnownFeatures(StrEnum):
     PLAYER_RATING = "player_rating"
     PLAYER_OFF_RATING = "player_off_rating"
     PLAYER_DEF_RATING = "player_def_rating"
-    PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED = (
-        "player_rating_difference_from_team_projected"
-    )
+    PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED = "player_rating_difference_from_team_projected"
     TEAM_OFF_RATING_PROJECTED = "team_off_rating_projected"
     TEAM_DEF_RATING_PROJECTED = "team_def_rating_projected"
     OPPONENT_OFF_RATING_PROJECTED = "opponent_off_rating_projected"
@@ -22,6 +20,7 @@ class RatingKnownFeatures(StrEnum):
     TEAM_LEAGUE = "team_league"
     PLAYER_LEAGUE = "player_league"
     OPPONENT_LEAGUE = "opponent_league"
+
 
 class RatingUnknownFeatures(StrEnum):
     PERFORMANCE = "performance"

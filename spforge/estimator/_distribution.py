@@ -1,5 +1,4 @@
 import copy
-from typing import Optional
 
 import narwhals.stable.v2 as nw
 import numpy as np
@@ -8,15 +7,14 @@ import polars as pl
 from narwhals.typing import IntoFrameT
 from scipy.optimize import minimize
 from scipy.special import gammaln
-from scipy.stats import nbinom, norm
+from scipy.stats import nbinom, norm, t as student_t
+from sklearn.base import BaseEstimator
 from sklearn.preprocessing import StandardScaler
 
 from spforge import ColumnNames
-from spforge.transformers.base_transformer import BaseTransformer
-from spforge.scorer import apply_filters, Filter
-from spforge.feature_generator import RollingWindowTransformer
-from scipy.stats import t as student_t
-from sklearn.base import BaseEstimator
+from spforge.feature_generator._rolling_window import RollingWindowTransformer
+from spforge.scorer import Filter, apply_filters
+
 
 def neg_binom_log_likelihood(r, actual_points, predicted_points):
     if r <= 0:
@@ -48,11 +46,11 @@ class NegativeBinomialEstimator(BaseEstimator):
         max_value: int,
         min_value: int = 0,
         predicted_r_iterations: int = 6,
-        predict_granularity: Optional[list[str]] = None,
-        r_specific_granularity: Optional[list[str]] = None,
+        predict_granularity: list[str] | None = None,
+        r_specific_granularity: list[str] | None = None,
         r_rolling_mean_window: int = 40,
         predicted_r_weight: float = 1.0,
-        column_names: Optional[ColumnNames] = None,
+        column_names: ColumnNames | None = None,
     ):
         self.point_estimate_pred_column = point_estimate_pred_column
         self.max_value = max_value
@@ -63,7 +61,9 @@ class NegativeBinomialEstimator(BaseEstimator):
         self.r_rolling_mean_window = r_rolling_mean_window
         self.predicted_r_weight = predicted_r_weight
         self.column_names = column_names
-        
+
+        if self.r_specific_granularity and not self.column_names:
+            raise ValueError("r_specific_granularity is set but column names is not provided.")
         if self.r_specific_granularity:
             self._rolling_mean: RollingWindowTransformer = RollingWindowTransformer(
                 aggregation="mean",
@@ -95,59 +95,48 @@ class NegativeBinomialEstimator(BaseEstimator):
             self._rolling_mean = None
             self._rolling_var = None
 
-        if self.r_specific_granularity and not self.column_names:
-            raise ValueError(
-                "r_specific_granularity is set but column names is not provided."
-            )
-
         self._multipliers = list(range(2, 2 + predicted_r_iterations * 2, 2))
         self._target_scaler = StandardScaler()
         self._best_multiplier = None
         self._mean_r = None
         self._scores = []
         self._r_estimates = {}
-        self.target = '__target'
+        self.target = "__target"
         self._historical_game_ids = []
         self.classes_ = np.arange(min_value, max_value + 1)
-        
+
         super().__init__()
 
-        if self.r_specific_granularity and not self.column_names:
-            raise ValueError(
-                "r_specific_granularity is set but column names is not provided."
-            )
-
-        self._multipliers = list(range(2, 2 + predicted_r_iterations * 2, 2))
-        self._target_scaler = StandardScaler()
-        self._best_multiplier = None
-        self._mean_r = None
-        self._scores = []
-        self._r_estimates = {}
-
-        self._historical_game_ids = []
-
     @nw.narwhalify
-    def fit(self, X: IntoFrameT, y, sample_weight: Optional[np.ndarray] = None):
+    def fit(self, X: IntoFrameT, y, sample_weight: np.ndarray | None = None):
         """
         Fit the negative binomial distribution predictor.
-        
+
         :param X: DataFrame (any DataFrame type - pandas, polars, or Narwhals). Cannot be numpy array.
         :param y: Target Series
         :param sample_weight: Optional sample weights (unused for distribution predictors)
         """
-        if isinstance(X.to_native() if hasattr(X, 'to_native') else X, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array")
-        
-        y_values = y.to_list() if hasattr(y, 'to_list') else (y.values if hasattr(y, 'values') else y)
-        df = X.with_columns(nw.new_series(name=self.target, values=y_values, backend=nw.get_native_namespace(X)))
-        
+        if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
+            raise TypeError(
+                "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
+            )
+
+        y_values = (
+            y.to_list() if hasattr(y, "to_list") else (y.values if hasattr(y, "values") else y)
+        )
+        df = X.with_columns(
+            nw.new_series(name=self.target, values=y_values, backend=nw.get_native_namespace(X))
+        )
+
         if self.point_estimate_pred_column not in df.columns:
-            raise ValueError(f"point_estimate_pred_column '{self.point_estimate_pred_column}' not found in X.columns: {df.columns}")
-        
+            raise ValueError(
+                f"point_estimate_pred_column '{self.point_estimate_pred_column}' not found in X.columns: {df.columns}"
+            )
+
         self._train_internal(df)
-        
+
         return self
-    
+
     @nw.narwhalify
     def _train_internal(self, df: IntoFrameT) -> None:
         positive_predicted_rows = df.filter(nw.col(self.point_estimate_pred_column) > 0)
@@ -162,13 +151,13 @@ class NegativeBinomialEstimator(BaseEstimator):
             )
         result = minimize(
             neg_binom_log_likelihood,
-            x0=np.array([1.0]),  # Initial guess
+            x0=np.array([1.0]),
             args=(
                 positive_predicted_rows[self.target].to_numpy(),
                 positive_predicted_rows[self.point_estimate_pred_column].to_numpy(),
             ),
             method="L-BFGS-B",
-            bounds=[(0.01, None)],  # Ensure r stays positive
+            bounds=[(0.01, None)],
         )
         self._mean_r = float(result.x[0])
         if self.r_specific_granularity:
@@ -177,35 +166,27 @@ class NegativeBinomialEstimator(BaseEstimator):
             if self.column_names.player_id not in self.r_specific_granularity:
                 column_names_lag.player_id = None
             gran_grp = nw.from_native(
-                self._rolling_mean.fit_transform(
-                    gran_grp, column_names=column_names_lag
-                )
+                self._rolling_mean.fit_transform(gran_grp, column_names=column_names_lag)
             )
             gran_grp = nw.from_native(
-                self._rolling_var.fit_transform(
-                    gran_grp, column_names=column_names_lag
-                )
+                self._rolling_var.fit_transform(gran_grp, column_names=column_names_lag)
             )
 
             def define_quantile_bins(
                 df: IntoFrameT, column: str, quantiles: list[float]
             ) -> list[float]:
-                return [
-                    df[column].quantile(q, interpolation="nearest") for q in quantiles
-                ]
+                return [df[column].quantile(q, interpolation="nearest") for q in quantiles]
 
             mu_bins = define_quantile_bins(
                 gran_grp, self._rolling_mean.features_out[0], [0.2, 0.4, 0.6, 0.8]
             )
 
             for mu_idx, mu_bin in enumerate(mu_bins):
-                mu_group = gran_grp.filter(
-                    (nw.col(self._rolling_mean.features_out[0]) >= mu_bin)
-                )
+                mu_group = gran_grp.filter(nw.col(self._rolling_mean.features_out[0]) >= mu_bin)
                 if mu_idx < len(mu_bins) - 1:
                     next_mu_bin = mu_bins[mu_idx + 1]
                     mu_group = mu_group.filter(
-                        (nw.col(self._rolling_mean.features_out[0]) < next_mu_bin)
+                        nw.col(self._rolling_mean.features_out[0]) < next_mu_bin
                     )
 
                 var_bins = define_quantile_bins(
@@ -219,7 +200,7 @@ class NegativeBinomialEstimator(BaseEstimator):
                     if var_idx < len(var_bins) - 1:
                         next_var_bin = var_bins[var_idx + 1]
                         final_group = final_group.filter(
-                            (nw.col(self._rolling_var.features_out[0]) < next_var_bin)
+                            nw.col(self._rolling_var.features_out[0]) < next_var_bin
                         )
 
                     result = minimize(
@@ -234,54 +215,54 @@ class NegativeBinomialEstimator(BaseEstimator):
                     )
                     self._r_estimates[(mu_bin, var_bin)] = float(result.x[0])
 
-            self._historical_game_ids = (
-                gran_grp[self.column_names.match_id].unique().to_list()
-            )
+            self._historical_game_ids = gran_grp[self.column_names.match_id].unique().to_list()
 
     @nw.narwhalify
     def predict_proba(self, X: IntoFrameT) -> np.ndarray:
         """
         Predict probability distributions.
-        
+
         :param X: DataFrame (any DataFrame type - pandas, polars, or Narwhals). Cannot be numpy array.
         :return: Array of probability distributions (n_samples, n_classes)
         """
-        if isinstance(X.to_native() if hasattr(X, 'to_native') else X, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array")
-        
+        if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
+            raise TypeError(
+                "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
+            )
+
         if self.point_estimate_pred_column not in X.columns:
-            raise ValueError(f"point_estimate_pred_column '{self.point_estimate_pred_column}' not found in X.columns: {X.columns}")
-        
+            raise ValueError(
+                f"point_estimate_pred_column '{self.point_estimate_pred_column}' not found in X.columns: {X.columns}"
+            )
+
         if self._mean_r is None:
             raise ValueError("NegativeBinomialPredictor has not been fitted yet. Call fit() first.")
-        
+
         df = X
-        
+
         prob_df = self._predict_internal(df)
-        
-        prob_series = prob_df[self.pred_column].to_list()
+
+        prob_col = "__target_probabilities"
+        prob_series = prob_df[prob_col].to_list()
         probabilities = np.array([np.array(p) for p in prob_series])
-        
+
         return probabilities
-    
+
     @nw.narwhalify
     def predict(self, X: IntoFrameT) -> np.ndarray:
         """
         Predict point estimates (mode of distribution).
-        
+
         :param X: DataFrame (any DataFrame type - pandas, polars, or Narwhals). Cannot be numpy array.
         :return: Array of predicted values
         """
-        if isinstance(X.to_native() if hasattr(X, 'to_native') else X, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array")
+        if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
+            raise TypeError(
+                "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
+            )
         probabilities = self.predict_proba(X)
-        # Return mode (argmax) of each distribution
         return np.argmax(probabilities, axis=1) + self.min_value
-    
-    @property
-    def pred_column(self) -> str:
-        return f"{self.target}_probabilities"
-    
+
     @nw.narwhalify
     def _predict_internal(self, df: IntoFrameT) -> IntoFrameT:
         """Internal prediction logic using Narwhals DataFrames"""
@@ -302,12 +283,8 @@ class NegativeBinomialEstimator(BaseEstimator):
                     self._rolling_var.fit_transform(historical_gran_group)
                 )
             if len(future_gran_group) > 0:
-                future_gran_group = nw.from_native(
-                    self._rolling_mean.transform(future_gran_group)
-                )
-                future_gran_group = nw.from_native(
-                    self._rolling_var.transform(future_gran_group)
-                )
+                future_gran_group = nw.from_native(self._rolling_mean.transform(future_gran_group))
+                future_gran_group = nw.from_native(self._rolling_var.transform(future_gran_group))
 
             if len(historical_gran_group) > 0 and len(future_gran_group) > 0:
                 gran_grp = nw.concat([historical_gran_group, future_gran_group]).unique(
@@ -342,17 +319,15 @@ class NegativeBinomialEstimator(BaseEstimator):
             )
 
             assert len(pred_df) == pre_join_df_row_count
-            df = self._add_probabilities(df=pred_df).select(
-                [*input_cols, self.pred_column]
-            )
+            prob_col = "__target_probabilities"
+            df = self._add_probabilities(df=pred_df).select([*input_cols, prob_col])
             assert len(df) == pre_join_df_row_count
             return df
 
         else:
             df = self._add_predicted_r(df)
-            return self._add_probabilities(df=df).select(
-                [*input_cols, self.pred_column]
-            )
+            prob_col = "__target_probabilities"
+            return self._add_probabilities(df=df).select([*input_cols, prob_col])
 
     def _grp_to_r_granularity(self, df: IntoFrameT, is_train: bool) -> IntoFrameT:
 
@@ -470,14 +445,16 @@ class NegativeBinomialEstimator(BaseEstimator):
             r = row["__predicted_r"]
             p = row["__predicted_p"]
             prob = nbinom.pmf(point_range, r, p)
+            prob /= prob.sum()
 
             outcome_probs = prob
             classes_.append(np.argmax(prob))
             all_outcome_probs.append(outcome_probs)
 
+        prob_col = "__target_probabilities"
         pred_grp = pred_grp.with_columns(
             nw.new_series(
-                name=self.pred_column,
+                name=prob_col,
                 values=all_outcome_probs,
                 backend=nw.get_native_namespace(df),
             )
@@ -485,7 +462,7 @@ class NegativeBinomialEstimator(BaseEstimator):
 
         if self.predict_granularity:
             return df.join(
-                pred_grp.select([*self.predict_granularity, self.pred_column]),
+                pred_grp.select([*self.predict_granularity, prob_col]),
                 on=self.predict_granularity,
                 how="left",
             )
@@ -512,18 +489,22 @@ class NormalDistributionPredictor(BaseEstimator):
         super().__init__()
 
     @nw.narwhalify
-    def fit(self, X: IntoFrameT, y, sample_weight: Optional[np.ndarray] = None):
+    def fit(self, X: IntoFrameT, y, sample_weight: np.ndarray | None = None):
         """
         Fit the normal distribution predictor.
-        
+
         :param X: DataFrame (any DataFrame type - pandas, polars, or Narwhals). Cannot be numpy array.
         :param y: Target Series (unused, kept for sklearn interface)
         :param sample_weight: Optional sample weights (unused)
         """
-        if isinstance(X.to_native() if hasattr(X, 'to_native') else X, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array")
+        if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
+            raise TypeError(
+                "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
+            )
         if self.point_estimate_pred_column not in X.columns:
-            raise ValueError(f"point_estimate_pred_column '{self.point_estimate_pred_column}' not found in X.columns: {X.columns}")
+            raise ValueError(
+                f"point_estimate_pred_column '{self.point_estimate_pred_column}' not found in X.columns: {X.columns}"
+            )
         self._classes = np.arange(self.min_value, self.max_value + 1)
         return self
 
@@ -531,21 +512,26 @@ class NormalDistributionPredictor(BaseEstimator):
     def predict_proba(self, X: IntoFrameT) -> np.ndarray:
         """
         Predict probability distributions.
-        
+
         :param X: DataFrame (any DataFrame type - pandas, polars, or Narwhals). Cannot be numpy array.
         :return: Array of probability distributions (n_samples, n_classes)
         """
-        if isinstance(X.to_native() if hasattr(X, 'to_native') else X, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array")
+        if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
+            raise TypeError(
+                "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
+            )
         if self.point_estimate_pred_column not in X.columns:
-            raise ValueError(f"point_estimate_pred_column '{self.point_estimate_pred_column}' not found in X.columns: {X.columns}")
+            raise ValueError(
+                f"point_estimate_pred_column '{self.point_estimate_pred_column}' not found in X.columns: {X.columns}"
+            )
         if self._classes is None:
-            raise ValueError("NormalDistributionPredictor has not been fitted yet. Call fit() first.")
-        
+            raise ValueError(
+                "NormalDistributionPredictor has not been fitted yet. Call fit() first."
+            )
+
         lower_bounds = self._classes - 0.5
         upper_bounds = self._classes + 0.5
-        
-        # Extract values from Narwhals Series
+
         mu_values = X[self.point_estimate_pred_column].to_list()
         probabilities = []
         for mu in mu_values:
@@ -553,27 +539,23 @@ class NormalDistributionPredictor(BaseEstimator):
             cdf_lower = norm.cdf(lower_bounds, loc=mu, scale=self.sigma)
             probs = cdf_upper - cdf_lower
             probabilities.append(probs)
-        
+
         return np.array(probabilities)
-    
+
     @nw.narwhalify
     def predict(self, X: IntoFrameT) -> np.ndarray:
         """
         Predict point estimates (mode of distribution).
-        
+
         :param X: DataFrame (any DataFrame type - pandas, polars, or Narwhals). Cannot be numpy array.
         :return: Array of predicted values
         """
-        if isinstance(X.to_native() if hasattr(X, 'to_native') else X, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array")
-        # Use predict_proba and return mode
-        probabilities = self.predict_proba(X)
+        if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
+            raise TypeError(
+                "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
+            )
         probabilities = self.predict_proba(X)
         return np.argmax(probabilities, axis=1) + self.min_value
-    
-    @property
-    def pred_column(self) -> str:
-        return f"{self.target}_probabilities"
 
 
 class StudentTDistributionPredictor(BaseEstimator):
@@ -599,7 +581,7 @@ class StudentTDistributionPredictor(BaseEstimator):
         target: str,
         df: float = 5.0,
         sigma: float | None = None,
-        pred_column: Optional[str] = None,
+        pred_column: str | None = None,
         min_sigma: float = 1.0,
         min_train_rows: int = 50,
         sigma_fallback_if_no_data: float = 10.0,
@@ -610,7 +592,7 @@ class StudentTDistributionPredictor(BaseEstimator):
         self.max_value = max_value
         self.min_value = min_value
         self.target = target
-        
+
         self.df = float(df)
         if self.df <= 2.0:
             raise ValueError(f"df must be > 2.0 for finite variance; got df={self.df}")
@@ -627,10 +609,10 @@ class StudentTDistributionPredictor(BaseEstimator):
         self.min_bin_rows = int(min_bin_rows)
 
         # learned conditional sigma: bin edges on mu + sigma per bin
-        self._mu_bin_edges: Optional[np.ndarray] = None  # len = sigma_bins+1
-        self._sigma_by_bin: Optional[np.ndarray] = None  # len = sigma_bins
+        self._mu_bin_edges: np.ndarray | None = None  # len = sigma_bins+1
+        self._sigma_by_bin: np.ndarray | None = None  # len = sigma_bins
 
-        self._classes: Optional[np.ndarray] = None
+        self._classes: np.ndarray | None = None
         self.classes_ = np.arange(min_value, max_value + 1)
         super().__init__()
 
@@ -653,34 +635,37 @@ class StudentTDistributionPredictor(BaseEstimator):
         return max(self.min_sigma, float(sigma_hat))
 
     @nw.narwhalify
-    def fit(self, X: IntoFrameT, y, sample_weight: Optional[np.ndarray] = None):
+    def fit(self, X: IntoFrameT, y, sample_weight: np.ndarray | None = None):
         """
         Fit the Student-t distribution predictor.
-        
+
         :param X: DataFrame (any DataFrame type - pandas, polars, or Narwhals). Cannot be numpy array.
         :param y: Target Series
         :param sample_weight: Optional sample weights (unused)
         """
-        if isinstance(X.to_native() if hasattr(X, 'to_native') else X, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array")
+        if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
+            raise TypeError(
+                "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
+            )
         if self.point_estimate_pred_column not in X.columns:
-            raise ValueError(f"point_estimate_pred_column '{self.point_estimate_pred_column}' not found in X.columns: {X.columns.tolist()}")
-        
-        # Convert to Narwhals DataFrame for internal processing
+            raise ValueError(
+                f"point_estimate_pred_column '{self.point_estimate_pred_column}' not found in X.columns: {X.columns.tolist()}"
+            )
+
         df = nw.from_native(pl.DataFrame(X))
-        df = df.with_columns(nw.new_series(name=self.target, values=y.values, backend=nw.get_native_namespace(df)))
-        
-        # Call internal training logic
+        df = df.with_columns(
+            nw.new_series(name=self.target, values=y.values, backend=nw.get_native_namespace(df))
+        )
+
         self._train_internal(df)
-        
+
         return self
-    
+
     @nw.narwhalify
     def _train_internal(self, df: nw.DataFrame) -> None:
         self._reset_state()
         self._classes = np.arange(self.min_value, self.max_value + 1)
 
-        # If sigma explicitly set, keep it fixed and stop.
         if self.sigma_global is not None:
             self.sigma_global = max(self.min_sigma, float(self.sigma_global))
             return
@@ -696,7 +681,6 @@ class StudentTDistributionPredictor(BaseEstimator):
         mu = df[self.point_estimate_pred_column].to_numpy()
         mask = np.isfinite(y) & np.isfinite(mu)
         if mask.sum() < self.min_train_rows:
-            # Not enough data for conditional fitting; use fallback global sigma
             self.sigma_global = max(self.min_sigma, self.sigma_fallback_if_no_data)
             return
 
@@ -704,23 +688,16 @@ class StudentTDistributionPredictor(BaseEstimator):
         mu = mu[mask].astype(float)
         resid = y - mu
 
-        # Fit mu-quantile bin edges
-        # If mu has too few unique values, quantiles can collapse -> handle that.
         qs = np.linspace(0.0, 1.0, self.sigma_bins + 1)
         edges = np.quantile(mu, qs)
 
-        # Ensure strictly increasing edges (avoid empty/degenerate bins)
         edges = np.unique(edges)
         if edges.size < 3:
-            # can't bin; fall back to global sigma
             self.sigma_global = self._fit_sigma_global(resid)
             return
 
-        # If unique edges < desired bins+1, reduce bin count accordingly
-        # bins = len(edges)-1
         self._mu_bin_edges = edges
 
-        # Compute sigma per bin (MAD), fallback to global if bin too small
         sigma_global = self._fit_sigma_global(resid)
         sigmas = []
         for i in range(len(edges) - 1):
@@ -739,7 +716,6 @@ class StudentTDistributionPredictor(BaseEstimator):
 
         self._sigma_by_bin = np.asarray(sigmas, dtype=float)
 
-        # If binning produced something weird, fallback
         if not np.all(np.isfinite(self._sigma_by_bin)) or self._sigma_by_bin.size == 0:
             self._mu_bin_edges = None
             self._sigma_by_bin = None
@@ -759,22 +735,28 @@ class StudentTDistributionPredictor(BaseEstimator):
     def predict_proba(self, X: IntoFrameT) -> np.ndarray:
         """
         Predict probability distributions.
-        
+
         :param X: DataFrame (any DataFrame type - pandas, polars, or Narwhals). Cannot be numpy array.
         :return: Array of probability distributions (n_samples, n_classes)
         """
-        if isinstance(X.to_native() if hasattr(X, 'to_native') else X, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array")
+        if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
+            raise TypeError(
+                "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
+            )
         if self.point_estimate_pred_column not in X.columns:
-            raise ValueError(f"point_estimate_pred_column '{self.point_estimate_pred_column}' not found in X.columns: {X.columns}")
+            raise ValueError(
+                f"point_estimate_pred_column '{self.point_estimate_pred_column}' not found in X.columns: {X.columns}"
+            )
         if self._classes is None:
-            raise ValueError("StudentTDistributionPredictor has not been fitted yet. Call fit() first.")
-        
+            raise ValueError(
+                "StudentTDistributionPredictor has not been fitted yet. Call fit() first."
+            )
+
         classes = self._classes
         lower_bounds = classes - 0.5
         upper_bounds = classes + 0.5
         df_param = float(self.df)
-        
+
         # Extract values from Narwhals Series
         mu_values = X[self.point_estimate_pred_column].to_list()
         probabilities = []
@@ -787,25 +769,23 @@ class StudentTDistributionPredictor(BaseEstimator):
             if s > 0:
                 probs = probs / s
             probabilities.append(probs)
-        
+
         return np.array(probabilities)
-    
+
     @nw.narwhalify
     def predict(self, X: IntoFrameT) -> np.ndarray:
         """
         Predict point estimates (mode of distribution).
-        
+
         :param X: DataFrame (any DataFrame type - pandas, polars, or Narwhals). Cannot be numpy array.
         :return: Array of predicted values
         """
-        if isinstance(X.to_native() if hasattr(X, 'to_native') else X, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array")
+        if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
+            raise TypeError(
+                "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
+            )
         probabilities = self.predict_proba(X)
         return np.argmax(probabilities, axis=1) + self.min_value
-    
-    @property
-    def pred_column(self) -> str:
-        return f"{self.target}_probabilities"
 
 
 class DistributionManagerPredictor(BaseEstimator):
@@ -816,150 +796,108 @@ class DistributionManagerPredictor(BaseEstimator):
 
     def __init__(
         self,
-        point_predictor,  # Pipeline instance
-        distribution_predictor,  # BaseEstimator distribution predictor
-        filters: Optional[list[Filter]] = None,
-        post_predict_transformers: Optional[list[BaseTransformer]] = None,
+        point_estimator,
+        distribution_estimator,
+        filters: list[Filter] | None = None,
     ):
-        self.point_predictor = point_predictor
-        self.distribution_predictor = distribution_predictor
+        self.point_estimator = point_estimator
+        self.distribution_estimator = distribution_estimator
         self.filters = filters
-        self.post_predict_transformers = post_predict_transformers or []
-        self.classes_ = distribution_predictor.classes_ if hasattr(distribution_predictor, 'classes_') else None
+        self.classes_ = (
+            distribution_estimator.classes_ if hasattr(distribution_estimator, "classes_") else None
+        )
         super().__init__()
 
     @nw.narwhalify
-    def fit(self, X: IntoFrameT, y, sample_weight: Optional[np.ndarray] = None):
+    def fit(self, X: IntoFrameT, y, sample_weight: np.ndarray | None = None):
         """
         Fit both the point predictor and distribution predictor.
-        
+
         :param X: DataFrame (any DataFrame type - pandas, polars, or Narwhals). Cannot be numpy array.
         :param y: Target Series
         :param sample_weight: Optional sample weights (passed to point predictor if supported)
         """
-        if isinstance(X.to_native() if hasattr(X, 'to_native') else X, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array")
-        
-        # X is already Narwhals DataFrame due to decorator
-        # Convert y to Narwhals Series if needed
-        y_values = y.to_list() if hasattr(y, 'to_list') else (y.values if hasattr(y, 'values') else y)
-        df = X.with_columns(nw.new_series(name=self.point_predictor.target, values=y_values, backend=nw.get_native_namespace(X)))
-        
-        # Apply filters
+        if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
+            raise TypeError(
+                "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
+            )
+
+        target_name = getattr(y, "name", "target")
+        self._target_name = target_name
+
+        y_values = (
+            y.to_list() if hasattr(y, "to_list") else (y.values if hasattr(y, "values") else y)
+        )
+        df = X.with_columns(
+            nw.new_series(name=target_name, values=y_values, backend=nw.get_native_namespace(X))
+        )
+
         if self.filters:
             df_filtered = apply_filters(df=df, filters=self.filters)
-            # apply_filters returns a Narwhals DataFrame (decorated with @narwhals.narwhalify)
             df = df_filtered
-        
-        # Train point predictor - df already has target column, so use Narwhals interface
-        self.point_predictor.fit(df, features=list(X.columns))
-        
-        # Get point predictions - convert df to polars to force DataFrame return (not numpy array)
-        # Pipeline.predict() returns numpy array if input is pandas, DataFrame if polars
+
+        self.point_estimator.fit(X=df.drop(self._target_name), y=df[self._target_name])
+
+        pred_values = self.point_estimator.predict(X=df.drop(self._target_name))
+
+        pred_col = f"{target_name}_prediction"
+
         df_native = df.to_native()
         if isinstance(df_native, pd.DataFrame):
-            # Convert to polars so predict() returns DataFrame
-            df_pl = pl.DataFrame(df_native)
-            df_with_predictions = self.point_predictor.predict(nw.from_native(df_pl), return_features=False)
+            df_pd = df_native.copy()
+            df_pd[pred_col] = pred_values
         else:
-            # Already polars, predict() will return DataFrame
-            df_with_predictions = self.point_predictor.predict(df, return_features=False)
-        
-        # Convert back to pandas for distribution predictor fit
-        # df_with_predictions is a Polars DataFrame (not wrapped in Narwhals)
-        if isinstance(df_with_predictions, pl.DataFrame):
-            df_pd = df_with_predictions.to_pandas()
-        elif hasattr(df_with_predictions, 'to_native'):
-            df_native = df_with_predictions.to_native()
-            if isinstance(df_native, pl.DataFrame):
-                df_pd = df_native.to_pandas()
-            else:
-                df_pd = df_native
-        else:
-            df_pd = df_with_predictions
-        
-        # Fit distribution predictor
-        X_dist = df_pd[[self.distribution_predictor.point_estimate_pred_column]]
-        y_dist = df_pd[self.point_predictor.target]
-        self.distribution_predictor.fit(X_dist, y_dist)
-        
+            df_pd = df_native.to_pandas()
+            df_pd[pred_col] = pred_values
+
+        X_dist = df_pd[[self.distribution_estimator.point_estimate_pred_column]]
+        y_dist = df_pd[target_name]
+        self.distribution_estimator.fit(X_dist, y_dist)
+
         return self
 
     @nw.narwhalify
     def predict_proba(self, X: IntoFrameT) -> np.ndarray:
         """
         Predict probability distributions.
-        
+
         :param X: DataFrame (any DataFrame type - pandas, polars, or Narwhals). Cannot be numpy array.
         :return: Array of probability distributions (n_samples, n_classes)
         """
-        if isinstance(X.to_native() if hasattr(X, 'to_native') else X, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array")
-        
-        # X is already Narwhals DataFrame due to decorator
+        if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
+            raise TypeError(
+                "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
+            )
+
         df = X
-        
-        # Get point predictions - convert df to polars to force DataFrame return (not numpy array)
-        if self.point_predictor.pred_column in df.columns:
-            df = df.drop([self.point_predictor.pred_column])
+
+        pred_values = self.point_estimator.predict(X=df)
+
+        pred_col = f"{self._target_name}_prediction"
+
         df_native = df.to_native()
         if isinstance(df_native, pd.DataFrame):
-            # Convert to polars so predict() returns DataFrame
-            df_pl = pl.DataFrame(df_native)
-            df_with_predictions = self.point_predictor.predict(nw.from_native(df_pl), return_features=False)
+            df_pd = df_native.copy()
+            df_pd[pred_col] = pred_values
         else:
-            # Already polars, predict() will return DataFrame
-            df_with_predictions = self.point_predictor.predict(df, return_features=False)
-        
-        # Convert back to pandas for distribution predictor
-        # df_with_predictions is a Polars DataFrame (not wrapped in Narwhals)
-        if isinstance(df_with_predictions, pl.DataFrame):
-            df_pd = df_with_predictions.to_pandas()
-        elif hasattr(df_with_predictions, 'to_native'):
-            df_native = df_with_predictions.to_native()
-            if isinstance(df_native, pl.DataFrame):
-                df_pd = df_native.to_pandas()
-            else:
-                df_pd = df_native
-        else:
-            df_pd = df_with_predictions
-        
-        # Get distribution predictions
-        X_dist = df_pd[[self.distribution_predictor.point_estimate_pred_column]]
-        probabilities = self.distribution_predictor.predict_proba(X_dist)
-        
-        # Apply post-predict transformers if any
-        if self.post_predict_transformers:
-            df_final = nw.from_native(df_pd)
-            for transformer in self.post_predict_transformers:
-                df_final = nw.from_native(transformer.transform(df_final))
-            # Note: post-predict transformers might modify probabilities, but we return the distribution predictor's output
-            # This is a limitation - post-predict transformers work on DataFrames, not numpy arrays
-        
+            df_pd = df_native.to_pandas()
+            df_pd[pred_col] = pred_values
+
+        X_dist = df_pd[[self.distribution_estimator.point_estimate_pred_column]]
+        probabilities = self.distribution_estimator.predict_proba(X_dist)
         return probabilities
-    
+
     @nw.narwhalify
     def predict(self, X: IntoFrameT) -> np.ndarray:
         """
         Predict point estimates (mode of distribution).
-        
+
         :param X: DataFrame (any DataFrame type - pandas, polars, or Narwhals). Cannot be numpy array.
         :return: Array of predicted values
         """
-        if isinstance(X.to_native() if hasattr(X, 'to_native') else X, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array")
+        if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
+            raise TypeError(
+                "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
+            )
         probabilities = self.predict_proba(X)
-        return np.argmax(probabilities, axis=1) + self.distribution_predictor.min_value
-    
-    @property
-    def target(self) -> str:
-        return self.point_predictor.target
-    
-    @property
-    def pred_column(self) -> str:
-        return self.distribution_predictor.pred_column
-    
-    @property
-    def features(self) -> list[str]:
-        return self.point_predictor.features
-
+        return np.argmax(probabilities, axis=1) + self.distribution_estimator.min_value

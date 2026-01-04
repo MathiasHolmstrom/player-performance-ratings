@@ -1,13 +1,10 @@
-from typing import Optional
-
-from narwhals.typing import IntoFrameT
 import narwhals.stable.v2 as nw
+from narwhals.typing import IntoFrameT
 
 from spforge import ColumnNames
-from spforge.transformers.base_transformer import BaseTransformer
 
 
-class LagGenerator(BaseTransformer):
+class LagGenerator:
 
     def __init__(
         self,
@@ -16,16 +13,17 @@ class LagGenerator(BaseTransformer):
         add_opponent: bool,
         iterations: list[int],
         prefix: str,
-        column_names: Optional[ColumnNames] = None,
+        column_names: ColumnNames | None = None,
         are_estimator_features: bool = True,
-        unique_constraint: Optional[list[str]] = None,
-        group_to_granularity: Optional[list[str]] = None,
-        update_column: Optional[str] = None,
-        match_id_column: Optional[str] = None,
+        unique_constraint: list[str] | None = None,
+        group_to_granularity: list[str] | None = None,
+        update_column: str | None = None,
+        match_id_column: str | None = None,
         scale_by_participation_weight: bool = False,
     ):
 
         self._features_out = []
+        self.features = features
         self._entity_features_out = []
         for feature_name in features:
             for lag in iterations:
@@ -33,7 +31,7 @@ class LagGenerator(BaseTransformer):
                 self._entity_features_out.append(f"{prefix}_{feature_name}{lag}")
                 if add_opponent:
                     self._features_out.append(f"{prefix}_{feature_name}{lag}_opponent")
-        super().__init__(features_out=self._features_out, features=features)
+
         self.column_names = column_names
         self.iterations = iterations
         self._are_estimator_features = are_estimator_features
@@ -58,7 +56,6 @@ class LagGenerator(BaseTransformer):
             )
         )
 
-
     @property
     def predictor_features_out(self) -> list[str]:
         if self._are_estimator_features:
@@ -69,18 +66,14 @@ class LagGenerator(BaseTransformer):
     def features_out(self) -> list[str]:
         return self._features_out
 
-    def _maybe_group(
-        self, df: IntoFrameT, additional_cols: Optional[list[str]] = None
-    ) -> IntoFrameT:
+    def _maybe_group(self, df: IntoFrameT, additional_cols: list[str] | None = None) -> IntoFrameT:
         if (
             self.group_to_granularity
             and not self.unique_constraint
             or self.unique_constraint
             and sorted(self.unique_constraint) != sorted(self.group_to_granularity)
         ):
-            sort_col = (
-                self.column_names.start_date if self.column_names else "__row_index"
-            )
+            sort_col = self.column_names.start_date if self.column_names else "__row_index"
             return self._group_to_granularity_level(
                 df=df, sort_col=sort_col, additional_cols=additional_cols
             )
@@ -90,13 +83,13 @@ class LagGenerator(BaseTransformer):
     def _concat_with_stored(
         self,
         group_df: IntoFrameT,
-        ori_df: Optional[IntoFrameT] = None,
-        additional_cols: Optional[list[str]] = None,
+        ori_df: IntoFrameT | None = None,
+        additional_cols: list[str] | None = None,
     ) -> IntoFrameT:
         df = (
             ori_df
             if self.update_column
-            and isinstance(ori_df,nw.DataFrame)
+            and isinstance(ori_df, nw.DataFrame)
             and self.group_to_granularity
             and self.update_column not in self.group_to_granularity
             else group_df
@@ -136,9 +129,7 @@ class LagGenerator(BaseTransformer):
                 sort_col=self.column_names.start_date,
                 additional_cols=additional_cols,
             )
-        feature_generation_constraint = (
-            self.group_to_granularity or self.unique_constraint
-        )
+        feature_generation_constraint = self.group_to_granularity or self.unique_constraint
         return concat_df.unique(
             subset=feature_generation_constraint,
             maintain_order=True,
@@ -147,13 +138,13 @@ class LagGenerator(BaseTransformer):
     def _store_df(
         self,
         grouped_df: IntoFrameT,
-        ori_df: Optional[nw.DataFrame] = None,
-        additional_cols: Optional[list[str]] = None,
+        ori_df: nw.DataFrame | None = None,
+        additional_cols: list[str] | None = None,
     ):
         df = (
             ori_df
             if self.update_column
-            and isinstance(ori_df,nw.DataFrame)
+            and isinstance(ori_df, nw.DataFrame)
             and self.group_to_granularity
             and self.update_column not in self.group_to_granularity
             else grouped_df
@@ -189,9 +180,7 @@ class LagGenerator(BaseTransformer):
         if self._df is None:
             self._df = df.select(cols)
         else:
-            self._df = nw.concat(
-                [nw.from_native(self._df), df.select(cols)], how="diagonal"
-            )
+            self._df = nw.concat([nw.from_native(self._df), df.select(cols)], how="diagonal")
 
         storage_unique_constraint = self._create_storage_unique_constraint()
 
@@ -208,7 +197,7 @@ class LagGenerator(BaseTransformer):
         return storage_unique_constraint
 
     def _group_to_granularity_level(
-        self, df: IntoFrameT, sort_col, additional_cols: Optional[list[str]] = None
+        self, df: IntoFrameT, sort_col, additional_cols: list[str] | None = None
     ) -> IntoFrameT:
         if (
             self.group_to_granularity
@@ -234,8 +223,8 @@ class LagGenerator(BaseTransformer):
         self,
         df: IntoFrameT,
         concat_df: IntoFrameT,
-        match_id_join_on: Optional[str] = None,
-        features_out: Optional[list[str]] = None,
+        match_id_join_on: str | None = None,
+        features_out: list[str] | None = None,
     ) -> IntoFrameT:
         features_out = features_out or self._entity_features_out
 
@@ -256,15 +245,11 @@ class LagGenerator(BaseTransformer):
             ]
         )
         join_cols = (
-            self.group_to_granularity
-            if self.group_to_granularity
-            else self.unique_constraint
+            self.group_to_granularity if self.group_to_granularity else self.unique_constraint
         )
         for column in join_cols:
             if concat_df[column].dtype != df[column].dtype:
-                concat_df = concat_df.with_columns(
-                    concat_df[column].cast(df[column].dtype)
-                )
+                concat_df = concat_df.with_columns(concat_df[column].cast(df[column].dtype))
 
         transformed_df = (
             df.select(ori_cols)
@@ -327,16 +312,12 @@ class LagGenerator(BaseTransformer):
     def _forward_fill_future_features(
         self,
         df: IntoFrameT,
-        granularity: Optional[list[str]] = None,
     ) -> IntoFrameT:
 
         cn = self.column_names
 
         df = df.with_columns(
-            [
-                nw.col(f).fill_null(-999.21345).alias(f)
-                for f in self._entity_features_out
-            ]
+            [nw.col(f).fill_null(-999.21345).alias(f) for f in self._entity_features_out]
         )
         df = df.sort([cn.start_date])
         first_grp = (
@@ -350,30 +331,24 @@ class LagGenerator(BaseTransformer):
             .drop("__entity_row_index")
         ).select([*self.granularity, *self._entity_features_out])
 
-        df = df.select(
-            [c for c in df.columns if c not in self._entity_features_out]
-        ).join(first_grp, on=self.granularity, how="left")
+        df = df.select([c for c in df.columns if c not in self._entity_features_out]).join(
+            first_grp, on=self.granularity, how="left"
+        )
 
         df = df.sort([cn.start_date, cn.match_id, cn.team_id])
         for f in self._entity_features_out:
             df = df.with_columns(
-                nw.when(nw.col(f) == -999.21345)
-                .then(nw.lit(None))
-                .otherwise(nw.col(f))
-                .alias(f)
+                nw.when(nw.col(f) == -999.21345).then(nw.lit(None)).otherwise(nw.col(f)).alias(f)
             )
             if df[f].is_null().sum() == len(df):
                 df = df.with_columns(
-                    nw.col(f)
-                    .fill_null(strategy="forward")
-                    .over(self.granularity)
-                    .alias(f)
+                    nw.col(f).fill_null(strategy="forward").over(self.granularity).alias(f)
                     for f in self._entity_features_out
                 )
 
-        team_features = df.group_by(
-            [self.column_names.team_id, self.column_names.match_id]
-        ).agg([nw.col(f).mean().alias(f) for f in self._entity_features_out])
+        team_features = df.group_by([self.column_names.team_id, self.column_names.match_id]).agg(
+            [nw.col(f).mean().alias(f) for f in self._entity_features_out]
+        )
 
         rename_mapping = {
             self.column_names.team_id: "__opponent_team_id",
@@ -381,23 +356,13 @@ class LagGenerator(BaseTransformer):
         }
 
         df_opponent_feature = team_features.select(
-            [
-                nw.col(name).alias(rename_mapping.get(name, name))
-                for name in team_features.columns
-            ]
+            [nw.col(name).alias(rename_mapping.get(name, name)) for name in team_features.columns]
         )
         opponent_feat_names = [f"{f}_opponent" for f in self._entity_features_out]
-        new_df = df.join(
-            df_opponent_feature, on=[self.column_names.match_id], suffix="_team_sum"
-        )
-        new_df = new_df.filter(
-            nw.col(self.column_names.team_id) != nw.col("__opponent_team_id")
-        )
+        new_df = df.join(df_opponent_feature, on=[self.column_names.match_id], suffix="_team_sum")
+        new_df = new_df.filter(nw.col(self.column_names.team_id) != nw.col("__opponent_team_id"))
         new_df = new_df.with_columns(
-            [
-                nw.col(column).fill_null(-999.21345).alias(column)
-                for column in opponent_feat_names
-            ]
+            [nw.col(column).fill_null(-999.21345).alias(column) for column in opponent_feat_names]
         )
         new_df = new_df.sort([cn.start_date, cn.match_id, "__opponent_team_id"])
         first_grp = (
@@ -411,15 +376,12 @@ class LagGenerator(BaseTransformer):
             .drop("__opp_row_index")
         ).select(["__opponent_team_id", *opponent_feat_names])
 
-        new_df = new_df.select(
-            [c for c in new_df.columns if c not in opponent_feat_names]
-        ).join(first_grp, on="__opponent_team_id", how="left")
+        new_df = new_df.select([c for c in new_df.columns if c not in opponent_feat_names]).join(
+            first_grp, on="__opponent_team_id", how="left"
+        )
         new_df = new_df.with_columns(
             [
-                nw.when(nw.col(f) == -999.21345)
-                .then(nw.lit(None))
-                .otherwise(nw.col(f))
-                .alias(f)
+                nw.when(nw.col(f) == -999.21345).then(nw.lit(None)).otherwise(nw.col(f)).alias(f)
                 for f in opponent_feat_names
             ]
         )
@@ -427,10 +389,7 @@ class LagGenerator(BaseTransformer):
         new_df = new_df.sort([cn.start_date, cn.match_id, "__opponent_team_id"])
         for f in opponent_feat_names:
             new_df = new_df.with_columns(
-                nw.col(f)
-                .fill_null(strategy="forward")
-                .over("__opponent_team_id")
-                .alias(f)
+                nw.col(f).fill_null(strategy="forward").over("__opponent_team_id").alias(f)
             )
         join_cols = self.unique_constraint or [
             self.column_names.match_id,
@@ -482,9 +441,7 @@ class LagGenerator(BaseTransformer):
         df = df.sort("__row_index")
         if self.update_column != self.match_id_column:
             for feature_name in self._entity_features_out:
-                df = self._equalize_values_within_update_id(
-                    df=df, column_name=feature_name
-                )
+                df = self._equalize_values_within_update_id(df=df, column_name=feature_name)
 
         if self.add_opponent:
             return self._add_opponent_features(df).sort("__row_index")

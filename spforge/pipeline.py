@@ -1,46 +1,68 @@
-import polars as pl
-import logging
+from typing import Any
 
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline as SkPipeline
-from typing import Optional, Any
-
+import narwhals.stable.v2 as nw
 import numpy as np
 import pandas as pd
-import narwhals.stable.v2 as nw
+import polars as pl
 from narwhals.typing import IntoFrameT
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline as SkPipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.base import BaseEstimator
 
-from spforge.transformers.base_transformer import BaseTransformer
-from spforge.transformers import ConvertDataFrameToCategoricalTransformer
-
+from spforge.estimator.sklearn_estimator import GroupByEstimator
 from spforge.scorer import Filter, apply_filters
 
+class PreprocessorToDataFrame(BaseEstimator, TransformerMixin):
+    def __init__(self, preprocessor: Any):
+        self.preprocessor = preprocessor
+        self._feature_names_out: np.ndarray | None = None
+
+    @nw.narwhalify
+    def fit(self, X: IntoFrameT, y: Any = None):
+        y = y.to_numpy() if not isinstance(y, np.ndarray) else y
+        self.preprocessor.fit(X.to_native(), y)
+        if hasattr(self.preprocessor, "get_feature_names_out"):
+            self._feature_names_out = self.preprocessor.get_feature_names_out()
+        else:
+            self._feature_names_out = None
+        return self
+
+    @nw.narwhalify
+    def transform(self, X: IntoFrameT) -> IntoFrameT:
+        out = self.preprocessor.transform(X.to_native())
+        return nw.from_native(
+            out,
+        )
+
+    def get_feature_names_out(self, input_features: Any = None):
+        if hasattr(self.preprocessor, "get_feature_names_out"):
+            return self.preprocessor.get_feature_names_out(input_features)
+        if self._feature_names_out is None:
+            raise AttributeError("No feature names available.")
+        return self._feature_names_out
 
 class Pipeline(BaseEstimator):
     def __init__(
-            self,
-            estimator: Any,
-            target: str,
-            features: Optional[list[str]] = None,
-            pred_column: Optional[str] = None,
-            filters: list[Filter] | None = None,
-            scale_features: bool = False,
-            one_hot_encode_cat_features: bool = False,
-            impute_missing_values: bool = False,
-            drop_rows_where_target_is_nan: bool = False,
-            min_target: int | float | None = None,
-            max_target: int | float | None = None,
-            categorical_features: list[str] | None = None,
-            numeric_features: list[str] | None = None,
-            remainder: str = "drop",
+        self,
+        estimator: Any,
+        feature_names: list[str],
+        granularity: list[str] | None = None,
+        filters: list[Filter] | None = None,
+        scale_features: bool = False,
+        one_hot_encode_cat_features: bool = False,
+        impute_missing_values: bool = False,
+        drop_rows_where_target_is_nan: bool = False,
+        min_target: int | float | None = None,
+        max_target: int | float | None = None,
+        categorical_features: list[str] | None = None,
+        numeric_features: list[str] | None = None,
+        remainder: str = "drop",
     ):
+        self.feature_names = feature_names
+        self.granularity = granularity
         self.estimator = estimator
-        self._target = target
-        self._features = features or []
-        self._pred_column = pred_column or f"{target}_prediction"
         self.filters = filters or []
         self.scale_features = scale_features
         self.one_hot_encode_cat_features = one_hot_encode_cat_features
@@ -51,45 +73,32 @@ class Pipeline(BaseEstimator):
         self.categorical_features = categorical_features
         self.numeric_features = numeric_features
         self.remainder = remainder
+
         self._sk: SkPipeline | None = None
         self._fitted_features: list[str] = []
+        self._target_name: str | None = None
 
-    @property
-    def target(self) -> str:
-        return self._target
 
-    @property
-    def pred_column(self) -> str:
-        return self._pred_column
+    def _infer_feature_types(self, df_pd: pd.DataFrame) -> tuple[list[str], list[str]]:
+        feats = list(self.feature_names)
+        if self.numeric_features is not None and self.categorical_features is not None:
+            num = [c for c in self.numeric_features if c in feats]
+            cat = [c for c in self.categorical_features if c in feats]
+            return num, cat
 
-    @property
-    def features(self) -> list[str]:
-        return self._features
+        if self.numeric_features is not None:
+            num_set = {c for c in self.numeric_features if c in feats}
+            cat = [c for c in feats if c not in num_set]
+            return [c for c in feats if c in num_set], cat
 
-    def _reject_numpy(self, X: Any):
-        native = X.to_native() if hasattr(X, "to_native") else X
-        if isinstance(native, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas/polars/narwhals), not a numpy array")
-
-    def _to_pandas(self, df: Any) -> pd.DataFrame:
-        native = df.to_native() if hasattr(df, "to_native") else df
-        if isinstance(native, pd.DataFrame):
-            return native
-        if isinstance(native, pl.DataFrame):
-            return native.to_pandas()
-        if hasattr(df, "to_pandas"):
-            return df.to_pandas()
-        return pd.DataFrame(native)
-
-    def _infer_feature_types(self, df_pd: pd.DataFrame, features: list[str]) -> tuple[list[str], list[str]]:
-        if self.numeric_features is not None or self.categorical_features is not None:
-            num = self.numeric_features or []
-            cat = self.categorical_features or []
-            return list(num), list(cat)
+        if self.categorical_features is not None:
+            cat_set = {c for c in self.categorical_features if c in feats}
+            num = [c for c in feats if c not in cat_set]
+            return num, [c for c in feats if c in cat_set]
 
         num = []
         cat = []
-        for c in features:
+        for c in self.feature_names:
             s = df_pd[c]
             if pd.api.types.is_numeric_dtype(s):
                 num.append(c)
@@ -97,95 +106,106 @@ class Pipeline(BaseEstimator):
                 cat.append(c)
         return num, cat
 
-    def _build_sklearn_pipeline(self, df_pd: pd.DataFrame, features: list[str]) -> SkPipeline:
-        num_feats, cat_feats = self._infer_feature_types(df_pd, features)
+    def _build_sklearn_pipeline(self, df_pd: pd.DataFrame) -> SkPipeline:
+        num_feats, cat_feats = self._infer_feature_types(df_pd)
+
+        gran = [c for c in (self.granularity or []) if c in self.feature_names]
+        do_groupby = len(gran) > 0
+
+        if do_groupby:
+            num_feats = [c for c in num_feats if c not in gran]
+            cat_feats = [c for c in cat_feats if c not in gran]
 
         num_steps = []
         cat_steps = []
 
         if self.impute_missing_values:
-            num_steps.append(("impute", SimpleImputer()))
-            cat_steps.append(("impute", SimpleImputer(strategy="most_frequent")))
+            if num_feats:
+                num_steps.append(("impute", SimpleImputer()))
+            if cat_feats:
+                cat_steps.append(("impute", SimpleImputer(strategy="most_frequent")))
 
-        if self.scale_features:
+        if self.scale_features and num_feats:
             num_steps.append(("scale", StandardScaler()))
 
-        if self.one_hot_encode_cat_features:
-            cat_steps.append(("ohe", OneHotEncoder(handle_unknown="ignore")))
+        if self.one_hot_encode_cat_features and cat_feats:
+            try:
+                ohe = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
+            except TypeError:
+                ohe = OneHotEncoder(handle_unknown="ignore", sparse=False)
+            cat_steps.append(("ohe", ohe))
 
+        transformers = []
         if num_feats:
-            if num_steps:
-                num_pipe = SkPipeline(steps=num_steps)
-            else:
-                num_pipe = "passthrough"
-            num_tr = ("num", num_pipe, num_feats)
-        else:
-            num_tr = None
+            num_pipe = SkPipeline(steps=num_steps) if num_steps else "passthrough"
+            transformers.append(("num", num_pipe, num_feats))
 
         if cat_feats:
-            if cat_steps:
-                cat_pipe = SkPipeline(steps=cat_steps)
-            else:
-                cat_pipe = "passthrough"
-            cat_tr = ("cat", cat_pipe, cat_feats)
-        else:
-            cat_tr = None
+            cat_pipe = SkPipeline(steps=cat_steps) if cat_steps else "passthrough"
+            transformers.append(("cat", cat_pipe, cat_feats))
 
-        transformers = [t for t in [num_tr, cat_tr] if t is not None]
-        pre = ColumnTransformer(transformers=transformers, remainder=self.remainder)
+        if do_groupby:
+            transformers.append(("key", "passthrough", gran))
 
-        return SkPipeline(steps=[("pre", pre), ("est", self.estimator)])
+        pre_raw = ColumnTransformer(transformers=transformers, remainder=self.remainder)
+        pre_raw.set_output(transform='polars')
+        pre = PreprocessorToDataFrame(pre_raw)
 
-    def _narwhals_preprocess(self, df: Any) -> Any:
+        est = (
+            GroupByEstimator(self.estimator, granularity=[f"key__{c}" for c in gran])
+            if do_groupby
+            else self.estimator
+        )
+
+        return SkPipeline(steps=[("pre", pre), ("est", est)])
+
+    def _narwhals_preprocess(self, df: nw.DataFrame, target: str) -> nw.DataFrame:
         if self.min_target is not None:
-            df = df.with_columns(nw.col(self._target).clip(lower_bound=self.min_target))
+            df = df.with_columns(nw.col(target).clip(lower_bound=self.min_target))
         if self.max_target is not None:
-            df = df.with_columns(nw.col(self._target).clip(upper_bound=self.max_target))
+            df = df.with_columns(nw.col(target).clip(upper_bound=self.max_target))
 
         df = apply_filters(df=df, filters=self.filters)
+
         if not hasattr(df, "to_native"):
             df = nw.from_native(df)
 
         if self.drop_rows_where_target_is_nan:
-            df = df.filter(~nw.col(self._target).is_nan())
+            df = df.filter(~nw.col(target).is_null())
 
         return df
 
     @nw.narwhalify
-    def fit(self, X: IntoFrameT, y=None, features: Optional[list[str]] = None,
-            sample_weight: Optional[np.ndarray] = None):
-        self._reject_numpy(X)
+    def fit(self, X: IntoFrameT, y: Any, sample_weight: np.ndarray | None = None):
+        self._target_name = getattr(y, "name", "target")
+        self._fitted_features = list(self.feature_names)
 
-        original_native = X.to_native()
-        is_sklearn_style = y is not None
-
-        if is_sklearn_style:
-            y_values = y.to_list() if hasattr(y, "to_list") else y
-            df = X.with_columns(
-                nw.new_series(
-                    name=self._target,
-                    values=y_values,
-                    backend=nw.get_native_namespace(X),
-                )
+        y_values = y.to_list() if hasattr(y, "to_list") else y
+        df = X.with_columns(
+            nw.new_series(
+                name=self._target_name,
+                values=y_values,
+                backend=nw.get_native_namespace(X),
             )
-            feats = features or list(X.columns)
-        else:
-            df = X
-            if self._target not in df.columns:
-                raise ValueError(f"Target {self._target} not in columns: {df.columns}")
-            feats = features or self._features
+        )
 
-        if not feats:
-            raise ValueError("features not set. Pass features to fit() or constructor")
 
-        df = self._narwhals_preprocess(df)
-        df_pd = self._to_pandas(df)
+        df = self._narwhals_preprocess(df, self._target_name)
 
-        self._fitted_features = list(feats)
-        self._sk = self._build_sklearn_pipeline(df_pd, self._fitted_features)
+        missing = [c for c in self._fitted_features if c not in df.columns]
+        if missing:
+            raise ValueError(f"Missing required feature columns: {missing}")
 
-        X_fit = df_pd[self._fitted_features]
-        y_fit = df_pd[self._target]
+        if self._target_name not in df.columns:
+            raise ValueError(f"Missing target column: {self._target_name}")
+
+        if len(df) == 0:
+            raise ValueError("DataFrame is empty after preprocessing. Cannot fit estimator.")
+
+        self._sk = self._build_sklearn_pipeline(df)
+
+        X_fit = df[self._fitted_features].to_native()
+        y_fit = df[self._target_name].to_numpy()
 
         if sample_weight is not None:
             self._sk.fit(X_fit, y_fit, est__sample_weight=sample_weight)
@@ -198,48 +218,16 @@ class Pipeline(BaseEstimator):
         return self
 
     @nw.narwhalify
-    def predict(self, X: IntoFrameT, return_features: bool = False, **kwargs) -> IntoFrameT:
-        self._reject_numpy(X)
+    def predict(self, X: IntoFrameT) -> IntoFrameT | np.ndarray:
         if self._sk is None:
             raise RuntimeError("Pipeline not fitted. Call fit() first.")
 
-        native_in = X.to_native()
-        is_pandas_in = isinstance(native_in, pd.DataFrame)
-
-        df = nw.from_native(X) if not hasattr(X, "to_native") else X
-        df_pd = self._to_pandas(df)
-
-        X_pred = df_pd[self._fitted_features]
-        preds = self._sk.predict(X_pred)
-
-        if is_pandas_in:
-            return preds
-
-        out = df.with_columns(
-            nw.new_series(
-                name=self._pred_column,
-                values=preds.tolist() if isinstance(preds, np.ndarray) else list(preds),
-                backend=nw.get_native_namespace(df),
-            )
-        )
-
-        if return_features:
-            return out
-
-        input_cols = list(X.columns)
-        cols = [c for c in input_cols if c in out.columns] + [self._pred_column]
-        return out.select(cols)
+        return self._sk.predict(X[self._fitted_features].to_native())
 
     @nw.narwhalify
     def predict_proba(self, X: IntoFrameT) -> np.ndarray:
-        self._reject_numpy(X)
         if self._sk is None:
             raise RuntimeError("Pipeline not fitted. Call fit() first.")
 
-        if not hasattr(self._sk[-1], "predict_proba"):
-            raise AttributeError(f"{type(self._sk[-1]).__name__} does not support predict_proba")
-
-        df = nw.from_native(X) if not hasattr(X, "to_native") else X
-        df_pd = self._to_pandas(df)
-        X_pred = df_pd[self._fitted_features]
+        X_pred = X[self._fitted_features]
         return self._sk.predict_proba(X_pred)

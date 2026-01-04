@@ -1,16 +1,14 @@
-from typing import Optional
-
 import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
 
 from spforge import ColumnNames
 from spforge.feature_generator._base import LagGenerator
 from spforge.feature_generator._utils import (
-    required_lag_column_names,
-    transformation_validator,
-    historical_lag_transformations_wrapper,
     future_lag_transformations_wrapper,
     future_validator,
+    historical_lag_transformations_wrapper,
+    required_lag_column_names,
+    transformation_validator,
 )
 
 
@@ -21,15 +19,15 @@ class LagTransformer(LagGenerator):
         features: list[str],
         lag_length: int,
         granularity: list[str],
-        days_between_lags: Optional[list[int]] = None,
+        days_between_lags: list[int] | None = None,
         future_lag: bool = False,
         prefix: str = "lag",
         add_opponent: bool = False,
-        column_names: Optional[ColumnNames] = None,
-        group_to_granularity: Optional[list[str]] = None,
-        unique_constraint: Optional[list[str]] = None,
-        update_column: Optional[str] = None,
-        match_id_column: Optional[str] = None,
+        column_names: ColumnNames | None = None,
+        group_to_granularity: list[str] | None = None,
+        unique_constraint: list[str] | None = None,
+        update_column: str | None = None,
+        match_id_column: str | None = None,
     ):
         """
         :param features. List of features to create lags for
@@ -67,9 +65,7 @@ class LagTransformer(LagGenerator):
     @historical_lag_transformations_wrapper
     @required_lag_column_names
     @transformation_validator
-    def fit_transform(
-        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
-    ) -> IntoFrameT:
+    def fit_transform(self, df: IntoFrameT, column_names: ColumnNames | None = None) -> IntoFrameT:
         """ """
         grouped = self._maybe_group(df)
         if self.column_names:
@@ -86,9 +82,7 @@ class LagTransformer(LagGenerator):
                 if self.group_to_granularity
                 else [*self.granularity, self.update_column]
             )
-            grouped_with_feats = self._generate_features(grouped, ori_df=df).sort(
-                "__row_index"
-            )
+            grouped_with_feats = self._generate_features(grouped, ori_df=df).sort("__row_index")
             df = df.join(
                 grouped_with_feats.select([*join_on_cols, *self.features_out]),
                 on=join_on_cols,

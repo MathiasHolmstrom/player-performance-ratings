@@ -1,38 +1,33 @@
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
+from sklearn.base import TransformerMixin
 
 if TYPE_CHECKING:
     from spforge.pipeline import Pipeline
 
-from spforge.transformers.base_transformer import (
-    BaseTransformer,
-)
 import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
 
 
-class PredictorTransformer(BaseTransformer):
+class PredictorTransformer(TransformerMixin):
     """
-    Transformer that uses a predictor to generate predictions on the dataset
+    Transformer that uses an estimator to generate predictions on the dataset
     This is useful if you want to use the output of a feature as input for another model
     """
 
-    def __init__(self, predictor: "Pipeline", features: list[str] = None):
+    def __init__(self, estimator: "Pipeline", features: list[str] = None):
         """
-        :param predictor: The predictor to use to add add new prediction-columns to the dataset
-        :param features: The features to use for the predictor
+        :param estimator: The estimator (sklearn-compatible) to use to add new prediction-columns to the dataset
+        :param features: The features to track (for BaseTransformer), not used by estimator
         """
-        self.predictor = predictor
-        super().__init__(
-            features=features, features_out=[f"{self.predictor.pred_column}"]
-        )
+        self.estimator = estimator
+        super().__init__(features=features, features_out=[f"{self.estimator.pred_column}"])
 
     @nw.narwhalify
-    def fit_transform(
-        self, df: IntoFrameT, column_names: Optional[None] = None
-    ) -> IntoFrameT:
-        self.predictor.fit(df=df, features=self.features)
-        return self.transform(df)
+    def fit(self, df: IntoFrameT) :
+        self.estimator.fit(X=df)
+        return self
 
     @nw.narwhalify
-    def transform(self, df: IntoFrameT, cross_validate: bool = False) -> IntoFrameT:
-        return self.predictor.predict(df=df)
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
+        return self.estimator.predict(X=df, return_features=True)

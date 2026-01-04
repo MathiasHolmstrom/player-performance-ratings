@@ -1,92 +1,48 @@
-from typing import Optional
+from typing import Any
 
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from spforge.pipeline import Pipeline
-
-from spforge import ColumnNames
-
-from spforge.transformers.base_transformer import (
-    BaseTransformer,
-)
 import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
+from sklearn.base import BaseEstimator, TransformerMixin, is_regressor
 
 
 
-
-class NetOverPredictedTransformer(BaseTransformer):
+class NetOverPredictedTransformer(TransformerMixin):
     def __init__(
         self,
-        predictor: "Pipeline",
-        features: list[str] = None,
-        net_over_predicted_col: Optional[str] = None,
-        are_estimator_features: bool = False,
+        estimator: BaseEstimator | Any,
+        features: list[str],
+        target_name: str,
+        net_over_predicted_col: str,
+        pred_column: str | None = None,
     ):
-        super().__init__(
-            features=features,
-            are_estimator_features=are_estimator_features,
-            features_out=[],
-        )
+        self.features_out = [net_over_predicted_col, pred_column] if pred_column else [net_over_predicted_col]
+        self.features_out = features
+        self.target_name = target_name
+        self.estimator = estimator
+        self.pred_column = pred_column or '__pred'
+        self.net_over_predicted_col = net_over_predicted_col
+        assert is_regressor(estimator)
 
-        self.predictor = predictor
-        self.column_names = None
-
-        self.net_over_predicted_col = (
-            net_over_predicted_col
-            if net_over_predicted_col is not None
-            else f"net_over_predicted_{self.predictor.pred_column}"
-        )
-
-        if not self.net_over_predicted_col:
-            raise ValueError("net_over_predicted_col must not be empty")
-
-        self._features_out = [
-            self.predictor.pred_column,
-            self.net_over_predicted_col,
-        ]
-
-        if not hasattr(self, "_predictor_features_out"):
-            self._predictor_features_out = []
-        self._predictor_features_out.extend(self._features_out.copy())
-
-        if self._are_estimator_features:
-            self._predictor_features_out.append(self.predictor.pred_column)
-            self.features_out.append(self.predictor.pred_column)
 
     @nw.narwhalify
-    def fit_transform(
+    def fit(
         self,
-        df: IntoFrameT,
-        column_names: Optional[ColumnNames] = None,
-    ) -> IntoFrameT:
-        ori_cols = df.columns
-        self.column_names = column_names
-        self.predictor.fit(df, features=self.features)
+        X: IntoFrameT,
+        y,
+    )  :
+        self.estimator.fit(X, y)
+        return self
 
-        df = self._transform(df)
-
-        return df.select(list(set(ori_cols + self.features_out)))
 
     @nw.narwhalify
-    def transform(self, df: IntoFrameT) -> IntoFrameT:
-        return self._transform(df)
-
-
-    def _transform(self, df: IntoFrameT) -> IntoFrameT:
-        ori_cols = df.columns
-        df = nw.from_native(self.predictor.predict(df))
-
-        df = df.with_columns(
-            (nw.col(self.predictor.target) - nw.col(self.predictor.pred_column)).alias(
-                self.net_over_predicted_col
-            )
+    def transform(self, X: IntoFrameT) -> IntoFrameT:
+        ori_cols = X.columns
+        predictions = self.estimator.predict(X)
+        X = X.with_columns(
+            nw.new_series(name=self.pred_column, values=predictions, backend=nw.get_native_namespace(X))
         )
-
-        return df.select(
-            list(set(ori_cols + self.features_out + self._predictor_features_out))
+        X = X.with_columns(
+            (nw.col(self.target_name) - nw.col(self.pred_column)).alias(self.net_over_predicted_col)
         )
-
+        return X.select(ori_cols + self.features_out)
 

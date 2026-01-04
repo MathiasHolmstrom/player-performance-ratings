@@ -1,23 +1,19 @@
-from abc import abstractmethod, ABC
-from typing import Optional
-
-from spforge import ColumnNames
-
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from spforge.pipeline import Pipeline
 
-from spforge.scorer import BaseScorer
+from narwhals.typing import IntoFrameT
 
-from narwhals.typing import IntoFrameT, IntoFrameT
+from spforge.scorer import BaseScorer
 
 
 class CrossValidator(ABC):
 
     def __init__(
         self,
-        scorer: Optional[BaseScorer],
+        scorer: BaseScorer | None,
         min_validation_date: str,
         estimator: "Pipeline",
     ):
@@ -39,7 +35,7 @@ class CrossValidator(ABC):
         pass
 
     def cross_validation_score(
-        self, validation_df: IntoFrameT, scorer: Optional[BaseScorer] = None
+        self, validation_df: IntoFrameT, scorer: BaseScorer | None = None
     ) -> float:
         if not scorer and not self.scorer:
             raise ValueError(

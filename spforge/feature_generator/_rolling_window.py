@@ -1,17 +1,17 @@
-from typing import Union, Optional, Literal
-import narwhals.stable.v2 as nw
+from typing import Literal
 
+import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
 
 from spforge import ColumnNames
-from spforge.feature_generator._utils import (
-    required_lag_column_names,
-    historical_lag_transformations_wrapper,
-    transformation_validator,
-    future_validator,
-    future_lag_transformations_wrapper,
-)
 from spforge.feature_generator._base import LagGenerator
+from spforge.feature_generator._utils import (
+    future_lag_transformations_wrapper,
+    future_validator,
+    historical_lag_transformations_wrapper,
+    required_lag_column_names,
+    transformation_validator,
+)
 
 
 class RollingWindowTransformer(LagGenerator):
@@ -28,17 +28,17 @@ class RollingWindowTransformer(LagGenerator):
         self,
         features: list[str],
         window: int,
-        granularity: Union[list[str], str],
+        granularity: list[str] | str,
         add_opponent: bool = False,
         scale_by_participation_weight: bool = False,
         min_periods: int = 1,
         are_estimator_features=True,
         prefix: str = "rolling_mean",
         aggregation: Literal["mean", "sum", "var"] = "mean",
-        group_to_granularity: Optional[list[str]] = None,
-        unique_constraint: Optional[list[str]] = None,
-        match_id_column: Optional[str] = None,
-        update_column: Optional[str] = None,
+        group_to_granularity: list[str] | None = None,
+        unique_constraint: list[str] | None = None,
+        match_id_column: str | None = None,
+        update_column: str | None = None,
     ):
         """
         :param features:   Features to create rolling mean for
@@ -75,7 +75,7 @@ class RollingWindowTransformer(LagGenerator):
         self.scale_by_participation_weight = scale_by_participation_weight
         if self.aggregation == "var" and self.scale_by_participation_weight:
             raise NotImplementedError(
-                f"Rolling variance with participation weight is not implemented yet."
+                "Rolling variance with participation weight is not implemented yet."
             )
         self.window = window
         self.min_periods = min_periods
@@ -84,9 +84,7 @@ class RollingWindowTransformer(LagGenerator):
     @historical_lag_transformations_wrapper
     @required_lag_column_names
     @transformation_validator
-    def fit_transform(
-        self, df: IntoFrameT, column_names: ColumnNames | None = None
-    ) -> IntoFrameT:
+    def fit_transform(self, df: IntoFrameT, column_names: ColumnNames | None = None) -> IntoFrameT:
         """
         Generates rolling mean for historical data
         Stored the historical data as instance-variables so it's possible to generate future data afterwards
@@ -110,9 +108,7 @@ class RollingWindowTransformer(LagGenerator):
                 if self.group_to_granularity
                 else [*self.granularity, self.update_column]
             )
-            grouped_with_feats = self._generate_features(grouped, ori_df=df).sort(
-                "__row_index"
-            )
+            grouped_with_feats = self._generate_features(grouped, ori_df=df).sort("__row_index")
             df = df.join(
                 grouped_with_feats.select([*join_on_cols, *self.features_out]),
                 on=join_on_cols,
@@ -168,9 +164,9 @@ class RollingWindowTransformer(LagGenerator):
         if self.scale_by_participation_weight:
 
             concat_df = concat_df.with_columns(
-                (
-                    nw.col(feature) * nw.col(self.column_names.participation_weight)
-                ).alias(f"__scaled_{feature}")
+                (nw.col(feature) * nw.col(self.column_names.participation_weight)).alias(
+                    f"__scaled_{feature}"
+                )
                 for feature in self.features
             )
             scaled_feats = [f"__scaled_{feature}" for feature in self.features]

@@ -1,9 +1,6 @@
-
-from ._base import BasePredictor
-from .sklearn_estimator import OrdinalClassifier, SkLearnWrapper, LGBMWrapper, GranularityEstimator
 from ._distribution import (
-    NegativeBinomialEstimator,
     DistributionManagerPredictor,
+    NegativeBinomialEstimator,
     NormalDistributionPredictor,
-
 )
+from .sklearn_estimator import GranularityEstimator, SkLearnEnhancerEstimator, OrdinalClassifier

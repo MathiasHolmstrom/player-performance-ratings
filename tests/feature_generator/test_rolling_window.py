@@ -1,7 +1,8 @@
 import pandas as pd
-import pytest
 import polars as pl
+import pytest
 from polars.testing import assert_frame_equal
+
 from spforge import ColumnNames
 from spforge.feature_generator import RollingWindowTransformer
 
@@ -115,9 +116,7 @@ def test_rolling_mean_transform_historical_game_team(
             ]
         )
         if not add_opponent:
-            expected_df = expected_df.drop(
-                f"{rolling_mean_transformation.prefix}_points3_opponent"
-            )
+            expected_df = expected_df.drop(f"{rolling_mean_transformation.prefix}_points3_opponent")
 
         assert_frame_equal(
             df_with_rolling_mean,
@@ -284,9 +283,7 @@ def test_rolling_mean_transform_historical_and_transform_future(df, column_names
         add_opponent=True,
     )
 
-    _ = rolling_mean_transformation.fit_transform(
-        df=historical_df, column_names=column_names
-    )
+    _ = rolling_mean_transformation.fit_transform(df=historical_df, column_names=column_names)
     transformed_future_df = rolling_mean_transformation.transform(future_df)
 
     if isinstance(future_df, pd.DataFrame):
@@ -304,12 +301,8 @@ def test_rolling_mean_transform_historical_and_transform_future(df, column_names
     else:
         expected_df = original_future_df.with_columns(
             [
-                pl.Series(
-                    rolling_mean_transformation.features_out[0], [2.5, 2, 2.5, 2]
-                ),
-                pl.Series(
-                    rolling_mean_transformation.features_out[1], [2, 2.5, 2, 2.5]
-                ),
+                pl.Series(rolling_mean_transformation.features_out[0], [2.5, 2, 2.5, 2]),
+                pl.Series(rolling_mean_transformation.features_out[1], [2, 2.5, 2, 2.5]),
             ]
         )
         pl.testing.assert_frame_equal(
@@ -358,16 +351,12 @@ def test_rolling_mean_transform_update_id_different_from_game_id(
         )
         column_names = None
 
-    transformed_df = transformer.fit_transform(
-        historical_df, column_names=column_names
-    )
+    transformed_df = transformer.fit_transform(historical_df, column_names=column_names)
 
     expected_df = expected_df.assign(
         **{transformer.features_out[0]: [None, None, 1.5, (3 + 2) / 2]}
     )
-    pd.testing.assert_frame_equal(
-        transformed_df, expected_df, check_like=True, check_dtype=False
-    )
+    pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
 @pytest.mark.parametrize("use_column_names", [True, False])
@@ -376,9 +365,7 @@ def test_rolling_mean_transform_historical_group_to_granularity(
 ):
     data = pd.DataFrame(
         {
-            column_names.start_date: ["2023-01-01"] * 4
-            + ["2023-01-02"] * 4
-            + ["2023-01-03"] * 4,
+            column_names.start_date: ["2023-01-01"] * 4 + ["2023-01-02"] * 4 + ["2023-01-03"] * 4,
             column_names.player_id: [1, 2, 3, 4] * 3,
             column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3],
             column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2],
@@ -405,9 +392,7 @@ def test_rolling_mean_transform_historical_group_to_granularity(
         column_names = None
 
     expected_df = data.copy()
-    transformed_df = transformer.fit_transform(
-        df=data, column_names=column_names
-    )
+    transformed_df = transformer.fit_transform(df=data, column_names=column_names)
     expected_df[transformer.features_out[0]] = [None] * 4 + [1, 1, 2, 2, 2, 2, 3, 3]
     pd.testing.assert_frame_equal(
         expected_df, transformed_df[expected_df.columns], check_dtype=False
@@ -459,9 +444,7 @@ def test_rolling_mean_transform_historical_group_to_granularity_and_update_id(
     column_names.update_match_id = "series_id"
     data = pd.DataFrame(
         {
-            column_names.start_date: ["2023-01-01"] * 4
-            + ["2023-01-02"] * 4
-            + ["2023-01-03"] * 4,
+            column_names.start_date: ["2023-01-01"] * 4 + ["2023-01-02"] * 4 + ["2023-01-03"] * 4,
             column_names.player_id: [1, 2, 3, 4] * 3,
             column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3],
             column_names.update_match_id: [1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2],
@@ -489,9 +472,7 @@ def test_rolling_mean_transform_historical_group_to_granularity_and_update_id(
         column_names = None
 
     expected_df = data.copy()
-    transformed_df = transformer.fit_transform(
-        df=data, column_names=column_names
-    )
+    transformed_df = transformer.fit_transform(df=data, column_names=column_names)
     expected_df[transformer.features_out[0]] = [None] * 4 + [1, 1, 2, 2] * 2
     pd.testing.assert_frame_equal(
         expected_df, transformed_df[expected_df.columns], check_dtype=False
@@ -558,9 +539,7 @@ def test_rolling_mean_transform_historical_different_unique_constraint(
         column_names = None
 
     expected_df = data.copy()
-    transformed_df = transformer.fit_transform(
-        df=data, column_names=column_names
-    )
+    transformed_df = transformer.fit_transform(df=data, column_names=column_names)
 
     expected_df = expected_df.assign(
         **{
@@ -580,9 +559,7 @@ def test_rolling_mean_transform_historical_different_unique_constraint(
             ]
         }
     )
-    pd.testing.assert_frame_equal(
-        transformed_df, expected_df, check_like=True, check_dtype=False
-    )
+    pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
 
 
 def test_rolling_mean_transform_future_granularity_differs_from_input_granularity(
@@ -652,9 +629,7 @@ def test_rolling_mean_transform_future_granularity_differs_from_input_granularit
 
 
 @pytest.mark.parametrize("use_column_names", [True, False])
-def test_rolling_mean_historical_transform_higher_granularity(
-    column_names, use_column_names: bool
-):
+def test_rolling_mean_historical_transform_higher_granularity(column_names, use_column_names: bool):
 
     data = pd.DataFrame(
         {
@@ -699,9 +674,7 @@ def test_rolling_mean_historical_transform_higher_granularity(
         column_names = None
 
     expected_df = data.copy()
-    transformed_df = transformer.fit_transform(
-        df=data, column_names=column_names
-    )
+    transformed_df = transformer.fit_transform(df=data, column_names=column_names)
 
     expected_df = expected_df.assign(
         **{
@@ -710,6 +683,4 @@ def test_rolling_mean_historical_transform_higher_granularity(
             + [(1 + 3 + 5 + 7) / 4, (2 + 4 + 6 + 8) / 4] * 2
         }
     )
-    pd.testing.assert_frame_equal(
-        transformed_df, expected_df, check_like=True, check_dtype=False
-    )
+    pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)

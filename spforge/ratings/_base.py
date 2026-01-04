@@ -4,7 +4,7 @@ from __future__ import annotations
 import inspect
 import logging
 from abc import abstractmethod
-from typing import Optional, Any, Literal, Union
+from typing import Any, Literal
 
 import narwhals.stable.v2 as nw
 import polars as pl
@@ -13,28 +13,29 @@ from narwhals.stable.v2.typing import IntoFrameT
 
 from spforge import ColumnNames
 from spforge.data_structures import RatingState
-from spforge.ratings import RatingKnownFeatures, RatingUnknownFeatures
+from spforge.feature_generator._utils import to_polars
+from spforge.performance_transformers._performance_manager import (
+    ColumnWeight,
+    PerformanceManager,
+    PerformanceWeightsManager,
+)
+from spforge.ratings.enums import RatingKnownFeatures, RatingUnknownFeatures
 from spforge.ratings.league_identifier import LeagueIdentifer2
 from spforge.ratings.performance_predictor import (
-    RatingMeanPerformancePredictor,
     RatingDifferencePerformancePredictor,
+    RatingMeanPerformancePredictor,
     RatingNonOpponentPerformancePredictor,
 )
-from spforge.performance_transformers._performance_manager import PerformanceManager, PerformanceWeightsManager
-from spforge.performance_transformers._performance_manager import ColumnWeight
-from spforge.transformers.base_transformer import BaseTransformer
-
-from spforge.feature_generator._utils import to_polars
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 EXPECTED_MEAN_CONFIDENCE_SUM = 30
 
 
-class RatingGenerator(BaseTransformer):
+class RatingGenerator:
     def __init__(
         self,
         performance_column: str,
-        performance_weights: Optional[list[Union[ColumnWeight, dict[str, float]]]],
+        performance_weights: list[ColumnWeight | dict[str, float]] | None,
         column_names: ColumnNames,
         features_out: list[str] | None,
         performance_manager: PerformanceManager | None,
@@ -47,7 +48,7 @@ class RatingGenerator(BaseTransformer):
         confidence_value_denom: float,
         confidence_max_sum: float,
         confidence_weight: float,
-        non_predictor_features_out: Optional[list[RatingKnownFeatures | RatingUnknownFeatures]],
+        non_predictor_features_out: list[RatingKnownFeatures | RatingUnknownFeatures] | None,
         min_rating_change_multiplier_ratio: float,
         league_rating_change_update_threshold: float,
         league_rating_adjustor_multiplier: float,
@@ -63,7 +64,7 @@ class RatingGenerator(BaseTransformer):
         self.league_rating_change_update_threshold = league_rating_change_update_threshold
 
         self.confidence_max_days = confidence_max_days
-        self._league_rating_changes: dict[Optional[str], float] = {}
+        self._league_rating_changes: dict[str | None, float] = {}
         self._league_rating_changes_count: dict[str, float] = {}
 
         self.min_rating_change_multiplier_ratio = float(min_rating_change_multiplier_ratio)
@@ -74,7 +75,9 @@ class RatingGenerator(BaseTransformer):
 
         self.confidence_max_sum = float(confidence_max_sum)
         self.non_predictor_features_out = non_predictor_features_out or []
-        self.non_predictor_features_out = [self._suffix(str(c)) for c in self.non_predictor_features_out]
+        self.non_predictor_features_out = [
+            self._suffix(str(c)) for c in self.non_predictor_features_out
+        ]
 
         if performance_predictor == "mean":
             _performance_predictor_class = RatingMeanPerformancePredictor
@@ -107,8 +110,7 @@ class RatingGenerator(BaseTransformer):
         self.kwargs = kwargs
 
         self.performance_manager = self._create_performance_manager()
-        
-        # Backward compatibility alias
+
         self.performances_generator = self.performance_manager
 
         self.confidence_days_ago_multiplier = float(confidence_days_ago_multiplier)
@@ -131,7 +133,7 @@ class RatingGenerator(BaseTransformer):
     def fit_transform(
         self,
         df: IntoFrameT,
-        column_names: Optional[ColumnNames] = None,
+        column_names: ColumnNames | None = None,
     ) -> DataFrame | IntoFrameT:
         if not self.performance_manager:
             assert self.performance_column in df.columns, (
@@ -203,7 +205,10 @@ class RatingGenerator(BaseTransformer):
 
     def _create_performance_manager(self) -> PerformanceManager | None:
         if self.performance_manager:
-            if self.performance_column and self.performance_column != self.performance_manager.performance_column:
+            if (
+                self.performance_column
+                and self.performance_column != self.performance_manager.performance_column
+            ):
                 self.performance_manager.performance_column = self.performance_column
                 logging.info(f"Renamed performance column to performance_{self.performance_column}")
             elif not self.performance_column:
@@ -216,8 +221,8 @@ class RatingGenerator(BaseTransformer):
                 converted_weights = []
                 for weight in self.performance_weights:
                     weight_dict = dict(weight)
-                    if 'col' in weight_dict and 'name' not in weight_dict:
-                        weight_dict['name'] = weight_dict.pop('col')
+                    if "col" in weight_dict and "name" not in weight_dict:
+                        weight_dict["name"] = weight_dict.pop("col")
                     converted_weights.append(ColumnWeight(**weight_dict))
                 self.performance_weights = converted_weights
             return PerformanceWeightsManager(
@@ -226,7 +231,9 @@ class RatingGenerator(BaseTransformer):
             )
 
         if self.auto_scale_performance and not self.performance_manager:
-            assert self.performance_column, "performance_column must be set if auto_scale_performance is True"
+            assert (
+                self.performance_column
+            ), "performance_column must be set if auto_scale_performance is True"
             if not self.performance_weights:
                 return PerformanceManager(
                     features=[self.performance_column],
@@ -239,41 +246,44 @@ class RatingGenerator(BaseTransformer):
 
         return None
 
-    def _add_day_number(self, df: pl.DataFrame, date_col: str | None = None, out_col: str = "__day_number") -> pl.DataFrame:
+    def _add_day_number(
+        self, df: pl.DataFrame, date_col: str | None = None, out_col: str = "__day_number"
+    ) -> pl.DataFrame:
         """
         Add day_number column to dataframe based on start_date.
         Supports various date formats: string, Date, Datetime (with or without timezone).
-        
+
         Args:
             df: Input dataframe
             date_col: Column name containing dates (defaults to column_names.start_date)
             out_col: Output column name (defaults to "__day_number")
-        
+
         Returns:
             DataFrame with added day_number column
         """
         cn = self.column_names
         date_column = date_col if date_col else cn.start_date
-        
+
         if date_column not in df.columns:
-            raise ValueError(f"Date column '{date_column}' not found in dataframe columns: {df.columns}")
-        
+            raise ValueError(
+                f"Date column '{date_column}' not found in dataframe columns: {df.columns}"
+            )
+
         dtype = df.schema.get(date_column)
         c = pl.col(date_column)
-        
+
         # Handle different date types - normalize all to datetime first
         # This handles mixed types by converting everything to a common format
-        if dtype == pl.Utf8 or (hasattr(pl, 'String') and dtype == pl.String):
+        if dtype == pl.Utf8 or (hasattr(pl, "String") and dtype == pl.String):
             # String format - use polars' flexible parsing with strict=False
             # Try date-only format first (most common), then datetime formats
-            dt = (
-                c.str.strptime(pl.Datetime(time_zone=None), "%Y-%m-%d", strict=False)
-                .fill_null(
-                    c.str.strptime(pl.Datetime(time_zone=None), "%Y-%m-%d %H:%M:%S", strict=False)
-                    .fill_null(
-                        c.str.strptime(pl.Datetime(time_zone=None), "%Y-%m-%dT%H:%M:%S", strict=False)
-                        .fill_null(c.cast(pl.Datetime(time_zone=None), strict=False))
-                    )
+            dt = c.str.strptime(pl.Datetime(time_zone=None), "%Y-%m-%d", strict=False).fill_null(
+                c.str.strptime(
+                    pl.Datetime(time_zone=None), "%Y-%m-%d %H:%M:%S", strict=False
+                ).fill_null(
+                    c.str.strptime(
+                        pl.Datetime(time_zone=None), "%Y-%m-%dT%H:%M:%S", strict=False
+                    ).fill_null(c.cast(pl.Datetime(time_zone=None), strict=False))
                 )
             )
             dt = dt.dt.replace_time_zone(None)
@@ -291,15 +301,15 @@ class RatingGenerator(BaseTransformer):
             # Unknown type - try to cast to datetime as fallback
             # This handles edge cases where dtype might be something unexpected
             dt = c.cast(pl.Datetime(time_zone=None), strict=False).dt.replace_time_zone(None)
-        
+
         # Convert to Date, then to Int32 for day number calculation
         start_as_int = dt.cast(pl.Date).cast(pl.Int32)
-        
+
         # Calculate day_number: (date - min_date + 1) so earliest date is day 1
         # Ensure no None values - fill with min if needed
         min_date = start_as_int.min()
         day_number = (start_as_int - min_date + 1).fill_null(1)
-        
+
         return df.with_columns(day_number.alias(out_col))
 
     def _applied_multiplier(self, state: RatingState, base_multiplier: float) -> float:
@@ -307,11 +317,19 @@ class RatingGenerator(BaseTransformer):
         conf_mult = base_multiplier * (
             (EXPECTED_MEAN_CONFIDENCE_SUM - state.confidence_sum) / self.confidence_value_denom + 1
         )
-        applied = conf_mult * self.confidence_weight + (1 - self.confidence_weight) * base_multiplier
+        applied = (
+            conf_mult * self.confidence_weight + (1 - self.confidence_weight) * base_multiplier
+        )
         return max(float(min_mult), float(applied))
 
-    def _post_match_confidence_sum(self, state: RatingState, day_number: int, participation_weight: float) -> float:
-        days_ago = 0.0 if state.last_match_day_number is None else float(day_number - state.last_match_day_number)
+    def _post_match_confidence_sum(
+        self, state: RatingState, day_number: int, participation_weight: float
+    ) -> float:
+        days_ago = (
+            0.0
+            if state.last_match_day_number is None
+            else float(day_number - state.last_match_day_number)
+        )
         val = (
             -min(days_ago, self.confidence_max_days) * self.confidence_days_ago_multiplier
             + state.confidence_sum

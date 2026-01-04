@@ -1,26 +1,21 @@
 import polars as pl
-from sklearn.metrics import mean_absolute_error
 from lightgbm import LGBMRegressor
+from sklearn.metrics import mean_absolute_error
 
 from examples import get_sub_sample_nba_data
 from spforge import FeatureGeneratorPipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
-
-from spforge.pipeline import Pipeline
-from spforge.estimator import (
-    SklearnPredictor,
-    NegativeBinomialEstimator,
-    DistributionManagerPredictor,
-)
-
 from spforge.data_structures import ColumnNames
-
-from spforge.scorer import SklearnScorer, OrdinalLossScorer
-from spforge.scorer import Filter, Operator
-from spforge.feature_generator import (
-    RollingWindowTransformer,
-    LagTransformer,
+from spforge.estimator import (
+    DistributionManagerPredictor,
+    NegativeBinomialEstimator,
 )
+from spforge.feature_generator import (
+    LagTransformer,
+    RollingWindowTransformer,
+)
+from spforge.pipeline import Pipeline
+from spforge.scorer import Filter, Operator, OrdinalLossScorer, SklearnScorer
 
 df = get_sub_sample_nba_data(as_polars=True, as_pandas=False)
 # df = df.filter(pl.col('minutes')>0)
@@ -43,12 +38,10 @@ df = df.with_columns(pl.col("points").clip(0, 40).alias("points"))
 
 features_generator = FeatureGeneratorPipeline(
     column_names=column_names,
-    transformers=[
-        RollingWindowTransformer(
-            features=["points"], window=15, granularity=["player_id"]
-        ),
+    feature_generators=[
+        RollingWindowTransformer(features=["points"], window=15, granularity=["player_id"]),
         LagTransformer(features=["points"], lag_length=3, granularity=["player_id"]),
-    ]
+    ],
 )
 df = features_generator.fit_transform(df)
 predictor = DistributionManagerPredictor(
@@ -101,11 +94,11 @@ ordinal_scorer = OrdinalLossScorer(
     target=predictor.target,
     validation_column="is_validation",
     filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
-    classes=range(0,predictor.distribution_predictor.max_value+1)
+    classes=range(0, predictor.distribution_predictor.max_value + 1),
 )
 
 ordinal_loss_score = cross_validator.cross_validation_score(
-    validation_df=validation_df, scorer=ordinal_scorer,
+    validation_df=validation_df,
+    scorer=ordinal_scorer,
 )
 print(f"Ordinal Loss {ordinal_loss_score}")
-

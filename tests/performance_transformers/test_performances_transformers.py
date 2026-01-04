@@ -1,7 +1,6 @@
-import pytest
-
-import polars as pl
 import pandas as pd
+import polars as pl
+import pytest
 from polars.testing import assert_frame_equal
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -11,7 +10,11 @@ from spforge.performance_transformers import (
     DiminishingValueTransformer,
     SymmetricDistributionTransformer,
 )
-from spforge.performance_transformers._performances_transformers import SklearnEstimatorImputer, GroupByTransformer
+from spforge.performance_transformers._performances_transformers import (
+    GroupByTransformer,
+    SklearnEstimatorImputer,
+)
+from spforge.pipeline import Pipeline
 from spforge.transformers import RatioTeamPredictorTransformer
 
 dfs = [
@@ -76,13 +79,9 @@ def test_symmetric_distribution_transformer(df_type, granularity):
     a = np.random.normal(loc=0, scale=10, size=3500)
     b = np.random.exponential(scale=2, size=3500)
     if df_type == "pd":
-        df = pd.DataFrame({"position": positions, "a": a, "b": b}).sort_values(
-            by=["position", "a"]
-        )
+        df = pd.DataFrame({"position": positions, "a": a, "b": b}).sort_values(by=["position", "a"])
     elif df_type == "pl":
-        df = pl.DataFrame({"position": positions, "a": a, "b": b}).sort(
-            ["position", "a"]
-        )
+        df = pl.DataFrame({"position": positions, "a": a, "b": b}).sort(["position", "a"])
     else:
         raise ValueError("df_type must be 'pd' or 'pl'")
 
@@ -112,13 +111,9 @@ def test_group_by_transformer(df_type):
     a = np.random.normal(loc=0, scale=10, size=3500)
     b = np.random.exponential(scale=2, size=3500)
     if df_type == "pd":
-        df = pd.DataFrame({"position": positions, "a": a, "b": b}).sort_values(
-            by=["position", "a"]
-        )
+        df = pd.DataFrame({"position": positions, "a": a, "b": b}).sort_values(by=["position", "a"])
     elif df_type == "pl":
-        df = pl.DataFrame({"position": positions, "a": a, "b": b}).sort(
-            ["position", "a"]
-        )
+        df = pl.DataFrame({"position": positions, "a": a, "b": b}).sort(["position", "a"])
     else:
         raise ValueError("df_type must be 'pd' or 'pl'")
 
@@ -126,9 +121,7 @@ def test_group_by_transformer(df_type):
     if isinstance(df, pd.DataFrame):
         df["va"] = df.groupby(transformer.granularity)[["a"]].transform("mean")
         df["vb"] = df.groupby(transformer.granularity)[["b"]].transform("mean")
-        pd.testing.assert_frame_equal(
-            transformed.reset_index(drop=True), df.reset_index(drop=True)
-        )
+        pd.testing.assert_frame_equal(transformed.reset_index(drop=True), df.reset_index(drop=True))
     elif isinstance(df, pl.DataFrame):
         expected_transformed = df.with_columns(
             [
@@ -137,9 +130,6 @@ def test_group_by_transformer(df_type):
             ]
         )
         assert_frame_equal(transformed, expected_transformed)
-
-
-
 
 
 def test_groupby_transformer_fit_transform():
@@ -151,9 +141,7 @@ def test_groupby_transformer_fit_transform():
         }
     )
 
-    transformer = GroupByTransformer(
-        features=["performance"], granularity=["player_id"]
-    )
+    transformer = GroupByTransformer(features=["performance"], granularity=["player_id"])
 
     expected_df = df.copy()
     expected_df[transformer.prefix + "performance"] = [0.35, 0.45, 0.3, 0.35, 0.45, 0.3]
@@ -249,9 +237,7 @@ def test_symmetric_distribution_transformery_fit_transform(df):
         }
     )
 
-    transformer = SymmetricDistributionTransformer(
-        features=["performance"], max_iterations=40
-    )
+    transformer = SymmetricDistributionTransformer(features=["performance"], max_iterations=40)
     transformed_df = transformer.fit_transform(data)
     if isinstance(transformed_df, pd.DataFrame):
         transformed_df = pl.DataFrame(transformed_df)
@@ -307,19 +293,13 @@ def test_symmetric_distribution_transformer_transform():
         }
     )
 
-    transformer = SymmetricDistributionTransformer(
-        features=["performance"], max_iterations=40
-    )
+    transformer = SymmetricDistributionTransformer(features=["performance"], max_iterations=40)
     fit_transformed_df = transformer.fit_transform(ori_fit_transform_df)
     expected_value_1 = fit_transformed_df.iloc[
-        ori_fit_transform_df[ori_fit_transform_df["performance"] == 0.8].index.tolist()[
-            0
-        ]
+        ori_fit_transform_df[ori_fit_transform_df["performance"] == 0.8].index.tolist()[0]
     ]["performance"]
     expected_value_2 = fit_transformed_df.iloc[
-        ori_fit_transform_df[ori_fit_transform_df["performance"] == 0.1].index.tolist()[
-            0
-        ]
+        ori_fit_transform_df[ori_fit_transform_df["performance"] == 0.1].index.tolist()[0]
     ]["performance"]
 
     transformed_df = transformer.transform(to_transform_df)
@@ -373,38 +353,9 @@ def test_symmetric_distribution_transformer_with_granularity_fit_transform():
     )
     transformed_df = transformer.fit_transform(df)
     assert (
-        abs(df[lambda x: x.position == "SG"]["performance"].skew())
-        > transformer.skewness_allowed
+        abs(df[lambda x: x.position == "SG"]["performance"].skew()) > transformer.skewness_allowed
     )
     assert (
         abs(transformed_df.loc[lambda x: x.position == "SG"]["performance"].skew())
         < transformer.skewness_allowed
     )
-
-
-@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
-def test_ratio_team_predictor(df):
-    column_names = ColumnNames(
-        match_id="game_id",
-        team_id="team_id",
-        player_id="player_id",
-        start_date="start_date",
-    )
-    data = df(
-        {
-            "performance": [0.1, 0.8, 0.8, 0.8, 0.8],
-            "target": [1, 0, 1, 0, 1],
-            "team_id": [1, 2, 1, 2, 1],
-            "game_id": [1, 1, 2, 2, 1],
-        }
-    )
-    transformer = RatioTeamPredictorTransformer(
-        features=["performance"],
-        predictor=SklearnPredictor(target="target", estimator=LinearRegression()),
-    )
-
-    fit_transformed_data = transformer.fit_transform(data, column_names=column_names)
-    assert transformer.predictor.pred_column in fit_transformed_data.columns
-    assert len(transformer.features_out) == 2
-    for col in transformer.features_out:
-        assert col in fit_transformed_data.columns

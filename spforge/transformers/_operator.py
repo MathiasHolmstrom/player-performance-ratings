@@ -1,15 +1,9 @@
 import logging
 from enum import Enum
-from typing import Optional
 
-from spforge import ColumnNames
-
-from spforge.transformers.base_transformer import (
-    BaseTransformer,
-)
 import narwhals.stable.v2 as nw
-from narwhals.typing import IntoFrameT, IntoFrameT
-
+from narwhals.typing import IntoFrameT
+from sklearn.base import TransformerMixin
 
 
 class Operation(Enum):
@@ -18,7 +12,7 @@ class Operation(Enum):
     DIVIDE = "divide"
 
 
-class OperatorTransformer(BaseTransformer):
+class OperatorTransformer(TransformerMixin):
     """
     Performs operations on two columns and stores the result in a new column.
     An operation can be subtraction, addition, multiplication, or division.
@@ -29,8 +23,8 @@ class OperatorTransformer(BaseTransformer):
         feature1: str,
         operation: Operation,
         feature2: str,
-        new_column_name: Optional[str] = None,
-        features: Optional[list[str]] = None,
+        new_column_name: str | None = None,
+        features: list[str] | None = None,
         are_estimator_features: bool = True,
     ):
         """
@@ -59,15 +53,8 @@ class OperatorTransformer(BaseTransformer):
             features_out=[self.new_column_name],
         )
 
-
-    def fit_transform(
-        self, df: IntoFrameT, column_names: Optional[ColumnNames] = None
-    ) -> IntoFrameT:
-        self.column_names = column_names
-
-        df = self._transform(df)
-
-        return df
+    def fit(self, df: IntoFrameT):
+        return self
 
     @nw.narwhalify
     def transform(self, df: IntoFrameT, cross_validate: bool = False) -> IntoFrameT:
@@ -79,22 +66,16 @@ class OperatorTransformer(BaseTransformer):
             return df
         if self.operation == Operation.SUBTRACT:
             df = df.with_columns(
-                (nw.col(self.feature1) - nw.col(self.feature2)).alias(
-                    self.new_column_name
-                )
+                (nw.col(self.feature1) - nw.col(self.feature2)).alias(self.new_column_name)
             )
 
         elif self.operation == Operation.MULTIPLY:
             df = df.with_columns(
-                (nw.col(self.feature1) * nw.col(self.feature2)).alias(
-                    self.new_column_name
-                )
+                (nw.col(self.feature1) * nw.col(self.feature2)).alias(self.new_column_name)
             )
         elif self.operation == Operation.DIVIDE:
             df = df.with_columns(
-                (nw.col(self.feature1) / nw.col(self.feature2)).alias(
-                    self.new_column_name
-                )
+                (nw.col(self.feature1) / nw.col(self.feature2)).alias(self.new_column_name)
             )
 
         else:

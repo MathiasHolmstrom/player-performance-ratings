@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 import math
-from typing import Optional, Literal, Any, Union
+from typing import Any, Literal
 
 import polars as pl
 
 from spforge.data_structures import ColumnNames
-from spforge.ratings._base import RatingGenerator, RatingState
-from spforge.ratings import RatingKnownFeatures, RatingUnknownFeatures
 from spforge.performance_transformers._performance_manager import ColumnWeight, PerformanceManager
+from spforge.ratings._base import RatingGenerator, RatingState
+from spforge.ratings.enums import RatingKnownFeatures, RatingUnknownFeatures
 
 TEAM_PRED_OFF_COL = "__TEAM_PREDICTED_OFF_PERFORMANCE"
 TEAM_PRED_DEF_COL = "__TEAM_PREDICTED_DEF_PERFORMANCE"
@@ -19,7 +19,7 @@ class TeamRatingGenerator(RatingGenerator):
     def __init__(
         self,
         performance_column: str,
-        performance_weights: Optional[list[Union[ColumnWeight, dict[str, float]]]] = None,
+        performance_weights: list[ColumnWeight | dict[str, float]] | None = None,
         performance_manager: PerformanceManager | None = None,
         auto_scale_performance: bool = False,
         performance_predictor: Literal["difference", "mean", "ignore_opponent"] = "difference",
@@ -31,15 +31,15 @@ class TeamRatingGenerator(RatingGenerator):
         confidence_value_denom: float = 140,
         confidence_max_sum: float = 150,
         confidence_weight: float = 0.9,
-        features_out: Optional[list[RatingKnownFeatures]] = None,
-        non_predictor_features_out: Optional[list[RatingKnownFeatures | RatingUnknownFeatures]] = None,
+        features_out: list[RatingKnownFeatures] | None = None,
+        non_predictor_features_out: list[RatingKnownFeatures | RatingUnknownFeatures] | None = None,
         min_rating_change_multiplier_ratio: float = 0.1,
         league_rating_change_update_threshold: float = 100,
         league_rating_adjustor_multiplier: float = 0.05,
-        column_names: Optional[ColumnNames] = None,
-        output_suffix: Optional[str] = None,
+        column_names: ColumnNames | None = None,
+        output_suffix: str | None = None,
         start_team_rating: float = 1000.0,
-        rating_center: Optional[float] = None,
+        rating_center: float | None = None,
         rating_diff_coef: float = 0.001,
         rating_mean_coef: float = 0.001,
         team_rating_coef: float = 0.001,
@@ -89,12 +89,14 @@ class TeamRatingGenerator(RatingGenerator):
         self.OPP_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.OPPONENT_RATING_PROJECTED))
         self.DIFF_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED))
         self.MEAN_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_MEAN_PROJECTED))
-        
+
         # Non-predictor features
         self.DIFF_COL = self._suffix(str(RatingUnknownFeatures.RATING_DIFFERENCE))
 
         self.start_team_rating = float(start_team_rating)
-        self.rating_center = float(self.start_team_rating if rating_center is None else rating_center)
+        self.rating_center = float(
+            self.start_team_rating if rating_center is None else rating_center
+        )
 
         # Two rating sets per team
         self._team_off_ratings: dict[str, RatingState] = {}
@@ -107,25 +109,35 @@ class TeamRatingGenerator(RatingGenerator):
 
     def _ensure_team_off(self, team_id: str) -> RatingState:
         if team_id not in self._team_off_ratings:
-            self._team_off_ratings[team_id] = RatingState(id=team_id, rating_value=self.start_team_rating)
+            self._team_off_ratings[team_id] = RatingState(
+                id=team_id, rating_value=self.start_team_rating
+            )
         return self._team_off_ratings[team_id]
 
     def _ensure_team_def(self, team_id: str) -> RatingState:
         if team_id not in self._team_def_ratings:
-            self._team_def_ratings[team_id] = RatingState(id=team_id, rating_value=self.start_team_rating)
+            self._team_def_ratings[team_id] = RatingState(
+                id=team_id, rating_value=self.start_team_rating
+            )
         return self._team_def_ratings[team_id]
 
     def _calculate_post_match_confidence_sum(self, state: RatingState, day_number: int) -> float:
-        return self._post_match_confidence_sum(state=state, day_number=day_number, participation_weight=1.0)
+        return self._post_match_confidence_sum(
+            state=state, day_number=day_number, participation_weight=1.0
+        )
 
     def _create_match_df(self, df: pl.DataFrame) -> pl.DataFrame:
         cn = self.column_names
 
-        base_cols = list(dict.fromkeys([cn.match_id, cn.team_id, cn.start_date, cn.update_match_id]))
+        base_cols = list(
+            dict.fromkeys([cn.match_id, cn.team_id, cn.start_date, cn.update_match_id])
+        )
         if self.performance_column in df.columns:
             base_cols.append(self.performance_column)
 
-        team_rows = df.select([c for c in base_cols if c in df.columns]).unique([cn.match_id, cn.team_id])
+        team_rows = df.select([c for c in base_cols if c in df.columns]).unique(
+            [cn.match_id, cn.team_id]
+        )
 
         match_df = (
             team_rows.join(team_rows, on=cn.match_id, how="inner", suffix="_opponent")
@@ -150,13 +162,19 @@ class TeamRatingGenerator(RatingGenerator):
 
     def _historical_transform(self, df: pl.DataFrame) -> pl.DataFrame:
         cn = self.column_names
-        assert df.group_by(cn.match_id).agg(pl.col(cn.team_id).n_unique())[cn.team_id].n_unique() == 1
+        assert (
+            df.group_by(cn.match_id).agg(pl.col(cn.team_id).n_unique())[cn.team_id].n_unique() == 1
+        )
         assert df.group_by(cn.match_id).agg(pl.col(cn.team_id).n_unique())[cn.team_id].max() == 2
 
         match_df = self._create_match_df(df)
         ratings = self._calculate_ratings(match_df)
 
-        cols = [c for c in df.columns if c not in (self.TEAM_PRED_OFF_PERF_COL, self.TEAM_PRED_DEF_PERF_COL)]
+        cols = [
+            c
+            for c in df.columns
+            if c not in (self.TEAM_PRED_OFF_PERF_COL, self.TEAM_PRED_DEF_PERF_COL)
+        ]
         df2 = df.select(cols).join(ratings, on=[cn.match_id, cn.team_id], how="left")
         return self._add_rating_features(df2)
 
@@ -186,7 +204,11 @@ class TeamRatingGenerator(RatingGenerator):
             opp_def_pre = float(o_def.rating_value)
 
             # Observed performances
-            off_perf = float(r[self.performance_column]) if r.get(self.performance_column) is not None else 0.0
+            off_perf = (
+                float(r[self.performance_column])
+                if r.get(self.performance_column) is not None
+                else 0.0
+            )
             opp_off_perf = float(r[perf_opp_col]) if r.get(perf_opp_col) is not None else 0.0
             def_perf = 1.0 - opp_off_perf
 
@@ -203,7 +225,9 @@ class TeamRatingGenerator(RatingGenerator):
             def_change = (def_perf - pred_def) * mult_def
 
             if math.isnan(off_change) or math.isnan(def_change):
-                raise ValueError(f"NaN rating change for team_id={team_id}, match_id={r[cn.match_id]}")
+                raise ValueError(
+                    f"NaN rating change for team_id={team_id}, match_id={r[cn.match_id]}"
+                )
 
             rows.append(
                 {
@@ -296,12 +320,16 @@ class TeamRatingGenerator(RatingGenerator):
 
         if need_diff and self.DIFF_PROJ_COL not in df.columns:
             df = df.with_columns(
-                (pl.col(self.TEAM_RATING_PROJ_COL) - pl.col(self.OPP_RATING_PROJ_COL)).alias(self.DIFF_PROJ_COL)
+                (pl.col(self.TEAM_RATING_PROJ_COL) - pl.col(self.OPP_RATING_PROJ_COL)).alias(
+                    self.DIFF_PROJ_COL
+                )
             )
 
         if need_mean and self.MEAN_PROJ_COL not in df.columns:
             df = df.with_columns(
-                ((pl.col(self.TEAM_RATING_PROJ_COL) + pl.col(self.OPP_RATING_PROJ_COL)) / 2.0).alias(self.MEAN_PROJ_COL)
+                (
+                    (pl.col(self.TEAM_RATING_PROJ_COL) + pl.col(self.OPP_RATING_PROJ_COL)) / 2.0
+                ).alias(self.MEAN_PROJ_COL)
             )
 
         # Compute non-predictor RATING_DIFFERENCE if requested
@@ -310,12 +338,21 @@ class TeamRatingGenerator(RatingGenerator):
             # Ensure we have the required columns
             if self.TEAM_RATING_PROJ_COL not in df.columns:
                 # Use TEAM_OFF_RATING_PROJ_COL as fallback
-                df = df.with_columns(pl.col(self.TEAM_OFF_RATING_PROJ_COL).alias(self.TEAM_RATING_PROJ_COL))
-            if self.OPP_RATING_PROJ_COL not in df.columns and self.OPP_DEF_RATING_PROJ_COL in df.columns:
-                df = df.with_columns(pl.col(self.OPP_DEF_RATING_PROJ_COL).alias(self.OPP_RATING_PROJ_COL))
+                df = df.with_columns(
+                    pl.col(self.TEAM_OFF_RATING_PROJ_COL).alias(self.TEAM_RATING_PROJ_COL)
+                )
+            if (
+                self.OPP_RATING_PROJ_COL not in df.columns
+                and self.OPP_DEF_RATING_PROJ_COL in df.columns
+            ):
+                df = df.with_columns(
+                    pl.col(self.OPP_DEF_RATING_PROJ_COL).alias(self.OPP_RATING_PROJ_COL)
+                )
             if self.OPP_RATING_PROJ_COL in df.columns:
                 df = df.with_columns(
-                    (pl.col(self.TEAM_RATING_PROJ_COL) - pl.col(self.OPP_RATING_PROJ_COL)).alias(self.DIFF_COL)
+                    (pl.col(self.TEAM_RATING_PROJ_COL) - pl.col(self.OPP_RATING_PROJ_COL)).alias(
+                        self.DIFF_COL
+                    )
                 )
 
         candidates = {
@@ -337,21 +374,27 @@ class TeamRatingGenerator(RatingGenerator):
         # This ensures that columns from _calculate_ratings are only kept if they're requested
         drop_cols = [c for c in candidates if (c in df.columns and c not in cols_to_add)]
         result = df.drop(drop_cols)
-        
+
         # Also ensure that any columns not in candidates (like input columns) are preserved
         # This is already handled by only dropping columns in candidates
-        
+
         return result
 
     def _future_transform(self, df: pl.DataFrame) -> pl.DataFrame:
         cn = self.column_names
-        assert df.group_by(cn.match_id).agg(pl.col(cn.team_id).n_unique())[cn.team_id].n_unique() == 1
+        assert (
+            df.group_by(cn.match_id).agg(pl.col(cn.team_id).n_unique())[cn.team_id].n_unique() == 1
+        )
         assert df.group_by(cn.match_id).agg(pl.col(cn.team_id).n_unique())[cn.team_id].max() == 2
 
         match_df = self._create_match_df(df)
         ratings = self._calculate_future_ratings(match_df)
 
-        cols = [c for c in df.columns if c not in (self.TEAM_PRED_OFF_PERF_COL, self.TEAM_PRED_DEF_PERF_COL)]
+        cols = [
+            c
+            for c in df.columns
+            if c not in (self.TEAM_PRED_OFF_PERF_COL, self.TEAM_PRED_DEF_PERF_COL)
+        ]
         df2 = df.select(cols).join(ratings, on=[cn.match_id, cn.team_id], how="left")
         return self._add_rating_features(df2)
 

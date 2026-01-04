@@ -3,30 +3,28 @@ from __future__ import annotations
 
 import copy
 import math
-from typing import Optional, Union, Literal, Any
+from typing import Any, Literal
 
 import polars as pl
 
 from spforge.data_structures import (
-    PlayerRating,
     ColumnNames,
-    PreMatchTeamRating,
-    PreMatchPlayerRating,
-    PreMatchPlayersCollection,
     MatchPerformance,
     MatchPlayer,
+    PlayerRating,
+    PreMatchPlayerRating,
+    PreMatchPlayersCollection,
+    PreMatchTeamRating,
 )
-from spforge.performance_transformers._performance_manager import PerformanceManager
-from spforge.performance_transformers._performance_manager import ColumnWeight
-from spforge.ratings import RatingKnownFeatures, RatingUnknownFeatures
-from spforge.ratings._base import RatingGenerator
+from spforge.performance_transformers._performance_manager import ColumnWeight, PerformanceManager
+from spforge.ratings._base import RatingGenerator, RatingKnownFeatures, RatingUnknownFeatures
 from spforge.ratings.start_rating_generator import StartRatingGenerator
 from spforge.ratings.utils import (
     add_opp_team_rating,
-    add_team_rating,
-    add_team_rating_projected,
     add_rating_difference_projected,
     add_rating_mean_projected,
+    add_team_rating,
+    add_team_rating_projected,
 )
 
 PLAYER_STATS = "__PLAYER_STATS"
@@ -49,11 +47,10 @@ class PlayerRatingGenerator(RatingGenerator):
     def __init__(
         self,
         performance_column: str,
-        performance_weights: Optional[list[Union[ColumnWeight, dict[str, float]]]] = None,
+        performance_weights: list[ColumnWeight | dict[str, float]] | None = None,
         performance_manager: PerformanceManager | None = None,
         auto_scale_performance: bool = False,
         performance_predictor: Literal["difference", "mean", "ignore_opponent"] = "difference",
-        # NEW: separate multipliers
         rating_change_multiplier_offense: float = 50,
         rating_change_multiplier_defense: float = 50,
         confidence_days_ago_multiplier: float = 0.06,
@@ -61,8 +58,8 @@ class PlayerRatingGenerator(RatingGenerator):
         confidence_value_denom: float = 140,
         confidence_max_sum: float = 150,
         confidence_weight: float = 0.9,
-        features_out: Optional[list[RatingKnownFeatures]] = None,
-        non_predictor_features_out: Optional[list[RatingKnownFeatures | RatingUnknownFeatures]] = None,
+        features_out: list[RatingKnownFeatures] | None = None,
+        non_predictor_features_out: list[RatingKnownFeatures | RatingUnknownFeatures] | None = None,
         min_rating_change_multiplier_ratio: float = 0.1,
         league_rating_change_update_threshold: float = 100,
         league_rating_adjustor_multiplier: float = 0.05,
@@ -75,8 +72,8 @@ class PlayerRatingGenerator(RatingGenerator):
         start_max_days_ago_league_entities: int = 120,
         start_min_match_count_team_rating: int = 2,
         start_harcoded_start_rating: float | None = None,
-        column_names: Optional[ColumnNames] = None,
-        output_suffix: Optional[str] = None,
+        column_names: ColumnNames | None = None,
+        output_suffix: str | None = None,
         **kwargs: Any,
     ):
         super().__init__(
@@ -115,22 +112,35 @@ class PlayerRatingGenerator(RatingGenerator):
         self.PLAYER_OFF_RATING_COL = self._suffix(str(RatingKnownFeatures.PLAYER_OFF_RATING))
         self.PLAYER_DEF_RATING_COL = self._suffix(str(RatingKnownFeatures.PLAYER_DEF_RATING))
 
-        self.PLAYER_PRED_OFF_PERF_COL = self._suffix(str(RatingUnknownFeatures.PLAYER_PREDICTED_OFF_PERFORMANCE))
-        self.PLAYER_PRED_DEF_PERF_COL = self._suffix(str(RatingUnknownFeatures.PLAYER_PREDICTED_DEF_PERFORMANCE))
+        self.PLAYER_PRED_OFF_PERF_COL = self._suffix(
+            str(RatingUnknownFeatures.PLAYER_PREDICTED_OFF_PERFORMANCE)
+        )
+        self.PLAYER_PRED_DEF_PERF_COL = self._suffix(
+            str(RatingUnknownFeatures.PLAYER_PREDICTED_DEF_PERFORMANCE)
+        )
 
         self.PLAYER_RATING_COL = self._suffix(str(RatingKnownFeatures.PLAYER_RATING))
-        self.PLAYER_PRED_PERF_COL = self._suffix(str(RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE))
-
+        self.PLAYER_PRED_PERF_COL = self._suffix(
+            str(RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE)
+        )
 
         self.TEAM_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.TEAM_RATING_PROJECTED))
         self.OPP_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.OPPONENT_RATING_PROJECTED))
         self.DIFF_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED))
         self.MEAN_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_MEAN_PROJECTED))
 
-        self.TEAM_OFF_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED))
-        self.TEAM_DEF_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.TEAM_DEF_RATING_PROJECTED))
-        self.OPP_OFF_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.OPPONENT_OFF_RATING_PROJECTED))
-        self.OPP_DEF_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED))
+        self.TEAM_OFF_RATING_PROJ_COL = self._suffix(
+            str(RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED)
+        )
+        self.TEAM_DEF_RATING_PROJ_COL = self._suffix(
+            str(RatingKnownFeatures.TEAM_DEF_RATING_PROJECTED)
+        )
+        self.OPP_OFF_RATING_PROJ_COL = self._suffix(
+            str(RatingKnownFeatures.OPPONENT_OFF_RATING_PROJECTED)
+        )
+        self.OPP_DEF_RATING_PROJ_COL = self._suffix(
+            str(RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED)
+        )
 
         self.TEAM_RATING_COL = self._suffix(str(RatingUnknownFeatures.TEAM_RATING))
         self.OPP_RATING_COL = self._suffix(str(RatingUnknownFeatures.OPPONENT_RATING))
@@ -179,7 +189,9 @@ class PlayerRatingGenerator(RatingGenerator):
     def _applied_multiplier_def(self, state: PlayerRating) -> float:
         return self._applied_multiplier(state, self.rating_change_multiplier_defense)
 
-    def _calculate_post_match_confidence_sum(self, entity_rating: PlayerRating, day_number: int, particpation_weight: float) -> float:
+    def _calculate_post_match_confidence_sum(
+        self, entity_rating: PlayerRating, day_number: int, particpation_weight: float
+    ) -> float:
         return self._post_match_confidence_sum(
             state=entity_rating,
             day_number=day_number,
@@ -193,14 +205,19 @@ class PlayerRatingGenerator(RatingGenerator):
         match_df = self._create_match_df(df)
         ratings = self._calculate_ratings(match_df)
 
-        cols = [c for c in df.columns if c not in (
-            self.PLAYER_OFF_RATING_COL,
-            self.PLAYER_DEF_RATING_COL,
-            self.PLAYER_PRED_OFF_PERF_COL,
-            self.PLAYER_PRED_DEF_PERF_COL,
-            self.PLAYER_RATING_COL,
-            self.PLAYER_PRED_PERF_COL,
-        )]
+        cols = [
+            c
+            for c in df.columns
+            if c
+            not in (
+                self.PLAYER_OFF_RATING_COL,
+                self.PLAYER_DEF_RATING_COL,
+                self.PLAYER_PRED_OFF_PERF_COL,
+                self.PLAYER_PRED_DEF_PERF_COL,
+                self.PLAYER_RATING_COL,
+                self.PLAYER_PRED_PERF_COL,
+            )
+        ]
 
         df = df.select(cols).join(
             ratings,
@@ -213,14 +230,19 @@ class PlayerRatingGenerator(RatingGenerator):
         match_df = self._create_match_df(df)
         ratings = self._calculate_future_ratings(match_df)
 
-        cols = [c for c in df.columns if c not in (
-            self.PLAYER_OFF_RATING_COL,
-            self.PLAYER_DEF_RATING_COL,
-            self.PLAYER_PRED_OFF_PERF_COL,
-            self.PLAYER_PRED_DEF_PERF_COL,
-            self.PLAYER_RATING_COL,
-            self.PLAYER_PRED_PERF_COL,
-        )]
+        cols = [
+            c
+            for c in df.columns
+            if c
+            not in (
+                self.PLAYER_OFF_RATING_COL,
+                self.PLAYER_DEF_RATING_COL,
+                self.PLAYER_PRED_OFF_PERF_COL,
+                self.PLAYER_PRED_DEF_PERF_COL,
+                self.PLAYER_RATING_COL,
+                self.PLAYER_PRED_PERF_COL,
+            )
+        ]
 
         # Handle empty ratings DataFrame (e.g., when match_df is empty due to missing opponent)
         if ratings.height == 0:
@@ -229,14 +251,16 @@ class PlayerRatingGenerator(RatingGenerator):
             result_rows = []
             for row in df.iter_rows(named=True):
                 pid = row[cn.player_id]
-                
+
                 # Get or create start rating for this player
                 if pid not in self._player_off_ratings:
                     # Create a temporary MatchPlayer to generate start rating
                     day_number = 1  # Default day number
                     mp = MatchPerformance(
                         performance_value=0.0,
-                        projected_participation_weight=row.get(cn.projected_participation_weight, row.get(cn.participation_weight, 1.0)),
+                        projected_participation_weight=row.get(
+                            cn.projected_participation_weight, row.get(cn.participation_weight, 1.0)
+                        ),
                         participation_weight=row.get(cn.participation_weight, 1.0),
                     )
                     start_val = self.start_rating_generator.generate_rating_value(
@@ -251,22 +275,32 @@ class PlayerRatingGenerator(RatingGenerator):
                     )
                     self._player_off_ratings[pid] = PlayerRating(id=pid, rating_value=start_val)
                     self._player_def_ratings[pid] = PlayerRating(id=pid, rating_value=start_val)
-                
-                result_rows.append({
-                    **row,
-                    self.PLAYER_OFF_RATING_COL: float(self._player_off_ratings[pid].rating_value),
-                    self.PLAYER_DEF_RATING_COL: float(self._player_def_ratings[pid].rating_value),
-                    self.PLAYER_PRED_OFF_PERF_COL: 0.5,  # Default prediction
-                    self.PLAYER_PRED_DEF_PERF_COL: 0.5,  # Default prediction
-                    self.PLAYER_RATING_COL: float(self._player_off_ratings[pid].rating_value),
-                    self.PLAYER_PRED_PERF_COL: 0.5,  # Default prediction
-                })
-            
+
+                result_rows.append(
+                    {
+                        **row,
+                        self.PLAYER_OFF_RATING_COL: float(
+                            self._player_off_ratings[pid].rating_value
+                        ),
+                        self.PLAYER_DEF_RATING_COL: float(
+                            self._player_def_ratings[pid].rating_value
+                        ),
+                        self.PLAYER_PRED_OFF_PERF_COL: 0.5,  # Default prediction
+                        self.PLAYER_PRED_DEF_PERF_COL: 0.5,  # Default prediction
+                        self.PLAYER_RATING_COL: float(self._player_off_ratings[pid].rating_value),
+                        self.PLAYER_PRED_PERF_COL: 0.5,  # Default prediction
+                    }
+                )
+
             df_with_ratings = pl.DataFrame(result_rows)
         else:
             df_with_ratings = df.select(cols).join(
                 ratings,
-                on=[self.column_names.player_id, self.column_names.match_id, self.column_names.team_id],
+                on=[
+                    self.column_names.player_id,
+                    self.column_names.match_id,
+                    self.column_names.team_id,
+                ],
                 how="left",
             )
 
@@ -300,8 +334,12 @@ class PlayerRatingGenerator(RatingGenerator):
             team2 = r[f"{cn.team_id}_opponent"]
 
             # Build pre-match collections
-            c1 = self._create_pre_match_players_collection(r=r, stats_col=PLAYER_STATS, day_number=day_number, team_id=team1)
-            c2 = self._create_pre_match_players_collection(r=r, stats_col=f"{PLAYER_STATS}_opponent", day_number=day_number, team_id=team2)
+            c1 = self._create_pre_match_players_collection(
+                r=r, stats_col=PLAYER_STATS, day_number=day_number, team_id=team1
+            )
+            c2 = self._create_pre_match_players_collection(
+                r=r, stats_col=f"{PLAYER_STATS}_opponent", day_number=day_number, team_id=team2
+            )
 
             # Team offense performance (observed): weighted mean of player performance_column
             team1_off_perf = self._team_off_perf_from_collection(c1)
@@ -313,8 +351,9 @@ class PlayerRatingGenerator(RatingGenerator):
             team1_off_rating, team1_def_rating = self._team_off_def_rating_from_collection(c1)
             team2_off_rating, team2_def_rating = self._team_off_def_rating_from_collection(c2)
 
-
-            player_updates: list[tuple[str, str, float, float, float, float, float, float, int]] = []
+            player_updates: list[tuple[str, str, float, float, float, float, float, float, int]] = (
+                []
+            )
 
             for pre_player in c1.pre_match_player_ratings:
                 pid = pre_player.id
@@ -328,8 +367,12 @@ class PlayerRatingGenerator(RatingGenerator):
                 # predicted OFF: player OFF vs opponent TEAM DEF
                 pred_off = self._performance_predictor.predict_performance(
                     player_rating=pre_player,
-                    opponent_team_rating=PreMatchTeamRating(id=team2, players=[], rating_value=team2_def_rating),
-                    team_rating=PreMatchTeamRating(id=team1, players=[], rating_value=team1_off_rating),
+                    opponent_team_rating=PreMatchTeamRating(
+                        id=team2, players=[], rating_value=team2_def_rating
+                    ),
+                    team_rating=PreMatchTeamRating(
+                        id=team1, players=[], rating_value=team1_off_rating
+                    ),
                 )
 
                 pred_def = self._performance_predictor.predict_performance(
@@ -342,8 +385,12 @@ class PlayerRatingGenerator(RatingGenerator):
                         position=pre_player.position,
                         other=getattr(pre_player, "other", None),
                     ),
-                    opponent_team_rating=PreMatchTeamRating(id=team2, players=[], rating_value=team2_off_rating),
-                    team_rating=PreMatchTeamRating(id=team1, players=[], rating_value=team1_def_rating),
+                    opponent_team_rating=PreMatchTeamRating(
+                        id=team2, players=[], rating_value=team2_off_rating
+                    ),
+                    team_rating=PreMatchTeamRating(
+                        id=team1, players=[], rating_value=team1_def_rating
+                    ),
                 )
 
                 off_perf = float(pre_player.match_performance.performance_value)
@@ -352,13 +399,35 @@ class PlayerRatingGenerator(RatingGenerator):
                 mult_off = self._applied_multiplier_off(off_state)
                 mult_def = self._applied_multiplier_def(def_state)
 
-                off_change = (off_perf - float(pred_off)) * mult_off * float(pre_player.match_performance.participation_weight)
-                def_change = (def_perf - float(pred_def)) * mult_def * float(pre_player.match_performance.participation_weight)
+                off_change = (
+                    (off_perf - float(pred_off))
+                    * mult_off
+                    * float(pre_player.match_performance.participation_weight)
+                )
+                def_change = (
+                    (def_perf - float(pred_def))
+                    * mult_def
+                    * float(pre_player.match_performance.participation_weight)
+                )
 
                 if math.isnan(off_change) or math.isnan(def_change):
-                    raise ValueError(f"NaN player rating change for player_id={pid}, match_id={r[cn.match_id]}")
+                    raise ValueError(
+                        f"NaN player rating change for player_id={pid}, match_id={r[cn.match_id]}"
+                    )
 
-                player_updates.append((pid, team1, off_pre, def_pre, float(pred_off), float(pred_def), float(off_change), float(def_change), day_number))
+                player_updates.append(
+                    (
+                        pid,
+                        team1,
+                        off_pre,
+                        def_pre,
+                        float(pred_off),
+                        float(pred_def),
+                        float(off_change),
+                        float(def_change),
+                        day_number,
+                    )
+                )
 
             # Team2 players vs Team1
             for pre_player in c2.pre_match_player_ratings:
@@ -372,8 +441,12 @@ class PlayerRatingGenerator(RatingGenerator):
 
                 pred_off = self._performance_predictor.predict_performance(
                     player_rating=pre_player,
-                    opponent_team_rating=PreMatchTeamRating(id=team1, players=[], rating_value=team1_def_rating),
-                    team_rating=PreMatchTeamRating(id=team2, players=[], rating_value=team2_off_rating),
+                    opponent_team_rating=PreMatchTeamRating(
+                        id=team1, players=[], rating_value=team1_def_rating
+                    ),
+                    team_rating=PreMatchTeamRating(
+                        id=team2, players=[], rating_value=team2_off_rating
+                    ),
                 )
 
                 pred_def = self._performance_predictor.predict_performance(
@@ -386,8 +459,12 @@ class PlayerRatingGenerator(RatingGenerator):
                         position=pre_player.position,
                         other=getattr(pre_player, "other", None),
                     ),
-                    opponent_team_rating=PreMatchTeamRating(id=team1, players=[], rating_value=team1_off_rating),
-                    team_rating=PreMatchTeamRating(id=team2, players=[], rating_value=team2_def_rating),
+                    opponent_team_rating=PreMatchTeamRating(
+                        id=team1, players=[], rating_value=team1_off_rating
+                    ),
+                    team_rating=PreMatchTeamRating(
+                        id=team2, players=[], rating_value=team2_def_rating
+                    ),
                 )
 
                 off_perf = float(pre_player.match_performance.performance_value)
@@ -396,16 +473,48 @@ class PlayerRatingGenerator(RatingGenerator):
                 mult_off = self._applied_multiplier_off(off_state)
                 mult_def = self._applied_multiplier_def(def_state)
 
-                off_change = (off_perf - float(pred_off)) * mult_off * float(pre_player.match_performance.participation_weight)
-                def_change = (def_perf - float(pred_def)) * mult_def * float(pre_player.match_performance.participation_weight)
+                off_change = (
+                    (off_perf - float(pred_off))
+                    * mult_off
+                    * float(pre_player.match_performance.participation_weight)
+                )
+                def_change = (
+                    (def_perf - float(pred_def))
+                    * mult_def
+                    * float(pre_player.match_performance.participation_weight)
+                )
 
                 if math.isnan(off_change) or math.isnan(def_change):
-                    raise ValueError(f"NaN player rating change for player_id={pid}, match_id={r[cn.match_id]}")
+                    raise ValueError(
+                        f"NaN player rating change for player_id={pid}, match_id={r[cn.match_id]}"
+                    )
 
-                player_updates.append((pid, team2, off_pre, def_pre, float(pred_off), float(pred_def), float(off_change), float(def_change), day_number))
+                player_updates.append(
+                    (
+                        pid,
+                        team2,
+                        off_pre,
+                        def_pre,
+                        float(pred_off),
+                        float(pred_def),
+                        float(off_change),
+                        float(def_change),
+                        day_number,
+                    )
+                )
 
             match_id = r[cn.match_id]
-            for (pid, team_id, off_pre, def_pre, pred_off, pred_def, off_change, def_change, dn) in player_updates:
+            for (
+                pid,
+                team_id,
+                off_pre,
+                def_pre,
+                pred_off,
+                pred_def,
+                off_change,
+                def_change,
+                dn,
+            ) in player_updates:
                 out[cn.player_id].append(pid)
                 out[cn.match_id].append(match_id)
                 out[cn.team_id].append(team_id)
@@ -418,7 +527,17 @@ class PlayerRatingGenerator(RatingGenerator):
                 out[self.PLAYER_RATING_COL].append(off_pre)
                 out[self.PLAYER_PRED_PERF_COL].append(pred_off)
 
-            for (pid, team_id, _off_pre, _def_pre, _pred_off, _pred_def, off_change, def_change, dn) in player_updates:
+            for (
+                pid,
+                team_id,
+                _off_pre,
+                _def_pre,
+                _pred_off,
+                _pred_def,
+                off_change,
+                def_change,
+                dn,
+            ) in player_updates:
                 pending_team_updates.append((pid, team_id, off_change, def_change, dn))
 
             if last_update_id is None:
@@ -462,7 +581,6 @@ class PlayerRatingGenerator(RatingGenerator):
             def_state.last_match_day_number = int(day_number)
             def_state.most_recent_team_id = team_id
 
-
     def _add_rating_features(self, df: pl.DataFrame) -> pl.DataFrame:
         # self._features_out and self.non_predictor_features_out are already suffixed from __init__
         # So we can use them directly
@@ -484,9 +602,16 @@ class PlayerRatingGenerator(RatingGenerator):
                 player_rating_col=self.PLAYER_OFF_RATING_COL,
                 team_rating_out=self.TEAM_OFF_RATING_PROJ_COL,
             )
-            df = df.with_columns(pl.col(self.TEAM_OFF_RATING_PROJ_COL).alias(self.TEAM_RATING_PROJ_COL))
+            df = df.with_columns(
+                pl.col(self.TEAM_OFF_RATING_PROJ_COL).alias(self.TEAM_RATING_PROJ_COL)
+            )
 
-        if self.TEAM_DEF_RATING_PROJ_COL in cols_to_add or self.OPP_DEF_RATING_PROJ_COL in cols_to_add or self.OPP_RATING_PROJ_COL in cols_to_add or self.DIFF_PROJ_COL in cols_to_add:
+        if (
+            self.TEAM_DEF_RATING_PROJ_COL in cols_to_add
+            or self.OPP_DEF_RATING_PROJ_COL in cols_to_add
+            or self.OPP_RATING_PROJ_COL in cols_to_add
+            or self.DIFF_PROJ_COL in cols_to_add
+        ):
             df = add_team_rating_projected(
                 df=df,
                 column_names=cn,
@@ -502,16 +627,26 @@ class PlayerRatingGenerator(RatingGenerator):
                 opp_team_rating_out=self.OPP_OFF_RATING_PROJ_COL,
             )
 
-        if self.OPP_DEF_RATING_PROJ_COL in cols_to_add or self.OPP_RATING_PROJ_COL in cols_to_add or self.DIFF_PROJ_COL in cols_to_add:
+        if (
+            self.OPP_DEF_RATING_PROJ_COL in cols_to_add
+            or self.OPP_RATING_PROJ_COL in cols_to_add
+            or self.DIFF_PROJ_COL in cols_to_add
+        ):
             df = add_opp_team_rating(
                 df=df,
                 column_names=cn,
                 team_rating_col=self.TEAM_DEF_RATING_PROJ_COL,
                 opp_team_rating_out=self.OPP_DEF_RATING_PROJ_COL,
             )
-            df = df.with_columns(pl.col(self.OPP_DEF_RATING_PROJ_COL).alias(self.OPP_RATING_PROJ_COL))
+            df = df.with_columns(
+                pl.col(self.OPP_DEF_RATING_PROJ_COL).alias(self.OPP_RATING_PROJ_COL)
+            )
 
-        if self.TEAM_RATING_COL in cols_to_add or self.OPP_RATING_COL in cols_to_add or self.DIFF_COL in cols_to_add:
+        if (
+            self.TEAM_RATING_COL in cols_to_add
+            or self.OPP_RATING_COL in cols_to_add
+            or self.DIFF_COL in cols_to_add
+        ):
             df = add_team_rating(
                 df=df,
                 column_names=cn,
@@ -531,7 +666,7 @@ class PlayerRatingGenerator(RatingGenerator):
         if self.DIFF_PROJ_COL in cols_to_add:
             df = add_rating_difference_projected(
                 df=df,
-                team_rating_col=self.TEAM_RATING_PROJ_COL,   # OFF
+                team_rating_col=self.TEAM_RATING_PROJ_COL,  # OFF
                 opp_team_rating_col=self.OPP_RATING_PROJ_COL,  # DEF
                 rating_diff_out=self.DIFF_PROJ_COL,
             )
@@ -563,7 +698,9 @@ class PlayerRatingGenerator(RatingGenerator):
                 )
             if self.TEAM_RATING_COL in df.columns and self.OPP_RATING_COL in df.columns:
                 df = df.with_columns(
-                    (pl.col(self.TEAM_RATING_COL) - pl.col(self.OPP_RATING_COL)).alias(self.DIFF_COL)
+                    (pl.col(self.TEAM_RATING_COL) - pl.col(self.OPP_RATING_COL)).alias(
+                        self.DIFF_COL
+                    )
                 )
 
         # Drop unrequested columns using enum iteration (since you converted to Enums)
@@ -605,26 +742,23 @@ class PlayerRatingGenerator(RatingGenerator):
         group_cols = [cn.match_id, cn.team_id, cn.start_date]
         if cn.update_match_id != cn.match_id:
             group_cols.append(cn.update_match_id)
-        
-        agg_df = (
-            df.group_by(group_cols)
-            .agg(pl.col(PLAYER_STATS).alias(PLAYER_STATS))
-        )
+
+        agg_df = df.group_by(group_cols).agg(pl.col(PLAYER_STATS).alias(PLAYER_STATS))
 
         team_id_col = cn.team_id
 
-        right_cols = [c for c in agg_df.columns if c not in [cn.match_id, cn.start_date, cn.update_match_id]]
-        right_df = agg_df.select([cn.match_id] + [pl.col(c).alias(f"{c}_opponent") for c in right_cols])
+        right_cols = [
+            c for c in agg_df.columns if c not in [cn.match_id, cn.start_date, cn.update_match_id]
+        ]
+        right_df = agg_df.select(
+            [cn.match_id] + [pl.col(c).alias(f"{c}_opponent") for c in right_cols]
+        )
         match_df = (
-            agg_df.join(
-                right_df,
-                on=cn.match_id,
-                how="inner"
-            )
+            agg_df.join(right_df, on=cn.match_id, how="inner")
             .filter(pl.col(team_id_col) != pl.col(f"{team_id_col}_opponent"))
             .unique(cn.match_id)
         )
-        
+
         sort_cols = [cn.start_date, cn.match_id]
         if cn.update_match_id != cn.match_id and cn.update_match_id in match_df.columns:
             sort_cols.append(cn.update_match_id)
@@ -633,7 +767,9 @@ class PlayerRatingGenerator(RatingGenerator):
         match_df = self._add_day_number(match_df, cn.start_date, "__day_number")
         return match_df
 
-    def _create_pre_match_players_collection(self, r: dict, stats_col: str, day_number: int, team_id: str) -> PreMatchPlayersCollection:
+    def _create_pre_match_players_collection(
+        self, r: dict, stats_col: str, day_number: int, team_id: str
+    ) -> PreMatchPlayersCollection:
         cn = self.column_names
 
         pre_match_player_ratings: list[PreMatchPlayerRating] = []
@@ -649,7 +785,9 @@ class PlayerRatingGenerator(RatingGenerator):
             position = team_player.get(cn.position)
             player_league = team_player.get(cn.league, None)
 
-            participation_weight = team_player.get(cn.participation_weight, 1.0) if cn.participation_weight else 1.0
+            participation_weight = (
+                team_player.get(cn.participation_weight, 1.0) if cn.participation_weight else 1.0
+            )
             projected_participation_weight = (
                 team_player.get(cn.projected_participation_weight, participation_weight)
                 if cn.projected_participation_weight
@@ -657,7 +795,14 @@ class PlayerRatingGenerator(RatingGenerator):
             )
             projected_participation_weights.append(projected_participation_weight)
 
-            perf_val = float(team_player[self.performance_column]) if (self.performance_column in team_player and team_player[self.performance_column] is not None) else 0.0
+            perf_val = (
+                float(team_player[self.performance_column])
+                if (
+                    self.performance_column in team_player
+                    and team_player[self.performance_column] is not None
+                )
+                else 0.0
+            )
 
             mp = MatchPerformance(
                 performance_value=perf_val,
@@ -758,27 +903,49 @@ class PlayerRatingGenerator(RatingGenerator):
         wsum = 0.0
         psum = 0.0
         for pre in c.pre_match_player_ratings:
-            w = float(pre.match_performance.participation_weight) if cn.participation_weight else 1.0
+            w = (
+                float(pre.match_performance.participation_weight)
+                if cn.participation_weight
+                else 1.0
+            )
             psum += float(pre.match_performance.performance_value) * w
             wsum += w
         return psum / wsum if wsum else 0.0
 
-    def _team_off_def_rating_from_collection(self, c: PreMatchPlayersCollection) -> tuple[float, float]:
+    def _team_off_def_rating_from_collection(
+        self, c: PreMatchPlayersCollection
+    ) -> tuple[float, float]:
         cn = self.column_names
         if not c.player_ids:
             return 0.0, 0.0
 
         # OFF rating aggregate
-        off_vals = [float(self._player_off_ratings[pid].rating_value) for pid in c.player_ids if pid in self._player_off_ratings]
-        def_vals = [float(self._player_def_ratings[pid].rating_value) for pid in c.player_ids if pid in self._player_def_ratings]
+        off_vals = [
+            float(self._player_off_ratings[pid].rating_value)
+            for pid in c.player_ids
+            if pid in self._player_off_ratings
+        ]
+        def_vals = [
+            float(self._player_def_ratings[pid].rating_value)
+            for pid in c.player_ids
+            if pid in self._player_def_ratings
+        ]
         if not off_vals or not def_vals:
             return 0.0, 0.0
 
         if cn.projected_participation_weight and c.projected_particiation_weights:
             w = [float(x) for x in c.projected_particiation_weights]
             wsum = sum(w) if w else 0.0
-            off = (sum(v * ww for v, ww in zip(off_vals, w)) / wsum) if wsum else (sum(off_vals) / len(off_vals))
-            dff = (sum(v * ww for v, ww in zip(def_vals, w)) / wsum) if wsum else (sum(def_vals) / len(def_vals))
+            off = (
+                (sum(v * ww for v, ww in zip(off_vals, w)) / wsum)
+                if wsum
+                else (sum(off_vals) / len(off_vals))
+            )
+            dff = (
+                (sum(v * ww for v, ww in zip(def_vals, w)) / wsum)
+                if wsum
+                else (sum(def_vals) / len(def_vals))
+            )
             return float(off), float(dff)
 
         return float(sum(off_vals) / len(off_vals)), float(sum(def_vals) / len(def_vals))
@@ -813,11 +980,21 @@ class PlayerRatingGenerator(RatingGenerator):
         }
 
         def get_perf_value(team_player: dict) -> float:
-            if self.performance_column in team_player and team_player[self.performance_column] is not None:
+            if (
+                self.performance_column in team_player
+                and team_player[self.performance_column] is not None
+            ):
                 return float(team_player[self.performance_column])
             return 0.0
 
-        def ensure_new_player(pid: str, day_number: int, mp: MatchPerformance, league, position, team_pre: list[PreMatchPlayerRating]) -> None:
+        def ensure_new_player(
+            pid: str,
+            day_number: int,
+            mp: MatchPerformance,
+            league,
+            position,
+            team_pre: list[PreMatchPlayerRating],
+        ) -> None:
             if pid in local_off and pid in local_def:
                 return
             start_val = self.start_rating_generator.generate_rating_value(
@@ -836,7 +1013,9 @@ class PlayerRatingGenerator(RatingGenerator):
             team2 = r[f"{cn.team_id}_opponent"]
 
             # Build local collections (do not touch self._player_*_ratings)
-            def build_local_team(stats_col: str) -> tuple[list[PreMatchPlayerRating], list[str], list[float], list[float], float]:
+            def build_local_team(
+                stats_col: str,
+            ) -> tuple[list[PreMatchPlayerRating], list[str], list[float], list[float], float]:
                 pre_list: list[PreMatchPlayerRating] = []
                 player_ids: list[str] = []
                 proj_w: list[float] = []
@@ -852,7 +1031,11 @@ class PlayerRatingGenerator(RatingGenerator):
                     league = tp.get(cn.league, None)
 
                     pw = tp.get(cn.participation_weight, 1.0) if cn.participation_weight else 1.0
-                    ppw = tp.get(cn.projected_participation_weight, pw) if cn.projected_participation_weight else pw
+                    ppw = (
+                        tp.get(cn.projected_participation_weight, pw)
+                        if cn.projected_participation_weight
+                        else pw
+                    )
                     proj_w.append(float(ppw))
 
                     mp = MatchPerformance(
@@ -883,7 +1066,9 @@ class PlayerRatingGenerator(RatingGenerator):
                 return pre_list, player_ids, off_vals, proj_w, team_off_perf
 
             t1_pre, t1_ids, t1_off_vals, t1_proj_w, t1_off_perf = build_local_team(PLAYER_STATS)
-            t2_pre, t2_ids, t2_off_vals, t2_proj_w, t2_off_perf = build_local_team(f"{PLAYER_STATS}_opponent")
+            t2_pre, t2_ids, t2_off_vals, t2_proj_w, t2_off_perf = build_local_team(
+                f"{PLAYER_STATS}_opponent"
+            )
 
             t1_def_perf = 1.0 - t2_off_perf
             t2_def_perf = 1.0 - t1_off_perf
@@ -913,8 +1098,12 @@ class PlayerRatingGenerator(RatingGenerator):
 
                 pred_off = self._performance_predictor.predict_performance(
                     player_rating=pre,
-                    opponent_team_rating=PreMatchTeamRating(id=team2, players=[], rating_value=t2_def_rating),
-                    team_rating=PreMatchTeamRating(id=team1, players=[], rating_value=t1_off_rating),
+                    opponent_team_rating=PreMatchTeamRating(
+                        id=team2, players=[], rating_value=t2_def_rating
+                    ),
+                    team_rating=PreMatchTeamRating(
+                        id=team1, players=[], rating_value=t1_off_rating
+                    ),
                 )
 
                 pred_def = self._performance_predictor.predict_performance(
@@ -926,8 +1115,12 @@ class PlayerRatingGenerator(RatingGenerator):
                         league=pre.league,
                         position=pre.position,
                     ),
-                    opponent_team_rating=PreMatchTeamRating(id=team2, players=[], rating_value=t2_off_rating),
-                    team_rating=PreMatchTeamRating(id=team1, players=[], rating_value=t1_def_rating),
+                    opponent_team_rating=PreMatchTeamRating(
+                        id=team2, players=[], rating_value=t2_off_rating
+                    ),
+                    team_rating=PreMatchTeamRating(
+                        id=team1, players=[], rating_value=t1_def_rating
+                    ),
                 )
 
                 out[cn.player_id].append(pid)
@@ -948,8 +1141,12 @@ class PlayerRatingGenerator(RatingGenerator):
 
                 pred_off = self._performance_predictor.predict_performance(
                     player_rating=pre,
-                    opponent_team_rating=PreMatchTeamRating(id=team1, players=[], rating_value=t1_def_rating),
-                    team_rating=PreMatchTeamRating(id=team2, players=[], rating_value=t2_off_rating),
+                    opponent_team_rating=PreMatchTeamRating(
+                        id=team1, players=[], rating_value=t1_def_rating
+                    ),
+                    team_rating=PreMatchTeamRating(
+                        id=team2, players=[], rating_value=t2_off_rating
+                    ),
                 )
 
                 pred_def = self._performance_predictor.predict_performance(
@@ -961,8 +1158,12 @@ class PlayerRatingGenerator(RatingGenerator):
                         league=pre.league,
                         position=pre.position,
                     ),
-                    opponent_team_rating=PreMatchTeamRating(id=team1, players=[], rating_value=t1_off_rating),
-                    team_rating=PreMatchTeamRating(id=team2, players=[], rating_value=t2_def_rating),
+                    opponent_team_rating=PreMatchTeamRating(
+                        id=team1, players=[], rating_value=t1_off_rating
+                    ),
+                    team_rating=PreMatchTeamRating(
+                        id=team2, players=[], rating_value=t2_def_rating
+                    ),
                 )
 
                 out[cn.player_id].append(pid)
@@ -978,16 +1179,18 @@ class PlayerRatingGenerator(RatingGenerator):
         # Ensure all columns have the correct dtype (especially for empty DataFrames)
         if not out[cn.player_id]:  # Empty result
             # Return empty DataFrame with correct schema
-            return pl.DataFrame({
-                cn.player_id: pl.Series([], dtype=pl.Utf8),
-                cn.match_id: pl.Series([], dtype=pl.Utf8),
-                cn.team_id: pl.Series([], dtype=pl.Utf8),
-                self.PLAYER_OFF_RATING_COL: pl.Series([], dtype=pl.Float64),
-                self.PLAYER_DEF_RATING_COL: pl.Series([], dtype=pl.Float64),
-                self.PLAYER_PRED_OFF_PERF_COL: pl.Series([], dtype=pl.Float64),
-                self.PLAYER_PRED_DEF_PERF_COL: pl.Series([], dtype=pl.Float64),
-                self.PLAYER_RATING_COL: pl.Series([], dtype=pl.Float64),
-                self.PLAYER_PRED_PERF_COL: pl.Series([], dtype=pl.Float64),
-            })
-        
+            return pl.DataFrame(
+                {
+                    cn.player_id: pl.Series([], dtype=pl.Utf8),
+                    cn.match_id: pl.Series([], dtype=pl.Utf8),
+                    cn.team_id: pl.Series([], dtype=pl.Utf8),
+                    self.PLAYER_OFF_RATING_COL: pl.Series([], dtype=pl.Float64),
+                    self.PLAYER_DEF_RATING_COL: pl.Series([], dtype=pl.Float64),
+                    self.PLAYER_PRED_OFF_PERF_COL: pl.Series([], dtype=pl.Float64),
+                    self.PLAYER_PRED_DEF_PERF_COL: pl.Series([], dtype=pl.Float64),
+                    self.PLAYER_RATING_COL: pl.Series([], dtype=pl.Float64),
+                    self.PLAYER_PRED_PERF_COL: pl.Series([], dtype=pl.Float64),
+                }
+            )
+
         return pl.DataFrame(out, strict=False)

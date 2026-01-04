@@ -12,9 +12,7 @@ def add_team_rating(
     mid = column_names.match_id
     tid = column_names.team_id
 
-    return df.with_columns(
-        pl.col(player_rating_col).mean().over([mid, tid]).alias(team_rating_out)
-    )
+    return df.with_columns(pl.col(player_rating_col).mean().over([mid, tid]).alias(team_rating_out))
 
 
 def add_day_number_utc(
@@ -38,7 +36,6 @@ def add_day_number_utc(
     return df.with_columns((start_as_int - start_as_int.min() + 1).alias(out_col))
 
 
-
 def add_team_rating_projected(
     df: pl.DataFrame,
     column_names: ColumnNames,  # ColumnNames
@@ -58,7 +55,10 @@ def add_team_rating_projected(
         )
 
     return add_team_rating(
-        df=df,column_names=column_names,player_rating_col=player_rating_col, team_rating_out=team_rating_out
+        df=df,
+        column_names=column_names,
+        player_rating_col=player_rating_col,
+        team_rating_out=team_rating_out,
     )
 
 
@@ -95,8 +95,6 @@ def add_opponent_rating_projected(
 ) -> pl.DataFrame:
     """Alias for add_opp_team_rating - returns the opponent team rating column with a new name."""
     return df.with_columns(pl.col(opp_team_rating_col).alias(opponent_rating_out))
-
-
 
 
 def add_rating_difference_projected(

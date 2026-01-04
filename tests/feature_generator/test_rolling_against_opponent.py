@@ -1,6 +1,6 @@
 import pandas as pd
-import pytest
 import polars as pl
+import pytest
 from polars.testing import assert_frame_equal
 
 from spforge import ColumnNames
@@ -70,9 +70,7 @@ def test_rolling_mean_transform_historical(column_names, df, use_column_names):
             features=["points"],
             window=20,
         )
-        transformed_data = rolling_mean.fit_transform(
-            data, column_names=column_names
-        )
+        transformed_data = rolling_mean.fit_transform(data, column_names=column_names)
 
     else:
         rolling_mean = RollingAgainstOpponentTransformer(
@@ -101,9 +99,7 @@ def test_rolling_mean_transform_historical(column_names, df, use_column_names):
     ]
     if isinstance(transformed_data, pd.DataFrame):
         expected_data = data.copy()
-        expected_data = expected_data.assign(
-            **{rolling_mean.features_out[0]: expected_values}
-        )
+        expected_data = expected_data.assign(**{rolling_mean.features_out[0]: expected_values})
         pd.testing.assert_frame_equal(
             transformed_data, expected_data[transformed_data.columns], check_dtype=False
         )
@@ -167,9 +163,7 @@ def test_rolling_mean_transform_future(column_names, df):
 
     if isinstance(transformed_future_data, pd.DataFrame):
         expected_data = transformed_future_data.copy()
-        expected_data = expected_data.assign(
-            **{rolling_mean.features_out[0]: [1.5, 3.5]}
-        )
+        expected_data = expected_data.assign(**{rolling_mean.features_out[0]: [1.5, 3.5]})
         pd.testing.assert_frame_equal(
             transformed_future_data,
             expected_data[transformed_future_data.columns],

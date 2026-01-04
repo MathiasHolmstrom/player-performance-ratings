@@ -1,15 +1,13 @@
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
-from typing import Dict, Any, List, Optional
 
 from spforge.data_structures import (
     MatchPlayer,
-    PreMatchPlayerRating,
     PlayerRatingChange,
-    MatchTeam,
-    TeamRatingChange,
+    PreMatchPlayerRating,
 )
 
 DEFAULT_START_RATING = 1000
@@ -18,21 +16,21 @@ DEFAULT_START_RATING = 1000
 @dataclass
 class LeaguePlayerRatings:
     league: str
-    ratings: List[float]
+    ratings: list[float]
 
 
 class StartRatingGenerator:
 
     def __init__(
         self,
-        league_ratings: Optional[dict[str, float]] = None,
+        league_ratings: dict[str, float] | None = None,
         league_quantile: float = 0.2,
         min_count_for_percentiles: int = 50,
         team_rating_subtract: float = 80,
         team_weight: float = 0,
         max_days_ago_league_entities: int = 120,
         min_match_count_team_rating: int = 2,
-        harcoded_start_rating: Optional[float] = None,
+        harcoded_start_rating: float | None = None,
     ):
 
         self.league_ratings = league_ratings or {}
@@ -45,14 +43,14 @@ class StartRatingGenerator:
         self.harcoded_start_rating = harcoded_start_rating
         if self.harcoded_start_rating is not None:
             logging.warning(
-                f"Hardcoded start ratings are used."
-                f" This will usually result in worse accuracy when new players are expected to perform worse"
+                "Hardcoded start ratings are used."
+                " This will usually result in worse accuracy when new players are expected to perform worse"
             )
 
-        self._league_to_last_day_number: Dict[str, List[Any]] = {}
-        self._league_to_player_ids: Dict[str, List[str]] = {}
+        self._league_to_last_day_number: dict[str, list[Any]] = {}
+        self._league_to_player_ids: dict[str, list[str]] = {}
         self._league_player_ratings: dict[str, list] = {}
-        self._player_to_league: Dict[str, str] = {}
+        self._player_to_league: dict[str, str] = {}
 
     def reset(self):
         self._league_to_last_day_number = {}
@@ -83,13 +81,10 @@ class StartRatingGenerator:
 
         existing_team_rating = None
         if self.team_weight > 0:
-            tot_player_game_count = sum(
-                [p.games_played for p in team_pre_match_player_ratings]
-            )
+            tot_player_game_count = sum([p.games_played for p in team_pre_match_player_ratings])
             if tot_player_game_count >= self.min_match_count_team_rating:
                 sum_team_rating = sum(
-                    player.rating_value
-                    * player.match_performance.projected_participation_weight
+                    player.rating_value * player.match_performance.projected_participation_weight
                     for player in team_pre_match_player_ratings
                 )
 
@@ -110,17 +105,12 @@ class StartRatingGenerator:
         else:
             team_weight = self.team_weight
 
-            adjusted_team_start_rating = (
-                existing_team_rating - self.team_rating_subtract
-            )
+            adjusted_team_start_rating = existing_team_rating - self.team_rating_subtract
         start_rating_league = self._calculate_start_rating_value(
             match_day_number=day_number,
             league=league,
         )
-        return (
-            start_rating_league * (1 - team_weight)
-            + team_weight * adjusted_team_start_rating
-        )
+        return start_rating_league * (1 - team_weight) + team_weight * adjusted_team_start_rating
 
     def _calculate_start_rating_value(
         self,
@@ -141,12 +131,10 @@ class StartRatingGenerator:
         self,
         match_day_number: int,
         league: str,
-    ) -> List[float]:
-        player_ratings: List[float] = []
+    ) -> list[float]:
+        player_ratings: list[float] = []
 
-        for index, last_day_number in enumerate(
-            self._league_to_last_day_number[league]
-        ):
+        for index, last_day_number in enumerate(self._league_to_last_day_number[league]):
             days_ago = match_day_number - last_day_number
 
             if days_ago <= self.max_days_ago_league_entities:
@@ -154,7 +142,7 @@ class StartRatingGenerator:
 
         return player_ratings
 
-    def _start_rating_value_for_above_threshold(self, player_ratings: List) -> float:
+    def _start_rating_value_for_above_threshold(self, player_ratings: list) -> float:
         percentile = np.percentile(player_ratings, self.league_quantile * 100)
         return float(percentile)
 
@@ -162,9 +150,7 @@ class StartRatingGenerator:
         league = rating_change.league
         id = rating_change.id
         day_number = rating_change.day_number
-        rating_value = (
-            rating_change.pre_match_rating_value + rating_change.rating_change_value
-        )
+        rating_value = rating_change.pre_match_rating_value + rating_change.rating_change_value
 
         league_data = self._league_player_ratings.setdefault(league, [])
         league_player_ids = self._league_to_player_ids.setdefault(league, [])
