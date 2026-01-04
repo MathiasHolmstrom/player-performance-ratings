@@ -1,9 +1,35 @@
 import narwhals.stable.v2 as nw
+import numpy as np
 import pandas as pd
 import polars as pl
 from narwhals.typing import IntoFrameT
 
 from spforge import ColumnNames
+
+def is_lightgbm_estimator(est) -> bool:
+    try:
+        import lightgbm as lgb
+        return isinstance(est, lgb.sklearn.LGBMModel)
+    except Exception:
+        return est.__class__.__module__.startswith("lightgbm")
+def coerce_for_lightgbm(X):
+    try:
+        import narwhals.stable.v2 as nw
+
+        try:
+            X = nw.to_native(X)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    if hasattr(X, "to_pandas"):
+        return X.to_pandas()
+    if isinstance(X, np.ndarray):
+        return X
+    if hasattr(X, "to_numpy"):
+        return X.to_numpy()
+    return np.asarray(X)
 
 
 def convert_pandas_to_polars(df: pd.DataFrame) -> pl.DataFrame:

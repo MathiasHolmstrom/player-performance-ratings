@@ -80,7 +80,6 @@ class PlayerRatingGenerator(RatingGenerator):
             performance_column=performance_column,
             column_names=column_names,
             output_suffix=output_suffix,
-            # NEW base class args:
             rating_change_multiplier_offense=rating_change_multiplier_offense,
             rating_change_multiplier_defense=rating_change_multiplier_defense,
             confidence_days_ago_multiplier=confidence_days_ago_multiplier,
@@ -101,13 +100,6 @@ class PlayerRatingGenerator(RatingGenerator):
             **kwargs,
         )
 
-        # --- Player OFF/DEF rating output cols (requires new enum values) ---
-        # You should add these enum values:
-        #   RatingKnownFeatures.PLAYER_OFF_RATING = "player_off_rating"
-        #   RatingKnownFeatures.PLAYER_DEF_RATING = "player_def_rating"
-        # And optionally predicted perf:
-        #   RatingUnknownFeatures.PLAYER_PREDICTED_OFF_PERFORMANCE = "player_predicted_off_performance"
-        #   RatingUnknownFeatures.PLAYER_PREDICTED_DEF_PERFORMANCE = "player_predicted_def_performance"
 
         self.PLAYER_OFF_RATING_COL = self._suffix(str(RatingKnownFeatures.PLAYER_OFF_RATING))
         self.PLAYER_DEF_RATING_COL = self._suffix(str(RatingKnownFeatures.PLAYER_DEF_RATING))

@@ -223,7 +223,7 @@ def test_lgbm_wrapper_predict_proba_raises_error():
     X_pred = pd.DataFrame(
         {"feature1": [4, 5], "date_col": pd.date_range("2024-01-04", periods=2, freq="D")}
     )
-    with pytest.raises(AttributeError, match="does not have predict_proba"):
+    with pytest.raises(AttributeError, match="LinearRegression' object has no attribute 'predict_proba"):
         wrapper.predict_proba(X_pred)
 
 
@@ -239,7 +239,6 @@ def test_granularity_estimator_predict_proba_no_data():
     y_train = pd.Series([0, 1, 0, 1])
     predictor.fit(X_train, y_train)
 
-    # Predict with different granularity values not seen in training
     X_pred = pd.DataFrame({"position": ["c", "d"], "feature1": [0.2, 0.6]})  # Not in training
     # The current implementation handles missing granularity values by skipping them
     # Since 'c' and 'd' are not in training, they won't have estimators

@@ -63,7 +63,7 @@ class SkLearnEnhancerEstimator(BaseEstimator):
         self.estimator = estimator
         self.date_column = date_column
         self.day_weight_epsilon = day_weight_epsilon
-        super().__init__()
+        self.classes_ = []
 
     @nw.narwhalify
     def fit(self, X: IntoFrameT, y: Any, sample_weight: np.ndarray | None = None):
@@ -109,16 +109,16 @@ class SkLearnEnhancerEstimator(BaseEstimator):
     @nw.narwhalify
     def predict(self, X: IntoFrameT) -> np.ndarray:
         X_features = (
-            X.drop(columns=[self.date_column]) if self.date_column in X.columns else X
+            X.drop([self.date_column]) if self.date_column in X.columns else X
         )
         return self.estimator.predict(X_features.to_native())
 
     @nw.narwhalify
     def predict_proba(self, X: IntoFrameT) -> np.ndarray:
         X_features = (
-            X.drop(columns=[self.date_column]) if self.date_column in X.columns else X
+            X.drop([self.date_column]) if self.date_column in X.columns else X
         )
-        return self.estimator.predict_proba(X.to_native())
+        return self.estimator.predict_proba(X_features.to_native())
 
     def get_params(self, deep: bool = True) -> dict:
         params = {

@@ -17,9 +17,7 @@ class FeatureGeneratorPipeline:
 
     def __init__(self, column_names: ColumnNames, feature_generators: list[LagGenerator | RatingGenerator]):
         features_out = list(chain.from_iterable(t.features_out for t in feature_generators))
-        features = list(chain.from_iterable(t.features for t in feature_generators))
         self.features_out = features_out
-        self.features = features
         self.feature_generators = feature_generators
         self.column_names = column_names
 

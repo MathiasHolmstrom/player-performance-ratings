@@ -297,6 +297,7 @@ def test_pipeline_uses_feature_names_subset_even_if_extra_columns_present(df_reg
         estimator=cap,
         feature_names=["num1", "cat1"],
         one_hot_encode_cat_features=True,
+        categorical_features=['cat1'],
         impute_missing_values=True,
         scale_features=True,
         remainder="drop",

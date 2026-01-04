@@ -84,8 +84,6 @@ class AggregatorTransformer(TransformerMixin):
         self.column_to_alias = column_to_alias or {f: f"{f}_{aggregator}" for f in columns}
         self.granularity = granularity
         self.aggregator = aggregator
-        features_out = list(self.column_to_alias.values())
-        super().__init__(features=columns, features_out=features_out)
         self.drop_cols = drop_cols or []
 
     @nw.narwhalify
@@ -137,7 +135,6 @@ class NormalizerToColumnTransformer(TransformerMixin):
         self.granularity = granularity
         self.normalize_to_column = normalize_to_column
         self.drop_cols = drop_cols or []
-        super().__init__(features=[column, normalize_to_column], features_out=[column])
 
     @nw.narwhalify
     def fit(self, df: IntoFrameT, column_names=None) -> "NormalizerToColumnTransformer":

@@ -96,8 +96,6 @@ class RatingGenerator:
         else:
             self._features_out = [self._suffix(str(f)) for f in features_out]
 
-        super().__init__(features_out=self._features_out, features=[])
-
         sig = inspect.signature(_performance_predictor_class.__init__)
         init_params = [name for name, _param in sig.parameters.items() if name != "self"]
         performance_predictor_params = {k: v for k, v in kwargs.items() if k in init_params}
@@ -272,11 +270,8 @@ class RatingGenerator:
         dtype = df.schema.get(date_column)
         c = pl.col(date_column)
 
-        # Handle different date types - normalize all to datetime first
-        # This handles mixed types by converting everything to a common format
         if dtype == pl.Utf8 or (hasattr(pl, "String") and dtype == pl.String):
-            # String format - use polars' flexible parsing with strict=False
-            # Try date-only format first (most common), then datetime formats
+
             dt = c.str.strptime(pl.Datetime(time_zone=None), "%Y-%m-%d", strict=False).fill_null(
                 c.str.strptime(
                     pl.Datetime(time_zone=None), "%Y-%m-%d %H:%M:%S", strict=False
@@ -288,7 +283,6 @@ class RatingGenerator:
             )
             dt = dt.dt.replace_time_zone(None)
         elif dtype == pl.Date:
-            # Already a Date type - convert to datetime for consistency
             dt = c.cast(pl.Datetime(time_zone=None))
         elif isinstance(dtype, pl.Datetime):
             if dtype.time_zone is None:
@@ -341,3 +335,7 @@ class RatingGenerator:
         if last_match_day_number is None:
             return 0.0
         return float(day_number - last_match_day_number)
+
+    @property
+    def features_out(self) -> list[str]:
+        return self._features_out

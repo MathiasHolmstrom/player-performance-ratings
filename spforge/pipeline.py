@@ -3,7 +3,6 @@ from typing import Any
 import narwhals.stable.v2 as nw
 import numpy as np
 import pandas as pd
-import polars as pl
 from narwhals.typing import IntoFrameT
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
@@ -13,6 +12,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from spforge.estimator.sklearn_estimator import GroupByEstimator
 from spforge.scorer import Filter, apply_filters
+
 
 class PreprocessorToDataFrame(BaseEstimator, TransformerMixin):
     def __init__(self, preprocessor: Any):
@@ -159,16 +159,13 @@ class Pipeline(BaseEstimator):
 
         return SkPipeline(steps=[("pre", pre), ("est", est)])
 
-    def _narwhals_preprocess(self, df: nw.DataFrame, target: str) -> nw.DataFrame:
+    def _preprocess(self, df: nw.DataFrame, target: str) -> nw.DataFrame:
         if self.min_target is not None:
             df = df.with_columns(nw.col(target).clip(lower_bound=self.min_target))
         if self.max_target is not None:
             df = df.with_columns(nw.col(target).clip(upper_bound=self.max_target))
 
-        df = apply_filters(df=df, filters=self.filters)
-
-        if not hasattr(df, "to_native"):
-            df = nw.from_native(df)
+        df = nw.from_native(apply_filters(df=df, filters=self.filters))
 
         if self.drop_rows_where_target_is_nan:
             df = df.filter(~nw.col(target).is_null())
@@ -190,7 +187,7 @@ class Pipeline(BaseEstimator):
         )
 
 
-        df = self._narwhals_preprocess(df, self._target_name)
+        df = self._preprocess(df, self._target_name)
 
         missing = [c for c in self._fitted_features if c not in df.columns]
         if missing:
@@ -204,7 +201,7 @@ class Pipeline(BaseEstimator):
 
         self._sk = self._build_sklearn_pipeline(df)
 
-        X_fit = df[self._fitted_features].to_native()
+        X_fit = df.select(self._fitted_features)
         y_fit = df[self._target_name].to_numpy()
 
         if sample_weight is not None:
