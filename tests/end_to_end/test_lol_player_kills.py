@@ -147,7 +147,6 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
 
     probabilities = probability_predictor.predict_proba(future_df[["kills_pred"]])
 
-    # Assert 1: Check probability shape - should be (n_samples, n_classes)
     n_samples = len(future_df)
     n_classes = 16  # max_value - min_value + 1 = 15 - 0 + 1 = 16
     assert probabilities.shape == (
@@ -155,13 +154,43 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
         n_classes,
     ), f"Probabilities shape should be ({n_samples}, {n_classes}), got {probabilities.shape}"
 
-    # Assert 2: Verify probabilities are valid (non-negative, sum to 1)
-    assert (probabilities >= 0).all(), "All probabilities must be non-negative"
-    assert (probabilities <= 1).all(), "All probabilities must be <= 1"
+
+    neg_mask = probabilities < 0
+
+    if neg_mask.any():
+        idx = np.argwhere(neg_mask)
+
+        # Show first few offenders
+        bad = idx[:10]
+        raise AssertionError(
+            f"Found negative probabilities at indices (row, class): {bad.tolist()}\n"
+            f"Values: {[probabilities[i, j] for i, j in bad]}")
     prob_sums = probabilities.sum(axis=1)
-    assert np.allclose(
-        prob_sums, 1.0, atol=1e-6
-    ), f"Probabilities should sum to 1.0 for each sample, got min={prob_sums.min():.6f}, max={prob_sums.max():.6f}"
+
+    if not np.allclose(prob_sums, 1.0, atol=1e-6):
+        bad = np.where(~np.isclose(prob_sums, 1.0, atol=1e-6))[0]
+
+        rows = bad[:10].tolist()
+
+        details = []
+        for i in rows:
+            row = probabilities[i]
+            details.append(
+                {
+                    "row": int(i),
+                    "sum": float(prob_sums[i]),
+                    "has_nan": bool(np.isnan(row).any()),
+                    "has_inf": bool(np.isinf(row).any()),
+                    "min": float(np.nanmin(row)),
+                    "max": float(np.nanmax(row)),
+                    "values": row.tolist(),
+                }
+            )
+
+        raise AssertionError(
+            "Probabilities should sum to 1.0 for each sample.\n"
+            f"Bad rows (first 10): {details}"
+        )
 
     # Assert 3: Calculate expected value using dot product: E[X] = sum(probabilities * classes)
     classes = np.arange(0, n_classes)  # [0, 1, 2, ..., 15]

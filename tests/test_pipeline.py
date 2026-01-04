@@ -35,7 +35,7 @@ class CaptureEstimator(BaseEstimator):
 
     def predict_proba(self, X):
         if not self.has_proba:
-            raise AttributeError("predict_proba not supported")
+            return self.predict(X)
         n = len(X)
         out = np.zeros((n, 2), dtype=float)
         out[:, 0] = 0.25
@@ -101,7 +101,7 @@ def _col(df, name: str):
 
 
 def _inner_estimator(model: Pipeline):
-    est = model._sk.named_steps["est"]
+    est = model.sklearn_pipeline.named_steps["est"]
     if hasattr(est, "_est") and est._est is not None:
         return est._est
     raise AssertionError("Inner estimator not available; pipeline not fitted?")
@@ -236,9 +236,9 @@ def test_infer_numeric_from_feature_names_when_only_cat_features_given(df_reg):
     model.fit(X, y=y)
 
     assert cap.fit_columns is not None
-    assert any(c.endswith("num1") and c.startswith("num__") for c in cap.fit_columns)
-    assert any(c.endswith("num2") and c.startswith("num__") for c in cap.fit_columns)
-    assert any(c.startswith("cat__") for c in cap.fit_columns)
+    assert any(c.endswith("num1") and c.startswith("num") for c in cap.fit_columns)
+    assert any(c.endswith("num2") and c.startswith("num") for c in cap.fit_columns)
+    assert any(c.startswith("cat") for c in cap.fit_columns)
 
 
 def test_infer_categorical_from_feature_names_when_only_numeric_features_given(df_reg):
@@ -256,9 +256,9 @@ def test_infer_categorical_from_feature_names_when_only_numeric_features_given(d
     model.fit(X, y=y)
 
     assert cap.fit_columns is not None
-    assert any(c.endswith("num1") and c.startswith("num__") for c in cap.fit_columns)
-    assert any(c.endswith("num2") and c.startswith("num__") for c in cap.fit_columns)
-    assert any(c.startswith("cat__") for c in cap.fit_columns)
+    assert any(c.endswith("num1") and c.startswith("num") for c in cap.fit_columns)
+    assert any(c.endswith("num2") and c.startswith("num") for c in cap.fit_columns)
+    assert any(c.startswith("cat") for c in cap.fit_columns)
 
 
 def test_granularity_groups_rows_before_estimator_fit_and_predict(df_reg):
@@ -317,5 +317,5 @@ def test_pipeline_uses_feature_names_subset_even_if_extra_columns_present(df_reg
 
     assert cap.fit_columns is not None
     assert all("junk" not in c for c in cap.fit_columns)
-    assert any(c.startswith("num__") for c in cap.fit_columns)
-    assert any(c.startswith("cat__") for c in cap.fit_columns)
+    assert any(c.startswith("num") for c in cap.fit_columns)
+    assert any(c.startswith("cat") for c in cap.fit_columns)

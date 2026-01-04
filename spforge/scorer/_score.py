@@ -92,36 +92,26 @@ def apply_filters(df: IntoFrameT, filters: list[Filter]) -> IntoFrameT:
     for filter in filters:
 
         if df[filter.column_name].dtype in (nw.Datetime, nw.Date) and isinstance(filter.value, str):
-            # Parse datetime string and handle timezone
             parsed_dt = datetime.datetime.fromisoformat(filter.value)
-            # Check if the column has timezone info
-            # If column is timezone-naive, remove timezone from filter_value
-            # If column is timezone-aware, add UTC timezone
+
             try:
-                # Try to get first value to check timezone
                 first_val = df[filter.column_name].to_list()[0] if len(df) > 0 else None
                 if first_val is not None:
                     if isinstance(first_val, pd.Timestamp):
                         if first_val.tz is None:
-                            # Column is timezone-naive, remove timezone from filter_value
                             filter_value = parsed_dt.replace(tzinfo=None)
                         else:
-                            # Column is timezone-aware, add UTC timezone
                             filter_value = parsed_dt.replace(tzinfo=datetime.UTC)
                     else:
-                        # Polars datetime - Polars datetimes are timezone-naive by default
-                        # Check dtype string for timezone info
+
                         dtype_str = str(df[filter.column_name].dtype)
                         if "UTC" in dtype_str or "timezone" in dtype_str.lower():
                             filter_value = parsed_dt.replace(tzinfo=datetime.UTC)
                         else:
-                            # Timezone-naive, remove timezone from filter_value
                             filter_value = parsed_dt.replace(tzinfo=None)
                 else:
-                    # No data, default to timezone-naive
                     filter_value = parsed_dt.replace(tzinfo=None)
             except:
-                # Fallback: timezone-naive
                 filter_value = parsed_dt.replace(tzinfo=None)
         else:
             filter_value = filter.value
@@ -424,9 +414,6 @@ class SklearnScorer(BaseScorer):
         :param filters: The filters to apply before calculating
         """
 
-        self.pred_column_name = pred_column
-        self.scorer_function = scorer_function
-        self.params = params or {}
         super().__init__(
             target=target,
             pred_column=pred_column,
@@ -435,16 +422,16 @@ class SklearnScorer(BaseScorer):
             filters=filters,
             validation_column=validation_column,
         )
+        self.pred_column_name = pred_column
+        self.scorer_function = scorer_function
+        self.params = params or {}
+
 
     @narwhals.narwhalify
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
 
-        df = apply_filters(df=df, filters=self.filters)
-        # Ensure df is a Narwhals DataFrame
-        if not hasattr(df, "to_native"):
-            df = nw.from_native(df)
+        df = nw.from_native(apply_filters(df=df, filters=self.filters))
 
-        # Apply aggregation_level if set
         if self.aggregation_level:
             df = df.group_by(self.aggregation_level).agg(
                 [
@@ -452,33 +439,22 @@ class SklearnScorer(BaseScorer):
                     nw.col(self.target).sum().alias(self.target),
                 ]
             )
-            # After group_by, ensure df is still a Narwhals DataFrame
             if not hasattr(df, "to_native"):
                 df = nw.from_native(df)
 
-        # If granularity is set, calculate separate scores per group
         if self.granularity:
             results = {}
-            # Get unique granularity combinations - convert to native first to use select
-            df_native = df.to_native()
-            if isinstance(df_native, pd.DataFrame):
-                # For pandas, use unique() and convert to list of tuples
-                gran_df_unique = df_native[self.granularity].drop_duplicates()
-                granularity_tuples = [tuple(row) for row in gran_df_unique.values]
-            else:
-                # For polars, use select and unique
-                gran_df_unique = df_native.select(self.granularity).unique()
-                granularity_tuples = [tuple(row) for row in gran_df_unique.iter_rows()]
+
+            gran_df_unique = df.select(self.granularity).unique()
+            granularity_tuples = [tuple(row) for row in gran_df_unique.iter_rows()]
 
             for gran_tuple in granularity_tuples:
-                # Filter to this granularity combination using Narwhals
                 mask = None
                 for i, col in enumerate(self.granularity):
                     col_mask = nw.col(col) == nw.lit(gran_tuple[i])
                     mask = col_mask if mask is None else (mask & col_mask)
                 gran_df = df.filter(mask)
 
-                # Calculate score for this group
                 if len(gran_df) > 0 and isinstance(
                     gran_df[self.pred_column_name].to_list()[0], list
                 ):
@@ -496,7 +472,6 @@ class SklearnScorer(BaseScorer):
 
             return results
 
-        # Single score calculation
         if len(df) > 0 and isinstance(df[self.pred_column_name].to_list()[0], list):
             return float(
                 self.scorer_function(

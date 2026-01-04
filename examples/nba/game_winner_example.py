@@ -72,15 +72,15 @@ pipeline.fit(X=historical_df, y=historical_df['won'])
 
 # Future predictions on future results
 future_df = rating_generator.future_transform(future_df)
-future_predictions = pipeline.predict_proba(future_df)
-
+future_predictions = pipeline.predict_proba(future_df)[:,1]
+future_df['game_winner_probability'] = future_predictions
 # Grouping predictions from game-player level to game-level.
-team_grouped_predictions = future_predictions.groupby(column_names.match_id).first()[
+team_grouped_predictions = future_df.groupby(column_names.match_id).first()[
     [
         column_names.start_date,
         column_names.team_id,
         "team_id_opponent",
-        predictor.pred_column,
+        'game_winner_probability',
     ]
 ]
 

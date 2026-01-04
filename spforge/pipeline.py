@@ -1,3 +1,5 @@
+import datetime
+import logging
 from typing import Any
 
 import narwhals.stable.v2 as nw
@@ -12,6 +14,9 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from spforge.estimator.sklearn_estimator import GroupByEstimator
 from spforge.scorer import Filter, apply_filters
+from spforge.transformers import ConvertDataFrameToCategoricalTransformer
+
+_logger = logging.getLogger(__name__)
 
 
 class PreprocessorToDataFrame(BaseEstimator, TransformerMixin):
@@ -22,7 +27,7 @@ class PreprocessorToDataFrame(BaseEstimator, TransformerMixin):
     @nw.narwhalify
     def fit(self, X: IntoFrameT, y: Any = None):
         y = y.to_numpy() if not isinstance(y, np.ndarray) else y
-        self.preprocessor.fit(X.to_native(), y)
+        self.preprocessor.fit(X.to_pandas(), y)
         if hasattr(self.preprocessor, "get_feature_names_out"):
             self._feature_names_out = self.preprocessor.get_feature_names_out()
         else:
@@ -31,7 +36,7 @@ class PreprocessorToDataFrame(BaseEstimator, TransformerMixin):
 
     @nw.narwhalify
     def transform(self, X: IntoFrameT) -> IntoFrameT:
-        out = self.preprocessor.transform(X.to_native())
+        out = self.preprocessor.transform(X.to_pandas())
         return nw.from_native(
             out,
         )
@@ -43,28 +48,35 @@ class PreprocessorToDataFrame(BaseEstimator, TransformerMixin):
             raise AttributeError("No feature names available.")
         return self._feature_names_out
 
+
 class Pipeline(BaseEstimator):
     def __init__(
-        self,
-        estimator: Any,
-        feature_names: list[str],
-        granularity: list[str] | None = None,
-        filters: list[Filter] | None = None,
-        scale_features: bool = False,
-        one_hot_encode_cat_features: bool = False,
-        impute_missing_values: bool = False,
-        drop_rows_where_target_is_nan: bool = False,
-        min_target: int | float | None = None,
-        max_target: int | float | None = None,
-        categorical_features: list[str] | None = None,
-        numeric_features: list[str] | None = None,
-        remainder: str = "drop",
+            self,
+            estimator: Any,
+            feature_names: list[str],
+            predictor_transformers: list[Any] | None = None,
+            context_feature_names: list[str] | None = None,
+            granularity: list[str] | None = None,
+            filters: list[Filter] | None = None,
+            scale_features: bool = False,
+            convert_cat_features_to_cat_dtype: bool = False,
+            one_hot_encode_cat_features: bool = False,
+            impute_missing_values: bool = False,
+            drop_rows_where_target_is_nan: bool = False,
+            min_target: int | float | None = None,
+            max_target: int | float | None = None,
+            categorical_features: list[str] | None = None,
+            numeric_features: list[str] | None = None,
+            remainder: str = "drop",
     ):
         self.feature_names = feature_names
         self.granularity = granularity
+        self.predictor_transformers = predictor_transformers
         self.estimator = estimator
         self.filters = filters or []
         self.scale_features = scale_features
+        self.context_feature_names =  context_feature_names or []
+        self.convert_cat_features_to_cat_dtype = convert_cat_features_to_cat_dtype
         self.one_hot_encode_cat_features = one_hot_encode_cat_features
         self.impute_missing_values = impute_missing_values
         self.drop_rows_where_target_is_nan = drop_rows_where_target_is_nan
@@ -73,13 +85,13 @@ class Pipeline(BaseEstimator):
         self.categorical_features = categorical_features
         self.numeric_features = numeric_features
         self.remainder = remainder
+        assert len([c for c in self.context_feature_names if c in self.feature_names]) == 0
 
-        self._sk: SkPipeline | None = None
+        self.sklearn_pipeline: SkPipeline | None = None
         self._fitted_features: list[str] = []
         self._target_name: str | None = None
 
-
-    def _infer_feature_types(self, df_pd: pd.DataFrame) -> tuple[list[str], list[str]]:
+    def _infer_feature_types(self, df: IntoFrameT) -> tuple[list[str], list[str]]:
         feats = list(self.feature_names)
         if self.numeric_features is not None and self.categorical_features is not None:
             num = [c for c in self.numeric_features if c in feats]
@@ -98,16 +110,27 @@ class Pipeline(BaseEstimator):
 
         num = []
         cat = []
+        df_pd = df.to_pandas()
         for c in self.feature_names:
             s = df_pd[c]
             if pd.api.types.is_numeric_dtype(s):
                 num.append(c)
-            else:
-                cat.append(c)
+                continue
+            if pd.api.types.is_datetime64_any_dtype(s):
+                continue
+
+            if pd.api.types.is_object_dtype(s):
+                parsed = pd.to_datetime(s, errors="coerce")
+                if parsed.notna().mean() > 0.9:
+                    continue
+
+            cat.append(c)
+        _logger.info(f"Infered cat features %s", cat)
+        _logger.info(f"Infered num features %s", num)
         return num, cat
 
-    def _build_sklearn_pipeline(self, df_pd: pd.DataFrame) -> SkPipeline:
-        num_feats, cat_feats = self._infer_feature_types(df_pd)
+    def _build_sklearn_pipeline(self, df: IntoFrameT) -> SkPipeline:
+        num_feats, cat_feats = self._infer_feature_types(df)
 
         gran = [c for c in (self.granularity or []) if c in self.feature_names]
         do_groupby = len(gran) > 0
@@ -135,7 +158,11 @@ class Pipeline(BaseEstimator):
                 ohe = OneHotEncoder(handle_unknown="ignore", sparse=False)
             cat_steps.append(("ohe", ohe))
 
+        elif self.convert_cat_features_to_cat_dtype:
+            cat_steps.append(("cat_dtype", ConvertDataFrameToCategoricalTransformer()))
+
         transformers = []
+
         if num_feats:
             num_pipe = SkPipeline(steps=num_steps) if num_steps else "passthrough"
             transformers.append(("num", num_pipe, num_feats))
@@ -144,20 +171,42 @@ class Pipeline(BaseEstimator):
             cat_pipe = SkPipeline(steps=cat_steps) if cat_steps else "passthrough"
             transformers.append(("cat", cat_pipe, cat_feats))
 
+        if self.context_feature_names:
+            transformers.append(("ctx", "passthrough", self.context_feature_names))
+
         if do_groupby:
             transformers.append(("key", "passthrough", gran))
 
-        pre_raw = ColumnTransformer(transformers=transformers, remainder=self.remainder)
-        pre_raw.set_output(transform='polars')
+        pre_raw = ColumnTransformer(
+            transformers=transformers,
+            remainder=self.remainder,
+            verbose_feature_names_out=False,
+        )
+        pre_raw.set_output(transform="pandas")
         pre = PreprocessorToDataFrame(pre_raw)
 
         est = (
-            GroupByEstimator(self.estimator, granularity=[f"key__{c}" for c in gran])
+            GroupByEstimator(self.estimator, granularity=[f"{c}" for c in gran])
             if do_groupby
             else self.estimator
         )
 
-        return SkPipeline(steps=[("pre", pre), ("est", est)])
+        steps = [("pre", pre)]
+
+        for idx, transformer in enumerate(self.predictor_transformers or []):
+            t_ct = ColumnTransformer(
+                transformers=[
+                    ("features", transformer, self.feature_names+self.context_feature_names),
+                ],
+                remainder="passthrough",
+                verbose_feature_names_out=False,
+            )
+            t_ct.set_output(transform="pandas")
+            steps.append((f"t{idx}", t_ct))
+
+        steps.append(("est", est))
+
+        return SkPipeline(steps=steps)
 
     def _preprocess(self, df: nw.DataFrame, target: str) -> nw.DataFrame:
         if self.min_target is not None:
@@ -175,7 +224,7 @@ class Pipeline(BaseEstimator):
     @nw.narwhalify
     def fit(self, X: IntoFrameT, y: Any, sample_weight: np.ndarray | None = None):
         self._target_name = getattr(y, "name", "target")
-        self._fitted_features = list(self.feature_names)
+        self._fitted_features = self.feature_names + self.context_feature_names
 
         y_values = y.to_list() if hasattr(y, "to_list") else y
         df = X.with_columns(
@@ -185,7 +234,6 @@ class Pipeline(BaseEstimator):
                 backend=nw.get_native_namespace(X),
             )
         )
-
 
         df = self._preprocess(df, self._target_name)
 
@@ -199,32 +247,30 @@ class Pipeline(BaseEstimator):
         if len(df) == 0:
             raise ValueError("DataFrame is empty after preprocessing. Cannot fit estimator.")
 
-        self._sk = self._build_sklearn_pipeline(df)
+        self.sklearn_pipeline = self._build_sklearn_pipeline(df)
 
         X_fit = df.select(self._fitted_features)
         y_fit = df[self._target_name].to_numpy()
-
         if sample_weight is not None:
-            self._sk.fit(X_fit, y_fit, est__sample_weight=sample_weight)
+            self.sklearn_pipeline.fit(X_fit, y_fit, est__sample_weight=sample_weight)
         else:
-            self._sk.fit(X_fit, y_fit)
+            self.sklearn_pipeline.fit(X_fit, y_fit)
 
-        if hasattr(self._sk[-1], "classes_"):
-            self.classes_ = self._sk[-1].classes_
+        if hasattr(self.sklearn_pipeline[-1], "classes_"):
+            self.classes_ = self.sklearn_pipeline[-1].classes_
 
         return self
 
     @nw.narwhalify
     def predict(self, X: IntoFrameT) -> IntoFrameT | np.ndarray:
-        if self._sk is None:
+        if self.sklearn_pipeline is None:
             raise RuntimeError("Pipeline not fitted. Call fit() first.")
 
-        return self._sk.predict(X[self._fitted_features].to_native())
+        return self.sklearn_pipeline.predict(X[self._fitted_features])
 
     @nw.narwhalify
     def predict_proba(self, X: IntoFrameT) -> np.ndarray:
-        if self._sk is None:
+        if self.sklearn_pipeline is None:
             raise RuntimeError("Pipeline not fitted. Call fit() first.")
-
         X_pred = X[self._fitted_features]
-        return self._sk.predict_proba(X_pred)
+        return self.sklearn_pipeline.predict_proba(X_pred)

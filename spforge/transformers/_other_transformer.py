@@ -86,21 +86,29 @@ class GroupByReducer(BaseEstimator, TransformerMixin):
         return y_out, sw_out
 
 
-
-
-class ConvertDataFrameToCategoricalTransformer(TransformerMixin):
+class ConvertDataFrameToCategoricalTransformer(BaseEstimator, TransformerMixin):
     """
     Converts a specified list of columns to categorical dtype
     """
 
-    def __init__(self, features: list[str]):
-        self.features = features
 
     @nw.narwhalify
-    def fit(self, df: IntoFrameT) :
+    def fit(self, df: IntoFrameT, y: Any) :
+        self._feature_names_in = df.columns
         return self
 
     @nw.narwhalify
-    def transform(self, df: IntoFrameT) -> IntoFrameT:
-        df = df.with_columns(nw.col(feature).cast(nw.Categorical) for feature in self.features)
-        return df
+    def transform(self, X: IntoFrameT) -> IntoFrameT:
+        return X.with_columns(
+            nw.col(feature).cast(nw.Categorical).alias(feature) for feature in X.columns
+        )
+
+    def set_output(self, *, transform=None):
+        pass
+
+    def get_feature_names_out(self, input_features=None):
+
+        if input_features is None:
+            input_features = getattr(self, "feature_names_in_", None)
+
+        return np.array(list(input_features), dtype=object)

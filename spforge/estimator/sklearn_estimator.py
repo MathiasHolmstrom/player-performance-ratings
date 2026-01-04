@@ -21,7 +21,9 @@ class GroupByEstimator(BaseEstimator):
     def __sklearn_is_fitted__(self):
         return getattr(self, "_is_fitted_", False)
 
-    def fit(self, X: pd.DataFrame, y: Any, sample_weight: np.ndarray | None = None):
+    @nw.narwhalify
+    def fit(self, X: IntoFrameT, y: Any, sample_weight: np.ndarray | None = None):
+        X = X.to_pandas()
         self._reducer = GroupByReducer(self.granularity)
         X_red = self._reducer.fit_transform(X)
         y_red, sw_red = self._reducer.reduce_y(X, y, sample_weight=sample_weight)
@@ -40,13 +42,17 @@ class GroupByEstimator(BaseEstimator):
 
         return self
 
-    def predict(self, X: pd.DataFrame):
+    @nw.narwhalify
+    def predict(self, X: IntoFrameT):
+        X = X.to_pandas()
         if not self.__sklearn_is_fitted__():
             raise RuntimeError("GroupByEstimator not fitted. Call fit() first.")
         X_red = self._reducer.transform(X)
         return self._est.predict(X_red)
 
-    def predict_proba(self, X: pd.DataFrame):
+    @nw.narwhalify
+    def predict(self, X: IntoFrameT):
+        X = X.to_pandas()
         if not self.__sklearn_is_fitted__():
             raise RuntimeError("GroupByEstimator not fitted. Call fit() first.")
         X_red = self._reducer.transform(X)
@@ -65,22 +71,35 @@ class SkLearnEnhancerEstimator(BaseEstimator):
         self.day_weight_epsilon = day_weight_epsilon
         self.classes_ = []
 
+    def _resolve_date_column(self, cols: list[str]) -> Optional[str]:
+        if not self.date_column:
+            return None
+
+        if self.date_column in cols:
+            return self.date_column
+
+        suffix = f"__{self.date_column}"
+        matches = [c for c in cols if c.endswith(suffix)]
+        if len(matches) == 1:
+            return matches[0]
+
+        if len(matches) > 1:
+            raise ValueError(
+                f"date_column '{self.date_column}' is ambiguous after preprocessing. "
+                f"Matches: {matches}"
+            )
+
+        raise ValueError(f"Could not find {self.date_column}. Available columns {cols}")
+
     @nw.narwhalify
     def fit(self, X: IntoFrameT, y: Any, sample_weight: np.ndarray | None = None):
-        X_pd = X.to_pandas()
-        y_pd = (
-            y.to_pandas()
-            if hasattr(y, "to_pandas")
-            else (y.to_native() if hasattr(y, "to_native") else y)
-        )
-
+        y = y.to_numpy() if not isinstance(y, np.ndarray) else y
         combined_weights = sample_weight
 
-        if self.date_column and self.day_weight_epsilon is not None:
-            if self.date_column not in X_pd.columns:
-                raise ValueError(f"date_column '{self.date_column}' not found.")
+        resolved_date_col = self._resolve_date_column(list(X.columns))
 
-            date_series = pd.to_datetime(X_pd[self.date_column])
+        if resolved_date_col and self.day_weight_epsilon is not None:
+            date_series = pd.to_datetime(X.to_pandas()[resolved_date_col]) #TODO: Make this narwhals
             max_date = date_series.max()
             days_diff = (date_series - max_date).dt.total_seconds() / (24 * 60 * 60)
             min_diff = days_diff.min()
@@ -93,14 +112,15 @@ class SkLearnEnhancerEstimator(BaseEstimator):
             else:
                 combined_weights = date_weights.values
 
-        X_features = (
-            X_pd.drop(columns=[self.date_column]) if self.date_column in X_pd.columns else X_pd
-        )
-
+        X_features = X.drop([resolved_date_col]) if resolved_date_col else X
+        cat_cols = [name for name, dtype in X.schema.items() if dtype == nw.Categorical]
+        any_cat_feats = bool(cat_cols)
+        if any_cat_feats:
+            X_features = X_features.to_pandas()
         if combined_weights is not None:
-            self.estimator.fit(X_features, y_pd, sample_weight=combined_weights)
+            self.estimator.fit(X_features, y, sample_weight=combined_weights)
         else:
-            self.estimator.fit(X_features, y_pd)
+            self.estimator.fit(X_features, y)
 
         if hasattr(self.estimator, "classes_"):
             self.classes_ = self.estimator.classes_
@@ -111,13 +131,21 @@ class SkLearnEnhancerEstimator(BaseEstimator):
         X_features = (
             X.drop([self.date_column]) if self.date_column in X.columns else X
         )
-        return self.estimator.predict(X_features.to_native())
+        cat_cols = [name for name, dtype in X.schema.items() if dtype == nw.Categorical]
+        any_cat_feats = bool(cat_cols)
+        if any_cat_feats:
+            X_features = X_features.to_pandas()
+        return self.estimator.predict(X_features)
 
     @nw.narwhalify
     def predict_proba(self, X: IntoFrameT) -> np.ndarray:
         X_features = (
             X.drop([self.date_column]) if self.date_column in X.columns else X
         )
+        cat_cols = [name for name, dtype in X.schema.items() if dtype == nw.Categorical]
+        any_cat_feats = bool(cat_cols)
+        if any_cat_feats:
+            X_features = X_features.to_pandas()
         return self.estimator.predict_proba(X_features.to_native())
 
     def get_params(self, deep: bool = True) -> dict:
@@ -208,12 +236,7 @@ class GranularityEstimator(BaseEstimator):
     @nw.narwhalify
     def fit(self, X: IntoFrameT, y: Any, sample_weight: np.ndarray | None = None):
         X_pd = X.to_pandas()
-        y_pd = (
-            y.to_pandas()
-            if hasattr(y, "to_pandas")
-            else (y.to_native() if hasattr(y, "to_native") else y)
-        )
-
+        y_pd = y.to_numpy() if not isinstance(y, np.ndarray) else y
         if self.granularity_column_name not in X_pd.columns:
             raise ValueError(f"granularity_column_name '{self.granularity_column_name}' not found.")
 

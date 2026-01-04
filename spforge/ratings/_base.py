@@ -81,7 +81,7 @@ class RatingGenerator:
 
         if performance_predictor == "mean":
             _performance_predictor_class = RatingMeanPerformancePredictor
-            default_features = [RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
+            default_features = [RatingKnownFeatures.RATING_MEAN_PROJECTED]
         elif performance_predictor == "difference":
             _performance_predictor_class = RatingDifferencePerformancePredictor
             default_features = [RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]

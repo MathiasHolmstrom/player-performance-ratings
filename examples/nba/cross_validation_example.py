@@ -7,8 +7,7 @@ from spforge import FeatureGeneratorPipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
 from spforge.data_structures import ColumnNames
 from spforge.estimator import (
-    DistributionManagerPredictor,
-    NegativeBinomialEstimator,
+    NegativeBinomialEstimator, SkLearnEnhancerEstimator,
 )
 from spforge.feature_generator import (
     LagTransformer,
@@ -16,9 +15,9 @@ from spforge.feature_generator import (
 )
 from spforge.pipeline import Pipeline
 from spforge.scorer import Filter, Operator, OrdinalLossScorer, SklearnScorer
+from spforge.transformers import EstimatorTransformer
 
 df = get_sub_sample_nba_data(as_polars=True, as_pandas=False)
-# df = df.filter(pl.col('minutes')>0)
 column_names = ColumnNames(
     team_id="team_id",
     match_id="game_id",
@@ -44,61 +43,57 @@ features_generator = FeatureGeneratorPipeline(
     ],
 )
 df = features_generator.fit_transform(df)
-predictor = DistributionManagerPredictor(
-    point_predictor=SklearnPredictor(
-        estimator=LGBMRegressor(verbose=-100, random_state=42),
-        features=features_generator.features_out,
-        target="points",
-        pred_column="points_estimate",
-        weight_by_date=True,
-        date_column=column_names.start_date,
-    ),
-    distribution_predictor=NegativeBinomialEstimator(
-        max_value=40,
-        target="points",
-        point_estimate_pred_column="points_estimate",
-        r_specific_granularity=["player_id"],
-        predicted_r_weight=1,
-        column_names=column_names,
-    ),
+predictor = NegativeBinomialEstimator(
+    max_value=40,
+    point_estimate_pred_column="points_estimate",
+    r_specific_granularity=["player_id"],
+    predicted_r_weight=1,
+    column_names=column_names,
 )
-
 
 pipeline = Pipeline(
     convert_cat_features_to_cat_dtype=True,
-    predictor=predictor,
+    estimator=predictor,
+    feature_names=features_generator.features_out,
+    context_feature_names=[column_names.player_id, column_names.start_date, column_names.team_id, column_names.match_id],
+    predictor_transformers=[EstimatorTransformer(
+        prediction_column_name='points_estimate',
+        estimator=SkLearnEnhancerEstimator(
+            estimator=LGBMRegressor(verbose=-100, random_state=42),
+            date_column=column_names.start_date,
+            day_weight_epsilon=0.1
+        )
+    )]
+
 )
 
 cross_validator = MatchKFoldCrossValidator(
     date_column_name=column_names.start_date,
     match_id_column_name=column_names.match_id,
     estimator=pipeline,
+    prediction_column_name='points_probabilities',
+    target_column='points'
 )
-validation_df = cross_validator.generate_validation_df(df=df, return_features=True)
+validation_df = cross_validator.generate_validation_df(df=df)
 
 mean_absolute_scorer = SklearnScorer(
-    pred_column=predictor.point_predictor.pred_column,
-    target=predictor.target,
+    pred_column=pipeline.predictor_transformers[0].prediction_column_name,
+    target=cross_validator.target_column,
     scorer_function=mean_absolute_error,
     validation_column="is_validation",
     filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
 )
 
-mae_score = cross_validator.cross_validation_score(
-    validation_df=validation_df, scorer=mean_absolute_scorer
-)
+mae_score = mean_absolute_scorer.score(validation_df)
 print(f"MAE {mae_score}")
 
 ordinal_scorer = OrdinalLossScorer(
-    pred_column=predictor.pred_column,
-    target=predictor.target,
+    pred_column=cross_validator.prediction_column_name,
+    target=cross_validator.target_column,
     validation_column="is_validation",
     filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
-    classes=range(0, predictor.distribution_predictor.max_value + 1),
+    classes=range(0, predictor.max_value + 1),
 )
+ordinal_loss_score = ordinal_scorer.score(validation_df)
 
-ordinal_loss_score = cross_validator.cross_validation_score(
-    validation_df=validation_df,
-    scorer=ordinal_scorer,
-)
 print(f"Ordinal Loss {ordinal_loss_score}")

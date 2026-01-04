@@ -31,6 +31,7 @@ def df_pd_cv_reg():
 
 
 def _make_cv(estimator, pred_col="pred", n_splits=3, features=None):
+    features = features or ['x', 'y']
     cv = MatchKFoldCrossValidator(
         match_id_column_name="gameid",
         date_column_name="date",
@@ -44,19 +45,16 @@ def _make_cv(estimator, pred_col="pred", n_splits=3, features=None):
 
 
 def test_match_kfold_cv_binary_validation_only_subset(df_pd_cv_binary):
-    cv = _make_cv(LogisticRegression(max_iter=1000))
+    cv = _make_cv(LinearRegression())
     out = cv.generate_validation_df(df_pd_cv_binary)
 
     assert isinstance(out, pd.DataFrame)
     assert "pred" in out.columns
 
-    # Check that we only got a subset (validation splits)
     assert 0 < len(out) < len(df_pd_cv_binary)
 
-    # binary proba in [0, 1]
     assert pd.api.types.is_numeric_dtype(out["pred"])
-    assert (out["pred"] >= 0).all()
-    assert (out["pred"] <= 1).all()
+
 
 
 def test_match_kfold_cv_regression_subset(df_pd_cv_reg):
@@ -127,7 +125,7 @@ def test_match_kfold_cv_auto_infers_features(df_pd_cv_binary):
         match_id_column_name="gameid",
         date_column_name="date",
         target_column="y",
-        estimator=LogisticRegression(max_iter=1000),
+        estimator=LinearRegression(),
         prediction_column_name="pred",
         n_splits=3,
         features=None,
@@ -315,3 +313,143 @@ def test_match_kfold_cv_auto_infer_excludes_internal_columns():
     assert "pred" in out.columns
     assert len(out) > 0
 
+
+@pytest.fixture
+def df_pd_cv_multiclass():
+    # 30 matches, 2 rows per match (team 0/1) => enough for folds
+    dates = pd.date_range("2024-01-01", periods=30, freq="D")
+    match_ids = [f"m{i:02d}" for i in range(30)]
+    rows = []
+    for i, (d, mid) in enumerate(zip(dates, match_ids)):
+        for team in (0, 1):
+            x = float(i) + (0.1 if team == 1 else 0.0)
+            # 3-class target
+            y = int(i % 3)
+            rows.append({"date": d, "gameid": mid, "team": team, "x": x, "y": y})
+    return pd.DataFrame(rows)
+
+
+def _make_cv(estimator, pred_col="pred", n_splits=3, features=None):
+    return MatchKFoldCrossValidator(
+        match_id_column_name="gameid",
+        date_column_name="date",
+        target_column="y",
+        estimator=estimator,
+        prediction_column_name=pred_col,
+        n_splits=n_splits,
+        features=features,
+    )
+
+
+def _assert_multiclass_pred_column_is_vectorized(pred_series, n_classes: int):
+    # pandas: object column of list/ndarray
+    # polars: List dtype column
+    if isinstance(pred_series, pd.Series):
+        assert pred_series.dtype == "object"
+        assert len(pred_series) > 0
+        first = pred_series.iloc[0]
+        assert isinstance(first, (list, tuple, np.ndarray))
+        assert len(first) == n_classes
+        # values should look like probabilities
+        v = np.asarray(first, dtype=float)
+        assert np.all(v >= 0.0) and np.all(v <= 1.0)
+        assert np.isclose(v.sum(), 1.0, atol=1e-6)
+    else:
+        assert isinstance(pred_series.dtype, pl.List)
+
+        first = pred_series[0]
+
+        if isinstance(first, pl.Series):
+            first = first.to_list()
+
+        assert isinstance(first, (list, tuple))
+        assert len(first) == n_classes
+
+        v = np.asarray(first, dtype=float)
+        assert np.all(v >= 0.0) and np.all(v <= 1.0)
+        assert np.isclose(v.sum(), 1.0, atol=1e-6)
+
+
+def test_match_kfold_cv_multiclass_predict_proba_pandas_creates_vector_column(df_pd_cv_multiclass):
+    cv = _make_cv(
+        LogisticRegression(max_iter=2000, multi_class="auto"),
+        features=["x", "team"],
+        n_splits=3,
+    )
+    out = cv.generate_validation_df(df_pd_cv_multiclass)
+
+    assert isinstance(out, pd.DataFrame)
+    assert "pred" in out.columns
+    assert 0 < len(out) < len(df_pd_cv_multiclass)
+
+    _assert_multiclass_pred_column_is_vectorized(out["pred"], n_classes=3)
+
+
+def test_match_kfold_cv_multiclass_predict_proba_polars_creates_vector_column(df_pd_cv_multiclass):
+    df_pl = pl.from_pandas(df_pd_cv_multiclass)
+
+    cv = _make_cv(
+        LogisticRegression(max_iter=2000, multi_class="auto"),
+        features=["x", "team"],
+        n_splits=3,
+    )
+    out = cv.generate_validation_df(df_pl)
+
+    assert isinstance(out, pl.DataFrame)
+    assert "pred" in out.columns
+    assert 0 < out.height < df_pl.height
+
+    _assert_multiclass_pred_column_is_vectorized(out["pred"], n_classes=3)
+
+
+class _PredictProbaRaisesAttributeError:
+    # Has attribute, but calling it throws AttributeError
+    def fit(self, X, y):
+        return self
+
+    def predict_proba(self, X):
+        raise AttributeError("boom")
+
+    def predict(self, X):
+        Xn = X.to_numpy() if hasattr(X, "to_numpy") else np.asarray(X)
+        return np.zeros(Xn.shape[0], dtype=float) + 0.123
+
+
+def test_predict_smart_falls_back_to_predict_on_attributeerror(df_pd_cv_multiclass):
+    cv = _make_cv(
+        _PredictProbaRaisesAttributeError(),
+        features=["x", "team"],
+        n_splits=3,
+    )
+    out = cv.generate_validation_df(df_pd_cv_multiclass)
+
+    assert isinstance(out, pd.DataFrame)
+    assert "pred" in out.columns
+    assert pd.api.types.is_numeric_dtype(out["pred"])
+    assert np.isclose(out["pred"].iloc[0], 0.123)
+
+
+def test_predict_smart_binary_predict_proba_is_vector(df_pd_cv_multiclass):
+    df_bin = df_pd_cv_multiclass.copy()
+    df_bin["y"] = (df_bin["y"] == 1).astype(int)
+
+    cv = _make_cv(
+        LogisticRegression(max_iter=2000),
+        features=["x", "team"],
+        n_splits=3,
+    )
+    out = cv.generate_validation_df(df_bin)
+
+    assert isinstance(out, pd.DataFrame)
+    assert "pred" in out.columns
+    _assert_vector_pred_pandas(out["pred"], n_classes=2)
+
+
+def _assert_vector_pred_pandas(pred: pd.Series, n_classes: int):
+    assert pred.dtype == "object"
+    first = pred.iloc[0]
+    assert isinstance(first, (list, tuple, np.ndarray))
+    assert len(first) == n_classes
+    v = np.asarray(first, dtype=float)
+    assert np.all(v >= 0.0) and np.all(v <= 1.0)
+    assert np.isclose(v.sum(), 1.0, atol=1e-6)

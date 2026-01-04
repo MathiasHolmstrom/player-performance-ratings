@@ -23,7 +23,6 @@ class TeamRatingGenerator(RatingGenerator):
         performance_manager: PerformanceManager | None = None,
         auto_scale_performance: bool = False,
         performance_predictor: Literal["difference", "mean", "ignore_opponent"] = "difference",
-        # NEW: separate multipliers
         rating_change_multiplier_offense: float = 50,
         rating_change_multiplier_defense: float = 50,
         confidence_days_ago_multiplier: float = 0.06,
@@ -90,7 +89,6 @@ class TeamRatingGenerator(RatingGenerator):
         self.DIFF_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED))
         self.MEAN_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_MEAN_PROJECTED))
 
-        # Non-predictor features
         self.DIFF_COL = self._suffix(str(RatingUnknownFeatures.RATING_DIFFERENCE))
 
         self.start_team_rating = float(start_team_rating)
