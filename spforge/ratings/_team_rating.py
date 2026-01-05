@@ -86,7 +86,7 @@ class TeamRatingGenerator(RatingGenerator):
         self.TEAM_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.TEAM_RATING_PROJECTED))
 
         self.OPP_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.OPPONENT_RATING_PROJECTED))
-        self.DIFF_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED))
+        self.DIFF_PROJ_COL = self._suffix(str(RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED))
         self.MEAN_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_MEAN_PROJECTED))
 
         self.DIFF_COL = self._suffix(str(RatingUnknownFeatures.RATING_DIFFERENCE))

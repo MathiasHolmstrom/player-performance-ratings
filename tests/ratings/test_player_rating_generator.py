@@ -135,7 +135,7 @@ def test_fit_transform_batch_update_logic(base_cn):
     [
         RatingKnownFeatures.PLAYER_OFF_RATING,
         RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
-        RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED,
+        RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED,
     ],
 )
 def test_fit_transform_requested_features_presence(base_cn, sample_df, feature):
@@ -1257,7 +1257,7 @@ def test_fit_transform_multiple_league_changes(base_cn):
         ),
         # Test 7: Rating difference features
         (
-            [RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+            [RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED],
             [RatingUnknownFeatures.RATING_DIFFERENCE],
             "diff",
             ["rating_difference_projected_diff", "rating_difference_diff"],

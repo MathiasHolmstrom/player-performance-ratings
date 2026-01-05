@@ -15,7 +15,7 @@ from spforge.feature_generator import (
     RollingWindowTransformer,
 )
 from spforge.pipeline import Pipeline
-from spforge.ratings import TeamRatingGenerator
+from spforge.ratings import TeamRatingGenerator, PlayerRatingGenerator, RatingKnownFeatures
 from spforge.scorer import Filter, Operator, OrdinalLossScorer, SklearnScorer
 from spforge.transformers import EstimatorTransformer
 
@@ -27,6 +27,7 @@ def test_nba_player_points(dataframe_type):
         match_id="game_id",
         start_date="start_date",
         player_id="player_id",
+        participation_weight='minutes_ratio'
     )
     df = df.sort(
         [
@@ -35,6 +36,9 @@ def test_nba_player_points(dataframe_type):
             column_names.team_id,
             column_names.player_id,
         ]
+    )
+    df = df.with_columns(
+        (pl.col('minutes')/pl.lit(48.25)).alias('minutes_ratio')
     )
     df = df.with_columns(
         pl.col('points').sum().over('game_id').alias('total_points')
@@ -46,9 +50,17 @@ def test_nba_player_points(dataframe_type):
         performance_predictor='mean',
     )
 
+    player_points_rating_generator = PlayerRatingGenerator(
+        performance_column='points',
+        auto_scale_performance=True,
+        features_out=[RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED],
+        non_predictor_features_out=[RatingKnownFeatures.PLAYER_OFF_RATING, RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED],
+    )
+
     features_generator = FeatureGeneratorPipeline(
         column_names=column_names,
         feature_generators=[
+            player_points_rating_generator,
             total_points_rating_generator,
             RollingWindowTransformer(features=["points"], window=15, granularity=["player_id"]),
             LagTransformer(features=["points"], lag_length=3, granularity=["player_id"]),

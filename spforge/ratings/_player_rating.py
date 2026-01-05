@@ -118,7 +118,8 @@ class PlayerRatingGenerator(RatingGenerator):
 
         self.TEAM_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.TEAM_RATING_PROJECTED))
         self.OPP_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.OPPONENT_RATING_PROJECTED))
-        self.DIFF_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED))
+        self.DIFF_PROJ_COL = self._suffix(str(RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED))
+        self.PLAYER_DIFF_PROJ_COL =   self._suffix(str(RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED))
         self.MEAN_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_MEAN_PROJECTED))
 
         self.TEAM_OFF_RATING_PROJ_COL = self._suffix(
@@ -190,9 +191,7 @@ class PlayerRatingGenerator(RatingGenerator):
             participation_weight=particpation_weight,
         )
 
-    # --------------------
-    # Transforms
-    # --------------------
+
     def _historical_transform(self, df: pl.DataFrame) -> pl.DataFrame:
         match_df = self._create_match_df(df)
         ratings = self._calculate_ratings(match_df)
@@ -236,18 +235,14 @@ class PlayerRatingGenerator(RatingGenerator):
             )
         ]
 
-        # Handle empty ratings DataFrame (e.g., when match_df is empty due to missing opponent)
         if ratings.height == 0:
-            # If no ratings, return df with default start ratings for all players
             cn = self.column_names
             result_rows = []
             for row in df.iter_rows(named=True):
                 pid = row[cn.player_id]
 
-                # Get or create start rating for this player
                 if pid not in self._player_off_ratings:
-                    # Create a temporary MatchPlayer to generate start rating
-                    day_number = 1  # Default day number
+                    day_number = 1
                     mp = MatchPerformance(
                         performance_value=0.0,
                         projected_participation_weight=row.get(
@@ -277,10 +272,10 @@ class PlayerRatingGenerator(RatingGenerator):
                         self.PLAYER_DEF_RATING_COL: float(
                             self._player_def_ratings[pid].rating_value
                         ),
-                        self.PLAYER_PRED_OFF_PERF_COL: 0.5,  # Default prediction
-                        self.PLAYER_PRED_DEF_PERF_COL: 0.5,  # Default prediction
+                        self.PLAYER_PRED_OFF_PERF_COL: None,
+                        self.PLAYER_PRED_DEF_PERF_COL: None,
                         self.PLAYER_RATING_COL: float(self._player_off_ratings[pid].rating_value),
-                        self.PLAYER_PRED_PERF_COL: 0.5,  # Default prediction
+                        self.PLAYER_PRED_PERF_COL: None,
                     }
                 )
 
@@ -313,7 +308,6 @@ class PlayerRatingGenerator(RatingGenerator):
             self.PLAYER_DEF_RATING_COL: [],
             self.PLAYER_PRED_OFF_PERF_COL: [],
             self.PLAYER_PRED_DEF_PERF_COL: [],
-            # back-compat:
             self.PLAYER_RATING_COL: [],
             self.PLAYER_PRED_PERF_COL: [],
         }
@@ -574,8 +568,6 @@ class PlayerRatingGenerator(RatingGenerator):
             def_state.most_recent_team_id = team_id
 
     def _add_rating_features(self, df: pl.DataFrame) -> pl.DataFrame:
-        # self._features_out and self.non_predictor_features_out are already suffixed from __init__
-        # So we can use them directly
         cols_to_add = set((self._features_out or []) + (self.non_predictor_features_out or []))
 
         cn = self.column_names
@@ -603,6 +595,7 @@ class PlayerRatingGenerator(RatingGenerator):
             or self.OPP_DEF_RATING_PROJ_COL in cols_to_add
             or self.OPP_RATING_PROJ_COL in cols_to_add
             or self.DIFF_PROJ_COL in cols_to_add
+            or self.PLAYER_DIFF_PROJ_COL in cols_to_add
         ):
             df = add_team_rating_projected(
                 df=df,
@@ -623,6 +616,7 @@ class PlayerRatingGenerator(RatingGenerator):
             self.OPP_DEF_RATING_PROJ_COL in cols_to_add
             or self.OPP_RATING_PROJ_COL in cols_to_add
             or self.DIFF_PROJ_COL in cols_to_add
+            or self.PLAYER_DIFF_PROJ_COL in cols_to_add
         ):
             df = add_opp_team_rating(
                 df=df,
@@ -633,6 +627,11 @@ class PlayerRatingGenerator(RatingGenerator):
             df = df.with_columns(
                 pl.col(self.OPP_DEF_RATING_PROJ_COL).alias(self.OPP_RATING_PROJ_COL)
             )
+        if self.PLAYER_DIFF_PROJ_COL in cols_to_add:
+            df = df.with_columns(
+                (pl.col(self.PLAYER_RATING_COL)-pl.col(self.OPP_DEF_RATING_PROJ_COL)).alias(self.PLAYER_DIFF_PROJ_COL)
+            )
+
 
         if (
             self.TEAM_RATING_COL in cols_to_add

@@ -47,7 +47,7 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
         performance_weights=[ColumnWeight(name="kills", weight=1)],
     )
     rating_generator_result = PlayerRatingGenerator(
-        features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+        features_out=[RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED],
         performance_column="result",
         non_predictor_features_out=[RatingKnownFeatures.PLAYER_RATING],
     )

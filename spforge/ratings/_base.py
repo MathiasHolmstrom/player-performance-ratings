@@ -84,7 +84,7 @@ class RatingGenerator:
             default_features = [RatingKnownFeatures.RATING_MEAN_PROJECTED]
         elif performance_predictor == "difference":
             _performance_predictor_class = RatingDifferencePerformancePredictor
-            default_features = [RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
+            default_features = [RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED]
         elif performance_predictor == "ignore_opponent":
             _performance_predictor_class = RatingNonOpponentPerformancePredictor
             default_features = [RatingKnownFeatures.TEAM_RATING_PROJECTED]

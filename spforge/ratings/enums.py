@@ -15,7 +15,7 @@ class RatingKnownFeatures(StrEnum):
     OPPONENT_RATING_PROJECTED = "opponent_rating_projected"
     TEAM_RATING_PROJECTED = "team_rating_projected"
     PLAYER_RATING_DIFFERENCE_PROJECTED = "player_rating_difference_projected"
-    RATING_DIFFERENCE_PROJECTED = "rating_difference_projected"
+    TEAM_RATING_DIFFERENCE_PROJECTED = "team_rating_difference_projected"
     RATING_MEAN_PROJECTED = "rating_mean_projected"
     TEAM_LEAGUE = "team_league"
     PLAYER_LEAGUE = "player_league"

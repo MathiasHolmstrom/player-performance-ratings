@@ -741,7 +741,7 @@ def test_fit_transform_when_rating_difference_requested_then_it_is_calculated_co
         performance_column="won",
         column_names=column_names,
         features_out=[
-            RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED,
+            RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED,
             RatingKnownFeatures.TEAM_RATING_PROJECTED,
             RatingKnownFeatures.OPPONENT_RATING_PROJECTED,
         ],
@@ -2190,7 +2190,7 @@ def sample_team_df(column_names):
         ),
         # Test 6: Rating difference features (defaults to performance_column="won")
         (
-            [RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
+            [RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED],
             [RatingUnknownFeatures.RATING_DIFFERENCE],
             None,
             ["rating_difference_projected_won", "rating_difference_won"],
@@ -2330,7 +2330,7 @@ def test_team_rating_combined_features_out_and_non_predictor(column_names, sampl
         column_names=column_names,
         features_out=[
             RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
-            RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED,
+            RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED,
         ],
         non_predictor_features_out=[
             RatingUnknownFeatures.RATING_DIFFERENCE,
