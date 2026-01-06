@@ -137,7 +137,7 @@ class PlayerRatingGenerator(RatingGenerator):
 
         self.TEAM_RATING_COL = self._suffix(str(RatingUnknownFeatures.TEAM_RATING))
         self.OPP_RATING_COL = self._suffix(str(RatingUnknownFeatures.OPPONENT_RATING))
-        self.DIFF_COL = self._suffix(str(RatingUnknownFeatures.RATING_DIFFERENCE))
+        self.DIFF_COL = self._suffix(str(RatingUnknownFeatures.TEAM_RATING_DIFFERENCE))
 
         self.start_league_ratings = start_league_ratings
         self.start_league_quantile = start_league_quantile

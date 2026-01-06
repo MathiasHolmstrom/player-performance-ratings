@@ -15,7 +15,7 @@ from spforge.performance_transformers._performances_transformers import (
     SklearnEstimatorImputer,
 )
 from spforge.pipeline import Pipeline
-from spforge.transformers import RatioTeamPredictorTransformer
+from spforge.transformers import RatioEstimatorTransformer
 
 dfs = [
     pl.DataFrame(

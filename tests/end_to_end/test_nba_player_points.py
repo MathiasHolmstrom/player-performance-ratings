@@ -17,7 +17,8 @@ from spforge.feature_generator import (
 from spforge.pipeline import Pipeline
 from spforge.ratings import TeamRatingGenerator, PlayerRatingGenerator, RatingKnownFeatures
 from spforge.scorer import Filter, Operator, OrdinalLossScorer, SklearnScorer
-from spforge.transformers import EstimatorTransformer
+from spforge.transformers import EstimatorTransformer, RatioEstimatorTransformer
+
 
 @pytest.mark.parametrize('dataframe_type', ['pl', 'pd'])
 def test_nba_player_points(dataframe_type):
@@ -69,6 +70,7 @@ def test_nba_player_points(dataframe_type):
     if dataframe_type == 'pd':
         df = df.to_pandas()
     df = features_generator.fit_transform(df)
+
     predictor = NegativeBinomialEstimator(
         max_value=40,
         point_estimate_pred_column="points_estimate",
@@ -77,13 +79,23 @@ def test_nba_player_points(dataframe_type):
         column_names=column_names,
     )
 
-    pipeline = Pipeline(
-        convert_cat_features_to_cat_dtype=True,
-        estimator=predictor,
-        feature_names=features_generator.features_out + ['location'],
-        context_feature_names=[column_names.player_id, column_names.start_date, column_names.team_id,
-                               column_names.match_id],
-        predictor_transformers=[EstimatorTransformer(
+    estimator_transformer_raw =  EstimatorTransformer(
+            features=features_generator.features_out + ['location', column_names.start_date],
+            prediction_column_name='points_estimate_raw',
+            estimator=SkLearnEnhancerEstimator(
+                estimator=LGBMRegressor(verbose=-100, random_state=42, max_depth=2),
+                date_column=column_names.start_date,
+                day_weight_epsilon=0.1
+            )
+        )
+    team_ratio_transformer = RatioEstimatorTransformer(
+        estimator=LGBMRegressor(),
+        features=features_generator.features_out,
+        predict_row=False,
+        prediction_column_name=estimator_transformer_raw.prediction_column_name,
+        granularity=[column_names.match_id, column_names.team_id]
+    )
+    estimator_transformer_final =  EstimatorTransformer(
             features=features_generator.features_out + ['location', column_names.start_date],
             prediction_column_name='points_estimate',
             estimator=SkLearnEnhancerEstimator(
@@ -91,7 +103,14 @@ def test_nba_player_points(dataframe_type):
                 date_column=column_names.start_date,
                 day_weight_epsilon=0.1
             )
-        )]
+        )
+    pipeline = Pipeline(
+        convert_cat_features_to_cat_dtype=True,
+        estimator=predictor,
+        feature_names=features_generator.features_out + ['location'],
+        context_feature_names=[column_names.player_id, column_names.start_date, column_names.team_id,
+                               column_names.match_id],
+        predictor_transformers=[estimator_transformer_raw, team_ratio_transformer, estimator_transformer_final]
     )
 
     cross_validator = MatchKFoldCrossValidator(

@@ -1,12 +1,14 @@
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import polars as pl
 import pytest
-from sklearn.base import BaseEstimator
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from spforge import Pipeline
 
+from sklearn.base import BaseEstimator, TransformerMixin
 
 class CaptureEstimator(BaseEstimator):
     def __init__(self, has_proba: bool = False):
@@ -41,6 +43,52 @@ class CaptureEstimator(BaseEstimator):
         out[:, 0] = 0.25
         out[:, 1] = 0.75
         return out
+
+class CaptureDtypesEstimator(CaptureEstimator):
+    def __init__(self, has_proba: bool = False):
+        super().__init__(has_proba=has_proba)
+        self.fit_dtypes = None
+
+    def fit(self, X, y, sample_weight=None):
+        super().fit(X, y, sample_weight=sample_weight)
+        self.fit_dtypes = list(X.dtypes) if hasattr(X, "dtypes") else None
+        return self
+
+
+class FakeLGBMRegressor(BaseEstimator):
+    __module__ = "lightgbm.sklearn"
+
+    def fit(self, X, y, sample_weight=None):
+        return self
+
+    def predict(self, X):
+        return np.zeros(len(X), dtype=float)
+
+
+class EstimatorHoldingTransformer(BaseEstimator, TransformerMixin):
+    def __init__(self, estimator):
+        self.estimator = estimator
+
+    def fit(self, X, y=None, **fit_params):
+        if hasattr(X, "columns"):
+            self.feature_names_in_ = np.asarray(list(X.columns), dtype=object)
+        else:
+            self.feature_names_in_ = None
+        return self
+
+    def transform(self, X):
+        return X
+
+    def get_feature_names_out(self, input_features=None):
+        if input_features is None:
+            if getattr(self, "feature_names_in_", None) is not None:
+                return np.asarray(self.feature_names_in_, dtype=object)
+            return np.asarray([], dtype=object)
+        return np.asarray(list(input_features), dtype=object)
+
+    def set_output(self, *, transform=None):
+        return self
+
 
 
 @pytest.fixture(params=["pd", "pl"])
@@ -104,8 +152,7 @@ def _inner_estimator(model: Pipeline):
     est = model.sklearn_pipeline.named_steps["est"]
     if hasattr(est, "_est") and est._est is not None:
         return est._est
-    raise AssertionError("Inner estimator not available; pipeline not fitted?")
-
+    return est
 
 def test_fit_predict_returns_ndarray(df_reg):
     model = Pipeline(
@@ -319,3 +366,32 @@ def test_pipeline_uses_feature_names_subset_even_if_extra_columns_present(df_reg
     assert all("junk" not in c for c in cap.fit_columns)
     assert any(c.startswith("num") for c in cap.fit_columns)
     assert any(c.startswith("cat") for c in cap.fit_columns)
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_categorical_handling_auto_uses_native_when_lightgbm_in_predictor_transformers(
+    frame, df_reg_pd
+):
+    df = df_reg_pd if frame == "pd" else pl.from_pandas(df_reg_pd)
+
+    cap = CaptureDtypesEstimator()
+    model = Pipeline(
+        estimator=cap,
+        feature_names=["num1", "num2", "cat1"],
+        predictor_transformers=[EstimatorHoldingTransformer(estimator=FakeLGBMRegressor())],
+        categorical_handling="auto",
+        impute_missing_values=True,
+        scale_features=False,
+        remainder="drop",
+    )
+
+    X = _select(df, ["num1", "num2", "cat1"])
+    y = _col(df, "y")
+    model.fit(X, y=y)
+
+    inner = _inner_estimator(model)
+    assert inner.fit_columns is not None
+    assert "cat1" in inner.fit_columns
+
+    df_out = model.sklearn_pipeline.named_steps["pre"].transform(X)
+    assert isinstance(df_out['cat1'].dtype, pd.CategoricalDtype)

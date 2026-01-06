@@ -1,133 +1,172 @@
-from typing import TYPE_CHECKING
+from __future__ import annotations
+
+from typing import Any
 
 import narwhals.stable.v2 as nw
-import numpy as np
 import pandas as pd
-import polars as pl
 from narwhals.typing import IntoFrameT
-from sklearn.base import TransformerMixin
+from sklearn.base import BaseEstimator, TransformerMixin, is_regressor
 
-if TYPE_CHECKING:
-    from spforge.pipeline import Pipeline
-
-from spforge import ColumnNames
-from spforge.feature_generator._base import LagGenerator
-
-
-
-class RatioTeamPredictorTransformer(TransformerMixin):
-    """
-    Transformer that trains and uses the output of an estimator and divides it by the sum of the predictions for all the players within the team
-    If team_total_prediction_column is passed in, it will also multiply the ratio by the team_total_prediction_column
-    This is useful to provide a normalized point-estimate for a player for the given feature.
-
-    """
-
+class RatioEstimatorTransformer(BaseEstimator, TransformerMixin):
     def __init__(
         self,
         features: list[str],
-        estimator: "Pipeline",
-        team_total_prediction_column: str | None = None,
-        lag_transformer: list[LagGenerator] | None = None,
-        prefix: str = "_ratio_team",
-        target: str | None = None,
-        pred_column: str = "prediction",
+        estimator: Any,
+        granularity: list[str],
+        ratio_column_name: str = "__ratio",
+        prediction_column_name: str | None = None,
+        granularity_prediction_column_name: str | None = None,
+        predict_row: bool = True,
+        predict_granularity: bool = True,
     ):
-        """
-        :param features: The features to track (for BaseTransformer), not used by estimator
-        :param estimator: The estimator (sklearn-compatible) to use to add new prediction-columns to the dataset
-        :param team_total_prediction_column: If passed, The column to multiply the ratio by.
-        :param lag_transformer: Additional lag-generators (such as rolling-mean) can be performed after the ratio is calculated is passed
-        :param prefix: The prefix to use for the new columns
-        :param target: Target column name (inferred from estimator after fit if not provided)
-        :param pred_column: Prediction column name (defaults to "prediction")
-        """
-
-        self.estimator = estimator
-        self.team_total_prediction_column = team_total_prediction_column
-        self.prefix = prefix
-        self.lag_transformers = lag_transformer or []
-        self._target_name = target
-        self._pred_column = pred_column
-        self.features_out = [target or "target" + prefix, pred_column]
         self.features = features
+        self.estimator = estimator
+        self.granularity = granularity
 
-        target_name = target or "target"
-        if self.team_total_prediction_column:
-            self.features_out.append(target_name + prefix + "_team_total_multiplied")
+        self.ratio_column_name = ratio_column_name
+        self.prediction_column_name = prediction_column_name
+        self.granularity_prediction_column_name = granularity_prediction_column_name
 
+        self.predict_row = predict_row
+        self.predict_granularity = predict_granularity
+
+        if not self.features:
+            raise ValueError("features must be non-empty")
+        if not self.granularity:
+            raise ValueError("granularity must be non-empty")
+        if not is_regressor(self.estimator):
+            raise TypeError(
+                f"estimator must be a regressor, got {type(self.estimator).__name__}"
+            )
+
+        if not self.predict_row and not self.prediction_column_name:
+            raise ValueError("prediction_column_name must be provided when predict_row=False")
+        if not self.predict_granularity and not self.granularity_prediction_column_name:
+            raise ValueError(
+                "granularity_prediction_column_name must be provided when predict_granularity=False"
+            )
+
+        self._numeric_features: list[str] = []
+        self._non_numeric_features: list[str] = []
+        self._is_fitted = False
+
+    def _infer_feature_types(self, X: IntoFrameT):
+        df_feats = X.select(self.features)
+        numeric = list(df_feats.select(nw.selectors.numeric()).columns)
+        non_numeric = [c for c in self.features if c not in set(numeric)]
+        return numeric, non_numeric
+
+    def _group_agg_exprs(self):
+        exprs = []
+        for c in self._numeric_features:
+            exprs.append(nw.col(c).mean().alias(c))
+        for c in self._non_numeric_features:
+            exprs.append(nw.col(c).first().alias(c))
+        return exprs
+
+    def _extra_output_cols(self) -> list[str]:
+        cols = [self.ratio_column_name]
+        if self.prediction_column_name:
+            cols.append(self.prediction_column_name)
+        if self.granularity_prediction_column_name:
+            cols.append(self.granularity_prediction_column_name)
+        return cols
 
     @nw.narwhalify
-    def fit(self, df: IntoFrameT, column_names: ColumnNames | None) :
-        self.column_names = column_names
+    def fit(self, X: IntoFrameT, y: Any):
+        self._numeric_features, self._non_numeric_features = self._infer_feature_types(X)
 
-        if self._target_name is None:
-            all_cols = list(df.columns)
-            if len(all_cols) < 2:
-                raise ValueError(
-                    "DataFrame must have at least 2 columns (feature + target) when target is not provided"
+        if self.predict_row or self.predict_granularity:
+            y_values = y.to_list() if hasattr(y, "to_list") else y
+
+            df = X.with_columns(
+                nw.new_series(
+                    name="__target__",
+                    values=y_values,
+                    backend=nw.get_native_namespace(X),
                 )
-            self._target_name = all_cols[-1]
+            )
 
-        self.estimator.fit(X=df[self.features], y=df[self._target_name])
+            df_grp = df.group_by(self.granularity).agg(
+                self._group_agg_exprs() + [nw.col("__target__").mean().alias("__target__")]
+            )
 
-        if hasattr(self.estimator, "_target_name") and self.estimator._target_name:
-            self._target_name = self.estimator._target_name
+            self.estimator.fit(
+                df_grp.select(self.features),
+                df_grp["__target__"].to_numpy(),
+            )
 
+        self._is_fitted = True
         return self
 
-
     @nw.narwhalify
-    def transform(self, df: IntoFrameT) -> IntoFrameT:
-        return self._transform(df)
+    def transform(self, X: IntoFrameT) -> IntoFrameT:
+        native = X.to_native()
+        native_index = native.index if isinstance(native, pd.DataFrame) else None
 
+        if not self._is_fitted:
+            raise RuntimeError("Transformer not fitted")
 
-    def _transform(self, df: IntoFrameT) -> IntoFrameT:
-        input_features = df.columns
-        pred_result = self.estimator.predict(X=df[self.features])
+        df = X
 
-        if isinstance(pred_result, np.ndarray):
-            df_native = df.to_native()
-            if isinstance(df_native, pd.DataFrame):
-                df_result = df_native.copy()
-                df_result[self._pred_column] = pred_result
-                df = nw.from_native(df_result)
-            else:
-                df_result = df_native.with_columns(pl.Series(self._pred_column, pred_result))
-                df = nw.from_native(df_result)
-        else:
-            df = pred_result
-
-        if self._pred_column not in df.columns:
-            raise ValueError(
-                f"Prediction column '{self._pred_column}' not found in DataFrame. Available columns: {df.columns}"
-            )
-
-        df = df.with_columns(
-            [
-                nw.col(self._pred_column)
-                .sum()
-                .over([self.column_names.match_id, self.column_names.team_id])
-                .alias(f"{self._pred_column}_sum")
-            ]
-        )
-
-        df = df.with_columns(
-            [
-                (nw.col(self._pred_column) / nw.col(f"{self._pred_column}_sum")).alias(
-                    self._features_out[0]
-                )
-            ]
-        )
-
-        if self.team_total_prediction_column:
+        if self.predict_row:
+            row_pred = self.estimator.predict(df.select(self.features))
             df = df.with_columns(
-                [
-                    (
-                        nw.col(self._features_out[0]) * nw.col(self.team_total_prediction_column)
-                    ).alias(f"{self._target_name}{self.prefix}_team_total_multiplied")
-                ]
+                nw.new_series("__row_pred__", row_pred, backend=nw.get_native_namespace(df))
+            )
+        else:
+            if self.prediction_column_name not in set(df.columns):
+                raise ValueError(
+                    f"Expected existing column {self.prediction_column_name!r} in X when predict_row=False"
+                )
+            df = df.with_columns(nw.col(self.prediction_column_name).alias("__row_pred__"))
+
+        if self.predict_granularity:
+            df_grp_feat = df.group_by(self.granularity).agg(self._group_agg_exprs())
+            grp_pred = self.estimator.predict(df_grp_feat.select(self.features))
+
+            df_grp_pred = (
+                df_grp_feat.with_columns(
+                    nw.new_series("__grp_pred__", grp_pred, backend=nw.get_native_namespace(df_grp_feat))
+                )
+                .select(self.granularity + ["__grp_pred__"])
             )
 
-        return df.select(list(set(input_features + self._features_out)))
+            df = df.join(df_grp_pred, on=self.granularity, how="left")
+        else:
+            if self.granularity_prediction_column_name not in set(df.columns):
+                raise ValueError(
+                    f"Expected existing column {self.granularity_prediction_column_name!r} in X when predict_granularity=False"
+                )
+            df = df.with_columns(nw.col(self.granularity_prediction_column_name).alias("__grp_pred__"))
+
+        df = df.with_columns(
+            (nw.col("__row_pred__") / nw.col("__grp_pred__")).alias(self.ratio_column_name)
+        )
+
+        if self.prediction_column_name and self.predict_row:
+            df = df.with_columns(nw.col("__row_pred__").alias(self.prediction_column_name))
+
+        if self.granularity_prediction_column_name and self.predict_granularity:
+            df = df.with_columns(nw.col("__grp_pred__").alias(self.granularity_prediction_column_name))
+
+        out = df.select(self.get_feature_names_out())
+
+        # IMPORTANT: ensure pandas index matches input index for sklearn's pandas hstack
+        if native_index is not None:
+            out_native = out.to_native()
+            out_native.index = native_index
+            return out_native
+
+        return out
+
+    def set_output(self, *, transform=None):
+        return self
+
+    def get_feature_names_out(self, input_features=None) -> list[str]:
+        out = []
+        for c in self._extra_output_cols():
+            if c not in set(out):
+                out.append(c)
+        return list(set(out))
 

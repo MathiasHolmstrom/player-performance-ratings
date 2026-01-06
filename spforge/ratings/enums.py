@@ -24,7 +24,7 @@ class RatingKnownFeatures(StrEnum):
 
 class RatingUnknownFeatures(StrEnum):
     PERFORMANCE = "performance"
-    RATING_DIFFERENCE = "rating_difference"
+    TEAM_RATING_DIFFERENCE = "team_rating_difference"
     PLAYER_RATING_DIFFERENCE = "player_rating_difference"
     TEAM_RATING = "team_rating"
     OPPONENT_RATING = "opponent_rating"

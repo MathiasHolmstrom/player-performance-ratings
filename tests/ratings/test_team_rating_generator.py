@@ -759,9 +759,9 @@ def test_fit_transform_when_rating_difference_requested_then_it_is_calculated_co
 
     result = generator.fit_transform(df)
 
-    assert "rating_difference_projected" in result.columns
+    assert "team_rating_difference_projected" in result.columns
     team_a_row = result.filter(pl.col("team_id") == "team_a")
-    diff = team_a_row["rating_difference_projected"][0]
+    diff = team_a_row["team_rating_difference_projected"][0]
     team_rating = team_a_row["team_rating_projected"][0]
     opp_rating = team_a_row["opponent_rating_projected"][0]
     assert diff == pytest.approx(team_rating - opp_rating)
@@ -2150,7 +2150,6 @@ def sample_team_df(column_names):
             None,
             ["team_off_rating_projected_won"],
         ),
-        # Test 2: Multiple known features, no suffix (defaults to performance_column="won")
         (
             [
                 RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
@@ -2160,14 +2159,12 @@ def sample_team_df(column_names):
             None,
             ["team_off_rating_projected_won", "team_def_rating_projected_won"],
         ),
-        # Test 3: Known and unknown features, no suffix (defaults to performance_column="won")
         (
             [RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
             [RatingUnknownFeatures.PERFORMANCE],
             None,
             ["team_off_rating_projected_won", "performance_won"],
         ),
-        # Test 4: Single known feature with suffix
         (
             [RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
             None,
@@ -2180,20 +2177,20 @@ def sample_team_df(column_names):
                 RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
                 RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED,
             ],
-            [RatingUnknownFeatures.RATING_DIFFERENCE],
+            [RatingUnknownFeatures.TEAM_RATING_DIFFERENCE],
             "custom",
             [
                 "team_off_rating_projected_custom",
                 "opponent_def_rating_projected_custom",
-                "rating_difference_custom",
+                "team_rating_difference_custom",
             ],
         ),
         # Test 6: Rating difference features (defaults to performance_column="won")
         (
             [RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED],
-            [RatingUnknownFeatures.RATING_DIFFERENCE],
+            [RatingUnknownFeatures.TEAM_RATING_DIFFERENCE],
             None,
-            ["rating_difference_projected_won", "rating_difference_won"],
+            ["team_rating_difference_projected_won", "team_rating_difference_won"],
         ),
         # Test 7: Rating mean features
         ([RatingKnownFeatures.RATING_MEAN_PROJECTED], None, "mean", ["rating_mean_projected_mean"]),
@@ -2203,7 +2200,7 @@ def sample_team_df(column_names):
             [RatingUnknownFeatures.PERFORMANCE],
             None,
             [
-                "rating_difference_projected_won",
+                "team_rating_difference_projected_won",
                 "performance_won",
             ],  # Default is RATING_DIFFERENCE_PROJECTED
         ),
@@ -2249,7 +2246,7 @@ def test_team_rating_suffix_applied_to_all_features(column_names, sample_team_df
         RatingKnownFeatures.TEAM_DEF_RATING_PROJECTED,
         RatingKnownFeatures.OPPONENT_OFF_RATING_PROJECTED,
     ]
-    non_predictor = [RatingUnknownFeatures.RATING_DIFFERENCE, RatingUnknownFeatures.PERFORMANCE]
+    non_predictor = [RatingUnknownFeatures.TEAM_RATING_DIFFERENCE, RatingUnknownFeatures.PERFORMANCE]
 
     gen = TeamRatingGenerator(
         performance_column="won",
@@ -2267,7 +2264,7 @@ def test_team_rating_suffix_applied_to_all_features(column_names, sample_team_df
             f"team_off_rating_projected_{output_suffix}",
             f"team_def_rating_projected_{output_suffix}",
             f"opponent_off_rating_projected_{output_suffix}",
-            f"rating_difference_{output_suffix}",
+            f"team_rating_difference_{output_suffix}",
             f"performance_{output_suffix}",
         ]
     else:
@@ -2276,7 +2273,7 @@ def test_team_rating_suffix_applied_to_all_features(column_names, sample_team_df
             "team_off_rating_projected_won",
             "team_def_rating_projected_won",
             "opponent_off_rating_projected_won",
-            "rating_difference_won",
+            "team_rating_difference_won",
             "performance_won",
         ]
 
@@ -2314,7 +2311,7 @@ def test_team_rating_only_requested_features_present(column_names, sample_team_d
     unwanted_features = [
         "team_def_rating_projected",
         "opponent_off_rating_projected",
-        "rating_difference",
+        "team_rating_difference",
     ]
     for feature in unwanted_features:
         if feature not in input_cols:
@@ -2333,7 +2330,7 @@ def test_team_rating_combined_features_out_and_non_predictor(column_names, sampl
             RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED,
         ],
         non_predictor_features_out=[
-            RatingUnknownFeatures.RATING_DIFFERENCE,
+            RatingUnknownFeatures.TEAM_RATING_DIFFERENCE,
             RatingUnknownFeatures.PERFORMANCE,
         ],
         output_suffix=None,
@@ -2344,8 +2341,8 @@ def test_team_rating_combined_features_out_and_non_predictor(column_names, sampl
     # All requested features should be present (with performance column suffix)
     expected_cols = [
         "team_off_rating_projected_won",
-        "rating_difference_projected_won",
-        "rating_difference_won",
+        "team_rating_difference_projected_won",
+        "team_rating_difference_won",
         "performance_won",
     ]
 

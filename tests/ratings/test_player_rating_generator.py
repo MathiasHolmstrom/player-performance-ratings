@@ -1258,9 +1258,9 @@ def test_fit_transform_multiple_league_changes(base_cn):
         # Test 7: Rating difference features
         (
             [RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED],
-            [RatingUnknownFeatures.RATING_DIFFERENCE],
+            [RatingUnknownFeatures.TEAM_RATING_DIFFERENCE],
             "diff",
-            ["rating_difference_projected_diff", "rating_difference_diff"],
+            ["team_rating_difference_projected_diff", "team_rating_difference_diff"],
         ),
         # Test 8: Empty features_out (should use defaults, defaults to performance_column="perf")
         (
@@ -1268,7 +1268,7 @@ def test_fit_transform_multiple_league_changes(base_cn):
             [RatingUnknownFeatures.PLAYER_PREDICTED_OFF_PERFORMANCE],
             None,
             [
-                "rating_difference_projected_perf",
+                "team_rating_difference_projected_perf",
                 "player_predicted_off_performance_perf",
             ],  # Default is RATING_DIFFERENCE_PROJECTED
         ),

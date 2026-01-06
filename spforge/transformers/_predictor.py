@@ -1,6 +1,7 @@
 from typing import Any
 
 import numpy as np
+import pandas as pd
 from sklearn.base import TransformerMixin, BaseEstimator
 
 import narwhals.stable.v2 as nw
@@ -35,16 +36,11 @@ class EstimatorTransformer(BaseEstimator,TransformerMixin):
             nw.new_series(
                 name=self.prediction_column_name, values=prediction, backend=nw.get_native_namespace(X)
             )
-        )
+        ).select(self.get_feature_names_out())
 
     def get_feature_names_out(self, input_features=None):
 
-        if input_features is None:
-            input_features = getattr(self, "feature_names_in_", None)
-        if input_features is None:
-            return np.array([self.prediction_column_name], dtype=object)
-
-        return np.array(list(input_features) + [self.prediction_column_name], dtype=object)
+       return [self.prediction_column_name]
 
     def set_output(self, *, transform=None):
         if hasattr(self.estimator, "set_output"):

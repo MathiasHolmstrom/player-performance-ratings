@@ -264,7 +264,6 @@ def test_distribution_manager_predictor_fit():
     y = pd.Series([5, 6, 7, 8, 9], name="target")
     manager.fit(X, y)
 
-    # Both predictors should be fitted
     assert hasattr(manager.point_estimator, "coef_")
     assert distribution_predictor._classes is not None
 
@@ -327,7 +326,6 @@ def test_distribution_manager_predictor_properties():
         point_estimator=LinearRegression(), distribution_estimator=distribution_predictor
     )
 
-    # Fit first to set target on point_estimator
     X_train = pd.DataFrame({"feature1": [1.0, 2.0, 3.0]})
     y_train = pd.Series([5, 6, 7], name="target")
     manager.fit(X_train, y_train)
