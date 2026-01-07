@@ -88,7 +88,7 @@ class RatioEstimatorTransformer(BaseEstimator, TransformerMixin):
             )
 
             df_grp = df.group_by(self.granularity).agg(
-                self._group_agg_exprs() + [nw.col("__target__").sum().alias("__target__")]
+                self._group_agg_exprs() + [nw.col("__target__").mean().alias("__target__")]
             )
 
             self.estimator.fit(

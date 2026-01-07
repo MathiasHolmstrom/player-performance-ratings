@@ -30,9 +30,9 @@ def df_pd_cv_reg():
     y = 2.0 * x + 1.0
     return pd.DataFrame({"date": dates, "gameid": match_ids, "x": x, "y": y})
 
-
-def _make_cv(estimator, pred_col="pred", n_splits=3, features=None):
+def make_cv(estimator, pred_col="pred", n_splits=3, features=None, params= None):
     features = features or ['x', 'y']
+    params = params or {}
     cv = MatchKFoldCrossValidator(
         match_id_column_name="gameid",
         date_column_name="date",
@@ -41,8 +41,10 @@ def _make_cv(estimator, pred_col="pred", n_splits=3, features=None):
         prediction_column_name=pred_col,
         n_splits=n_splits,
         features=features,
+        **params
     )
     return cv
+
 
 
 def test_match_kfold_cv_binary_validation_only_subset(df_pd_cv_binary):
@@ -417,7 +419,7 @@ class _PredictProbaRaisesAttributeError:
 
 
 def test_predict_smart_falls_back_to_predict_on_attributeerror(df_pd_cv_multiclass):
-    cv = _make_cv(
+    cv = make_cv(
         _PredictProbaRaisesAttributeError(),
         features=["x", "team"],
         n_splits=3,
@@ -434,10 +436,11 @@ def test_predict_smart_binary_predict_proba_is_vector(df_pd_cv_multiclass):
     df_bin = df_pd_cv_multiclass.copy()
     df_bin["y"] = (df_bin["y"] == 1).astype(int)
 
-    cv = _make_cv(
+    cv = make_cv(
         LogisticRegression(max_iter=2000),
         features=["x", "team"],
         n_splits=3,
+        params={'binomial_probabilities_to_index1': False}
     )
     out = cv.generate_validation_df(df_bin)
 
@@ -468,7 +471,7 @@ class DummyMeanRegressor(BaseEstimator):
 def test_generate_validation_df_add_training_predictions_pd_returns_pd_and_marks_rows(
     df_pd_cv_reg,
 ):
-    cv = _make_cv(
+    cv = make_cv(
         estimator=DummyMeanRegressor(),
         pred_col="pred",
         n_splits=3,
@@ -507,7 +510,7 @@ def test_generate_validation_df_add_training_predictions_pd_returns_pd_and_marks
 def test_generate_validation_df_add_training_predictions_pl_roundtrip_type(
     df_pd_cv_reg,
 ):
-    cv = _make_cv(
+    cv = make_cv(
         estimator=DummyMeanRegressor(),
         pred_col="pred",
         n_splits=3,

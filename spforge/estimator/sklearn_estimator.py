@@ -61,15 +61,16 @@ class GroupByEstimator(BaseEstimator):
 
 class SkLearnEnhancerEstimator(BaseEstimator):
     def __init__(
-            self,
-            estimator: Any,
-            date_column: Optional[str] = None,
-            day_weight_epsilon: Optional[float] = None,
+        self,
+        estimator: Any,
+        date_column: Optional[str] = None,
+        day_weight_epsilon: Optional[float] = None,
     ):
         self.estimator = estimator
         self.date_column = date_column
         self.day_weight_epsilon = day_weight_epsilon
         self.classes_ = []
+        self.estimator_ = None  # fitted clone
 
     def _resolve_date_column(self, cols: list[str]) -> Optional[str]:
         if not self.date_column:
@@ -82,84 +83,84 @@ class SkLearnEnhancerEstimator(BaseEstimator):
         matches = [c for c in cols if c.endswith(suffix)]
         if len(matches) == 1:
             return matches[0]
-
         if len(matches) > 1:
             raise ValueError(
                 f"date_column '{self.date_column}' is ambiguous after preprocessing. "
                 f"Matches: {matches}"
             )
-
         raise ValueError(f"Could not find {self.date_column}. Available columns {cols}")
 
     @nw.narwhalify
-    def fit(self, X: IntoFrameT, y: Any, sample_weight: np.ndarray | None = None):
-        y = y.to_numpy() if not isinstance(y, np.ndarray) else y
+    def fit(self, X: Any, y: Any, sample_weight: np.ndarray | None = None):
+        y = y.to_numpy() if hasattr(y, "to_numpy") else (np.asarray(y) if not isinstance(y, np.ndarray) else y)
+
+        cols = list(X.columns)
+        resolved_date_col = self._resolve_date_column(cols)
+
         combined_weights = sample_weight
 
-        resolved_date_col = self._resolve_date_column(list(X.columns))
-
         if resolved_date_col and self.day_weight_epsilon is not None:
-            date_series = pd.to_datetime(X.to_pandas()[resolved_date_col]) #TODO: Make this narwhals
+            # easiest/most reliable for now: go through pandas for datetime math
+            date_series = pd.to_datetime(X.to_pandas()[resolved_date_col])
             max_date = date_series.max()
             days_diff = (date_series - max_date).dt.total_seconds() / (24 * 60 * 60)
             min_diff = days_diff.min()
 
             denom = (min_diff * -2 + self.day_weight_epsilon)
             date_weights = (days_diff - min_diff + self.day_weight_epsilon) / denom
+            date_weights = date_weights.to_numpy()
 
             if combined_weights is not None:
-                combined_weights = date_weights.values * combined_weights
+                combined_weights = date_weights * combined_weights
             else:
-                combined_weights = date_weights.values
+                combined_weights = date_weights
 
         X_features = X.drop([resolved_date_col]) if resolved_date_col else X
-        cat_cols = [name for name, dtype in X.schema.items() if dtype == nw.Categorical]
-        any_cat_feats = bool(cat_cols)
-        if any_cat_feats:
+
+        # if categorical present, convert to pandas (your current rule)
+        cat_cols = [name for name, dtype in X_features.schema.items() if dtype == nw.Categorical]
+        if cat_cols:
             X_features = X_features.to_pandas()
+
+        # IMPORTANT: fit a clone, store as estimator_
+        self.estimator_ = clone(self.estimator)
         if combined_weights is not None:
-            self.estimator.fit(X_features, y, sample_weight=combined_weights)
+            self.estimator_.fit(X_features, y, sample_weight=combined_weights)
         else:
-            self.estimator.fit(X_features, y)
+            self.estimator_.fit(X_features, y)
 
-        if hasattr(self.estimator, "classes_"):
-            self.classes_ = self.estimator.classes_
+        if hasattr(self.estimator_, "classes_"):
+            self.classes_ = self.estimator_.classes_
         return self
 
     @nw.narwhalify
-    def predict(self, X: IntoFrameT) -> np.ndarray:
-        X_features = (
-            X.drop([self.date_column]) if self.date_column in X.columns else X
-        )
-        X_features = X_features.to_pandas()
-        return self.estimator.predict(X_features)
+    def predict(self, X: Any) -> np.ndarray:
+        if self.estimator_ is None:
+            raise RuntimeError("SkLearnEnhancerEstimator is not fitted")
+
+        resolved_date_col = self._resolve_date_column(list(X.columns))
+        X_features = X.drop([resolved_date_col]) if resolved_date_col else X
+
+        cat_cols = [name for name, dtype in X_features.schema.items() if dtype == nw.Categorical]
+        if cat_cols:
+            X_features = X_features.to_pandas()
+
+        return self.estimator_.predict(X_features)
 
     @nw.narwhalify
-    def predict_proba(self, X: IntoFrameT) -> np.ndarray:
-        X_features = (
-            X.drop([self.date_column]) if self.date_column in X.columns else X
-        )
-        X_features = X_features.to_pandas()
-        return self.estimator.predict_proba(X_features)
+    def predict_proba(self, X: Any) -> np.ndarray:
+        if self.estimator_ is None:
+            raise RuntimeError("SkLearnEnhancerEstimator is not fitted")
 
-    def get_params(self, deep: bool = True) -> dict:
-        params = {
-            "estimator": self.estimator,
-            "date_column": self.date_column,
-            "day_weight_epsilon": self.day_weight_epsilon,
-        }
-        if deep and hasattr(self.estimator, "get_params"):
-            estimator_params = self.estimator.get_params(deep=True)
-            params.update({f"estimator__{k}": v for k, v in estimator_params.items()})
-        return params
+        resolved_date_col = self._resolve_date_column(list(X.columns))
+        X_features = X.drop([resolved_date_col]) if resolved_date_col else X
 
-    def set_params(self, **params) -> "SkLearnEnhancerEstimator":
-        for key, value in params.items():
-            if key.startswith("estimator__"):
-                self.estimator.set_params(**{key[11:]: value})
-            else:
-                setattr(self, key, value)
-        return self
+        cat_cols = [name for name, dtype in X_features.schema.items() if dtype == nw.Categorical]
+        if cat_cols:
+            X_features = X_features.to_pandas()
+
+        return self.estimator_.predict_proba(X_features)
+
 
 
 class OrdinalClassifier(BaseEstimator, ClassifierMixin):

@@ -75,7 +75,6 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
 
     game_winner_model = Pipeline(
         estimator=LogisticRegression(max_iter=1000),
-        one_hot_encode_cat_features=True,
         impute_missing_values=True,
         scale_features=False,
         feature_names=rating_generator_result.features_out
@@ -105,7 +104,6 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
 
     player_kills_model = Pipeline(
         estimator=LGBMRegressor(verbose=-100),
-        one_hot_encode_cat_features=True,
         impute_missing_values=True,
         scale_features=False,
         feature_names=player_kills_features

@@ -15,6 +15,7 @@ class MatchKFoldCrossValidator:
         n_splits: int = 3,
         min_validation_date: str | None = None,
         features: list[str] | None = None,
+        binomial_probabilities_to_index1: bool = True
     ):
         self.match_id_column_name = match_id_column_name
         self.date_column_name = date_column_name
@@ -24,6 +25,8 @@ class MatchKFoldCrossValidator:
         self.n_splits = n_splits
         self.min_validation_date = min_validation_date
         self.features = features  # Optional: if None, will infer from DataFrame
+        self.binomial_probabilities_to_index1 = binomial_probabilities_to_index1
+
 
     def _get_features(self, df):
         if self.features is not None:
@@ -44,18 +47,30 @@ class MatchKFoldCrossValidator:
         y = train_df[self.target_column]
         est.fit(X, y)
 
-    def _predict_smart(self, est, df: IntoFrameT)-> IntoFrameT:
+    def _predict_smart(self, est, df: IntoFrameT) -> IntoFrameT:
         features = self._get_features(df)
         X = df.select(features)
+
+        values = None
 
         if hasattr(est, "predict_proba"):
             try:
                 proba = est.predict_proba(X)
 
-                if proba.ndim == 2:
-                    values = proba.tolist()  # ← THIS is the key
+                if self.binomial_probabilities_to_index1:
+                    if getattr(proba, "ndim", None) == 2:
+                        n_cols = proba.shape[1]
+                        if n_cols == 2:
+                            values = proba[:, 1]
+                        else:
+                            values = proba.tolist()
+                    else:
+                        values = proba
                 else:
-                    values = proba
+                    if getattr(proba, "ndim", None) == 2:
+                        values = proba.tolist()
+                    else:
+                        values = proba
 
             except AttributeError:
                 values = est.predict(X)
@@ -96,7 +111,7 @@ class MatchKFoldCrossValidator:
                             nw.new_series(
                                 name=c,
                                 values=feat_df[c].to_numpy(),
-                                backend=nw.get_native_namespace(out)
+                                backend=nw.get_native_namespace(out),
                             )
                         )
 

@@ -1,7 +1,8 @@
 import polars as pl
 import pytest
 from lightgbm import LGBMRegressor
-from sklearn.metrics import mean_absolute_error
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import mean_absolute_error, log_loss
 
 from examples import get_sub_sample_nba_data
 from spforge import FeatureGeneratorPipeline
@@ -38,14 +39,15 @@ def test_nba_player_points(dataframe_type):
             column_names.player_id,
         ]
     )
-    df = df.with_columns(
-        (pl.col('minutes') / pl.lit(48.25)).alias('minutes_ratio')
-    )
+
     df = df.with_columns([
+        (pl.col('minutes') / pl.lit(48.25)).alias('minutes_ratio'),
         pl.col('points').sum().over('game_id').alias('total_points'),
-        (pl.col('points') / pl.col('minutes')).alias('points_per_minute')
+        pl.col('points').sum().over(['game_id', 'team_id']).alias('team_points'),
+        (pl.col('points') / pl.col('minutes')).alias('points_per_minute'),
     ]
     )
+
     df = df.with_columns(
         pl.when(
             pl.col('minutes') == 0
@@ -68,9 +70,16 @@ def test_nba_player_points(dataframe_type):
                                     RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED],
     )
 
+    player_plus_minus_rating_generator = PlayerRatingGenerator(
+        performance_column='plus_minus',
+        auto_scale_performance=True,
+        features_out=[RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED]
+    )
+
     features_generator = FeatureGeneratorPipeline(
         column_names=column_names,
         feature_generators=[
+            player_plus_minus_rating_generator,
             player_points_rating_generator,
             total_points_rating_generator,
             RollingWindowTransformer(features=["points"], window=15, granularity=["player_id"]),
@@ -81,7 +90,39 @@ def test_nba_player_points(dataframe_type):
         df = df.to_pandas()
     df = features_generator.fit_transform(df)
 
-    predictor = NegativeBinomialEstimator(
+    game_winner_pipeline = Pipeline(
+        estimator=LogisticRegression(),
+        feature_names=player_plus_minus_rating_generator.features_out +['location']
+    )
+    cross_validator_game_winnner = MatchKFoldCrossValidator(
+        date_column_name=column_names.start_date,
+        match_id_column_name=column_names.match_id,
+        estimator=game_winner_pipeline,
+        prediction_column_name='game_winner_probability',
+        target_column='won',
+        features= game_winner_pipeline.feature_names
+    )
+    pre_row_count = len(df)
+    df = cross_validator_game_winnner.generate_validation_df(df=df, add_trainining_predictions=True)
+    assert pre_row_count == len(df)
+    assert cross_validator_game_winnner.prediction_column_name in df.columns
+    game_winner_score = SklearnScorer(
+        scorer_function=log_loss,
+        filters=[
+            Filter(
+                column_name='is_validation',
+                value=1,
+                operator=Operator.EQUALS
+            )
+        ],
+        pred_column=cross_validator_game_winnner.prediction_column_name,
+        target=cross_validator_game_winnner.target_column
+    )
+    game_winner_log_loss = game_winner_score.score(df)
+    assert game_winner_log_loss < 0.67
+
+
+    negative_binomial = NegativeBinomialEstimator(
         max_value=40,
         point_estimate_pred_column="points_estimate",
         r_specific_granularity=["player_id"],
@@ -90,7 +131,7 @@ def test_nba_player_points(dataframe_type):
     )
 
     estimator_transformer_raw = EstimatorTransformer(
-        features=features_generator.features_out + ['location', column_names.start_date],
+        features=features_generator.features_out + ['location', column_names.start_date, 'game_winner_probability'],
         prediction_column_name='points_estimate_raw',
         estimator=SkLearnEnhancerEstimator(
             estimator=LGBMRegressor(verbose=-100, random_state=42, max_depth=2),
@@ -115,9 +156,8 @@ def test_nba_player_points(dataframe_type):
         )
     )
     pipeline = Pipeline(
-        convert_cat_features_to_cat_dtype=True,
-        estimator=predictor,
-        feature_names=features_generator.features_out + ['location'],
+        estimator=negative_binomial,
+        feature_names=features_generator.features_out + ['location', 'game_winner_probability'],
         context_feature_names=[column_names.player_id, column_names.start_date, column_names.team_id,
                                column_names.match_id],
         predictor_transformers=[estimator_transformer_raw, team_ratio_transformer, estimator_transformer_final]
@@ -169,7 +209,7 @@ def test_nba_player_points(dataframe_type):
         target=cross_validator.target_column,
         validation_column="is_validation",
         filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
-        classes=range(0, predictor.max_value + 1),
+        classes=range(0, negative_binomial.max_value + 1),
     )
     ordinal_loss_score = ordinal_scorer.score(validation_df)
 

@@ -43,7 +43,7 @@ def test_lgbm_wrapper_fit_with_date_weighting():
     y = pd.Series([1, 2, 3, 4, 5])
     wrapper.fit(X, y)
     # Should fit successfully with date weighting
-    assert hasattr(wrapper.estimator, "coef_")
+    assert hasattr(wrapper.estimator_, "coef_")
 
 
 def test_lgbm_wrapper_predict():
@@ -85,7 +85,7 @@ def test_lgbm_wrapper_sample_weight_combination():
     sample_weight = np.array([0.5, 1.0, 0.5])
     wrapper.fit(X, y, sample_weight=sample_weight)
     # Should fit successfully with combined weights
-    assert hasattr(wrapper.estimator, "coef_")
+    assert hasattr(wrapper.estimator_, "coef_")
 
 
 # ============================================================================

@@ -162,7 +162,6 @@ def test_fit_predict_returns_ndarray(df_reg):
     model = Pipeline(
         estimator=LinearRegression(),
         feature_names=["num1", "num2", "cat1"],
-        one_hot_encode_cat_features=True,
         impute_missing_values=True,
         scale_features=True,
     )
@@ -182,7 +181,6 @@ def test_drop_rows_where_target_is_nan(df_reg_pd, frame):
     model = Pipeline(
         estimator=LinearRegression(),
         feature_names=["num1", "num2", "cat1"],
-        one_hot_encode_cat_features=True,
         impute_missing_values=True,
         drop_rows_where_target_is_nan=True,
     )
@@ -200,7 +198,6 @@ def test_min_max_target_clipping(df_reg):
     model = Pipeline(
         estimator=LinearRegression(),
         feature_names=["num1", "num2", "cat1"],
-        one_hot_encode_cat_features=True,
         impute_missing_values=True,
         min_target=2.0,
         max_target=5.0,
@@ -219,7 +216,6 @@ def test_predict_proba(df_clf):
     model = Pipeline(
         estimator=LogisticRegression(max_iter=1000),
         feature_names=["num1", "num2", "cat1"],
-        one_hot_encode_cat_features=True,
         impute_missing_values=True,
         scale_features=True,
     )
@@ -237,7 +233,6 @@ def test_predict_proba_raises_if_not_supported(df_reg):
     model = Pipeline(
         estimator=LinearRegression(),
         feature_names=["num1", "num2", "cat1"],
-        one_hot_encode_cat_features=True,
         impute_missing_values=True,
         scale_features=True,
     )
@@ -252,7 +247,6 @@ def test_predict_proba_raises_if_not_supported(df_reg):
         model = Pipeline(
             estimator=cap,
             feature_names=["num1", "num2", "cat1"],
-            one_hot_encode_cat_features=True,
             impute_missing_values=True,
             scale_features=True,
         )
@@ -278,7 +272,6 @@ def test_infer_numeric_from_feature_names_when_only_cat_features_given(df_reg):
         estimator=cap,
         feature_names=["num1", "num2", "cat1"],
         categorical_features=["cat1"],
-        one_hot_encode_cat_features=True,
         impute_missing_values=True,
         scale_features=True,
     )
@@ -298,7 +291,6 @@ def test_infer_categorical_from_feature_names_when_only_numeric_features_given(d
         estimator=cap,
         feature_names=["num1", "num2", "cat1"],
         numeric_features=["num1", "num2"],
-        one_hot_encode_cat_features=True,
         impute_missing_values=True,
         scale_features=True,
     )
@@ -318,7 +310,6 @@ def test_granularity_groups_rows_before_estimator_fit_and_predict(df_reg):
         feature_names=["gameid", "num1", "num2", "cat1"],
         categorical_features=["cat1", "gameid"],
         granularity=["gameid"],
-        one_hot_encode_cat_features=True,
         impute_missing_values=True,
         scale_features=True,
         remainder="drop",
@@ -347,7 +338,6 @@ def test_pipeline_uses_feature_names_subset_even_if_extra_columns_present(df_reg
     model = Pipeline(
         estimator=cap,
         feature_names=["num1", "cat1"],
-        one_hot_encode_cat_features=True,
         categorical_features=['cat1'],
         impute_missing_values=True,
         scale_features=True,
@@ -408,7 +398,9 @@ class CaptureFitEstimator(BaseEstimator):
         self.fit_shape = None
         self.fit_sample_weight_is_none = None
 
-    def fit(self, X, y, sample_weight=None):
+    @nw.narwhalify
+    def fit(self, X: IntoFrameT, y, sample_weight=None):
+        X = X.to_pandas()
         self.fit_X_type = type(X)
         self.fit_shape = getattr(X, "shape", None)
         self.fit_sample_weight_is_none = sample_weight is None
@@ -437,7 +429,34 @@ class AddConstantPredictionTransformer(BaseEstimator):
             )
         )
 
+def _find_fitted(obj, predicate):
+    for _, v in obj.get_params(deep=True).items():
+        if predicate(v):
+            return v
+    raise AssertionError("Did not find fitted object matching predicate")
 
+
+def _fitted_estimator_transformer(model):
+    sk = model.sklearn_pipeline
+    ct = sk.named_steps["t1"]  # your second stage ColumnTransformer
+
+    # ct.transformers_ contains the FITTED transformers
+    for name, trans, cols in ct.transformers_:
+        if name != "features":
+            continue
+
+        # your 'features' transformer is _OnlyOutputColumns(...)
+        only = trans
+
+        # depending on your wrapper implementation, the wrapped transformer is usually here:
+        if hasattr(only, "transformer"):
+            return only.transformer
+        if hasattr(only, "_transformer"):
+            return only._transformer
+
+        raise AssertionError("Found 'features' transformer but couldn't unwrap _OnlyOutputColumns")
+
+    raise AssertionError("Could not find t1 'features' transformer in ct.transformers_")
 @pytest.mark.parametrize("frame", ["pd", "pl"])
 def test_final_sklearn_enhancer_estimator_gets_expected_feature_columns(frame):
     df_pd = pd.DataFrame(
@@ -472,22 +491,34 @@ def test_final_sklearn_enhancer_estimator_gets_expected_feature_columns(frame):
     model = Pipeline(
         estimator=CaptureFitEstimator(),
         feature_names=["num1", "num2", "location"],
-        context_feature_names=["player_id", "team_id", "match_id", "start_date"],
+        context_predictor_transformer_feature_names=["player_id", "team_id", "match_id", "start_date"],
         predictor_transformers=[dummy_prev, final_transformer],
-        convert_cat_features_to_cat_dtype=True,
         categorical_handling="auto",
         impute_missing_values=True,
         scale_features=False,
         remainder="drop",
     )
+
     if isinstance(df, pl.DataFrame):
         X = df.select(["num1", "num2", "location", "player_id", "team_id", "match_id", "start_date"])
+        y = df["y"]
     else:
         X = df[["num1", "num2", "location", "player_id", "team_id", "match_id", "start_date"]]
-    y = df["y"]
+        y = df["y"]
+
     model.fit(X, y=y)
 
-    assert inner.fit_columns is not None
-    assert inner.fit_columns == ["num1", "num2", "location"]
-    assert "start_date" not in inner.fit_columns
-    assert inner.fit_X_type is pd.DataFrame
+    sk = model.sklearn_pipeline
+
+    fitted_final = _find_fitted(
+        sk,
+        lambda o: isinstance(o, EstimatorTransformer) and getattr(o, "prediction_column_name", None) == "points_estimate",
+    )
+
+    expected_cols = ["num1", "num2", "location", "points_estimate_raw"] + list(fitted_final.get_feature_names_out())
+
+    assert model.estimator.fit_columns == expected_cols
+    assert model.estimator.fit_X_type is pd.DataFrame
+    et = _fitted_estimator_transformer(model)
+    assert et.estimator_.estimator_.fit_columns == ['num1', 'num2', 'location']
+    u =2
