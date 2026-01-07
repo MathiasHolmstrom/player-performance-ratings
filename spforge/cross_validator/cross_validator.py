@@ -103,7 +103,7 @@ class MatchKFoldCrossValidator:
         return out
 
     @nw.narwhalify
-    def generate_validation_df(self, df, add_trainining_predictions: bool = False):
+    def generate_validation_df(self, df: IntoFrameT, add_trainining_predictions: bool = False) -> IntoFrameT:
         df = df.sort([self.date_column_name, self.match_id_column_name])
 
         df = df.with_columns(

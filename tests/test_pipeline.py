@@ -1,14 +1,18 @@
-from typing import Any
-
+import narwhals as nw
 import numpy as np
 import pandas as pd
 import polars as pl
 import pytest
+from narwhals._native import IntoFrameT
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from spforge import Pipeline
 
 from sklearn.base import BaseEstimator, TransformerMixin
+
+from spforge.estimator import SkLearnEnhancerEstimator
+from spforge.transformers import EstimatorTransformer
+
 
 class CaptureEstimator(BaseEstimator):
     def __init__(self, has_proba: bool = False):
@@ -395,3 +399,95 @@ def test_categorical_handling_auto_uses_native_when_lightgbm_in_predictor_transf
 
     df_out = model.sklearn_pipeline.named_steps["pre"].transform(X)
     assert isinstance(df_out['cat1'].dtype, pd.CategoricalDtype)
+
+
+class CaptureFitEstimator(BaseEstimator):
+    def __init__(self):
+        self.fit_columns = None
+        self.fit_X_type = None
+        self.fit_shape = None
+        self.fit_sample_weight_is_none = None
+
+    def fit(self, X, y, sample_weight=None):
+        self.fit_X_type = type(X)
+        self.fit_shape = getattr(X, "shape", None)
+        self.fit_sample_weight_is_none = sample_weight is None
+        self.fit_columns = list(X.columns) if hasattr(X, "columns") else None
+        return self
+
+    def predict(self, X):
+        n = len(X) if hasattr(X, "__len__") else 0
+        return np.zeros(n)
+class AddConstantPredictionTransformer(BaseEstimator):
+    def __init__(self, col_name: str):
+        self.col_name = col_name
+        self.features_out = [col_name]
+
+    @nw.narwhalify
+    def fit(self, X: IntoFrameT, y=None):
+        return self
+
+    @nw.narwhalify
+    def transform(self, X: IntoFrameT) -> IntoFrameT:
+        return X.with_columns(
+            nw.new_series(
+                name=self.col_name,
+                values=[1.23] * len(X),
+                backend=nw.get_native_namespace(X),
+            )
+        )
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_final_sklearn_enhancer_estimator_gets_expected_feature_columns(frame):
+    df_pd = pd.DataFrame(
+        {
+            "num1": [1.0, 2.0, np.nan, 4.0],
+            "num2": [10.0, 20.0, 30.0, 40.0],
+            "location": ["home", "away", "home", "away"],
+            "start_date": ["2022-10-18", "2022-10-18", "2022-10-19", "2022-10-20"],
+            "player_id": [11, 11, 12, 12],
+            "team_id": [1, 1, 2, 2],
+            "match_id": [100, 100, 101, 101],
+            "y": [1.2, 2.4, 2.0, 4.2],
+        }
+    )
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
+
+    inner = CaptureFitEstimator()
+    enhancer = SkLearnEnhancerEstimator(
+        estimator=inner,
+        date_column="start_date",
+        day_weight_epsilon=0.1,
+    )
+
+    dummy_prev = AddConstantPredictionTransformer(col_name="points_estimate_raw")
+
+    final_transformer = EstimatorTransformer(
+        features=["num1", "num2", "location", "start_date"],
+        prediction_column_name="points_estimate",
+        estimator=enhancer,
+    )
+
+    model = Pipeline(
+        estimator=CaptureFitEstimator(),
+        feature_names=["num1", "num2", "location"],
+        context_feature_names=["player_id", "team_id", "match_id", "start_date"],
+        predictor_transformers=[dummy_prev, final_transformer],
+        convert_cat_features_to_cat_dtype=True,
+        categorical_handling="auto",
+        impute_missing_values=True,
+        scale_features=False,
+        remainder="drop",
+    )
+    if isinstance(df, pl.DataFrame):
+        X = df.select(["num1", "num2", "location", "player_id", "team_id", "match_id", "start_date"])
+    else:
+        X = df[["num1", "num2", "location", "player_id", "team_id", "match_id", "start_date"]]
+    y = df["y"]
+    model.fit(X, y=y)
+
+    assert inner.fit_columns is not None
+    assert inner.fit_columns == ["num1", "num2", "location"]
+    assert "start_date" not in inner.fit_columns
+    assert inner.fit_X_type is pd.DataFrame

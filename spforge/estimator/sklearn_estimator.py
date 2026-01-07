@@ -131,10 +131,7 @@ class SkLearnEnhancerEstimator(BaseEstimator):
         X_features = (
             X.drop([self.date_column]) if self.date_column in X.columns else X
         )
-        cat_cols = [name for name, dtype in X.schema.items() if dtype == nw.Categorical]
-        any_cat_feats = bool(cat_cols)
-        if any_cat_feats:
-            X_features = X_features.to_pandas()
+        X_features = X_features.to_pandas()
         return self.estimator.predict(X_features)
 
     @nw.narwhalify
@@ -142,11 +139,8 @@ class SkLearnEnhancerEstimator(BaseEstimator):
         X_features = (
             X.drop([self.date_column]) if self.date_column in X.columns else X
         )
-        cat_cols = [name for name, dtype in X.schema.items() if dtype == nw.Categorical]
-        any_cat_feats = bool(cat_cols)
-        if any_cat_feats:
-            X_features = X_features.to_pandas()
-        return self.estimator.predict_proba(X_features.to_native())
+        X_features = X_features.to_pandas()
+        return self.estimator.predict_proba(X_features)
 
     def get_params(self, deep: bool = True) -> dict:
         params = {

@@ -39,10 +39,19 @@ def test_nba_player_points(dataframe_type):
         ]
     )
     df = df.with_columns(
-        (pl.col('minutes')/pl.lit(48.25)).alias('minutes_ratio')
+        (pl.col('minutes') / pl.lit(48.25)).alias('minutes_ratio')
+    )
+    df = df.with_columns([
+        pl.col('points').sum().over('game_id').alias('total_points'),
+        (pl.col('points') / pl.col('minutes')).alias('points_per_minute')
+    ]
     )
     df = df.with_columns(
-        pl.col('points').sum().over('game_id').alias('total_points')
+        pl.when(
+            pl.col('minutes') == 0
+        ).then(pl.lit(0))
+        .otherwise(pl.col('points_per_minute'))
+        .alias('points_per_minute')
     )
     df = df.with_columns(pl.col("points").clip(0, 40).alias("points"))
     total_points_rating_generator = TeamRatingGenerator(
@@ -52,10 +61,11 @@ def test_nba_player_points(dataframe_type):
     )
 
     player_points_rating_generator = PlayerRatingGenerator(
-        performance_column='points',
+        performance_column='points_per_minute',
         auto_scale_performance=True,
         features_out=[RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED],
-        non_predictor_features_out=[RatingKnownFeatures.PLAYER_OFF_RATING, RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED],
+        non_predictor_features_out=[RatingKnownFeatures.PLAYER_OFF_RATING,
+                                    RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED],
     )
 
     features_generator = FeatureGeneratorPipeline(
@@ -79,15 +89,15 @@ def test_nba_player_points(dataframe_type):
         column_names=column_names,
     )
 
-    estimator_transformer_raw =  EstimatorTransformer(
-            features=features_generator.features_out + ['location', column_names.start_date],
-            prediction_column_name='points_estimate_raw',
-            estimator=SkLearnEnhancerEstimator(
-                estimator=LGBMRegressor(verbose=-100, random_state=42, max_depth=2),
-                date_column=column_names.start_date,
-                day_weight_epsilon=0.1
-            )
+    estimator_transformer_raw = EstimatorTransformer(
+        features=features_generator.features_out + ['location', column_names.start_date],
+        prediction_column_name='points_estimate_raw',
+        estimator=SkLearnEnhancerEstimator(
+            estimator=LGBMRegressor(verbose=-100, random_state=42, max_depth=2),
+            date_column=column_names.start_date,
+            day_weight_epsilon=0.1
         )
+    )
     team_ratio_transformer = RatioEstimatorTransformer(
         estimator=LGBMRegressor(),
         features=features_generator.features_out,
@@ -95,15 +105,15 @@ def test_nba_player_points(dataframe_type):
         prediction_column_name=estimator_transformer_raw.prediction_column_name,
         granularity=[column_names.match_id, column_names.team_id]
     )
-    estimator_transformer_final =  EstimatorTransformer(
-            features=features_generator.features_out + ['location', column_names.start_date],
-            prediction_column_name='points_estimate',
-            estimator=SkLearnEnhancerEstimator(
-                estimator=LGBMRegressor(verbose=-100, random_state=42),
-                date_column=column_names.start_date,
-                day_weight_epsilon=0.1
-            )
+    estimator_transformer_final = EstimatorTransformer(
+        features=features_generator.features_out + ['location', column_names.start_date],
+        prediction_column_name='points_estimate',
+        estimator=SkLearnEnhancerEstimator(
+            estimator=LGBMRegressor(verbose=-100, random_state=42),
+            date_column=column_names.start_date,
+            day_weight_epsilon=0.1
         )
+    )
     pipeline = Pipeline(
         convert_cat_features_to_cat_dtype=True,
         estimator=predictor,
@@ -121,7 +131,14 @@ def test_nba_player_points(dataframe_type):
         target_column='points',
         features=pipeline.context_feature_names + pipeline.feature_names
     )
-    validation_df = cross_validator.generate_validation_df(df=df)
+    validation_df = cross_validator.generate_validation_df(df=df, add_trainining_predictions=True)
+    if isinstance(validation_df, pl.DataFrame):
+        validation_df = validation_df.to_pandas()
+    high_player_rating_rows = validation_df[validation_df[player_points_rating_generator.PLAYER_DIFF_PROJ_COL] > 0]
+    low_points_prediction = validation_df[validation_df[player_points_rating_generator.PLAYER_DIFF_PROJ_COL] < 0]
+    assert high_player_rating_rows['points_estimate'].mean() > low_points_prediction['points_estimate'].mean()
+    assert high_player_rating_rows['points'].mean() > low_points_prediction['points'].mean()
+    assert high_player_rating_rows['__ratio'].mean() > low_points_prediction['__ratio'].mean()
 
     mean_absolute_scorer = SklearnScorer(
         pred_column=pipeline.predictor_transformers[0].prediction_column_name,
@@ -132,7 +149,20 @@ def test_nba_player_points(dataframe_type):
     )
 
     mae_score = mean_absolute_scorer.score(validation_df)
-    print(f"MAE {mae_score}")
+    assert mae_score < 4.53
+
+    validation_df['mean_points_per_minute'] = validation_df['points_per_minute'].mean()
+    validation_df['dummy_prediction'] = validation_df['mean_points_per_minute'] * validation_df['minutes']
+    mean_dummy_absolute_scorer = SklearnScorer(
+        pred_column='dummy_prediction',
+        target=cross_validator.target_column,
+        scorer_function=mean_absolute_error,
+        validation_column="is_validation",
+        filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
+    )
+
+    mae_dummy_score = mean_dummy_absolute_scorer.score(validation_df)
+    assert mae_dummy_score > mae_score
 
     ordinal_scorer = OrdinalLossScorer(
         pred_column=cross_validator.prediction_column_name,
