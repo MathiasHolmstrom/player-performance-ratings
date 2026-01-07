@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import pytest
+from sklearn.base import BaseEstimator
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from spforge import Pipeline
@@ -453,3 +454,70 @@ def _assert_vector_pred_pandas(pred: pd.Series, n_classes: int):
     v = np.asarray(first, dtype=float)
     assert np.all(v >= 0.0) and np.all(v <= 1.0)
     assert np.isclose(v.sum(), 1.0, atol=1e-6)
+
+
+class DummyMeanRegressor(BaseEstimator):
+    def fit(self, X, y):
+        self._mean = float(np.asarray(y).mean())
+        return self
+
+    def predict(self, X):
+        return np.full(len(X), self._mean, dtype=float)
+
+
+def test_generate_validation_df_add_training_predictions_pd_returns_pd_and_marks_rows(
+    df_pd_cv_reg,
+):
+    cv = _make_cv(
+        estimator=DummyMeanRegressor(),
+        pred_col="pred",
+        n_splits=3,
+        features=["x"],
+    )
+
+    out = cv.generate_validation_df(df_pd_cv_reg, add_trainining_predictions=True)
+
+    # narwhalify should return the original type
+    assert isinstance(out, pd.DataFrame)
+
+    # has required columns
+    assert "pred" in out.columns
+    assert "is_validation" in out.columns
+
+    # should cover ALL rows exactly once when add_trainining_predictions=True
+    assert len(out) == len(df_pd_cv_reg)
+
+    # is_validation should be 0/1 and both should exist
+    vals = set(out["is_validation"].tolist())
+    assert vals == {0, 1}
+
+    # training preds should be the earliest chunk (before min_validation_date median)
+    # With 12 dates, median index = 6 => min_validation_date = 2024-01-07
+    # So validation dates are >= 2024-01-07
+    median_date = df_pd_cv_reg["date"].sort_values().unique()[len(df_pd_cv_reg["date"].unique()) // 2]
+    train_mask = out["date"] < median_date
+    val_mask = out["date"] >= median_date
+
+    assert (out.loc[train_mask, "is_validation"] == 0).all()
+    assert (out.loc[val_mask, "is_validation"] == 1).all()
+
+
+
+
+def test_generate_validation_df_add_training_predictions_pl_roundtrip_type(
+    df_pd_cv_reg,
+):
+    cv = _make_cv(
+        estimator=DummyMeanRegressor(),
+        pred_col="pred",
+        n_splits=3,
+        features=["x"],
+    )
+
+    out = cv.generate_validation_df(pl.DataFrame(df_pd_cv_reg), add_trainining_predictions=True)
+
+    assert isinstance(out, pl.DataFrame)
+    assert "pred" in out.columns
+    assert "is_validation" in out.columns
+    assert out.height == len(df_pd_cv_reg)
+    assert set(out["is_validation"].to_list()) == {0, 1}

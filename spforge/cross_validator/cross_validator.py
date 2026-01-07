@@ -103,7 +103,7 @@ class MatchKFoldCrossValidator:
         return out
 
     @nw.narwhalify
-    def generate_validation_df(self, df):
+    def generate_validation_df(self, df, add_trainining_predictions: bool = False):
         df = df.sort([self.date_column_name, self.match_id_column_name])
 
         df = df.with_columns(
@@ -125,6 +125,7 @@ class MatchKFoldCrossValidator:
 
         results = []
         curr_cut = min_m
+        added_train_preds = False
 
         for i in range(self.n_splits):
             train_df = df.filter(nw.col("__match_num") < curr_cut)
@@ -143,11 +144,14 @@ class MatchKFoldCrossValidator:
             est = copy.deepcopy(self.estimator)
             self._fit_estimator(est, train_df)
 
-            pred_df = self._predict_smart(est, val_df)
+            if add_trainining_predictions and not added_train_preds:
+                train_pred_df = self._predict_smart(est, train_df).with_columns(
+                    nw.lit(0).alias("is_validation")
+                )
+                results.append(train_pred_df)
+                added_train_preds = True
 
-            if "is_validation" not in pred_df.columns:
-                pred_df = pred_df.with_columns(nw.lit(True).alias("is_validation"))
-
+            pred_df = self._predict_smart(est, val_df).with_columns(nw.lit(1).alias("is_validation"))
             results.append(pred_df)
 
             curr_cut += step
