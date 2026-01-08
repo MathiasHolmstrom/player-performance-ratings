@@ -96,7 +96,6 @@ class TeamRatingGenerator(RatingGenerator):
             self.start_team_rating if rating_center is None else rating_center
         )
 
-        # Two rating sets per team
         self._team_off_ratings: dict[str, RatingState] = {}
         self._team_def_ratings: dict[str, RatingState] = {}
 

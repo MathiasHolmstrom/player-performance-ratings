@@ -1,5 +1,6 @@
 from datetime import date, datetime
 
+import numpy as np
 import pandas as pd
 import polars as pl
 import pytest
@@ -17,7 +18,7 @@ from spforge.scorer import (
     SklearnScorer,
     apply_filters,
 )
-from spforge.scorer._score import PWMSE, ProbabilisticMeanBias
+from spforge.scorer._score import PWMSE, ProbabilisticMeanBias, ThresholdEventScorer
 
 
 # Helper function to create dataframe based on type
@@ -867,3 +868,114 @@ def test_scorer_combined_filters_and_validation(df_type):
     # Should use rows where valid==1 AND filter_col==1 (first 2 rows)
     expected = (0.5 - 0 + 0.6 - 1) / 2
     assert abs(score - expected) < 1e-10
+
+
+def _p_event_from_dist(dist, thr, *, labels=None, comparator=">="):
+    p = np.asarray(dist, dtype=float)
+    labs = np.asarray(labels, dtype=int) if labels is not None else np.arange(len(p), dtype=int)
+
+    if comparator == ">=":
+        return float(p[labs >= thr].sum())
+    if comparator == ">":
+        return float(p[labs > thr].sum())
+    if comparator == "<=":
+        return float(p[labs <= thr].sum())
+    if comparator == "<":
+        return float(p[labs < thr].sum())
+    raise ValueError(comparator)
+
+
+def _thr_int(x, rounding):
+    if rounding == "ceil":
+        return int(np.ceil(float(x)))
+    if rounding == "floor":
+        return int(np.floor(float(x)))
+    if rounding == "round":
+        return int(np.round(float(x)))
+    raise ValueError(rounding)
+
+
+def _y_event(outcome, thr, comparator):
+    if comparator == ">=":
+        return float(outcome >= thr)
+    if comparator == ">":
+        return float(outcome > thr)
+    if comparator == "<=":
+        return float(outcome <= thr)
+    if comparator == "<":
+        return float(outcome < thr)
+    raise ValueError(comparator)
+
+def _clip01(p, eps=1e-15):
+    p = np.asarray(p, dtype=float)
+    return np.clip(p, eps, 1.0 - eps)
+
+def test_threshold_event_score_logloss_basic_ge_ceil():
+    df = pd.DataFrame(
+        {
+            "dist": [
+                [0.10, 0.20, 0.30, 0.40],
+                [0.60, 0.10, 0.10, 0.20],
+                [0.00, 0.50, 0.25, 0.25],
+            ],
+            "ydstogo": [2.0, 2.0, 3.0],
+            "yards_gained": [2.0, 1.0, 4.0],
+        }
+    )
+
+    scorer = ThresholdEventScorer(
+        dist_column="dist",
+        threshold_column="ydstogo",
+        outcome_column="yards_gained",
+        comparator=">=",
+        threshold_rounding="ceil",
+    )
+
+    got = scorer.score(df)
+
+    thr = np.array([_thr_int(x, "ceil") for x in df["ydstogo"]], dtype=int)
+    y = np.array(
+        [_y_event(o, t, ">=") for o, t in zip(df["yards_gained"].to_numpy(), thr)],
+        dtype=float,
+    )
+    p = np.array(
+        [_p_event_from_dist(d, t, labels=None, comparator=">=") for d, t in zip(df["dist"], thr)],
+        dtype=float,
+    )
+
+    expected = float(log_loss(y, _clip01(p), labels=[0.0, 1.0]))
+    assert got == pytest.approx(expected, rel=0, abs=1e-12)
+
+
+
+def test_threshold_event_score_logloss_less_than_comparator():
+    df = pd.DataFrame(
+        {
+            "dist": [
+                [0.25, 0.25, 0.25, 0.25],
+                [0.10, 0.10, 0.10, 0.70],
+            ],
+            "thr": [2.0, 3.0],
+            "out": [1.0, 3.0],
+        }
+    )
+
+    scorer = ThresholdEventScorer(
+        dist_column="dist",
+        threshold_column="thr",
+        outcome_column="out",
+        comparator=Operator.LESS_THAN,
+        threshold_rounding="ceil",
+    )
+
+    got = scorer.score(df)
+
+    thr = np.array([_thr_int(x, "ceil") for x in df["thr"]], dtype=int)
+    y = np.array([_y_event(o, t, "<") for o, t in zip(df["out"].to_numpy(), thr)], dtype=float)
+    p = np.array(
+        [_p_event_from_dist(d, t, labels=None, comparator="<") for d, t in zip(df["dist"], thr)],
+        dtype=float,
+    )
+
+    expected = float(log_loss(y, _clip01(p), labels=[0.0, 1.0]))
+    assert got == pytest.approx(expected, rel=0, abs=1e-12)

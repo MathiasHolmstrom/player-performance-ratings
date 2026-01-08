@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 from narwhals.typing import IntoFrameT
+from sklearn.metrics import log_loss
 
 _logger = logging.getLogger(__name__)
 
@@ -242,7 +243,6 @@ class PWMSE(BaseScorer):
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
         df = apply_filters(df, self.filters)
         before = len(df)
-        # Filter out null targets - ensure df is properly wrapped as Narwhals DataFrame
         if not hasattr(df, "to_native"):
             df = nw.from_native(df)
         df = df.filter(~nw.col(self.target).is_null())
@@ -254,19 +254,12 @@ class PWMSE(BaseScorer):
             after,
         )
 
-        # Apply aggregation_level if set
-        # For PWMSE, predictions are lists/arrays, which can't be aggregated with mean
-        # Skip aggregation_level for PWMSE with list predictions (or implement custom aggregation)
-        # For now, we'll skip aggregation if pred_column contains lists
         if self.aggregation_level:
-            # Check if pred_column contains lists
             first_pred = df[self.pred_column].to_list()[0] if len(df) > 0 else None
             if isinstance(first_pred, list):
-                # Can't aggregate lists easily - skip aggregation_level for PWMSE
-                # In practice, you'd want custom list aggregation logic here
-                pass  # Skip aggregation for list predictions
+
+                pass
             else:
-                # Numeric predictions can be aggregated
                 df = df.group_by(self.aggregation_level).agg(
                     [
                         nw.col(self.pred_column).mean().alias(self.pred_column),
@@ -274,21 +267,18 @@ class PWMSE(BaseScorer):
                     ]
                 )
 
-        # If granularity is set, calculate separate scores per group
         if self.granularity:
             results = {}
             granularity_values = df.select(self.granularity).unique().to_dict(as_series=False)
             granularity_tuples = list(zip(*[granularity_values[col] for col in self.granularity]))
 
             for gran_tuple in granularity_tuples:
-                # Filter to this granularity combination
                 mask = None
                 for i, col in enumerate(self.granularity):
                     col_mask = nw.col(col) == gran_tuple[i]
                     mask = col_mask if mask is None else (mask & col_mask)
                 gran_df = df.filter(mask)
 
-                # Calculate score for this group
                 labels = np.asarray(self.labels, dtype=np.float64)
                 targets = gran_df[self.target].to_numpy().astype(np.float64)
                 preds = np.asarray(gran_df[self.pred_column].to_list(), dtype=np.float64)
@@ -297,7 +287,6 @@ class PWMSE(BaseScorer):
 
             return results
 
-        # Single score calculation
         labels = np.asarray(self.labels, dtype=np.float64)
         targets = df[self.target].to_numpy().astype(np.float64)
         preds = np.asarray(df[self.pred_column].to_list(), dtype=np.float64)
@@ -709,14 +698,12 @@ class OrdinalLossScorer(BaseScorer):
         if not hasattr(df, "to_native"):
             df = nw.from_native(df)
 
-        # Convert to Polars DataFrame for _calculate_score_for_group
         df_native = df.to_native()
         if isinstance(df_native, pd.DataFrame):
             df_pl = pl.DataFrame(df_native)
         else:
             df_pl = df_native
 
-        # Apply aggregation_level if set
         if self.aggregation_level:
             df_pl = df_pl.group_by(self.aggregation_level).agg(
                 [
@@ -725,24 +712,255 @@ class OrdinalLossScorer(BaseScorer):
                 ]
             )
 
-        # If granularity is set, calculate separate scores per group
         if self.granularity:
             results = {}
             granularity_values = df_pl.select(self.granularity).unique().to_dict(as_series=False)
             granularity_tuples = list(zip(*[granularity_values[col] for col in self.granularity]))
 
             for gran_tuple in granularity_tuples:
-                # Filter to this granularity combination
                 mask = None
                 for i, col in enumerate(self.granularity):
                     col_mask = pl.col(col) == gran_tuple[i]
                     mask = col_mask if mask is None else (mask & col_mask)
                 gran_df = df_pl.filter(mask)
 
-                # Calculate score for this group
                 results[gran_tuple] = self._calculate_score_for_group(gran_df)
 
             return results
 
-        # Single score calculation
         return self._calculate_score_for_group(df_pl)
+
+class ThresholdEventScorer(BaseScorer):
+    """
+    Scores threshold events from a per-row discrete distribution.
+
+    Required df columns:
+      - dist_column: list-like probability distribution per row
+      - threshold_column: per-row threshold
+      - outcome_column: realized numeric outcome
+
+    Event is derived as: outcome comparator rounded(threshold)
+    Event probability is derived by summing distribution mass in the event region.
+
+    Delegates final scoring to `binary_scorer` (default: SklearnScorer(log_loss)).
+    """
+
+    _EVENT_COL = "__event__"
+    _P_EVENT_COL = "__p_event__"
+
+    def __init__(
+            self,
+            dist_column: str,
+            *,
+            threshold_column: str,
+            outcome_column: str,
+            binary_scorer: BaseScorer | None = None,
+            labels: list[int] | None = None,
+            comparator: Operator = Operator.GREATER_THAN_OR_EQUALS,
+            threshold_rounding: str = "ceil",
+            validation_column: str | None = None,
+            aggregation_level: list[str] | None = None,
+            granularity: list[str] | None = None,
+            filters: list["Filter"] | None = None,
+    ):
+        self.pred_column_name = dist_column
+        super().__init__(
+            target=self._EVENT_COL,
+            pred_column=dist_column,
+            aggregation_level=aggregation_level,
+            granularity=granularity,
+            filters=filters,
+            validation_column=validation_column,
+        )
+
+        self.dist_column = dist_column
+        self.threshold_column = threshold_column
+        self.outcome_column = outcome_column
+
+        self.labels = np.asarray(labels, dtype=np.int64) if labels is not None else None
+        self.comparator = comparator
+        self.threshold_rounding = threshold_rounding
+
+        self.binary_scorer = binary_scorer or SklearnScorer(
+            scorer_function=log_loss,
+            target=self._EVENT_COL,
+            pred_column=self._P_EVENT_COL,
+            aggregation_level=aggregation_level,
+            granularity=granularity,
+            filters=None,
+            validation_column=validation_column,
+        )
+
+    def _round_thresholds(self, thresholds: np.ndarray) -> np.ndarray:
+        t = thresholds.astype(np.float64)
+        if self.threshold_rounding == "ceil":
+            return np.ceil(t).astype(np.int64)
+        if self.threshold_rounding == "floor":
+            return np.floor(t).astype(np.int64)
+        if self.threshold_rounding == "round":
+            return np.rint(t).astype(np.int64)
+        raise ValueError(self.threshold_rounding)
+
+    def _event_label(self, outcomes: np.ndarray, thr: np.ndarray) -> np.ndarray:
+        o = outcomes.astype(np.float64)
+
+        if self.comparator == Operator.GREATER_THAN_OR_EQUALS:
+            return (o >= thr).astype(np.float64)
+        if self.comparator == Operator.GREATER_THAN:
+            return (o > thr).astype(np.float64)
+        if self.comparator == Operator.LESS_THAN_OR_EQUALS:
+            return (o <= thr).astype(np.float64)
+        if self.comparator == Operator.LESS_THAN:
+            return (o < thr).astype(np.float64)
+        if self.comparator == Operator.EQUALS:
+            return (o == thr).astype(np.float64)
+        if self.comparator == Operator.NOT_EQUALS:
+            return (o != thr).astype(np.float64)
+
+        raise ValueError(f"Unsupported operator for threshold event: {self.comparator}")
+
+    def _p_event_vectorized(self, probs: np.ndarray, thr: np.ndarray) -> np.ndarray:
+        n, k = probs.shape
+        idx = np.arange(n, dtype=np.int64)
+
+        if self.labels is None:
+            cut_left = thr.astype(np.int64)
+            cut_right = (thr + 1).astype(np.int64)
+        else:
+            labs = self.labels
+            if labs.shape[0] != k:
+                raise ValueError("labels length must match distribution length")
+            cut_left = np.searchsorted(labs, thr, side="left").astype(np.int64)
+            cut_right = np.searchsorted(labs, thr, side="right").astype(np.int64)
+
+        if self.comparator in (
+                Operator.GREATER_THAN_OR_EQUALS,
+                Operator.GREATER_THAN,
+        ):
+            tail = np.cumsum(probs[:, ::-1], axis=1)[:, ::-1]
+            cut = cut_left if self.comparator == Operator.GREATER_THAN_OR_EQUALS else cut_right
+
+            invalid = cut >= k
+            cut_safe = np.clip(cut, 0, k - 1)
+
+            out = tail[idx, cut_safe]
+            out[invalid] = 0.0
+            return out.astype(np.float64)
+
+        if self.comparator in (
+                Operator.LESS_THAN_OR_EQUALS,
+                Operator.LESS_THAN,
+        ):
+            head = np.cumsum(probs, axis=1)
+            cut = cut_right - 1 if self.comparator == Operator.LESS_THAN_OR_EQUALS else cut_left - 1
+
+            invalid = cut < 0
+            cut_safe = np.clip(cut, 0, k - 1)
+
+            out = head[idx, cut_safe]
+            out[invalid] = 0.0
+            return out.astype(np.float64)
+
+        if self.comparator == Operator.EQUALS:
+            head = np.cumsum(probs, axis=1)
+            left = cut_left - 1
+            right = cut_right - 1
+
+            left_safe = np.clip(left, 0, k - 1)
+            right_safe = np.clip(right, 0, k - 1)
+
+            p_left = np.where(left >= 0, head[idx, left_safe], 0.0)
+            p_right = np.where(right >= 0, head[idx, right_safe], 0.0)
+            return (p_right - p_left).astype(np.float64)
+
+        if self.comparator == Operator.NOT_EQUALS:
+            p_eq = self._p_event_vectorized(probs, thr)
+            return (1.0 - p_eq).astype(np.float64)
+
+        raise ValueError(f"Unsupported operator for distribution event: {self.comparator}")
+
+    def _p_event_ragged(self, probs_list: list, thr: np.ndarray) -> np.ndarray:
+        n = len(probs_list)
+        out = np.empty(n, dtype=np.float64)
+
+        if self.labels is not None:
+            labs = self.labels
+            for i in range(n):
+                p = np.asarray(probs_list[i], dtype=np.float64)
+                if p.shape[0] != labs.shape[0]:
+                    raise ValueError(
+                        "ragged distributions not supported when labels are provided (length mismatch)")
+                t = int(thr[i])
+                if self.comparator == ">=":
+                    cut = int(np.searchsorted(labs, t, side="left"))
+                    out[i] = float(p[cut:].sum())
+                elif self.comparator == ">":
+                    cut = int(np.searchsorted(labs, t, side="right"))
+                    out[i] = float(p[cut:].sum())
+                elif self.comparator == "<=":
+                    cut = int(np.searchsorted(labs, t, side="right"))
+                    out[i] = float(p[:cut].sum())
+                elif self.comparator == "<":
+                    cut = int(np.searchsorted(labs, t, side="left"))
+                    out[i] = float(p[:cut].sum())
+                else:
+                    raise ValueError(self.comparator)
+            return out
+
+        for i in range(n):
+            p = np.asarray(probs_list[i], dtype=np.float64)
+            k = p.shape[0]
+            t = int(thr[i])
+
+            if self.comparator == ">=":
+                t = max(0, min(t, k))
+                out[i] = float(p[t:].sum())
+            elif self.comparator == ">":
+                t = max(0, min(t + 1, k))
+                out[i] = float(p[t:].sum())
+            elif self.comparator == "<=":
+                t = max(-1, min(t, k - 1))
+                out[i] = float(p[: t + 1].sum()) if t >= 0 else 0.0
+            elif self.comparator == "<":
+                t = max(0, min(t, k))
+                out[i] = float(p[:t].sum())
+            else:
+                raise ValueError(self.comparator)
+
+        return out
+
+    @narwhals.narwhalify
+    def score(self, df: "IntoFrameT") -> float | dict[tuple, float]:
+        df = nw.from_native(apply_filters(df, self.filters))
+
+        required = [self.dist_column, self.threshold_column, self.outcome_column]
+        mask = None
+        for c in required:
+            m = ~nw.col(c).is_null()
+            mask = m if mask is None else (mask & m)
+        df = df.filter(mask)
+
+        probs_list = df[self.dist_column].to_list()
+        thresholds = np.asarray(df[self.threshold_column].to_numpy(), dtype=np.float64)
+        outcomes = np.asarray(df[self.outcome_column].to_numpy(), dtype=np.float64)
+
+        thr = self._round_thresholds(thresholds)
+        y_event = self._event_label(outcomes, thr)
+
+        probs_arr = np.asarray(probs_list, dtype=np.float64)
+        if probs_arr.ndim == 2:
+            p_event = self._p_event_vectorized(probs_arr, thr)
+        else:
+            p_event = self._p_event_ragged(probs_list, thr)
+
+        backend = nw.get_native_namespace(df)
+        df = df.with_columns(
+            [
+                nw.new_series(name=self._EVENT_COL, values=y_event.tolist(), backend=backend),
+                nw.new_series(name=self._P_EVENT_COL, values=p_event.tolist(), backend=backend),
+            ]
+        )
+
+        return self.binary_scorer.score(df)
+
+

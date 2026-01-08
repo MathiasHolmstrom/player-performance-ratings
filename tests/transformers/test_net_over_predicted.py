@@ -11,7 +11,7 @@ from spforge.transformers import NetOverPredictedTransformer
 
 @pytest.mark.parametrize("backend", ["pandas", "polars", "lazy_polars"])
 def test_net_over_predicted_pandas_polars_and_lazy(backend: str):
-    mock_estimator = mock.Mock()
+    mock_estimator = mock.Mock(spec=["fit", "predict", "_estimator_type"])
     mock_estimator._estimator_type = "regressor"
     mock_estimator.fit.return_value = None
     mock_estimator.predict.return_value = np.array([0.4, 0.8, 2.0, 3.0])
