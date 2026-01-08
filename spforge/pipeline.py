@@ -10,7 +10,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline as SkPipeline
-from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler, FunctionTransformer
 
 from spforge.estimator.sklearn_estimator import GroupByEstimator
 from spforge.scorer import Filter, apply_filters
@@ -78,33 +78,6 @@ class _OnlyOutputColumns(BaseEstimator, TransformerMixin):
             return np.asarray(input_features if input_features is not None else [], dtype=object)
         return np.asarray(list(self.output_cols), dtype=object)
 
-
-class PreprocessorToDataFrame(BaseEstimator, TransformerMixin):
-    def __init__(self, preprocessor: Any):
-        self.preprocessor = preprocessor
-        self._feature_names_out: np.ndarray | None = None
-
-    @nw.narwhalify
-    def fit(self, X: IntoFrameT, y: Any = None):
-        y = y.to_numpy() if not isinstance(y, np.ndarray) else y
-        self.preprocessor.fit(X.to_pandas(), y)
-        if hasattr(self.preprocessor, "get_feature_names_out"):
-            self._feature_names_out = self.preprocessor.get_feature_names_out()
-        else:
-            self._feature_names_out = None
-        return self
-
-    @nw.narwhalify
-    def transform(self, X: IntoFrameT) -> IntoFrameT:
-        out = self.preprocessor.transform(X.to_pandas())
-        return nw.from_native(out)
-
-    def get_feature_names_out(self, input_features: Any = None):
-        if hasattr(self.preprocessor, "get_feature_names_out"):
-            return self.preprocessor.get_feature_names_out(input_features)
-        if self._feature_names_out is None:
-            raise AttributeError("No feature names available.")
-        return self._feature_names_out
 
 
 CategoricalHandling = Literal["auto", "onehot", "ordinal", "native"]
@@ -175,6 +148,8 @@ def lgbm_in_root(root) -> bool:
             return True
     return False
 
+def _to_pandas(X):
+    return X.to_pandas() if hasattr(X, "to_pandas") else X
 
 class Pipeline(BaseEstimator):
     def __init__(
@@ -197,7 +172,7 @@ class Pipeline(BaseEstimator):
             remainder: str = "drop",
     ):
         self.feature_names = feature_names
-        self.granularity = granularity
+        self.granularity = granularity or []
         self.predictor_transformers = predictor_transformers
         self.estimator = estimator
         self.filters = filters or []
@@ -214,6 +189,10 @@ class Pipeline(BaseEstimator):
         self.numeric_features = numeric_features
         self.remainder = remainder
         self._cat_feats = []
+        for c in self.granularity:
+            if c not in self.context_feature_names and c not in self.feature_names:
+                self.context_feature_names.append(c)
+
 
         assert len([c for c in self.context_feature_names if c in self.feature_names]) == 0
         self.sklearn_pipeline: SkPipeline | None = None
@@ -287,15 +266,17 @@ class Pipeline(BaseEstimator):
             return 'onehot'
         return "native" if self._contains_lightgbm_anywhere() else "ordinal"
 
+
+
     def _build_sklearn_pipeline(self, df: IntoFrameT) -> SkPipeline:
         num_feats, cat_feats = self._infer_feature_types(df)
         self._cat_feats = cat_feats
-        gran = [c for c in (self.granularity or []) if c in self.feature_names]
-        do_groupby = len(gran) > 0
+
+        do_groupby = len(self.granularity) > 0
 
         if do_groupby:
-            num_feats = [c for c in num_feats if c not in gran]
-            cat_feats = [c for c in cat_feats if c not in gran]
+            num_feats = [c for c in num_feats if c not in self.granularity]
+            cat_feats = [c for c in cat_feats if c not in self.granularity]
 
         self._resolved_categorical_handling = self._resolve_categorical_handling()
 
@@ -328,12 +309,12 @@ class Pipeline(BaseEstimator):
                         ),
                     )
                 )
-            elif self._resolved_categorical_handling == 'native':
-                cat_steps.append((
-                    'cat_dtype',
-                    ConvertDataFrameToCategoricalTransformer(
-                    ),
-                )
+            elif self._resolved_categorical_handling == "native":
+                cat_steps.append(
+                    (
+                        "cat_dtype",
+                        ConvertDataFrameToCategoricalTransformer(),
+                    )
                 )
 
         transformers = []
@@ -346,27 +327,32 @@ class Pipeline(BaseEstimator):
             cat_pipe = SkPipeline(steps=cat_steps) if cat_steps else "passthrough"
             transformers.append(("cat", cat_pipe, cat_feats))
 
-        if self.context_feature_names or self.context_predictor_transformer_feature_names:
-            transformers.append(("ctx", "passthrough", list(set(self.context_feature_names + self.context_predictor_transformer_feature_names))))
+        ctx_cols = _dedupe_preserve_order(
+            (self.context_feature_names or []) + (self.context_predictor_transformer_feature_names or [])
+        )
 
         if do_groupby:
-            transformers.append(("key", "passthrough", gran))
+            key_cols = list(self.granularity or [])
+            key_set = set(key_cols)
+            ctx_cols = [c for c in ctx_cols if c not in key_set]  # exclude overlap
+            transformers.append(("key", "passthrough", key_cols))
 
-        pre_raw = ColumnTransformer(
+        if ctx_cols:
+            transformers.append(("ctx", "passthrough", ctx_cols))
+
+        pre = ColumnTransformer(
             transformers=transformers,
             remainder=self.remainder,
             verbose_feature_names_out=False,
         )
-        pre_raw.set_output(transform="pandas")
-        pre = PreprocessorToDataFrame(pre_raw)
+        pre.set_output(transform="pandas")
 
-        est = (
-            GroupByEstimator(self.estimator, granularity=[f"{c}" for c in gran])
-            if do_groupby
-            else self.estimator
-        )
+        est = GroupByEstimator(self.estimator, granularity=[f"{c}" for c in self.granularity]) if do_groupby else self.estimator
 
-        steps: list[tuple[str, Any]] = [("pre", pre)]
+        steps: list[tuple[str, Any]] = [
+            ("to_pd", FunctionTransformer(_to_pandas, validate=False)),
+            ("pre", pre),
+        ]
 
         prev_transformer_feats_out = []
 
@@ -384,11 +370,10 @@ class Pipeline(BaseEstimator):
         context_feature_names = list(set(self.context_feature_names + context_pred_feats))
 
         for idx, transformer in enumerate(self.predictor_transformers or []):
-            input_cols = _dedupe_preserve_order(
-                self.feature_names + context_feature_names + prev_transformer_feats_out
-            )
-            feats_out = _safe_feature_names_out(transformer, input_cols)
-
+            input_cols = _dedupe_preserve_order(self.feature_names + context_feature_names + prev_transformer_feats_out)
+            feats_out = list(_safe_feature_names_out(transformer, input_cols))
+            if len(feats_out) != len(set(feats_out)):
+                raise ValueError(f"Duplicate names in feats_out for transformer {transformer}: {feats_out}")
             def _keep_cols(X, drop=set(feats_out)):
                 return [c for c in X.columns if c not in drop]
 
@@ -410,13 +395,8 @@ class Pipeline(BaseEstimator):
         def _final_keep_cols(X, drop=drop_ctx_set):
             return [c for c in X.columns if c not in drop]
 
-        final_ct = ColumnTransformer(
-            transformers=[("keep", "passthrough", _final_keep_cols)],
-            remainder="drop",
-            verbose_feature_names_out=False,
-        )
-        final_ct.set_output(transform="pandas")
-        steps.append(("final", final_ct))
+        final = FunctionTransformer(lambda X: X[_final_keep_cols(X)], validate=False)
+        steps.append(("final", final))
 
         steps.append(("est", est))
         return SkPipeline(steps=steps)
@@ -437,7 +417,7 @@ class Pipeline(BaseEstimator):
     @nw.narwhalify
     def fit(self, X: IntoFrameT, y: Any, sample_weight: np.ndarray | None = None):
         self._target_name = getattr(y, "name", "target")
-        self._fitted_features = list(set(self.feature_names + self.context_feature_names + self.context_predictor_transformer_feature_names))
+        self._fitted_features = list(set(self.feature_names + self.context_feature_names + self.context_predictor_transformer_feature_names + self.granularity))
 
         y_values = y.to_list() if hasattr(y, "to_list") else y
         df = X.with_columns(

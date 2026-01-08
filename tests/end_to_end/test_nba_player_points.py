@@ -91,6 +91,7 @@ def test_nba_player_points(dataframe_type):
     df = features_generator.fit_transform(df)
 
     game_winner_pipeline = Pipeline(
+        granularity=['game_id', 'team_id'],
         estimator=LogisticRegression(),
         feature_names=player_plus_minus_rating_generator.features_out +['location']
     )
@@ -100,7 +101,7 @@ def test_nba_player_points(dataframe_type):
         estimator=game_winner_pipeline,
         prediction_column_name='game_winner_probability',
         target_column='won',
-        features= game_winner_pipeline.feature_names
+        features= game_winner_pipeline.feature_names + game_winner_pipeline.context_feature_names
     )
     pre_row_count = len(df)
     df = cross_validator_game_winnner.generate_validation_df(df=df, add_trainining_predictions=True)

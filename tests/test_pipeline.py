@@ -330,7 +330,7 @@ def test_granularity_groups_rows_before_estimator_fit_and_predict(df_reg):
 
     preds = model.predict(X)
     assert isinstance(preds, np.ndarray)
-    assert preds.shape == (n_groups,)
+    assert preds.shape[0] == len(X)
 
 
 def test_pipeline_uses_feature_names_subset_even_if_extra_columns_present(df_reg):

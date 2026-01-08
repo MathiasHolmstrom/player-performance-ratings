@@ -51,8 +51,6 @@ class MatchKFoldCrossValidator:
         features = self._get_features(df)
         X = df.select(features)
 
-        values = None
-
         if hasattr(est, "predict_proba"):
             try:
                 proba = est.predict_proba(X)
