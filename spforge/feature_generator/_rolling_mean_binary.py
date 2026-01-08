@@ -115,7 +115,7 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
     @future_lag_transformations_wrapper
     @future_validator
     @transformation_validator
-    def transform(self, df: IntoFrameT) -> IntoFrameT:
+    def future_transform(self, df: IntoFrameT) -> IntoFrameT:
 
         if self.binary_column in df.columns:
             if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:

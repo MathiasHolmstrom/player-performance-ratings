@@ -395,7 +395,7 @@ def test_lag_transform_historical_and_transform_future(df, column_names):
     )
 
     _ = lag_transformation.fit_transform(historical_df, column_names=column_names)
-    future_transformed_df = lag_transformation.transform(future_df)
+    future_transformed_df = lag_transformation.future_transform(future_df)
 
     if isinstance(future_df, pd.DataFrame):
         expected_df = future_df_copy.assign(**{lag_transformation.prefix + "_points1": [3, 2, 3]})
@@ -459,7 +459,7 @@ def test_lag_transformation_transform_2_lags(df, column_names):
     )
 
     _ = lag_transformation.fit_transform(historical_df, column_names=column_names)
-    future_transformed_df = lag_transformation.transform(future_df)
+    future_transformed_df = lag_transformation.future_transform(future_df)
 
     if isinstance(future_df, pd.DataFrame):
         expected_df = future_df_copy.assign(**{lag_transformation.prefix + "_points1": [3, 2, 3]})
@@ -557,7 +557,7 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
     except:
         expected_future_df = future_df.clone()
 
-    future_df = lag_transformation.transform(future_df)
+    future_df = lag_transformation.future_transform(future_df)
 
     if isinstance(future_df, pd.DataFrame):
         expected_future_df = expected_future_df.assign(

@@ -1,15 +1,11 @@
 from datetime import date, datetime
-from unittest import mock
 
-import numpy as np
 import pandas as pd
 import polars as pl
 import pytest
 from sklearn.metrics import (
     log_loss,
-    mean_absolute_error,
-    mean_squared_error,
-    root_mean_squared_error,
+    mean_absolute_error, root_mean_squared_error,
 )
 
 from spforge.scorer import (

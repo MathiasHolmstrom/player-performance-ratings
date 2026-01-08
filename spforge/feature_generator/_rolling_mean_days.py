@@ -111,7 +111,7 @@ class RollingMeanDaysTransformer(LagGenerator):
     @future_validator
     @future_lag_transformations_wrapper
     @transformation_validator
-    def transform(self, df: IntoFrameT) -> IntoFrameT:
+    def future_transform(self, df: IntoFrameT) -> IntoFrameT:
         ori_cols = df.columns
         if self.column_names:
             if df[self.date_column].dtype not in (nw.Date, nw.Datetime):

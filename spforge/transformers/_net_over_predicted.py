@@ -13,7 +13,6 @@ class NetOverPredictedTransformer(TransformerMixin):
         features: list[str],
         target_name: str,
         net_over_predicted_col: str,
-        passthrough: bool = False,
         pred_column: str | None = None,
     ):
         self.features_out = [net_over_predicted_col, pred_column] if pred_column else [net_over_predicted_col]
@@ -22,8 +21,17 @@ class NetOverPredictedTransformer(TransformerMixin):
         self.estimator = estimator
         self.pred_column = pred_column or '__pred'
         self.net_over_predicted_col = net_over_predicted_col
-        self.passthrough = passthrough
-        assert is_regressor(estimator)
+
+        def get_deepest_estimator(estimator):
+            """
+            Walk down `.estimator` attributes until the deepest estimator is found.
+            """
+            while hasattr(estimator, "estimator"):
+                estimator = estimator.estimator
+            return estimator
+
+        deepest = get_deepest_estimator(estimator)
+        assert is_regressor(deepest)
 
 
     @nw.narwhalify

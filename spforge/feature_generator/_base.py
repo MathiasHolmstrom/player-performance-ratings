@@ -2,9 +2,10 @@ import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
 
 from spforge import ColumnNames
+from spforge.base_feature_generator import FeatureGenerator
 
 
-class LagGenerator:
+class LagGenerator(FeatureGenerator):
 
     def __init__(
         self,
@@ -31,6 +32,8 @@ class LagGenerator:
                 self._entity_features_out.append(f"{prefix}_{feature_name}{lag}")
                 if add_opponent:
                     self._features_out.append(f"{prefix}_{feature_name}{lag}_opponent")
+
+        super().__init__(features_out=self._features_out)
 
         self.column_names = column_names
         self.iterations = iterations
@@ -62,9 +65,6 @@ class LagGenerator:
             return self.features_out
         return []
 
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out
 
     def _maybe_group(self, df: IntoFrameT, additional_cols: list[str] | None = None) -> IntoFrameT:
         if (

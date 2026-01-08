@@ -279,8 +279,8 @@ class NegativeBinomialEstimator(BaseEstimator):
                     self._rolling_var.fit_transform(historical_gran_group)
                 )
             if len(future_gran_group) > 0:
-                future_gran_group = nw.from_native(self._rolling_mean.transform(future_gran_group))
-                future_gran_group = nw.from_native(self._rolling_var.transform(future_gran_group))
+                future_gran_group = nw.from_native(self._rolling_mean.future_transform(future_gran_group))
+                future_gran_group = nw.from_native(self._rolling_var.future_transform(future_gran_group))
 
             if len(historical_gran_group) > 0 and len(future_gran_group) > 0:
                 gran_grp = nw.concat([historical_gran_group, future_gran_group]).unique(
@@ -582,7 +582,7 @@ class NormalDistributionPredictor(BaseEstimator):
         return np.argmax(probabilities, axis=1) + self.min_value
 
 
-class StudentTDistributionPredictor(BaseEstimator):
+class StudentTDistributionEstimator(BaseEstimator):
     """
     Discretized Student-t over integer outcomes [min_value, max_value].
 
@@ -605,7 +605,6 @@ class StudentTDistributionPredictor(BaseEstimator):
         target: str,
         df: float = 5.0,
         sigma: float | None = None,
-        pred_column: str | None = None,
         min_sigma: float = 1.0,
         min_train_rows: int = 50,
         sigma_fallback_if_no_data: float = 10.0,
@@ -659,7 +658,7 @@ class StudentTDistributionPredictor(BaseEstimator):
         return max(self.min_sigma, float(sigma_hat))
 
     @nw.narwhalify
-    def fit(self, X: IntoFrameT, y, sample_weight: np.ndarray | None = None):
+    def fit(self, X: IntoFrameT, y: list[int] | np.ndarray, sample_weight: np.ndarray | None = None):
         """
         Fit the Student-t distribution predictor.
 
@@ -673,12 +672,12 @@ class StudentTDistributionPredictor(BaseEstimator):
             )
         if self.point_estimate_pred_column not in X.columns:
             raise ValueError(
-                f"point_estimate_pred_column '{self.point_estimate_pred_column}' not found in X.columns: {X.columns.tolist()}"
+                f"point_estimate_pred_column '{self.point_estimate_pred_column}' not found in X.columns: {X.columns}"
             )
 
         df = nw.from_native(pl.DataFrame(X))
         df = df.with_columns(
-            nw.new_series(name=self.target, values=y.values, backend=nw.get_native_namespace(df))
+            nw.new_series(name=self.target, values=y, backend=nw.get_native_namespace(df))
         )
 
         self._train_internal(df)
@@ -757,12 +756,7 @@ class StudentTDistributionPredictor(BaseEstimator):
 
     @nw.narwhalify
     def predict_proba(self, X: IntoFrameT) -> np.ndarray:
-        """
-        Predict probability distributions.
 
-        :param X: DataFrame (any DataFrame type - pandas, polars, or Narwhals). Cannot be numpy array.
-        :return: Array of probability distributions (n_samples, n_classes)
-        """
         if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
             raise TypeError(
                 "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
@@ -781,7 +775,6 @@ class StudentTDistributionPredictor(BaseEstimator):
         upper_bounds = classes + 0.5
         df_param = float(self.df)
 
-        # Extract values from Narwhals Series
         mu_values = X[self.point_estimate_pred_column].to_list()
         probabilities = []
         for mu_val in mu_values:
@@ -798,96 +791,10 @@ class StudentTDistributionPredictor(BaseEstimator):
 
     @nw.narwhalify
     def predict(self, X: IntoFrameT) -> np.ndarray:
-        """
-        Predict point estimates (mode of distribution).
 
-        :param X: DataFrame (any DataFrame type - pandas, polars, or Narwhals). Cannot be numpy array.
-        :return: Array of predicted values
-        """
         if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
             raise TypeError(
                 "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
             )
         probabilities = self.predict_proba(X)
         return np.argmax(probabilities, axis=1) + self.min_value
-
-
-class DistributionManagerPredictor(BaseEstimator):
-    """
-    Wrapper that combines a point predictor (Pipeline) with a distribution predictor.
-    This is a sklearn-compatible estimator that internally uses Pipeline's train/predict interface.
-    """
-
-    def __init__(
-        self,
-        point_estimator,
-        distribution_estimator,
-        filters: list[Filter] | None = None,
-    ):
-        self.point_estimator = point_estimator
-        self.distribution_estimator = distribution_estimator
-        self.filters = filters
-        self.classes_ = (
-            distribution_estimator.classes_ if hasattr(distribution_estimator, "classes_") else None
-        )
-        super().__init__()
-
-    @nw.narwhalify
-    def fit(self, X: IntoFrameT, y, sample_weight: np.ndarray | None = None):
-        """
-        Fit both the point predictor and distribution predictor.
-
-        :param X: DataFrame (any DataFrame type - pandas, polars, or Narwhals). Cannot be numpy array.
-        :param y: Target Series
-        :param sample_weight: Optional sample weights (passed to point predictor if supported)
-        """
-        target_name = getattr(y, "name", "target")
-        self._target_name = target_name
-
-        y_values = y.to_list() if hasattr(y, "to_list") else (y.values if hasattr(y, "values") else y)
-        df = X.with_columns(
-            nw.new_series(name=target_name, values=y_values, backend=nw.get_native_namespace(X))
-        )
-
-        if self.filters:
-            df = apply_filters(df=df, filters=self.filters)
-
-        X_point = df.drop(self._target_name)
-        y_point = df[self._target_name]
-
-        self.point_estimator.fit(X=X_point, y=y_point)
-
-        pred_values = self.point_estimator.predict(X=X_point)
-        pred_col = f"{target_name}_prediction"
-
-        df = df.with_columns(
-            nw.new_series(name=pred_col, values=pred_values, backend=nw.get_native_namespace(df))
-        )
-
-        X_dist = df
-        y_dist = df[self._target_name]
-        self.distribution_estimator.fit(X_dist, y_dist)
-
-        return self
-
-
-    @nw.narwhalify
-    def predict_proba(self, X: IntoFrameT) -> np.ndarray:
-        df = X
-        pred_values = self.point_estimator.predict(X=df)
-        pred_col = f"{self._target_name}_prediction"
-
-        df = df.with_columns(
-            nw.new_series(name=pred_col, values=pred_values, backend=nw.get_native_namespace(df))
-        )
-
-        X_dist = df
-        probabilities = self.distribution_estimator.predict_proba(X_dist)
-        return probabilities
-
-
-    @nw.narwhalify
-    def predict(self, X: IntoFrameT) -> np.ndarray:
-
-        probabilities = self.predict_proba(X)
-        return np.argmax(probabilities, axis=1) + self.distribution_estimator.min_value

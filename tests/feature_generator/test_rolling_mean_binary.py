@@ -391,7 +391,7 @@ def test_binary_granularity_rolling_mean_generate_future(df, column_names, min_p
     except:
         expected_future_df = future_df.to_pandas()
 
-    future_df = transformer.transform(future_df)
+    future_df = transformer.future_transform(future_df)
     expected_future_df[transformer.features_out[0]] = [12.5, 2, 12.5, 2]
     expected_future_df[transformer.features_out[1]] = [-2, -15, -2, -15]
     expected_future_df[transformer.features_out[2]] = [2, 12.5, 2, 12.5]

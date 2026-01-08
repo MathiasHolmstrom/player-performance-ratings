@@ -284,7 +284,7 @@ def test_rolling_mean_transform_historical_and_transform_future(df, column_names
     )
 
     _ = rolling_mean_transformation.fit_transform(df=historical_df, column_names=column_names)
-    transformed_future_df = rolling_mean_transformation.transform(future_df)
+    transformed_future_df = rolling_mean_transformation.future_transform(future_df)
 
     if isinstance(future_df, pd.DataFrame):
         expected_df = original_future_df.assign(
@@ -429,7 +429,7 @@ def test_rolling_mean_transform_future_game_team_granularity(column_names: Colum
 
     expected_df = future_data.copy()
     _ = transformer.fit_transform(df=hist_data, column_names=column_names)
-    transformed_future_df = transformer.transform(future_data)
+    transformed_future_df = transformer.future_transform(future_data)
 
     expected_df[transformer.features_out[0]] = [2, 2, 3, 3]
     pd.testing.assert_frame_equal(
@@ -611,7 +611,7 @@ def test_rolling_mean_transform_future_granularity_differs_from_input_granularit
     expected_df = future_df.copy()
     _ = transformer.fit_transform(df=historical_df, column_names=column_names)
 
-    transformed_future_df = transformer.transform(future_df)
+    transformed_future_df = transformer.future_transform(future_df)
 
     expected_df = expected_df.assign(
         **{

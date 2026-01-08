@@ -12,6 +12,7 @@ from narwhals.stable.v2 import DataFrame
 from narwhals.stable.v2.typing import IntoFrameT
 
 from spforge import ColumnNames
+from spforge.base_feature_generator import FeatureGenerator
 from spforge.data_structures import RatingState
 from spforge.feature_generator._utils import to_polars
 from spforge.performance_transformers._performance_manager import (
@@ -31,7 +32,7 @@ MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
 EXPECTED_MEAN_CONFIDENCE_SUM = 30
 
 
-class RatingGenerator:
+class RatingGenerator(FeatureGenerator):
     def __init__(
         self,
         performance_column: str,
@@ -55,7 +56,26 @@ class RatingGenerator:
         output_suffix: str | None = None,
         **kwargs: Any,
     ):
+
+        if performance_predictor == "mean":
+            _performance_predictor_class = RatingMeanPerformancePredictor
+            default_features = [RatingKnownFeatures.RATING_MEAN_PROJECTED]
+        elif performance_predictor == "difference":
+            _performance_predictor_class = RatingDifferencePerformancePredictor
+            default_features = [RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED]
+        elif performance_predictor == "ignore_opponent":
+            _performance_predictor_class = RatingNonOpponentPerformancePredictor
+            default_features = [RatingKnownFeatures.TEAM_RATING_PROJECTED]
+        else:
+            raise ValueError(f"performance_predictor {performance_predictor} is not supported")
+
         self.output_suffix = performance_column if output_suffix is None else output_suffix
+        if features_out is None:
+            _features_out = [self._suffix(str(f)) for f in default_features]
+        else:
+            _features_out = [self._suffix(str(f)) for f in features_out]
+        super().__init__(features_out=_features_out)
+
 
         self.performance_predictor = performance_predictor
         self.performance_weights = performance_weights
@@ -79,22 +99,6 @@ class RatingGenerator:
             self._suffix(str(c)) for c in self.non_predictor_features_out
         ]
 
-        if performance_predictor == "mean":
-            _performance_predictor_class = RatingMeanPerformancePredictor
-            default_features = [RatingKnownFeatures.RATING_MEAN_PROJECTED]
-        elif performance_predictor == "difference":
-            _performance_predictor_class = RatingDifferencePerformancePredictor
-            default_features = [RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED]
-        elif performance_predictor == "ignore_opponent":
-            _performance_predictor_class = RatingNonOpponentPerformancePredictor
-            default_features = [RatingKnownFeatures.TEAM_RATING_PROJECTED]
-        else:
-            raise ValueError(f"performance_predictor {performance_predictor} is not supported")
-
-        if features_out is None:
-            self._features_out = [self._suffix(str(f)) for f in default_features]
-        else:
-            self._features_out = [self._suffix(str(f)) for f in features_out]
 
         sig = inspect.signature(_performance_predictor_class.__init__)
         init_params = [name for name, _param in sig.parameters.items() if name != "self"]
@@ -335,7 +339,3 @@ class RatingGenerator:
         if last_match_day_number is None:
             return 0.0
         return float(day_number - last_match_day_number)
-
-    @property
-    def features_out(self) -> list[str]:
-        return self._features_out

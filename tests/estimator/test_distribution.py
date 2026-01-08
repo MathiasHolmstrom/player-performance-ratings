@@ -5,12 +5,10 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import pytest
-from scipy.stats import nbinom
 from sklearn.linear_model import LinearRegression
 
 from spforge import ColumnNames
 from spforge.estimator import (
-    DistributionManagerPredictor,
     NegativeBinomialEstimator,
     NormalDistributionPredictor,
 )
@@ -232,100 +230,3 @@ def test_normal_distribution_predictor_predict_proba_not_fitted():
 # DistributionManagerPredictor Tests
 # ============================================================================
 
-
-def test_distribution_manager_predictor_initialization():
-    """Test DistributionManagerPredictor initialization"""
-    point_predictor = Pipeline(
-        estimator=LinearRegression(),
-        feature_names=['x']
-    )
-    distribution_predictor = NormalDistributionPredictor(
-        point_estimate_pred_column="target_prediction", max_value=10, min_value=0, target="target"
-    )
-    manager = DistributionManagerPredictor(
-        point_estimator=point_predictor, distribution_estimator=distribution_predictor
-    )
-    assert manager.point_estimator == point_predictor
-    assert manager.distribution_estimator == distribution_predictor
-
-
-def test_distribution_manager_predictor_fit():
-    """Test DistributionManagerPredictor fit"""
-
-
-    distribution_predictor = NormalDistributionPredictor(
-        point_estimate_pred_column="target_prediction", max_value=10, min_value=0, target="target"
-    )
-    manager = DistributionManagerPredictor(
-        point_estimator=LinearRegression(), distribution_estimator=distribution_predictor
-    )
-
-    X = pd.DataFrame({"feature1": [1.0, 2.0, 3.0, 4.0, 5.0]})
-    y = pd.Series([5, 6, 7, 8, 9], name="target")
-    manager.fit(X, y)
-
-    assert hasattr(manager.point_estimator, "coef_")
-    assert distribution_predictor._classes is not None
-
-
-def test_distribution_manager_predictor_predict_proba():
-    """Test DistributionManagerPredictor predict_proba"""
-
-    distribution_predictor = NormalDistributionPredictor(
-        point_estimate_pred_column="target_prediction",
-        max_value=10,
-        min_value=0,
-        target="target",
-        sigma=5.0,
-    )
-    manager = DistributionManagerPredictor(
-        point_estimator=LinearRegression(), distribution_estimator=distribution_predictor
-    )
-
-    X_train = pd.DataFrame({"feature1": [1.0, 2.0, 3.0, 4.0, 5.0]})
-    y_train = pd.Series([5, 6, 7, 8, 9], name="target")
-    manager.fit(X_train, y_train)
-
-    X_pred = pd.DataFrame({"feature1": [6.0, 7.0]})
-    probabilities = manager.predict_proba(X_pred)
-    assert probabilities.shape == (2, 11)  # 2 samples, 11 classes (0-10)
-
-
-def test_distribution_manager_predictor_predict():
-    """Test DistributionManagerPredictor predict"""
-
-
-    distribution_predictor = NormalDistributionPredictor(
-        point_estimate_pred_column="target_prediction",
-        max_value=10,
-        min_value=0,
-        target="target",
-        sigma=5.0,
-    )
-    manager = DistributionManagerPredictor(
-        point_estimator=LinearRegression(), distribution_estimator=distribution_predictor
-    )
-
-    X_train = pd.DataFrame({"feature1": [1.0, 2.0, 3.0, 4.0, 5.0]})
-    y_train = pd.Series([5, 6, 7, 8, 9], name="target")
-    manager.fit(X_train, y_train)
-
-    X_pred = pd.DataFrame({"feature1": [6.0, 7.0]})
-    predictions = manager.predict(X_pred)
-    assert len(predictions) == 2
-    assert all(0 <= p <= 10 for p in predictions)
-
-
-def test_distribution_manager_predictor_properties():
-    """Test DistributionManagerPredictor properties"""
-
-    distribution_predictor = NormalDistributionPredictor(
-        point_estimate_pred_column="target_prediction", max_value=10, min_value=0, target="target"
-    )
-    manager = DistributionManagerPredictor(
-        point_estimator=LinearRegression(), distribution_estimator=distribution_predictor
-    )
-
-    X_train = pd.DataFrame({"feature1": [1.0, 2.0, 3.0]})
-    y_train = pd.Series([5, 6, 7], name="target")
-    manager.fit(X_train, y_train)

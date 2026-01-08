@@ -141,7 +141,7 @@ def test_nba_player_points(dataframe_type):
         )
     )
     team_ratio_transformer = RatioEstimatorTransformer(
-        estimator=LGBMRegressor(),
+        estimator=LGBMRegressor(verbose=-100),
         features=features_generator.features_out,
         predict_row=False,
         prediction_column_name=estimator_transformer_raw.prediction_column_name,

@@ -45,11 +45,13 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
         performance_column="performance_kills",
         auto_scale_performance=True,
         performance_weights=[ColumnWeight(name="kills", weight=1)],
+        column_names=column_names
     )
     rating_generator_result = PlayerRatingGenerator(
         features_out=[RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED],
         performance_column="result",
         non_predictor_features_out=[RatingKnownFeatures.PLAYER_RATING],
+        column_names=column_names
     )
 
     lag_generators = [
@@ -67,8 +69,7 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
     ]
 
     features_generator = FeatureGeneratorPipeline(
-        column_names=column_names,
-        feature_generators=[rating_generator_player_kills, rating_generator_result, *lag_generators],
+        feature_generators=[rating_generator_player_kills, rating_generator_result, *lag_generators],column_names=column_names
     )
 
     historical_df = features_generator.fit_transform(historical_df)

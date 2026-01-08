@@ -41,10 +41,10 @@ class MatchKFoldCrossValidator:
 
         return [c for c in df.columns if c not in exclude_cols]
 
-    def _fit_estimator(self, est, train_df):
+    def _fit_estimator(self, est, train_df: IntoFrameT):
         features = self._get_features(train_df)
         X = train_df.select(features)
-        y = train_df[self.target_column]
+        y = train_df[self.target_column].to_list()
         est.fit(X, y)
 
     def _predict_smart(self, est, df: IntoFrameT) -> IntoFrameT:

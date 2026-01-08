@@ -121,7 +121,7 @@ class RollingWindowTransformer(LagGenerator):
     @future_lag_transformations_wrapper
     @future_validator
     @transformation_validator
-    def transform(self, df: IntoFrameT) -> IntoFrameT:
+    def future_transform(self, df: IntoFrameT) -> IntoFrameT:
         """
         Generates rolling mean for future data
         Assumes that .generate_historical() has been called before

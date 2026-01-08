@@ -1124,7 +1124,6 @@ class PlayerRatingGenerator(RatingGenerator):
                 out[self.PLAYER_RATING_COL].append(off_pre)
                 out[self.PLAYER_PRED_PERF_COL].append(float(pred_off))
 
-            # Team2 players
             for pre in t2_pre:
                 pid = pre.id
                 off_pre = float(local_off[pid].rating_value)

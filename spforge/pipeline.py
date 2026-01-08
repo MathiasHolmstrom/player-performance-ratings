@@ -164,7 +164,7 @@ class Pipeline(BaseEstimator):
             scale_features: bool = False,
             categorical_handling: CategoricalHandling = "auto",
             impute_missing_values: bool = False,
-            drop_rows_where_target_is_nan: bool = False,
+            drop_rows_where_target_is_nan: bool = True,
             min_target: int | float | None = None,
             max_target: int | float | None = None,
             categorical_features: list[str] | None = None,
@@ -410,7 +410,10 @@ class Pipeline(BaseEstimator):
         df = nw.from_native(apply_filters(df=df, filters=self.filters))
 
         if self.drop_rows_where_target_is_nan:
+            pre_row_count = len(df)
             df = df.filter(~nw.col(target).is_null())
+            if pre_row_count != len(df):
+                _logger.info('dropped %d rows with target nan', len(df)-pre_row_count)
 
         return df
 

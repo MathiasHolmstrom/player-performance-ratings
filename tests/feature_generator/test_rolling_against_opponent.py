@@ -159,7 +159,7 @@ def test_rolling_mean_transform_future(column_names, df):
     )
     _ = rolling_mean.fit_transform(historical_df, column_names=column_names)
 
-    transformed_future_data = rolling_mean.transform(future_df)
+    transformed_future_data = rolling_mean.future_transform(future_df)
 
     if isinstance(transformed_future_data, pd.DataFrame):
         expected_data = transformed_future_data.copy()

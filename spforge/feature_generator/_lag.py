@@ -95,7 +95,7 @@ class LagTransformer(LagGenerator):
     @future_lag_transformations_wrapper
     @future_validator
     @transformation_validator
-    def transform(self, df: IntoFrameT) -> IntoFrameT:
+    def future_transform(self, df: IntoFrameT) -> IntoFrameT:
 
         sort_col = self.column_names.start_date if self.column_names else "__row_index"
         grouped = self._group_to_granularity_level(df=df, sort_col=sort_col)

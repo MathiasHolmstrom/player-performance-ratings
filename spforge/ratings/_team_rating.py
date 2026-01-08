@@ -210,10 +210,7 @@ class TeamRatingGenerator(RatingGenerator):
             opp_off_perf = float(r[perf_opp_col]) if r.get(perf_opp_col) is not None else 0.0
             def_perf = 1.0 - opp_off_perf
 
-            # Predictions:
-            # - team offense vs opponent defense
             pred_off = self._predict_performance(team_off_pre, opp_def_pre)
-            # - team defense vs opponent offense
             pred_def = self._predict_performance(team_def_pre, opp_off_pre)
 
             mult_off = self._applied_multiplier(s_off, self.rating_change_multiplier_offense)

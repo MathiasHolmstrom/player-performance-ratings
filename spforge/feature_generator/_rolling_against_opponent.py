@@ -169,7 +169,7 @@ class RollingAgainstOpponentTransformer(LagGenerator):
     @future_lag_transformations_wrapper
     @future_validator
     @transformation_validator
-    def transform(self, df: IntoFrameT) -> IntoFrameT:
+    def future_transform(self, df: IntoFrameT) -> IntoFrameT:
         """
         Generates rolling mean opponent for future data
         Assumes that .generate_historical() has been called before
@@ -233,7 +233,7 @@ class RollingAgainstOpponentTransformer(LagGenerator):
             ).sort("__row_index")
 
         if is_future:
-            concat_df = nw.from_native(self._transformer.transform(concat_df))
+            concat_df = nw.from_native(self._transformer.future_transform(concat_df))
 
         else:
             concat_df = nw.from_native(

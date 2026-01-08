@@ -220,7 +220,7 @@ def test_rolling_mean_days_transform_future_40_days_update_id_differs_from_match
     )
 
     _ = rolling_mean_transformation.fit_transform(historical_df, column_names=column_names)
-    transformed_future_df = rolling_mean_transformation.transform(future_df)
+    transformed_future_df = rolling_mean_transformation.future_transform(future_df)
 
     expected_df = original_df.assign(
         **{
@@ -343,7 +343,7 @@ def test_rolling_mean_days_transformer_future_transform(column_names):
 
     expected_df = future_df.copy()
 
-    transformed_future_df = transformer.transform(df=future_df)
+    transformed_future_df = transformer.future_transform(df=future_df)
 
     expected_df = expected_df.assign(
         **{
@@ -416,7 +416,7 @@ def test_rolling_mean_days_tranformer_transform_first_future_beyond_window(
 
     expected_df = future_df.copy()
 
-    transformed_future_df = transformer.transform(df=future_df)
+    transformed_future_df = transformer.future_transform(df=future_df)
 
     expected_df = expected_df.assign(
         **{
@@ -564,7 +564,7 @@ def test_rolling_mean__days_transform_future_granularity_differs_from_input_gran
     expected_df = future_df.copy()
     _ = transformer.fit_transform(df=historical_df, column_names=column_names)
 
-    transformed_future_df = transformer.transform(future_df)
+    transformed_future_df = transformer.future_transform(future_df)
 
     expected_df = expected_df.assign(
         **{

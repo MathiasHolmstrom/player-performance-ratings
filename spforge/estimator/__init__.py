@@ -1,5 +1,4 @@
 from ._distribution import (
-    DistributionManagerPredictor,
     NegativeBinomialEstimator,
     NormalDistributionPredictor,
 )
