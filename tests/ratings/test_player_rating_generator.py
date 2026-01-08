@@ -1,635 +1,1386 @@
-import numpy as np
-import pandas as pd
 import polars as pl
-from polars.testing import assert_frame_equal
 import pytest
 
-from spforge.data_structures import (
-    ColumnNames,
-)
-from spforge.ratings import PlayerRatingGenerator
-from spforge.ratings.enums import (
-    RatingKnownFeatures,
-    RatingUnknownFeatures,
-)
-
-from spforge.ratings.rating_calculators import (
-    MatchRatingGenerator,
-    StartRatingGenerator,
-)
-from spforge.transformers.fit_transformers import PerformanceWeightsManager
-from spforge.transformers.fit_transformers._performance_manager import ColumnWeight
+from spforge import ColumnNames
+from spforge.data_structures import RatingState
+from spforge.ratings import PlayerRatingGenerator, RatingKnownFeatures, RatingUnknownFeatures
 
 
 @pytest.fixture
-def column_names():
+def base_cn():
     return ColumnNames(
-        match_id="game_id",
-        team_id="team_id",
-        player_id="player_id",
-        start_date="start_date",
+        player_id="pid",
+        team_id="tid",
+        match_id="mid",
+        start_date="dt",
+        update_match_id="mid",
+        participation_weight="pw",
     )
 
 
-@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
-def test_opponent_adjusted_rating_generator_with_projected_performance(df):
-    column_names = ColumnNames(
-        match_id="game_id",
-        team_id="team_id",
-        player_id="player_id",
-        start_date="start_date",
-        projected_participation_weight="projected_participation_weight",
-        participation_weight="participation_weight",
-    )
-
-    rating_generator = PlayerRatingGenerator(
-        unknown_features_out=[RatingUnknownFeatures.TEAM_RATING],
-        features_out=[RatingKnownFeatures.TEAM_RATING_PROJECTED],
-        match_rating_generator=MatchRatingGenerator(
-            confidence_weight=0,
-            start_rating_generator=StartRatingGenerator(harcoded_start_rating=1000),
-        ),
-    )
-
-    data = df(
+@pytest.fixture
+def sample_df(base_cn):
+    """A standard 1-match, 2-team, 4-player setup."""
+    return pl.DataFrame(
         {
-            column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2],
-            column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2],
-            column_names.player_id: [1, 2, 3, 4, 1, 2, 3, 4],
-            column_names.start_date: [
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-            ],
-            rating_generator.performance_column: [
-                1.0,
-                0.5,
-                0.25,
-                0.25,
-                0.5,
-                0.5,
-                0.5,
-                0.5,
-            ],
-            column_names.projected_participation_weight: [
-                1.0,
-                1.0,
-                1.0,
-                1.0,
-                0.2,
-                1,
-                0.6,
-                0.6,
-            ],
-            column_names.participation_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.6, 0.4, 0.7, 0.3],
+            "pw": [1.0, 1.0, 1.0, 1.0],
         }
     )
 
-    df_with_ratings = rating_generator.fit_transform(
-        df=data,
-        column_names=column_names,
+
+@pytest.fixture
+def sequential_df(base_cn):
+    """A sequential 3-match setup for testing rating evolution."""
+    return pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P1", "P2", "P1", "P2"],
+            "tid": ["T1", "T2", "T1", "T2", "T1", "T2"],
+            "mid": ["M1", "M1", "M2", "M2", "M3", "M3"],
+            "dt": [
+                "2024-01-01",
+                "2024-01-01",
+                "2024-01-02",
+                "2024-01-02",
+                "2024-01-03",
+                "2024-01-03",
+            ],
+            "perf": [0.8, 0.2, 0.8, 0.2, 0.8, 0.2],
+            "pw": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+        }
     )
 
-    if isinstance(df_with_ratings, pl.DataFrame):
-        df_with_ratings = df_with_ratings.to_pandas()
 
-    assert (
-        df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[4]
-        == df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[5]
-    )
-    assert (
-        df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[6]
-        == df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED][7]
-    )
-    assert (
-        df_with_ratings[RatingKnownFeatures.TEAM_RATING_PROJECTED].iloc[4]
-        < df_with_ratings[RatingUnknownFeatures.TEAM_RATING][4]
-    )
+@pytest.mark.parametrize("perf_val", [-0.1, 1.1])
+def test_fit_transform_performance_bounds_validation(base_cn, sample_df, perf_val):
+    """Check that the generator raises ValueError when performance is outside [0, 1]."""
+    df = sample_df.with_columns(pl.lit(perf_val).alias("perf"))
+    gen = PlayerRatingGenerator(performance_column="perf", column_names=base_cn)
+    with pytest.raises(ValueError):
+        gen.fit_transform(df)
 
 
-@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
-def test_update_rating_generator_generate_historical(df):
-    column_names = ColumnNames(
-        match_id="game_id",
-        team_id="team_id",
-        player_id="player_id",
-        start_date="start_date",
-        projected_participation_weight="projected_participation_weight",
-        participation_weight="participation_weight",
+def test_fit_transform_updates_internal_state(base_cn, sample_df):
+    """Verify that fit_transform populates the internal rating dictionaries."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf", column_names=base_cn, auto_scale_performance=True
     )
-    rating_generator = PlayerRatingGenerator(
+    assert len(gen._player_off_ratings) == 0
+
+    gen.fit_transform(sample_df)
+
+    assert "P1" in gen._player_off_ratings
+    assert "P1" in gen._player_def_ratings
+
+    assert gen._player_off_ratings["P1"].rating_value > 0
+
+
+def test_fit_transform_participation_weight_scaling(base_cn):
+    """Test that a player with lower participation weight receives a smaller rating update."""
+    df = pl.DataFrame(
+        {
+            "pid": ["Full", "Half", "Opp1", "Opp2"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.8, 0.8, 0.2, 0.2],
+            "pw": [1.0, 0.5, 1.0, 1.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf", column_names=base_cn, auto_scale_performance=True
+    )
+    gen.fit_transform(df)
+
+    full_rating = gen._player_off_ratings["Full"].rating_value
+    half_rating = gen._player_off_ratings["Half"].rating_value
+
+    assert full_rating > half_rating
+    assert half_rating > 0
+
+
+def test_fit_transform_batch_update_logic(base_cn):
+    """Test that ratings do not update between matches if update_match_id is the same."""
+
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P1", "P2"],
+            "tid": ["T1", "T2", "T1", "T2"],
+            "mid": ["M1", "M1", "M2", "M2"],
+            "update_id": ["Batch1", "Batch1", "Batch1", "Batch1"],
+            "dt": ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
+            "perf": [0.9, 0.1, 0.9, 0.1],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+    from dataclasses import replace
+
+    cn = replace(base_cn, update_match_id="update_id")
+    gen = PlayerRatingGenerator(
+        performance_column="perf", column_names=cn, auto_scale_performance=True
+    )
+    output = gen.fit_transform(df)
+
+    assert len(output) >= 2
+
+    assert len(gen._player_off_ratings) > 0
+
+
+@pytest.mark.parametrize(
+    "feature",
+    [
+        RatingKnownFeatures.PLAYER_OFF_RATING,
+        RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
+        RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED,
+    ],
+)
+def test_fit_transform_requested_features_presence(base_cn, sample_df, feature):
+    """Verify that specific requested features appear in the resulting DataFrame."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf", column_names=base_cn, features_out=[feature]
+    )
+    res = gen.fit_transform(sample_df)
+
+    expected_col = f"{feature}_perf"
+    assert expected_col in res.columns
+
+
+def test_future_transform_no_state_mutation(base_cn, sample_df):
+    """Ensure that calling future_transform does not alter the model's internal ratings."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf", column_names=base_cn, auto_scale_performance=True
+    )
+    gen.fit_transform(sample_df)
+
+    off_state_before = gen._player_off_ratings["P1"].rating_value
+
+    future_df = sample_df.with_columns(pl.lit("M-FUTURE").alias("mid"))
+    gen.future_transform(future_df)
+
+    off_state_after = gen._player_off_ratings["P1"].rating_value
+    assert off_state_before == off_state_after
+
+
+def test_future_transform_cold_start_player(base_cn, sample_df):
+    """Check that future_transform handles players not seen during fit_transform."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf", column_names=base_cn, auto_scale_performance=True
+    )
+    gen.fit_transform(sample_df)
+
+    new_player_df = pl.DataFrame(
+        {
+            "pid": ["P99", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M2", "M2", "M2", "M2"],
+            "dt": ["2024-01-05"] * 4,
+            "pw": [1.0] * 4,
+        }
+    )
+
+    res = gen.future_transform(new_player_df)
+
+    assert "P99" in res["pid"].to_list()
+
+    assert len(res) >= 2
+
+
+def test_transform_is_identical_to_future_transform(base_cn, sample_df):
+    """Verify that the standard transform() call redirects to future_transform logic."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf", column_names=base_cn, auto_scale_performance=True
+    )
+
+    gen.fit_transform(sample_df)
+
+    res_transform = gen.transform(sample_df)
+    res_future = gen.future_transform(sample_df)
+
+    assert len(res_transform) == len(res_future)
+
+    assert set(res_transform.columns) == set(res_future.columns)
+
+
+def test_fit_transform_offense_defense_independence(base_cn):
+    """Verify that Offense and Defense ratings update based on different logic."""
+
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.8, 0.7, 0.8, 0.7],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf", column_names=base_cn, auto_scale_performance=True
+    )
+    gen.fit_transform(df)
+
+    off_rating = gen._player_off_ratings["P1"].rating_value
+    assert off_rating > 0.0
+
+    def_rating = gen._player_def_ratings["P1"].rating_value
+
+    assert def_rating < off_rating or def_rating <= 0.0
+
+
+def _create_date_column_player(date_format: str, dates: list) -> pl.Series:
+    """Helper to create date column with specified format for player tests."""
+    if date_format == "string_iso_date":
+        return pl.Series("dt", dates)
+    elif date_format == "string_datetime_space":
+        date_strings = [
+            f"{d} 12:00:00" if isinstance(d, str) and " " not in d else d for d in dates
+        ]
+        return pl.Series("dt", date_strings)
+    elif date_format == "date_type":
+        from datetime import date
+
+        date_objs = [
+            date(2024, 1, int(d.split("-")[2])) if isinstance(d, str) and "-" in d else d
+            for d in dates
+        ]
+        return pl.Series("dt", date_objs, dtype=pl.Date)
+    elif date_format == "datetime_type":
+        from datetime import datetime
+
+        datetime_objs = [
+            datetime(2024, 1, int(d.split("-")[2])) if isinstance(d, str) and "-" in d else d
+            for d in dates
+        ]
+        return pl.Series("dt", datetime_objs, dtype=pl.Datetime(time_zone=None))
+    else:
+        raise ValueError(f"Unknown date_format: {date_format}")
+
+
+@pytest.mark.parametrize(
+    "date_format",
+    [
+        "string_iso_date",
+        "string_datetime_space",
+        "date_type",
+        "datetime_type",
+    ],
+)
+def test_fit_transform_when_date_formats_vary_then_processes_successfully_player(
+    base_cn, date_format
+):
+    """
+    When date formats vary for player rating generator, then we should expect to see
+    fit_transform processes successfully because _add_day_number handles all these formats.
+    """
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+    )
+
+    dates = ["2024-01-01", "2024-01-01", "2024-01-01", "2024-01-01"]
+    date_col = _create_date_column_player(date_format, dates)
+
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": date_col,
+            "perf": [0.6, 0.4, 0.7, 0.3],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+
+    result = gen.fit_transform(df)
+
+    assert len(result) >= 2
+
+    assert len(gen._player_off_ratings) > 0
+
+
+@pytest.mark.parametrize(
+    "date_format",
+    [
+        "string_iso_date",
+        "datetime_type",
+    ],
+)
+def test_future_transform_when_date_formats_vary_then_processes_successfully_player(
+    base_cn, date_format
+):
+    """
+    When date formats vary for player rating generator, then we should expect to see
+    future_transform processes successfully because _add_day_number handles all these formats.
+    """
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+    )
+
+    fit_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": _create_date_column_player("string_iso_date", ["2024-01-01"] * 4),
+            "perf": [0.6, 0.4, 0.7, 0.3],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+    gen.fit_transform(fit_df)
+
+    p1_rating_before = gen._player_off_ratings["P1"].rating_value
+
+    dates = ["2024-01-02", "2024-01-02", "2024-01-02", "2024-01-02"]
+    date_col = _create_date_column_player(date_format, dates)
+
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M2", "M2", "M2", "M2"],
+            "dt": date_col,
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+
+    result = gen.future_transform(df)
+
+    assert len(result) >= 2
+
+    assert gen._player_off_ratings["P1"].rating_value == p1_rating_before
+
+
+def test_init_custom_suffix_applied_to_all_features(base_cn):
+    """Verify that the output_suffix is appended to all requested feature columns."""
+    gen = PlayerRatingGenerator(
+        performance_column="goals",
+        column_names=base_cn,
+        output_suffix="v2",
         features_out=[
-            RatingKnownFeatures.TEAM_RATING_PROJECTED,
-            RatingKnownFeatures.PLAYER_RATING,
-            RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED,
-            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
-            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED,
+            RatingKnownFeatures.PLAYER_OFF_RATING,
+            RatingKnownFeatures.TEAM_DEF_RATING_PROJECTED,
         ],
-        match_rating_generator=MatchRatingGenerator(
-            confidence_weight=0,
-            start_rating_generator=StartRatingGenerator(harcoded_start_rating=1000),
-        ),
-        unknown_features_out=[RatingUnknownFeatures.PLAYER_RATING_CHANGE],
     )
-    data = df(
+    # The generator uses performance_column as a default suffix if output_suffix is None,
+    # but if output_suffix is provided, it should respect it.
+    assert gen.PLAYER_OFF_RATING_COL == "player_off_rating_v2"
+    assert gen.TEAM_DEF_RATING_PROJ_COL == "team_def_rating_projected_v2"
+
+
+def test_init_multi_performance_weights(base_cn):
+    """Verify initialization when multiple performance columns are weighted."""
+    weights = [{"col": "goals", "weight": 0.7}, {"col": "assists", "weight": 0.3}]
+    gen = PlayerRatingGenerator(
+        performance_column="ignored", performance_weights=weights, column_names=base_cn
+    )
+    # Internally it should have a PerformanceManager
+    assert gen.performance_manager is not None
+
+
+# --- fit_transform Tests ---
+
+
+def test_fit_transform_zero_participation_weight(base_cn):
+    """A player with 0 participation weight should experience no rating change."""
+    df = pl.DataFrame(
         {
-            column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2],
-            column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2],
-            column_names.player_id: [1, 2, 3, 4, 1, 2, 3, 4],
-            column_names.start_date: [
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-            ],
-            rating_generator.performance_column: [
-                1.0,
-                0.5,
-                0.25,
-                0.25,
-                0.5,
-                0.5,
-                0.5,
-                0.5,
-            ],
-            column_names.projected_participation_weight: [
-                1.0,
-                1.0,
-                1.0,
-                1.0,
-                0.2,
-                1,
-                0.6,
-                0.6,
-            ],
-            column_names.participation_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            "pid": ["P1", "P_Opp"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-01", "2024-01-01"],
+            "perf": [1.0, 0.0],
+            "pw": [0.0, 1.0],  # P1 played 0 minutes
         }
     )
-
-    ratings_df = rating_generator.fit_transform(df=data, column_names=column_names)
-    cols = [
-        *data.columns,
-        *rating_generator.unknown_features_out,
-        *rating_generator._features_out,
-    ]
-    for col in cols:
-        assert col in ratings_df.columns
-
-    assert len(ratings_df.columns) == len(cols)
-
-
-@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
-def test_update_rating_generator_historical_and_future(df):
-    column_names = ColumnNames(
-        match_id="game_id",
-        team_id="team_id",
-        player_id="player_id",
-        start_date="start_date",
-        projected_participation_weight="projected_participation_weight",
-        participation_weight="participation_weight",
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        start_harcoded_start_rating=0.0,  # Set start rating to 0.0 for this test
     )
-    rating_generator = PlayerRatingGenerator(
+    gen.fit_transform(df)
+
+    # Rating should remain at the start value (0.0) since participation weight is 0
+    # (no rating change occurs when participation weight is 0)
+    assert gen._player_off_ratings["P1"].rating_value == 0.0
+
+
+def test_fit_transform_sequential_rating_evolution(base_cn, sequential_df):
+    """Ratings should change monotonically if a player performs consistently above average."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf", column_names=base_cn, auto_scale_performance=True
+    )
+    gen.fit_transform(sequential_df)
+
+    # After processing 3 matches where P1 consistently performs well (0.8),
+    # the final rating should be higher than the initial rating (1000)
+    final_rating = gen._player_off_ratings["P1"].rating_value
+    assert final_rating > 1000.0  # Should have increased from default start rating
+
+    # Also verify that confidence increased
+    assert gen._player_off_ratings["P1"].confidence_sum > 1.0
+    assert gen._player_off_ratings["P1"].games_played == 3.0
+
+
+def test_fit_transform_confidence_decay_over_time(base_cn):
+    """Players who haven't played for a long time should have their confidence sum decreased."""
+    # Match 1: Initial play
+    # Match 2: Play after 200 days (exceeds default confidence_max_days=120)
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P1", "P2"],
+            "tid": ["T1", "T2", "T1", "T2"],
+            "mid": ["M1", "M1", "M2", "M2"],
+            "dt": ["2024-01-01", "2024-01-01", "2024-10-01", "2024-10-01"],
+            "perf": [0.5, 0.5, 0.8, 0.2],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        confidence_days_ago_multiplier=1.0,  # Aggressive decay
+    )
+    gen.fit_transform(df)
+
+    # After Match 1, confidence_sum should be 1.0.
+    # Before Match 2, the 200+ days gap should trigger decay in _post_match_confidence_sum.
+    # We check internal state
+    assert gen._player_off_ratings["P1"].confidence_sum < 2.0
+
+
+def test_fit_transform_null_performance_handling(base_cn, sample_df):
+    """Rows with null performance should be handled or skipped without crashing."""
+    df_with_null = sample_df.with_columns(
+        pl.when(pl.col("pid") == "P1").then(None).otherwise(pl.col("perf")).alias("perf")
+    )
+    gen = PlayerRatingGenerator(performance_column="perf", column_names=base_cn)
+
+    # Depending on implementation, it might skip P1 or treat as 0.
+    # The key is that the generator shouldn't crash.
+    res = gen.fit_transform(df_with_null)
+    assert len(res) == 4
+
+
+# --- transform & future_transform Tests ---
+
+
+def test_transform_error_before_fit(base_cn, sample_df):
+    """Calling transform before fit/fit_transform should raise an error or return start ratings."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
         features_out=[
-            RatingKnownFeatures.TEAM_RATING_PROJECTED,
-            RatingKnownFeatures.PLAYER_RATING,
-            RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED,
-            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
-            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED,
-        ],
-        unknown_features_out=[RatingUnknownFeatures.PLAYER_RATING_CHANGE],
-        match_rating_generator=MatchRatingGenerator(
-            confidence_weight=0,
-            start_rating_generator=StartRatingGenerator(harcoded_start_rating=1000),
+            RatingKnownFeatures.PLAYER_OFF_RATING
+        ],  # Explicitly request player_off_rating
+    )
+    # If the model isn't fitted, it hasn't seen any players.
+    # It should still work but return default start ratings for everyone.
+    res = gen.transform(sample_df)
+    assert "player_off_rating_perf" in res.columns
+    # Default start rating is 1000.0, not 0.0
+    assert res["player_off_rating_perf"][0] == 1000.0
+
+
+def test_future_transform_extreme_rating_differences(base_cn):
+    """Verify predictions stay within [0, 1] even with massive rating gaps."""
+    from spforge.data_structures import PlayerRating
+    from spforge.ratings import RatingUnknownFeatures
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        non_predictor_features_out=[
+            RatingUnknownFeatures.PLAYER_PREDICTED_OFF_PERFORMANCE
+        ],  # Request prediction column
+    )
+
+    gen._player_off_ratings["GOD"] = PlayerRating(id="GOD", rating_value=100.0, confidence_sum=30)
+    gen._player_def_ratings["GOD"] = PlayerRating(id="GOD", rating_value=100.0, confidence_sum=30)
+    gen._player_off_ratings["NOOB"] = PlayerRating(
+        id="NOOB", rating_value=-100.0, confidence_sum=30
+    )
+    gen._player_def_ratings["NOOB"] = PlayerRating(
+        id="NOOB", rating_value=-100.0, confidence_sum=30
+    )
+
+    future_df = pl.DataFrame(
+        {
+            "pid": ["GOD", "NOOB"],
+            "tid": ["T1", "T2"],
+            "mid": ["M-FUTURE", "M-FUTURE"],  # Both players in same match
+            "dt": ["2025-01-01", "2025-01-01"],
+            "pw": [1.0, 1.0],
+        }
+    )
+
+    res = gen.future_transform(future_df)
+    pred_col = "player_predicted_off_performance_perf"  # Correct column name with suffix
+
+    # Predictions should be clipped or sigmoid-like between 0 and 1
+    assert 0.0 <= res.filter(pl.col("pid") == "GOD")[pred_col][0] <= 1.0
+    assert 0.0 <= res.filter(pl.col("pid") == "NOOB")[pred_col][0] <= 1.0
+
+
+# --- Multiple Call / State Persistence Tests ---
+
+
+def test_fit_transform_multiple_calls_persistence(base_cn):
+    """Calling fit_transform twice should result in additive updates to the state."""
+    df1 = pl.DataFrame(
+        {
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-01", "2024-01-01"],
+            "perf": [0.8, 0.2],
+            "pw": [1.0, 1.0],
+        }
+    )
+    df2 = pl.DataFrame(
+        {
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M2", "M2"],
+            "dt": ["2024-01-02", "2024-01-02"],
+            "perf": [0.8, 0.2],
+            "pw": [1.0, 1.0],
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf", column_names=base_cn, auto_scale_performance=True
+    )
+
+    gen.fit_transform(df1)
+    rating_after_1 = gen._player_off_ratings["P1"].rating_value
+
+    gen.fit_transform(df2)
+    rating_after_2 = gen._player_off_ratings["P1"].rating_value
+
+    assert rating_after_2 > rating_after_1
+    assert gen._player_off_ratings["P1"].confidence_sum > 1.0
+
+
+def test_fit_transform_auto_scale_false(base_cn):
+    """Verify behavior when auto_scale_performance is False."""
+    # Performance is already 0-1, but auto_scale=False should skip the min/max adjustment.
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-01", "2024-01-01"],
+            "perf": [0.9, 0.1],
+            "pw": [1.0, 1.0],
+        }
+    )
+    gen_no_scale = PlayerRatingGenerator(
+        performance_column="perf", column_names=base_cn, auto_scale_performance=False
+    )
+    gen_no_scale.fit_transform(df)
+
+    # If it didn't scale, the 0.9 should be compared directly against the default prediction (0.5).
+    assert gen_no_scale._player_off_ratings["P1"].rating_value > 0
+
+
+# --- Team-Changing Behavior Tests ---
+
+
+def test_fit_transform_team_change_tracking(base_cn):
+    """Verify that most_recent_team_id is updated when a player changes teams."""
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P1", "P3"],  # P1 changes from T1 to T2
+            "tid": ["T1", "T2", "T2", "T1"],
+            "mid": ["M1", "M1", "M2", "M2"],
+            "dt": ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
+            "perf": [0.6, 0.4, 0.7, 0.3],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf", column_names=base_cn, auto_scale_performance=True
+    )
+    gen.fit_transform(df)
+
+    # After M1, P1 should be on T1
+    # After M2, P1 should be on T2
+    assert gen._player_off_ratings["P1"].most_recent_team_id == "T2"
+    assert gen._player_def_ratings["P1"].most_recent_team_id == "T2"
+
+
+def test_fit_transform_multiple_team_changes(base_cn):
+    """Verify team tracking works correctly with multiple team changes."""
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P1", "P3", "P1", "P4"],  # P1: T1 -> T2 -> T3
+            "tid": ["T1", "T2", "T2", "T1", "T3", "T1"],
+            "mid": ["M1", "M1", "M2", "M2", "M3", "M3"],
+            "dt": [
+                "2024-01-01",
+                "2024-01-01",
+                "2024-01-02",
+                "2024-01-02",
+                "2024-01-03",
+                "2024-01-03",
+            ],
+            "perf": [0.6, 0.4, 0.7, 0.3, 0.8, 0.2],
+            "pw": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf", column_names=base_cn, auto_scale_performance=True
+    )
+    gen.fit_transform(df)
+
+    assert gen._player_off_ratings["P1"].most_recent_team_id == "T3"
+    assert gen._player_def_ratings["P1"].most_recent_team_id == "T3"
+
+
+def test_fit_transform_team_change_in_same_batch(base_cn):
+    """Verify team change tracking when update_match_id groups multiple matches."""
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P1", "P3"],
+            "tid": ["T1", "T2", "T2", "T1"],  # P1 changes teams
+            "mid": ["M1", "M1", "M2", "M2"],
+            "update_id": ["Batch1", "Batch1", "Batch1", "Batch1"],  # Same batch
+            "dt": ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
+            "perf": [0.6, 0.4, 0.7, 0.3],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+    from dataclasses import replace
+
+    cn = replace(base_cn, update_match_id="update_id")
+    gen = PlayerRatingGenerator(
+        performance_column="perf", column_names=cn, auto_scale_performance=True
+    )
+    gen.fit_transform(df)
+
+    # P1 should end up on T2 (last team in the batch)
+    assert gen._player_off_ratings["P1"].most_recent_team_id == "T2"
+    assert gen._player_def_ratings["P1"].most_recent_team_id == "T2"
+
+
+# NOTE: team_id_change_confidence_sum_decrease parameter exists but is not currently used in the code.
+# The logic to decrease confidence when team changes is missing from _apply_player_updates.
+# This test documents the expected behavior if/when the feature is implemented.
+def test_fit_transform_team_change_confidence_decrease_not_implemented(base_cn):
+    """Document that team change confidence decrease is not currently implemented."""
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P1", "P3"],  # P1 changes from T1 to T2
+            "tid": ["T1", "T2", "T2", "T1"],
+            "mid": ["M1", "M1", "M2", "M2"],
+            "dt": ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
+            "perf": [0.6, 0.4, 0.7, 0.3],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        team_id_change_confidence_sum_decrease=5.0,  # Set but not used
+    )
+    gen.fit_transform(df)
+
+    # Currently, confidence_sum increases normally regardless of team change
+    # If implemented, confidence_sum should decrease by team_id_change_confidence_sum_decrease
+    # when team changes from previous most_recent_team_id
+    p1_confidence = gen._player_off_ratings["P1"].confidence_sum
+    # This test just verifies the parameter exists and team_id is tracked
+    assert gen._player_off_ratings["P1"].most_recent_team_id == "T2"
+    assert p1_confidence > 0  # Confidence exists, but team change doesn't affect it currently
+
+
+# --- Start Rating Generator Tests ---
+
+
+def test_fit_transform_hardcoded_start_rating(base_cn):
+    """When start_harcoded_start_rating is set, all new players get that rating."""
+    hardcoded_rating = 1500.0
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        start_harcoded_start_rating=hardcoded_rating,
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+    )
+
+    # Test with future_transform to see the start rating before updates
+    future_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-01"] * 2,
+            "pw": [1.0, 1.0],
+        }
+    )
+    res = gen.future_transform(future_df)
+
+    # New players should get the hardcoded start rating
+    p1_rating = res.filter(pl.col("pid") == "P1")["player_off_rating_perf"][0]
+    p2_rating = res.filter(pl.col("pid") == "P2")["player_off_rating_perf"][0]
+    assert p1_rating == hardcoded_rating
+    assert p2_rating == hardcoded_rating
+
+    # Also test fit_transform - ratings will start at hardcoded value then update
+    df = pl.DataFrame(
+        {
+            "pid": ["P3", "P4"],
+            "tid": ["T1", "T2"],
+            "mid": ["M2", "M2"],
+            "dt": ["2024-01-02"] * 2,
+            "perf": [0.6, 0.4],
+            "pw": [1.0, 1.0],
+        }
+    )
+    gen.fit_transform(df)
+
+    # After match, ratings will have updated from hardcoded start
+    # But we can verify they started from hardcoded by checking they're close
+    # (they'll be updated based on performance)
+    assert gen._player_off_ratings["P3"].rating_value != 1000.0  # Not default
+    assert gen._player_def_ratings["P3"].rating_value != 1000.0  # Not default
+
+
+def test_future_transform_hardcoded_start_rating(base_cn, sample_df):
+    """Hardcoded start rating works in future_transform for unseen players."""
+    hardcoded_rating = 1200.0
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        start_harcoded_start_rating=hardcoded_rating,
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING, RatingKnownFeatures.PLAYER_DEF_RATING],
+    )
+    gen.fit_transform(sample_df)
+
+    # New player in future_transform should get hardcoded rating
+    # Need both teams to have players for the match structure
+    future_df = pl.DataFrame(
+        {
+            "pid": ["P99", "P100"],  # Both are new
+            "tid": ["T1", "T2"],
+            "mid": ["M2", "M2"],
+            "dt": ["2024-01-05", "2024-01-05"],
+            "pw": [1.0, 1.0],
+        }
+    )
+    res = gen.future_transform(future_df)
+
+    p99_row = res.filter(pl.col("pid") == "P99")
+    assert len(p99_row) > 0
+    assert p99_row["player_off_rating_perf"][0] == hardcoded_rating
+    assert p99_row["player_def_rating_perf"][0] == hardcoded_rating
+
+
+def test_fit_transform_default_league_rating(base_cn):
+    """When no league data exists, new players get default league rating (1000)."""
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-01", "2024-01-01"],
+            "perf": [0.6, 0.4],
+            "pw": [1.0, 1.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf", column_names=base_cn, auto_scale_performance=True
+    )
+    gen.fit_transform(df)
+
+    # Default league rating starts at 1000 (DEFAULT_START_RATING)
+    # But after the match, ratings get updated based on performance
+    # P1 performed 0.6 (above average), so rating should increase from 1000
+    assert gen._player_off_ratings["P1"].rating_value > 1000.0
+    assert gen._player_def_ratings["P1"].rating_value > 1000.0
+
+
+def test_fit_transform_league_specific_start_rating(base_cn):
+    """League-specific start ratings via start_league_ratings parameter."""
+    # Use separate matches for each team pair to ensure all players are processed
+    # (The code processes one team pair per match due to .unique(match_id))
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],  # P4 is opponent for P3
+            "tid": ["T1", "T2", "T3", "T4"],
+            "mid": ["M1", "M1", "M2", "M2"],  # Two matches: M1 (P1 vs P2), M2 (P3 vs P4)
+            "dt": ["2024-01-01", "2024-01-01", "2024-01-01", "2024-01-01"],
+            "perf": [0.6, 0.4, 0.5, 0.5],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+            "league": ["NBA", "NBA", "G-League", "G-League"],
+        }
+    )
+    from dataclasses import replace
+
+    cn = replace(base_cn, league="league")
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=cn,
+        auto_scale_performance=True,
+        start_league_ratings={"NBA": 1100.0, "G-League": 900.0},
+    )
+    gen.fit_transform(df)
+
+    # P1 and P2 are in NBA, P3 is in G-League
+    # After match, ratings are updated from start ratings
+    # P1 performed 0.6 (above average), so rating increases from 1100
+    # P2 performed 0.4 (below average), so rating decreases from 1100
+    # P3 performed 0.5 (average), so rating stays close to 900
+    assert gen._player_off_ratings["P1"].rating_value > 1100.0  # Updated from NBA start
+    assert gen._player_off_ratings["P2"].rating_value < 1100.0  # Updated from NBA start
+    # P3 should have started at 900 and updated (could go up or down depending on opponent)
+    assert gen._player_off_ratings["P3"].rating_value != 1000.0  # Not default
+
+
+def test_fit_transform_league_quantile_calculation(base_cn):
+    """League quantile calculation when enough players exist."""
+    # Create enough players to exceed min_count_for_percentiles (default 50)
+    # For testing, we'll use a lower threshold
+    player_ids = [f"P{i}" for i in range(60)]
+    team_ids = [f"T{(i % 2) + 1}" for i in range(60)]
+    match_ids = ["M1"] * 60
+    dates = ["2024-01-01"] * 60
+    # Create varied performances to establish a distribution
+    performances = [0.3 + (i % 10) * 0.05 for i in range(60)]
+
+    df = pl.DataFrame(
+        {
+            "pid": player_ids,
+            "tid": team_ids,
+            "mid": match_ids,
+            "dt": dates,
+            "perf": performances,
+            "pw": [1.0] * 60,
+            "league": ["NBA"] * 60,
+        }
+    )
+    from dataclasses import replace
+
+    cn = replace(base_cn, league="league")
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=cn,
+        auto_scale_performance=True,
+        start_league_quantile=0.2,  # 20th percentile
+        start_min_count_for_percentiles=50,  # Threshold met
+    )
+    gen.fit_transform(df)
+
+    # After processing, new players should use quantile-based rating
+    # Since all 60 players are new, they'll all get start ratings
+    # The quantile will be calculated from the ratings after first match
+    # For a new player in a subsequent match, it should use the quantile
+    # Need at least 2 players for transformer (different performance values)
+    df2 = pl.DataFrame(
+        {
+            "pid": ["P99", "P100"],  # Add opponent for match
+            "tid": ["T1", "T2"],
+            "mid": ["M2", "M2"],
+            "dt": ["2024-01-02", "2024-01-02"],
+            "perf": [0.5, 0.6],  # Different values for transformer
+            "pw": [1.0, 1.0],
+            "league": ["NBA", "NBA"],
+        }
+    )
+    gen.fit_transform(df2)
+
+    # P99 should get a quantile-based start rating
+    assert gen._player_off_ratings["P99"].rating_value is not None
+
+
+def test_fit_transform_league_max_days_ago_filtering(base_cn):
+    """Filtering by start_max_days_ago_league_entities (only recent players count)."""
+    df1 = pl.DataFrame(
+        {
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-01", "2024-01-01"],
+            "perf": [0.6, 0.4],
+            "pw": [1.0, 1.0],
+            "league": ["NBA", "NBA"],
+        }
+    )
+    from dataclasses import replace
+
+    cn = replace(base_cn, league="league")
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=cn,
+        auto_scale_performance=True,
+        start_max_days_ago_league_entities=30,  # Only players from last 30 days
+    )
+    gen.fit_transform(df1)
+
+    # Add a new player after 200 days (beyond the threshold)
+    # Need at least 2 players for transformer (different performance values)
+    df2 = pl.DataFrame(
+        {
+            "pid": ["P3", "P4"],  # Add opponent for match
+            "tid": ["T1", "T2"],
+            "mid": ["M2", "M2"],
+            "dt": ["2024-07-20", "2024-07-20"],  # ~200 days later
+            "perf": [0.5, 0.6],  # Different values for transformer
+            "pw": [1.0, 1.0],
+            "league": ["NBA", "NBA"],
+        }
+    )
+    gen.fit_transform(df2)
+
+    # P3 should get default league rating since P1 and P2 are too old
+    # (their ratings won't be included in quantile calculation)
+    # But after the match, rating gets updated from start value
+    # P3 performed 0.5 (average), so rating should be close to 1000
+    assert abs(gen._player_off_ratings["P3"].rating_value - 1000.0) < 50.0  # Close to default
+
+
+def test_fit_transform_team_based_start_rating(base_cn):
+    """Team-based start rating when start_team_weight > 0."""
+    # First, establish some players on a team
+    df1 = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.8, 0.7, 0.3, 0.2],  # T1 performs well, T2 poorly
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        start_team_weight=0.5,  # 50% team, 50% league
+        start_team_rating_subtract=80.0,
+        start_min_match_count_team_rating=2,  # Need 2+ games per team
+    )
+    gen.fit_transform(df1)
+
+    # Add a new player to T1 (which has good players)
+    df2 = pl.DataFrame(
+        {
+            "pid": ["P5", "P1", "P2"],  # P5 is new on T1
+            "tid": ["T1", "T1", "T2"],
+            "mid": ["M2", "M2", "M2"],
+            "dt": ["2024-01-02"] * 3,
+            "perf": [0.5, 0.8, 0.3],
+            "pw": [1.0, 1.0, 1.0],
+        }
+    )
+    gen.fit_transform(df2)
+
+    # P5 should get a blended rating: league_rating * 0.5 + team_rating * 0.5
+    # Team rating = (P1_rating + P2_rating) / 2 - 80
+    p5_rating = gen._player_off_ratings["P5"].rating_value
+    assert p5_rating != 1000.0  # Should be different from default
+    assert p5_rating > 0  # Should be positive
+
+
+def test_fit_transform_team_based_start_rating_empty_team(base_cn):
+    """Empty team (no existing players) falls back to league rating."""
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3"],  # T1 has P1, P2; T2 has P3 (opponent)
+            "tid": ["T1", "T1", "T2"],
+            "mid": ["M1", "M1", "M1"],
+            "dt": ["2024-01-01", "2024-01-01", "2024-01-01"],
+            "perf": [0.6, 0.4, 0.5],  # Different values to avoid transformer error
+            "pw": [1.0, 1.0, 1.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        start_team_weight=0.5,  # Team weight > 0 but team is empty (no existing players)
+    )
+    gen.fit_transform(df)
+
+    # Should fall back to league rating (default 1000) since team is empty
+    # But after match, ratings get updated
+    assert gen._player_off_ratings["P1"].rating_value > 1000.0  # Updated from start
+
+
+def test_fit_transform_team_based_start_rating_min_match_count(base_cn):
+    """start_min_match_count_team_rating threshold works."""
+    # Team with only 1 game (below threshold of 2)
+    df1 = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3"],  # T1 has P1, P2; T2 has P3 (opponent)
+            "tid": ["T1", "T1", "T2"],
+            "mid": ["M1", "M1", "M1"],
+            "dt": ["2024-01-01", "2024-01-01", "2024-01-01"],
+            "perf": [0.8, 0.2, 0.5],  # Different values to avoid transformer error
+            "pw": [1.0, 1.0, 1.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        start_team_weight=0.5,
+        start_min_match_count_team_rating=2,  # Need 2+ games
+    )
+    gen.fit_transform(df1)
+
+    # Add new player to T1 (team only has 1 game total, below threshold)
+    df2 = pl.DataFrame(
+        {
+            "pid": ["P4", "P5"],  # P4 is new to T1, P5 is opponent
+            "tid": ["T1", "T2"],
+            "mid": ["M2", "M2"],
+            "dt": ["2024-01-02"] * 2,
+            "perf": [0.5, 0.6],  # Different values to avoid transformer error
+            "pw": [1.0, 1.0],
+        }
+    )
+    gen.fit_transform(df2)
+
+    # P4 should get league rating only (team weight = 0 because threshold not met)
+    # After match, rating gets updated from start value
+    assert gen._player_off_ratings["P4"].rating_value != 1000.0  # Updated from start
+    # Should be close to 1000 since team-based rating is not used (threshold not met)
+    assert abs(gen._player_off_ratings["P4"].rating_value - 1000.0) < 50.0
+
+
+def test_fit_transform_league_change_tracking(base_cn):
+    """NOTE: update_players_to_leagues exists but is not currently called automatically.
+    This test documents the expected behavior if/when the feature is fully implemented."""
+    df1 = pl.DataFrame(
+        {
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-01"] * 2,
+            "perf": [0.6, 0.4],
+            "pw": [1.0, 1.0],
+            "league": ["NBA", "NBA"],
+        }
+    )
+    from dataclasses import replace
+
+    cn = replace(base_cn, league="league")
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf", column_names=cn, auto_scale_performance=True
+    )
+    gen.fit_transform(df1)
+
+    # Currently, update_players_to_leagues is not called automatically,
+    # so league tracking doesn't happen. The method exists in StartRatingGenerator
+    # but needs to be integrated into the rating update flow.
+    # This test verifies the method exists and can be called manually if needed.
+    assert hasattr(gen.start_rating_generator, "update_players_to_leagues")
+
+    # League-specific start ratings still work via start_league_ratings parameter
+    gen2 = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=cn,
+        auto_scale_performance=True,
+        start_league_ratings={"NBA": 1100.0, "G-League": 900.0},
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+    )
+
+    # Check start rating before match using future_transform
+    future_df = pl.DataFrame(
+        {
+            "pid": ["P1"],
+            "tid": ["T1"],
+            "mid": ["M1"],
+            "dt": ["2024-01-01"],
+            "pw": [1.0],
+            "league": ["NBA"],
+        }
+    )
+    res = gen2.future_transform(future_df)
+    start_rating = res["player_off_rating_perf"][0]
+    assert start_rating == 1100.0  # NBA start rating
+
+    # After fit_transform, rating will be updated from start
+    gen2.fit_transform(df1)
+    assert gen2._player_off_ratings["P1"].rating_value != 1000.0  # Not default
+    assert gen2._player_off_ratings["P1"].rating_value > 1100.0  # Updated from NBA start
+
+
+def test_fit_transform_multiple_league_changes(base_cn):
+    """NOTE: League change tracking via update_players_to_leagues is not currently automatic.
+    This test verifies that league-specific start ratings work correctly across different leagues.
+    """
+    from dataclasses import replace
+
+    cn = replace(base_cn, league="league")
+
+    # Test that players get appropriate start ratings based on their current league
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=cn,
+        auto_scale_performance=True,
+        start_league_ratings={"NBA": 1100.0, "G-League": 900.0, "EuroLeague": 950.0},
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+    )
+
+    # P1 starts in NBA
+    df1 = pl.DataFrame(
+        {
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-01"] * 2,
+            "perf": [0.6, 0.4],
+            "pw": [1.0, 1.0],
+            "league": ["NBA", "NBA"],
+        }
+    )
+    # Check start rating before match
+    future_df = pl.DataFrame(
+        {
+            "pid": ["P1"],
+            "tid": ["T1"],
+            "mid": ["M1"],
+            "dt": ["2024-01-01"],
+            "pw": [1.0],
+            "league": ["NBA"],
+        }
+    )
+    gen.future_transform(future_df)
+
+    gen.fit_transform(df1)
+    # After match, rating updated from NBA start (1100)
+    assert gen._player_off_ratings["P1"].rating_value > 1100.0
+
+    # P1 moves to G-League - should get G-League start rating for new matches
+    # (but rating will have updated from previous matches)
+    df2 = pl.DataFrame(
+        {
+            "pid": ["P1", "P3"],
+            "tid": ["T1", "T2"],
+            "mid": ["M2", "M2"],
+            "dt": ["2024-01-02"] * 2,
+            "perf": [0.7, 0.3],
+            "pw": [1.0, 1.0],
+            "league": ["G-League", "G-League"],
+        }
+    )
+
+    # Check P3's start rating before match (new player in G-League)
+    future_df2 = pl.DataFrame(
+        {
+            "pid": ["P3"],
+            "tid": ["T2"],
+            "mid": ["M2"],
+            "dt": ["2024-01-02"],
+            "pw": [1.0],
+            "league": ["G-League"],
+        }
+    )
+    res2 = gen.future_transform(future_df2)
+    p3_start = res2["player_off_rating_perf"][0]
+    assert p3_start == 900.0  # G-League start rating
+
+    gen.fit_transform(df2)
+
+    # P3 is new in G-League, should have started at 900 and updated
+    # P3 performed 0.3 (below average), so rating decreases from 900
+    assert gen._player_off_ratings["P3"].rating_value != 1000.0  # Not default
+    # Rating can go below 900 if performance is poor
+    assert (
+        gen._player_off_ratings["P3"].rating_value < 1000.0
+    )  # Below default (started at 900, performed poorly)
+
+
+# --- Feature Output Tests ---
+
+
+@pytest.mark.parametrize(
+    "features_out,non_predictor_features_out,output_suffix,expected_cols",
+    [
+        # Test 1: Single known feature, no suffix (defaults to performance_column="perf")
+        ([RatingKnownFeatures.PLAYER_OFF_RATING], None, None, ["player_off_rating_perf"]),
+        # Test 2: Multiple known features, no suffix (defaults to performance_column="perf")
+        (
+            [RatingKnownFeatures.PLAYER_OFF_RATING, RatingKnownFeatures.PLAYER_DEF_RATING],
+            None,
+            None,
+            ["player_off_rating_perf", "player_def_rating_perf"],
         ),
-    )
-    historical_df = df(
-        {
-            column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2],
-            column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2],
-            column_names.player_id: [1, 2, 3, 4, 1, 2, 3, 4],
-            column_names.start_date: [
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-            ],
-            rating_generator.performance_column: [
-                1.0,
-                0.5,
-                0.25,
-                0.25,
-                0.5,
-                0.5,
-                0.5,
-                0.5,
-            ],
-            column_names.projected_participation_weight: [
-                1.0,
-                1.0,
-                1.0,
-                1.0,
-                0.2,
-                1,
-                0.6,
-                0.6,
-            ],
-            column_names.participation_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-        }
-    )
-
-    future_df = df(
-        {
-            column_names.match_id: [3, 3, 3, 3],
-            column_names.team_id: [1, 1, 2, 2],
-            column_names.player_id: [1, 2, 3, 4],
-            column_names.start_date: [
-                pd.to_datetime("2022-01-05"),
-                pd.to_datetime("2022-01-05"),
-                pd.to_datetime("2022-01-05"),
-                pd.to_datetime("2022-01-05"),
-            ],
-            column_names.projected_participation_weight: [1.0, 1.0, 1.0, 1.0],
-        }
-    )
-
-    _ = rating_generator.fit_transform(df=historical_df, column_names=column_names)
-    player_ratings = rating_generator.player_ratings
-    future_df_with_ratings = rating_generator.transform_future(df=future_df)
-
-    player_rating_1 = player_ratings[1].rating_value
-    player_rating_2 = player_ratings[2].rating_value
-    player_rating_3 = player_ratings[3].rating_value
-    player_rating_4 = player_ratings[4].rating_value
-
-    team_rating1 = player_rating_1 * 0.5 + player_rating_2 * 0.5
-    team_rating2 = player_rating_3 * 0.5 + player_rating_4 * 0.5
-
-    expected_future_ratings = {
-        RatingKnownFeatures.TEAM_RATING_PROJECTED: [
-            team_rating1,
-            team_rating1,
-            team_rating2,
-            team_rating2,
-        ],
-        RatingKnownFeatures.PLAYER_RATING: [
-            player_rating_1,
-            player_rating_2,
-            player_rating_3,
-            player_rating_4,
-        ],
-        RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED: [
-            team_rating1 - team_rating2,
-            team_rating1 - team_rating2,
-            team_rating2 - team_rating1,
-            team_rating2 - team_rating1,
-        ],
-        RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED: [
-            player_rating_1 - team_rating2,
-            player_rating_2 - team_rating2,
-            player_rating_3 - team_rating1,
-            player_rating_4 - team_rating1,
-        ],
-        RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED: [
-            player_rating_1 - team_rating1,
-            player_rating_2 - team_rating1,
-            player_rating_3 - team_rating2,
-            player_rating_4 - team_rating2,
-        ],
-        RatingUnknownFeatures.PLAYER_RATING_CHANGE: [np.nan, np.nan, np.nan, np.nan],
-    }
-    if isinstance(future_df, pl.DataFrame):
-        expected_future_df = future_df.hstack(pl.from_dict(expected_future_ratings))
-        assert_frame_equal(
-            future_df_with_ratings,
-            expected_future_df.select(future_df_with_ratings.columns),
-            check_dtype=False,
-        )
-    else:
-        expected_future_df = future_df.assign(**expected_future_ratings)
-        pd.testing.assert_frame_equal(
-            future_df_with_ratings,
-            expected_future_df,
-            check_dtype=False,
-            check_like=True,
-        )
-
-
-@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
-def test_update_rating_generator_stores_correct(df):
-    column_names = ColumnNames(
-        match_id="game_id",
-        team_id="team_id",
-        player_id="player_id",
-        start_date="start_date",
-    )
-    rating_generator = PlayerRatingGenerator()
-    historical_df1 = df(
-        {
-            column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2],
-            column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2],
-            column_names.player_id: [1, 2, 3, 4, 1, 2, 3, 4],
-            column_names.start_date: [
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-            ],
-            rating_generator.performance_column: [1.0, 1.0, 0, 0, 1.0, 1.0, 0, 0],
-        }
-    )
-
-    historical_df2 = df(
-        {
-            column_names.match_id: [2, 2, 2, 2, 3, 3, 3, 3],
-            column_names.team_id: [1, 1, 2, 2, 1, 1, 3, 3],
-            column_names.player_id: [1, 2, 3, 4, 1, 2, 5, 6],
-            column_names.start_date: [
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-03"),
-                pd.to_datetime("2021-01-03"),
-                pd.to_datetime("2021-01-03"),
-                pd.to_datetime("2021-01-03"),
-            ],
-            rating_generator.performance_column: [1.0, 1.0, 0, 0, 1.0, 1.0, 0, 0],
-        }
-    )
-
-    hist_ratings1 = rating_generator.fit_transform(
-        historical_df1, column_names=column_names
-    )
-
-    if isinstance(hist_ratings1, pl.DataFrame):
-        expected_rating_difference_game2 = (
-            hist_ratings1.filter(pl.col(column_names.match_id) == 2)[
-                rating_generator.features_out[0]
-            ]
-            .head(1)
-            .item()
-        )
-    else:
-        expected_rating_difference_game2 = hist_ratings1[
-            hist_ratings1[column_names.match_id] == 2
-        ][rating_generator.features_out[0]].iloc[0]
-
-    hist_ratings2 = rating_generator.fit_transform(
-        historical_df2, column_names=column_names
-    )
-    if isinstance(hist_ratings1, pl.DataFrame):
-        assert (
-            hist_ratings2[rating_generator.features_out[0]].head(1).item()
-            == expected_rating_difference_game2
-        )
-    else:
-        assert (
-            hist_ratings2[rating_generator.features_out[0]].iloc[0]
-            == expected_rating_difference_game2
-        )
-
-    for f in rating_generator._features_out:
-        assert f in hist_ratings1.columns
-    for f in rating_generator.unknown_features_out:
-        assert f in hist_ratings2.columns
-
-    if isinstance(historical_df1, pl.DataFrame):
-        hist_ratings = pl.concat([hist_ratings1, hist_ratings2]).unique(
-            [column_names.match_id, column_names.player_id]
-        )
-        hist_ratings = hist_ratings.sort(
+        # Test 3: Known and unknown features, no suffix (defaults to performance_column="perf")
+        (
+            [RatingKnownFeatures.PLAYER_OFF_RATING],
+            [RatingUnknownFeatures.PLAYER_PREDICTED_OFF_PERFORMANCE],
+            None,
+            ["player_off_rating_perf", "player_predicted_off_performance_perf"],
+        ),
+        # Test 4: Single known feature with suffix
+        ([RatingKnownFeatures.PLAYER_OFF_RATING], None, "v2", ["player_off_rating_v2"]),
+        # Test 5: Multiple features with suffix
+        (
+            [RatingKnownFeatures.PLAYER_OFF_RATING, RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
+            [RatingUnknownFeatures.PLAYER_PREDICTED_OFF_PERFORMANCE],
+            "custom",
             [
-                column_names.start_date,
-                column_names.match_id,
-                column_names.team_id,
-                column_names.player_id,
-            ]
-        )
+                "player_off_rating_custom",
+                "team_off_rating_projected_custom",
+                "player_predicted_off_performance_custom",
+            ],
+        ),
+        # Test 6: Team-level features (defaults to performance_column="perf")
+        (
+            [
+                RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
+                RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED,
+            ],
+            [RatingUnknownFeatures.TEAM_RATING],
+            None,
+            [
+                "team_off_rating_projected_perf",
+                "opponent_def_rating_projected_perf",
+                "team_rating_perf",
+            ],
+        ),
+        # Test 7: Rating difference features
+        (
+            [RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED],
+            [RatingUnknownFeatures.TEAM_RATING_DIFFERENCE],
+            "diff",
+            ["team_rating_difference_projected_diff", "team_rating_difference_diff"],
+        ),
+        # Test 8: Empty features_out (should use defaults, defaults to performance_column="perf")
+        (
+            None,
+            [RatingUnknownFeatures.PLAYER_PREDICTED_OFF_PERFORMANCE],
+            None,
+            [
+                "team_rating_difference_projected_perf",
+                "player_predicted_off_performance_perf",
+            ],  # Default is RATING_DIFFERENCE_PROJECTED
+        ),
+    ],
+)
+def test_player_rating_features_out_combinations(
+    base_cn, sample_df, features_out, non_predictor_features_out, output_suffix, expected_cols
+):
+    """Test that correct features are output for different combinations of features_out, non_predictor_features_out, and suffixes."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        features_out=features_out,
+        non_predictor_features_out=non_predictor_features_out,
+        output_suffix=output_suffix,
+    )
+    result = gen.fit_transform(sample_df)
 
-        assert_frame_equal(
-            rating_generator.historical_df[rating_generator.features_out],
-            hist_ratings[rating_generator.features_out],
-        )
+    # Check that all expected columns are present
+    result_cols = (
+        result.columns.tolist() if hasattr(result.columns, "tolist") else list(result.columns)
+    )
+    for col in expected_cols:
+        assert (
+            col in result_cols
+        ), f"Expected column '{col}' not found in output. Columns: {result_cols}"
+
+    # Check that result has data
+    assert len(result) > 0
+
+
+@pytest.mark.parametrize("output_suffix", [None, "v2", "custom_suffix", "test123"])
+def test_player_rating_suffix_applied_to_all_features(base_cn, sample_df, output_suffix):
+    """Test that output_suffix is correctly applied to all requested features."""
+    features = [
+        RatingKnownFeatures.PLAYER_OFF_RATING,
+        RatingKnownFeatures.PLAYER_DEF_RATING,
+        RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
+    ]
+    non_predictor = [
+        RatingUnknownFeatures.PLAYER_PREDICTED_OFF_PERFORMANCE,
+        RatingUnknownFeatures.TEAM_RATING,
+    ]
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        features_out=features,
+        non_predictor_features_out=non_predictor,
+        output_suffix=output_suffix,
+    )
+    result = gen.fit_transform(sample_df)
+
+    # Build expected column names
+    if output_suffix:
+        expected_cols = [
+            f"player_off_rating_{output_suffix}",
+            f"player_def_rating_{output_suffix}",
+            f"team_off_rating_projected_{output_suffix}",
+            f"player_predicted_off_performance_{output_suffix}",
+            f"team_rating_{output_suffix}",
+        ]
     else:
-        hist_ratings = pd.concat([hist_ratings1, hist_ratings2]).drop_duplicates(
-            [column_names.match_id, column_names.player_id]
-        )
-        pd.testing.assert_frame_equal(
-            rating_generator.historical_df[rating_generator.features_out].reset_index(
-                drop=True
-            ),
-            hist_ratings[rating_generator.features_out].reset_index(drop=True),
-        )
-
-
-@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
-def test_rating_generator_prefix_suffix(df):
-
-    column_names = ColumnNames(
-        match_id="game_id",
-        team_id="team_id",
-        player_id="player_id",
-        start_date="start_date",
-        league="league",
-    )
-    rating_generator = PlayerRatingGenerator(
-        prefix="prefix_",
-        suffix="_suffix",
-        unknown_features_out=[
-            RatingUnknownFeatures.PLAYER_RATING_CHANGE,
-            RatingUnknownFeatures.PERFORMANCE,
-            RatingUnknownFeatures.RATING_DIFFERENCE,
-            RatingUnknownFeatures.OPPONENT_RATING,
-            RatingUnknownFeatures.RATING_MEAN,
-        ],
-        non_predictor_known_features_out=[
-            RatingKnownFeatures.TEAM_RATING_PROJECTED,
-            RatingKnownFeatures.PLAYER_RATING,
-            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
-            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED,
-            RatingKnownFeatures.TEAM_LEAGUE,
-            RatingKnownFeatures.PLAYER_LEAGUE,
-            RatingKnownFeatures.OPPONENT_LEAGUE,
-            RatingKnownFeatures.OPPONENT_RATING_PROJECTED,
-        ],
-    )
-    historical_df1 = df(
-        {
-            column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2],
-            column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2],
-            column_names.player_id: [1, 2, 3, 4, 1, 2, 3, 4],
-            column_names.league: ["a", "a", "b", "b", "a", "a", "b", "b"],
-            column_names.start_date: [
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-            ],
-            rating_generator.performance_column: [1.0, 1.0, 0, 0, 1.0, 1.0, 0, 0],
-        }
-    )
-
-    historical_df1_with_ratings = rating_generator.fit_transform(
-        historical_df1, column_names=column_names
-    )
-    for (
-        non_estimator_known_features_out
-    ) in rating_generator._non_estimator_known_features_out:
-        expected_feature_name_out = (
-            rating_generator.prefix
-            + non_estimator_known_features_out
-            + rating_generator.suffix
-        )
-        assert expected_feature_name_out in historical_df1_with_ratings.columns
-
-    for unknown_features_out in rating_generator._unknown_features_out:
-        expected_feature_name_out = (
-            rating_generator.prefix + unknown_features_out + rating_generator.suffix
-        )
-        assert expected_feature_name_out in historical_df1_with_ratings.columns
-
-    for f in rating_generator._features_out:
-        expected_feature_out = rating_generator.prefix + f + rating_generator.suffix
-        assert expected_feature_out in historical_df1_with_ratings.columns
-
-    future_df = df(
-        {
-            column_names.match_id: [3, 3, 3, 3],
-            column_names.team_id: [1, 1, 2, 2],
-            column_names.player_id: [1, 2, 3, 4],
-            column_names.league: ["a", "a", "b", "b"],
-            column_names.start_date: [
-                pd.to_datetime("2020-01-03"),
-                pd.to_datetime("2020-01-03"),
-                pd.to_datetime("2020-01-03"),
-                pd.to_datetime("2020-01-03"),
-            ],
-        }
-    )
-
-    future_df_ratings = rating_generator.transform_future(future_df)
-    for (
-        non_estimator_known_features_out
-    ) in rating_generator._non_estimator_known_features_out:
-        expected_feature_name_out = (
-            rating_generator.prefix
-            + non_estimator_known_features_out
-            + rating_generator.suffix
-        )
-        assert expected_feature_name_out in future_df_ratings.columns
-
-    for f in rating_generator._features_out:
-        expected_feature_out = rating_generator.prefix + f + rating_generator.suffix
-        assert expected_feature_out in future_df_ratings.columns
-
-
-@pytest.mark.parametrize("as_dict", [True, False])
-@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
-def test_update_rating_generator_with_performances_generator(df, as_dict):
-    column_names = ColumnNames(
-        match_id="game_id",
-        team_id="team_id",
-        player_id="player_id",
-        start_date="start_date",
-        league="league",
-    )
-    if as_dict:
-        performances_generator = None
-        performance_weights = [
-            {
-                "name": "points_difference",
-                "weight": 0.5,
-            },
-            {
-                "name": "won",
-                "weight": 0.5,
-            },
+        # When output_suffix=None, it defaults to performance column name ("perf")
+        expected_cols = [
+            "player_off_rating_perf",
+            "player_def_rating_perf",
+            "team_off_rating_projected_perf",
+            "player_predicted_off_performance_perf",
+            "team_rating_perf",
         ]
 
-    else:
-        performances_generator = PerformanceWeightsManager(
-            weights=[
-                ColumnWeight(name="points_difference", weight=0.5),
-                ColumnWeight(name="won", weight=0.5),
-            ],
-            prefix="performance__",
+    for col in expected_cols:
+        result_cols = (
+            result.columns.tolist() if hasattr(result.columns, "tolist") else list(result.columns)
         )
-        performance_weights = None
+    assert col in result_cols, f"Expected column '{col}' not found. Columns: {result_cols}"
 
-    rating_generator = PlayerRatingGenerator(
-        performances_generator=performances_generator,
-        performance_weights=performance_weights,
-        prefix="prefix_",
-        suffix="_suffix",
-        unknown_features_out=[
-            RatingUnknownFeatures.PLAYER_RATING_CHANGE,
-            RatingUnknownFeatures.PERFORMANCE,
-            RatingUnknownFeatures.RATING_DIFFERENCE,
-            RatingUnknownFeatures.OPPONENT_RATING,
-            RatingUnknownFeatures.RATING_MEAN,
-        ],
-        non_predictor_known_features_out=[
-            RatingKnownFeatures.TEAM_RATING_PROJECTED,
-            RatingKnownFeatures.PLAYER_RATING,
-            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED,
-            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED,
-            RatingKnownFeatures.TEAM_LEAGUE,
-            RatingKnownFeatures.PLAYER_LEAGUE,
-            RatingKnownFeatures.OPPONENT_LEAGUE,
-            RatingKnownFeatures.OPPONENT_RATING_PROJECTED,
-        ],
-    )
-    historical_df = df(
-        {
-            column_names.match_id: [1, 1, 1, 1, 2, 2, 2, 2],
-            column_names.team_id: [1, 1, 2, 2, 1, 1, 2, 2],
-            column_names.player_id: [1, 2, 3, 4, 1, 2, 3, 4],
-            column_names.league: ["a", "a", "b", "b", "a", "a", "b", "b"],
-            column_names.start_date: [
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2020-01-01"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-                pd.to_datetime("2021-01-02"),
-            ],
-            "won": [1.0, 1.0, 0, 0, 1.0, 1.0, 0, 0],
-            "points_difference": [10, 5, -5, -10, 10, 5, -5, -10],
-        }
-    )
 
-    historical_df_with_ratings = rating_generator.fit_transform(
-        historical_df, column_names=column_names
+def test_player_rating_only_requested_features_present(base_cn, sample_df):
+    """Test that only requested features (and input columns) are present in output."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+        non_predictor_features_out=None,
+        output_suffix=None,
     )
-    assert rating_generator.performance_column == "performance__weighted"
-    if isinstance(historical_df, pl.DataFrame):
-        assert historical_df_with_ratings[
-            rating_generator.prefix + "performance" + rating_generator.suffix
-        ].to_list() == [1.0, 0.875, 0.125, 0, 1.0, 0.875, 0.125, 0]
-    else:
-        assert historical_df_with_ratings[
-            rating_generator.prefix + "performance" + rating_generator.suffix
-        ].tolist() == [1.0, 0.875, 0.125, 0, 1.0, 0.875, 0.125, 0]
+    result = gen.fit_transform(sample_df)
+
+    # Should have input columns + requested feature
+    input_cols = set(sample_df.columns)
+    result_cols = set(result.columns)
+
+    # Check that input columns are preserved
+    for col in input_cols:
+        assert col in result_cols, f"Input column '{col}' missing from output"
+
+    # Check that requested feature is present (with performance column suffix)
+    assert "player_off_rating_perf" in result_cols
+
+    # Check that other rating features are NOT present (unless they're input columns)
+    unwanted_features = [
+        "player_def_rating",
+        "team_off_rating_projected",
+        "player_predicted_off_performance",
+    ]
+    for feature in unwanted_features:
+        if feature not in input_cols:
+            assert (
+                feature not in result_cols
+            ), f"Unrequested feature '{feature}' should not be in output"

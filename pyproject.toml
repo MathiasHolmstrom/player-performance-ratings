@@ -1,0 +1,109 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spforge"
+version = "0.6.0"
+description = "A flexible framework for generating features, ratings, and building machine learning or other models for training and inference on sports data."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Mathias Holmstrøm", email = "mathiasholmstom@gmail.com" },
+]
+license = { text = "See LICENSE file" }
+keywords = ["sports", "machine-learning", "ratings", "features"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+  "numpy>=1.23.4",
+  "optuna>=3.4.0",
+  "pandas>=2.0.0",
+  "pendulum>=1.0.0",
+  "scikit-learn<=1.5.2, >=1.4.0",
+  "lightgbm>=4.0.0",
+  "narwhals>2.0.0",
+  "polars>=1.17.0",
+  "pyarrow>=19.0.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0.0",
+  "deepdiff>=8.6.0",
+  "ruff>=0.9.0",
+  "black>=24.0.0",
+  "pre-commit>=3.6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Hiderdk/player-performance-ratings"
+Repository = "https://github.com/Hiderdk/player-performance-ratings"
+
+[tool.setuptools]
+packages = ["spforge", "examples"]
+
+[tool.setuptools.package-data]
+"examples.nba" = ["data/*.parquet"]
+"examples.lol" = ["data/*.parquet"]
+
+# -----------------------------
+# Formatting (Black)
+# -----------------------------
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  \.venv
+ |build
+ |dist
+ |__pycache__
+)/
+'''
+
+# -----------------------------
+# Linting (Ruff)
+# -----------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+fix = true
+exclude = [
+  ".venv",
+  "build",
+  "dist",
+  "__pycache__",
+]
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "I",   # import sorting
+  "B",   # bugbear
+  "UP",  # pyupgrade
+  "SIM", # simplify
+]
+ignore = [
+  "E501", # line length handled by black
+]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["F401", "F811"]
+
+# -----------------------------
+# Pytest (optional)
+# -----------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

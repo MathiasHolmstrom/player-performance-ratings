@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Union, Any
+from typing import Any
 
 
 @dataclass
@@ -7,16 +7,16 @@ class ColumnNames:
     team_id: str
     match_id: str
     start_date: str
-    player_id: Optional[str] = None
-    league: Optional[str] = None
-    position: Optional[str] = None
-    participation_weight: Optional[str] = None
-    projected_participation_weight: Optional[str] = None
-    update_match_id: Optional[str] = None
-    parent_team_id: Optional[str] = None
-    team_players_playing_time: Optional[str] = None
-    opponent_players_playing_time: Optional[str] = None
-    other_values: Optional[list[str]] = None
+    player_id: str | None = None
+    league: str | None = None
+    position: str | None = None
+    participation_weight: str | None = None
+    projected_participation_weight: str | None = None
+    update_match_id: str | None = None
+    parent_team_id: str | None = None
+    team_players_playing_time: str | None = None
+    opponent_players_playing_time: str | None = None
+    other_values: list[str] | None = None
 
     def __post_init__(self):
         if self.update_match_id is None:
@@ -38,23 +38,24 @@ class ColumnNames:
 
 @dataclass
 class MatchPerformance:
-    performance_value: Optional[float]
-    participation_weight: Optional[float]
+    performance_value: float | None
+    participation_weight: float | None
     projected_participation_weight: float
-    team_players_playing_time: Optional[dict[str, float]] = None
-    opponent_players_playing_time: Optional[dict[str, float]] = None
+    team_players_playing_time: dict[str, float] | None = None
+    opponent_players_playing_time: dict[str, float] | None = None
 
 
 @dataclass
-class PlayerRating:
+class RatingState:
+    """Generic rating state (works for players or teams)."""
+
     id: str
     rating_value: float
-    name: Optional[str] = None
-    games_played: Union[float, int] = 0
-    last_match_day_number: int = None
-    confidence_sum: float = 0
-    prev_rating_changes: List[float] = None
-    most_recent_team_id: Optional[str] = None
+    confidence_sum: float = 0.0
+    games_played: float = 0.0
+    last_match_day_number: int | None = None
+    most_recent_group_id: str | None = None  # e.g. team_id for players, league, etc.
+    prev_rating_changes: list[float] = None
 
 
 @dataclass
@@ -62,7 +63,12 @@ class Team:
     id: str
     player_ids: list[str]
     last_match_day_number: int
-    name: Optional[str] = None
+    name: str | None = None
+
+
+@dataclass
+class PlayerRating(RatingState):
+    most_recent_team_id: str | None = None
 
 
 @dataclass
@@ -80,19 +86,17 @@ class PreMatchPlayerRating:
     id: str
     rating_value: float
     games_played: int
-    league: Optional[str]
-    position: Optional[str]
+    league: str | None
+    position: str | None
     match_performance: MatchPerformance
-    other: Optional[dict[str, Any]] = None
+    other: dict[str, Any] | None = None
 
 
 @dataclass
 class PreMatchTeamRating:
     id: str
     players: list[PreMatchPlayerRating]
-    rating_value: Optional[float]
-    projected_rating_value: float
-    league: Optional[str]
+    rating_value: float
 
 
 @dataclass
@@ -106,7 +110,7 @@ class PreMatchRating:
 class PlayerRatingChange:
     id: str
     day_number: int
-    league: Optional[str]
+    league: str | None
     participation_weight: float
     predicted_performance: float
     performance: float
@@ -119,10 +123,11 @@ class TeamRatingChange:
     id: str
     players: list[PlayerRatingChange]
     predicted_performance: float
+    predicted_player_performances: list[float]
     performance: float
     pre_match_projected_rating_value: float
     rating_change_value: float
-    league: Optional[str]
+    league: str | None
 
 
 @dataclass
@@ -161,12 +166,27 @@ class MatchRatings:
 @dataclass
 class MatchPlayer:
     id: str
-    performance: Optional[MatchPerformance]
-    league: Optional[str] = None
-    position: Optional[str] = None
-    team_players_participation_weight: Optional[dict[str, float]] = None
-    opponent_players_participation_weight: Optional[dict[str, float]] = None
-    others: Optional[dict[str, Any]] = None
+    performance: MatchPerformance | None
+    league: str | None = None
+    position: str | None = None
+    team_players_participation_weight: dict[str, float] | None = None
+    opponent_players_participation_weight: dict[str, float] | None = None
+    others: dict[str, Any] | None = None
+
+
+@dataclass
+class PreMatchPlayersCollection:
+    pre_match_player_ratings: list[PreMatchPlayerRating]
+    player_rating_values: list[float]
+    new_players: list[MatchPlayer]
+    player_ids: list[str]
+    projected_particiation_weights: list[float]
+
+
+@dataclass
+class NewPlayerPreMatchPlayersCollection:
+    pre_match_player_ratings: list[PreMatchPlayerRating]
+    player_rating_values: list[float]
 
 
 @dataclass
@@ -174,7 +194,7 @@ class MatchTeam:
     id: str
     players: list[MatchPlayer]
     league: str = None
-    update_id: Optional[str] = None
+    update_id: str | None = None
 
     def __post_init__(self):
 
@@ -185,9 +205,9 @@ class MatchTeam:
 @dataclass
 class Match:
     id: str
-    teams: List[MatchTeam]
+    teams: list[MatchTeam]
     day_number: int
-    update_id: Optional[str] = None
+    update_id: str | None = None
     league: str = None
 
     def __post_init__(self):

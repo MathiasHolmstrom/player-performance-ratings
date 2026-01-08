@@ -1,9 +1,9 @@
 from ._score import (
-    SklearnScorer,
-    OrdinalLossScorer,
-    MeanBiasScorer,
-    Filter,
-    apply_filters,
-    Operator,
     BaseScorer,
+    Filter,
+    MeanBiasScorer,
+    Operator,
+    OrdinalLossScorer,
+    SklearnScorer,
+    apply_filters,
 )

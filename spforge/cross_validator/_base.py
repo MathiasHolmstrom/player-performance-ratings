@@ -1,25 +1,25 @@
-from abc import abstractmethod, ABC
-from typing import Optional
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
-from spforge import ColumnNames
+if TYPE_CHECKING:
+    from spforge.pipeline import Pipeline
 
-from spforge.predictor._base import BasePredictor
+from narwhals.typing import IntoFrameT
+
 from spforge.scorer import BaseScorer
-
-from narwhals.typing import FrameT, IntoFrameT
 
 
 class CrossValidator(ABC):
 
     def __init__(
         self,
-        scorer: Optional[BaseScorer],
+        scorer: BaseScorer | None,
         min_validation_date: str,
-        predictor: BasePredictor,
+        estimator: "Pipeline",
     ):
         self.scorer = scorer
         self.min_validation_date = min_validation_date
-        self.predictor = predictor
+        self.estimator = estimator
 
     @property
     def validation_column_name(self) -> str:
@@ -28,14 +28,14 @@ class CrossValidator(ABC):
     @abstractmethod
     def generate_validation_df(
         self,
-        df: FrameT,
+        df: IntoFrameT,
         return_features: bool = False,
         add_train_prediction: bool = False,
     ) -> IntoFrameT:
         pass
 
     def cross_validation_score(
-        self, validation_df: FrameT, scorer: Optional[BaseScorer] = None
+        self, validation_df: IntoFrameT, scorer: BaseScorer | None = None
     ) -> float:
         if not scorer and not self.scorer:
             raise ValueError(

@@ -1,475 +1,524 @@
-from unittest import mock
-
+import narwhals as nw
+import numpy as np
 import pandas as pd
 import polars as pl
-from polars.testing import assert_frame_equal
 import pytest
-from spforge.cross_validator import MatchKFoldCrossValidator
+from narwhals._native import IntoFrameT
+from sklearn.linear_model import LinearRegression, LogisticRegression
 
-from spforge.predictor import SklearnPredictor, SklearnPredictor
-from sklearn.linear_model import LinearRegression
+from spforge import Pipeline
 
-from spforge.ratings.rating_calculators import MatchRatingGenerator
-from spforge.ratings import (
-    RatingKnownFeatures,
-    PlayerRatingGenerator,
-    RatingUnknownFeatures,
-)
+from sklearn.base import BaseEstimator, TransformerMixin
 
-from spforge.transformers import (
-    LagTransformer,
-    RatioTeamPredictorTransformer,
-    PredictorTransformer,
-)
-
-from spforge import ColumnNames, Pipeline
-from spforge.transformers import (
-    RollingWindowTransformer,
-)
-from spforge.transformers.fit_transformers._performance_manager import (
-    ColumnWeight,
-    PerformanceWeightsManager,
-)
+from spforge.estimator import SkLearnEnhancerEstimator
+from spforge.transformers import EstimatorTransformer
 
 
-def test_pipeline_constructor():
-    lag_generators = [
-        RollingWindowTransformer(
-            features=["kills", "deaths"],
-            window=1,
-            granularity=["player_id"],
-            prefix="rolling_mean_",
-        ),
-    ]
+class CaptureEstimator(BaseEstimator):
+    def __init__(self, has_proba: bool = False):
+        self.has_proba = has_proba
+        self.fit_X_type = None
+        self.fit_columns = None
+        self.fit_shape = None
+        self.predict_X_type = None
+        self.predict_columns = None
+        self.predict_shape = None
+        self.classes_ = np.array([0, 1]) if has_proba else None
 
-    post_lag_transformers = [
-        PredictorTransformer(
-            predictor=SklearnPredictor(estimator=LinearRegression(), target="won")
-        )
-    ]
-    rating_generator = PlayerRatingGenerator(
-        features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
-    )
+    def fit(self, X, y, sample_weight=None):
+        self.fit_X_type = type(X)
+        self.fit_shape = getattr(X, "shape", None)
+        self.fit_columns = list(X.columns) if hasattr(X, "columns") else None
+        self._y_is_numeric = pd.api.types.is_numeric_dtype(pd.Series(y))
+        return self
 
-    pipeline = Pipeline(
-        column_names=ColumnNames(
-            match_id="game_id",
-            team_id="team_id",
-            player_id="player_id",
-            start_date="start_date",
-        ),
-        lag_transformers=lag_generators,
-        post_lag_transformers=post_lag_transformers,
-        predictor=SklearnPredictor(
-            estimator=LinearRegression(), features=["kills"], target="won"
-        ),
-        rating_generators=rating_generator,
-    )
+    def predict(self, X):
+        self.predict_X_type = type(X)
+        self.predict_shape = getattr(X, "shape", None)
+        self.predict_columns = list(X.columns) if hasattr(X, "columns") else None
+        n = len(X)
+        return np.zeros(n, dtype=float)
 
-    expected_estimator_features = (
-        ["kills"]
-        + [l.features_out for l in lag_generators][0]
-        + [p.predictor.pred_column for p in post_lag_transformers]
-        + rating_generator.features_out
-    )
-    assert pipeline.features.sort() == expected_estimator_features.sort()
+    def predict_proba(self, X):
+        if not self.has_proba:
+            return self.predict(X)
+        n = len(X)
+        out = np.zeros((n, 2), dtype=float)
+        out[:, 0] = 0.25
+        out[:, 1] = 0.75
+        return out
 
-    # asserts estimator_features gets added to the post_transformer that contains a predictor
-    assert (
-        post_lag_transformers[0].features.sort()
-        == [
-            ["kills"]
-            + [l.features_out for l in lag_generators][0]
-            + rating_generator.features_out
-        ][0].sort()
-    )
+class CaptureDtypesEstimator(CaptureEstimator):
+    def __init__(self, has_proba: bool = False):
+        super().__init__(has_proba=has_proba)
+        self.fit_dtypes = None
+
+    def fit(self, X, y, sample_weight=None):
+        super().fit(X, y, sample_weight=sample_weight)
+        self.fit_dtypes = list(X.dtypes) if hasattr(X, "dtypes") else None
+        return self
 
 
-@pytest.mark.parametrize("df", [pl.DataFrame, pd.DataFrame])
-def test_match_predictor_auto_pre_transformers(df):
-    data = df(
+class FakeLGBMRegressor(BaseEstimator):
+    __module__ = "lightgbm.sklearn"
+
+    def fit(self, X, y, sample_weight=None):
+        return self
+
+    def predict(self, X):
+        return np.zeros(len(X), dtype=float)
+
+
+class EstimatorHoldingTransformer(BaseEstimator, TransformerMixin):
+    def __init__(self, estimator):
+        self.estimator = estimator
+
+    def fit(self, X, y=None, **fit_params):
+        if hasattr(X, "columns"):
+            self.feature_names_in_ = np.asarray(list(X.columns), dtype=object)
+        else:
+            self.feature_names_in_ = None
+        return self
+
+    def transform(self, X):
+        return X
+
+    def get_feature_names_out(self, input_features=None):
+        if input_features is None:
+            if getattr(self, "feature_names_in_", None) is not None:
+                return np.asarray(self.feature_names_in_, dtype=object)
+            return np.asarray([], dtype=object)
+        return np.asarray(list(input_features), dtype=object)
+
+    def set_output(self, *, transform=None):
+        return self
+
+
+
+@pytest.fixture(params=["pd", "pl"])
+def frame(request) -> str:
+    return request.param
+
+
+@pytest.fixture
+def df_reg_pd():
+    return pd.DataFrame(
         {
-            "game_id": [1, 1, 2, 2, 3, 3],
-            "player_id": [1, 2, 3, 1, 2, 3],
-            "team_id": [1, 2, 1, 2, 1, 3],
-            "start_date": [
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-02"),
-                pd.to_datetime("2023-01-02"),
-                pd.to_datetime("2023-01-03"),
-                pd.to_datetime("2023-01-03"),
-            ],
-            "deaths": [1, 1, 1, 2, 2, 2],
-            "kills": [0.2, 0.3, 0.4, 0.5, 2, 0.2],
-            "__target": [1, 0, 1, 0, 1, 0],
+            "gameid": ["g1", "g1", "g2", "g2", "g3", "g3"],
+            "num1": [1.0, 2.0, np.nan, 4.0, 5.0, 6.0],
+            "num2": [10.0, 20.0, 30.0, 40.0, np.nan, 60.0],
+            "cat1": ["a", "b", "a", None, "b", "c"],
+            "y": [1.2, 2.4, 2.0, 4.2, 5.1, 6.3],
         }
     )
 
-    column_weights = [
-        ColumnWeight(name="kills", weight=0.6),
-        ColumnWeight(name="deaths", weight=0.4, lower_is_better=True),
-    ]
 
-    if isinstance(data, pd.DataFrame):
-        expected_df = data.copy()
-        expected_df["prediction"] = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
-    else:
-        expected_df = data.with_columns(pl.lit(0.5).alias("prediction"))
-
-    predictor_mock = mock.Mock()
-    predictor_mock.target = "__target"
-    predictor_mock.columns_added = ["prediction"]
-    predictor_mock.features = [RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
-
-    rating_generators = PlayerRatingGenerator(
-        features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
-        performance_column="weighted_performance",
-        performances_generator=PerformanceWeightsManager(weights=column_weights),
-    )
-
-    pipeline = Pipeline(
-        predictor=predictor_mock,
-        rating_generators=rating_generators,
-        column_names=ColumnNames(
-            match_id="game_id",
-            team_id="team_id",
-            player_id="player_id",
-            start_date="start_date",
-        ),
-    )
-
-    pipeline.train(df=data)
-    assert len(pipeline.rating_generators[0].performances_generator.transformers) > 0
-
-
-@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
-def test_match_predictor_multiple_rating_generators_same_performance(df):
-    data = df(
+@pytest.fixture
+def df_clf_pd():
+    return pd.DataFrame(
         {
-            "game_id": [1, 1, 2, 2, 3, 3],
-            "player_id": [1, 2, 3, 1, 2, 3],
-            "team_id": [1, 2, 1, 2, 1, 3],
-            "start_date": [
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-02"),
-                pd.to_datetime("2023-01-02"),
-                pd.to_datetime("2023-01-03"),
-                pd.to_datetime("2023-01-03"),
-            ],
-            "performance": [0.2, 0.8, 0.4, 0.6, 1, 0],
-            "__target": [1, 0, 1, 0, 1, 0],
+            "gameid": ["g1", "g1", "g2", "g2", "g3", "g3", "g4", "g4"],
+            "num1": [1.0, 2.0, np.nan, 4.0, 5.0, 6.0, 7.0, 8.0],
+            "num2": [10.0, 20.0, 30.0, 40.0, np.nan, 60.0, 70.0, 80.0],
+            "cat1": ["a", "b", "a", None, "b", "c", "a", "c"],
+            "y": [0, 1, 0, 1, 1, 0, 0, 1],
         }
     )
 
-    column_names1 = ColumnNames(
-        match_id="game_id",
-        team_id="team_id",
-        player_id="player_id",
-        start_date="start_date",
-    )
-    if isinstance(data, pd.DataFrame):
-        data = data.sort_values(
-            by=[
-                column_names1.start_date,
-                column_names1.match_id,
-                column_names1.team_id,
-                column_names1.player_id,
-            ]
-        )
-    else:
-        data = data.sort(
-            column_names1.start_date,
-            column_names1.match_id,
-            column_names1.team_id,
-            column_names1.player_id,
-        )
 
-    predictor = SklearnPredictor(estimator=LinearRegression(), target="__target")
-
-    pipeline = Pipeline(
-        rating_generators=[
-            PlayerRatingGenerator(
-                features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
-                prefix="rating_1",
-                suffix="2",
-            ),
-            PlayerRatingGenerator(
-                match_rating_generator=MatchRatingGenerator(
-                    rating_change_multiplier=20
-                ),
-                features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
-                prefix="rating_2",
-            ),
-        ],
-        lag_transformers=[],
-        predictor=predictor,
-        column_names=column_names1,
-    )
-
-    pipeline.train(df=data)
-
-    expected_estimator_features = (
-        pipeline.rating_generators[0].features_out
-        + pipeline.rating_generators[1].features_out
-    )
-
-    assert sorted(expected_estimator_features) == sorted(pipeline.features)
-    assert sorted(expected_estimator_features) == sorted(pipeline.predictor.features)
+@pytest.fixture
+def df_reg(frame, df_reg_pd):
+    if frame == "pd":
+        return df_reg_pd
+    return pl.from_pandas(df_reg_pd)
 
 
-def test_match_predictor_0_rating_generators():
-    """
-    Post rating transformers are used, but no rating model. the features from transformers should be used to train model and add prediction
-    """
-
-    df = pd.DataFrame(
-        {
-            "game_id": [1, 1, 2, 2, 3, 3],
-            "player_id": [1, 2, 3, 1, 2, 3],
-            "team_id": [1, 2, 1, 2, 1, 3],
-            "start_date": [1, 1, 2, 2, 3, 3],
-            "deaths": [1, 1, 1, 2, 2, 2],
-            "kills": [0.2, 0.3, 0.4, 0.5, 2, 0.2],
-            "__target": [1, 0, 1, 0, 1, 0],
-        }
-    )
-
-    expected_df = df.copy()
-    expected_df["prediction"] = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
-
-    predictor_mock = mock.Mock()
-    predictor_mock.target = "__target"
-    predictor_mock.columns_added = ["prediction"]
-    predictor_mock.add_prediction.return_value = expected_df
-    predictor_mock.features = [RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED]
-
-    column_names = ColumnNames(
-        match_id="game_id",
-        team_id="team_id",
-        player_id="player_id",
-        start_date="start_date",
-    )
-
-    lag_transformer = LagTransformer(
-        features=["kills", "deaths"],
-        lag_length=1,
-        granularity=["player_id"],
-        prefix="lag_",
-    )
-
-    pipeline = Pipeline(
-        rating_generators=[],
-        lag_transformers=[lag_transformer],
-        predictor=predictor_mock,
-        column_names=column_names,
-    )
-
-    pipeline.train(df=df)
-
-    col_names_predictor_train = predictor_mock.train.call_args[1]["df"].columns
-    assert any(
-        lag_transformer.prefix in element for element in col_names_predictor_train
-    )
+@pytest.fixture
+def df_clf(frame, df_clf_pd):
+    if frame == "pd":
+        return df_clf_pd
+    return pl.from_pandas(df_clf_pd)
 
 
-@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
-def test_match_predictor_generate_and_predict(df):
-    historical_df = df(
-        {
-            "game_id": [1, 1, 2, 2, 3, 3],
-            "player_id": [1, 2, 3, 1, 2, 3],
-            "team_id": [1, 2, 1, 2, 1, 3],
-            "start_date": [
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-02"),
-                pd.to_datetime("2023-01-02"),
-                pd.to_datetime("2023-01-03"),
-                pd.to_datetime("2023-01-03"),
-            ],
-            "deaths": [1, 1, 1, 2, 2, 2],
-            "kills": [0.2, 0.3, 0.4, 0.5, 2, 0.2],
-            "__target": [1, 0, 1, 0, 1, 0],
-        }
-    )
-
-    future_df = df(
-        {
-            "game_id": [4, 4, 5, 5],
-            "player_id": [1, 2, 1, 3],
-            "team_id": [1, 3, 1, 3],
-            "start_date": [
-                pd.to_datetime("2023-01-04"),
-                pd.to_datetime("2023-01-04"),
-                pd.to_datetime("2023-01-05"),
-                pd.to_datetime("2023-01-05"),
-            ],
-        }
-    )
-
-    column_weights = [
-        ColumnWeight(name="kills", weight=0.6),
-        ColumnWeight(name="deaths", weight=0.4, lower_is_better=True),
-    ]
-    if isinstance(historical_df, pd.DataFrame):
-        historical_df_mock_return_with_prediction = historical_df.copy()
-        historical_df_mock_return_with_prediction["prediction"] = [
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-        ]
-    else:
-        historical_df_mock_return_with_prediction = historical_df.with_columns(
-            pl.lit(0.5).alias("prediction")
-        )
-
-    column_names = ColumnNames(
-        match_id="game_id",
-        team_id="team_id",
-        player_id="player_id",
-        start_date="start_date",
-    )
-    rating_generator = PlayerRatingGenerator(
-        features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
-        performances_generator=PerformanceWeightsManager(
-            weights=column_weights,
-        ),
-    )
-
-    pipeline = Pipeline(
-        predictor=SklearnPredictor(estimator=LinearRegression(), target="__target"),
-        rating_generators=rating_generator,
-        column_names=column_names,
-    )
-
-    pipeline.train(df=historical_df)
-    new_df = pipeline.predict(future_df, return_features=True)
-    expected_columns = list(future_df.columns) + [
-        *rating_generator.all_rating_features_out,
-        pipeline.predictor.pred_column,
-    ]
-    expected_columns.sort()
-    new_df.columns = sorted(new_df.columns)
-    if isinstance(new_df, pd.DataFrame):
-        assert new_df.columns.to_list() == expected_columns
-    else:
-        assert new_df.columns == expected_columns
-
-    assert len(pipeline.rating_generators[0].performances_generator.transformers) > 0
+def _height(df) -> int:
+    return df.height if isinstance(df, pl.DataFrame) else len(df)
 
 
-def test_train_predict_post_pre_and_lag_transformers():
-    df = pd.DataFrame(
-        {
-            "game_id": [1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
-            "player_id": [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
-            "team_id": [1, 2, 1, 2, 1, 2, 1, 2, 1, 2],
-            "start_date": [
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-01"),
-                pd.to_datetime("2023-01-02"),
-                pd.to_datetime("2023-01-02"),
-                pd.to_datetime("2023-01-03"),
-                pd.to_datetime("2023-01-03"),
-                pd.to_datetime("2023-01-03"),
-                pd.to_datetime("2023-01-03"),
-                pd.to_datetime("2023-01-04"),
-                pd.to_datetime("2023-01-04"),
-            ],
-            "kills": [0.5, 1, 0.7, 2, 0.5, 0.7, 0.2, 2.1, 0.8, 1],
-            "__target": [1, 0, 0.6, 0.3, 0.8, 0.2, 0.4, 0.1, 1, 0],
-        }
-    )
+def _select(df, cols: list[str]):
+    return df.select(cols) if isinstance(df, pl.DataFrame) else df[cols]
 
-    column_weights = [ColumnWeight(name="kills", weight=1)]
-    predictor = SklearnPredictor(
+
+def _col(df, name: str):
+    return df[name]
+
+
+def _inner_estimator(model: Pipeline):
+    est = model.sklearn_pipeline.named_steps["est"]
+    if hasattr(est, "_est") and est._est is not None:
+        return est._est
+    return est
+
+def test_fit_predict_returns_ndarray(df_reg):
+    model = Pipeline(
         estimator=LinearRegression(),
-        target="__target",
-        scale_features=True,
-        one_hot_encode_cat_features=True,
+        feature_names=["num1", "num2", "cat1"],
         impute_missing_values=True,
+        scale_features=True,
+    )
+    X = _select(df_reg, ["num1", "num2", "cat1"])
+    y = _col(df_reg, "y")
+    model.fit(X, y=y)
+    preds = model.predict(X)
+    assert isinstance(preds, np.ndarray)
+    assert preds.shape == (_height(df_reg),)
+
+
+def test_drop_rows_where_target_is_nan(df_reg_pd, frame):
+    df_pd = df_reg_pd.copy()
+    df_pd.loc[2, "y"] = np.nan
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
+
+    model = Pipeline(
+        estimator=LinearRegression(),
+        feature_names=["num1", "num2", "cat1"],
+        impute_missing_values=True,
+        drop_rows_where_target_is_nan=True,
     )
 
-    column_names = ColumnNames(
-        match_id="game_id",
-        team_id="team_id",
-        player_id="player_id",
-        start_date="start_date",
+    X = _select(df, ["num1", "num2", "cat1"])
+    y = _col(df, "y")
+    model.fit(X, y=y)
+    preds = model.predict(X)
+
+    assert isinstance(preds, np.ndarray)
+    assert preds.shape == (_height(df),)
+
+
+def test_min_max_target_clipping(df_reg):
+    model = Pipeline(
+        estimator=LinearRegression(),
+        feature_names=["num1", "num2", "cat1"],
+        impute_missing_values=True,
+        min_target=2.0,
+        max_target=5.0,
     )
-    rating_generator = PlayerRatingGenerator(
-        non_predictor_known_features_out=[RatingKnownFeatures.PLAYER_RATING],
-        features_out=[RatingKnownFeatures.RATING_DIFFERENCE_PROJECTED],
-        unknown_features_out=[RatingUnknownFeatures.TEAM_RATING],
-        performances_generator=PerformanceWeightsManager(weights=column_weights),
+
+    X = _select(df_reg, ["num1", "num2", "cat1"])
+    y = _col(df_reg, "y")
+    model.fit(X, y=y)
+    preds = model.predict(X)
+
+    assert isinstance(preds, np.ndarray)
+    assert preds.shape == (_height(df_reg),)
+
+
+def test_predict_proba(df_clf):
+    model = Pipeline(
+        estimator=LogisticRegression(max_iter=1000),
+        feature_names=["num1", "num2", "cat1"],
+        impute_missing_values=True,
+        scale_features=True,
     )
-    pre_transformer = PredictorTransformer(
-        predictor=SklearnPredictor(
+    X = _select(df_clf, ["num1", "num2", "cat1"])
+    y = _col(df_clf, "y")
+    model.fit(X, y=y)
+    proba = model.predict_proba(X)
+    assert isinstance(proba, np.ndarray)
+    assert proba.shape == (_height(df_clf), 2)
+    assert np.all((proba >= 0) & (proba <= 1))
+    assert np.allclose(proba.sum(axis=1), 1.0, atol=1e-6)
+
+
+def test_predict_proba_raises_if_not_supported(df_reg):
+    model = Pipeline(
+        estimator=LinearRegression(),
+        feature_names=["num1", "num2", "cat1"],
+        impute_missing_values=True,
+        scale_features=True,
+    )
+    X = _select(df_reg, ["num1", "num2", "cat1"])
+    y = _col(df_reg, "y")
+    model.fit(X, y=y)
+    with pytest.raises(AttributeError):
+        model.predict_proba(X)
+
+    def test_estimator_receives_original_input_frame_and_feature_subset(df_pd_reg):
+        cap = CaptureEstimator()
+        model = Pipeline(
+            estimator=cap,
+            feature_names=["num1", "num2", "cat1"],
+            impute_missing_values=True,
             scale_features=True,
-            one_hot_encode_cat_features=True,
-            estimator=LinearRegression(),
-            features=rating_generator.features_out,
-            target="__target",
-            pred_column="pre_prediction_transformer_target",
-        ),
+        )
+        X = df_pd_reg[["num1", "num2", "cat1"]]
+        y = df_pd_reg["y"]
+        model.fit(X, y=y)
+
+        assert cap.fit_X_type is type(X)
+        assert cap.fit_columns == ["num1", "num2", "cat1"]
+        assert cap.fit_shape[0] == len(df_pd_reg)
+
+        preds = model.predict(X)
+        assert isinstance(preds, np.ndarray)
+        assert preds.shape == (len(df_pd_reg),)
+
+        assert cap.predict_X_type is type(X)
+        assert cap.predict_columns == cap.fit_columns
+
+
+def test_infer_numeric_from_feature_names_when_only_cat_features_given(df_reg):
+    cap = CaptureEstimator()
+    model = Pipeline(
+        estimator=cap,
+        feature_names=["num1", "num2", "cat1"],
+        categorical_features=["cat1"],
+        impute_missing_values=True,
+        scale_features=True,
+    )
+    X = _select(df_reg, ["num1", "num2", "cat1"])
+    y = _col(df_reg, "y")
+    model.fit(X, y=y)
+
+    assert cap.fit_columns is not None
+    assert any(c.endswith("num1") and c.startswith("num") for c in cap.fit_columns)
+    assert any(c.endswith("num2") and c.startswith("num") for c in cap.fit_columns)
+    assert any(c.startswith("cat") for c in cap.fit_columns)
+
+
+def test_infer_categorical_from_feature_names_when_only_numeric_features_given(df_reg):
+    cap = CaptureEstimator()
+    model = Pipeline(
+        estimator=cap,
+        feature_names=["num1", "num2", "cat1"],
+        numeric_features=["num1", "num2"],
+        impute_missing_values=True,
+        scale_features=True,
+    )
+    X = _select(df_reg, ["num1", "num2", "cat1"])
+    y = _col(df_reg, "y")
+    model.fit(X, y=y)
+
+    assert cap.fit_columns is not None
+    assert any(c.endswith("num1") and c.startswith("num") for c in cap.fit_columns)
+    assert any(c.endswith("num2") and c.startswith("num") for c in cap.fit_columns)
+    assert any(c.startswith("cat") for c in cap.fit_columns)
+
+
+def test_granularity_groups_rows_before_estimator_fit_and_predict(df_reg):
+    model = Pipeline(
+        estimator=CaptureEstimator(),
+        feature_names=["gameid", "num1", "num2", "cat1"],
+        categorical_features=["cat1", "gameid"],
+        granularity=["gameid"],
+        impute_missing_values=True,
+        scale_features=True,
+        remainder="drop",
     )
 
-    lag_generator = LagTransformer(
-        features=["kills"], lag_length=1, granularity=["player_id"]
+    X = _select(df_reg, ["gameid", "num1", "num2", "cat1"])
+    y = _col(df_reg, "y")
+    model.fit(X, y=y)
+
+    inner = _inner_estimator(model)
+
+    if isinstance(df_reg, pl.DataFrame):
+        n_groups = df_reg.select(pl.col("gameid").n_unique()).item()
+    else:
+        n_groups = df_reg["gameid"].nunique()
+
+    assert inner.fit_shape[0] == n_groups
+
+    preds = model.predict(X)
+    assert isinstance(preds, np.ndarray)
+    assert preds.shape[0] == len(X)
+
+
+def test_pipeline_uses_feature_names_subset_even_if_extra_columns_present(df_reg):
+    cap = CaptureEstimator()
+    model = Pipeline(
+        estimator=cap,
+        feature_names=["num1", "cat1"],
+        categorical_features=['cat1'],
+        impute_missing_values=True,
+        scale_features=True,
+        remainder="drop",
     )
-    post_transformer = RatioTeamPredictorTransformer(
-        features=["kills"],
-        predictor=SklearnPredictor(
-            scale_features=True,
-            one_hot_encode_cat_features=True,
-            estimator=LinearRegression(),
-            features=lag_generator.features_out,
-            target="__target",
-        ),
+
+    if isinstance(df_reg, pl.DataFrame):
+        df = df_reg.with_columns(pl.arange(0, df_reg.height).alias("junk"))
+        X = df.select(["num1", "cat1", "junk"])
+        y = df["y"]
+    else:
+        df = df_reg.copy()
+        df["junk"] = np.arange(len(df))
+        X = df[["num1", "cat1", "junk"]]
+        y = df["y"]
+
+    model.fit(X, y=y)
+
+    assert cap.fit_columns is not None
+    assert all("junk" not in c for c in cap.fit_columns)
+    assert any(c.startswith("num") for c in cap.fit_columns)
+    assert any(c.startswith("cat") for c in cap.fit_columns)
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_categorical_handling_auto_uses_native_when_lightgbm_in_predictor_transformers(
+    frame, df_reg_pd
+):
+    df = df_reg_pd if frame == "pd" else pl.from_pandas(df_reg_pd)
+
+    cap = CaptureDtypesEstimator()
+    model = Pipeline(
+        estimator=cap,
+        feature_names=["num1", "num2", "cat1"],
+        predictor_transformers=[EstimatorHoldingTransformer(estimator=FakeLGBMRegressor())],
+        categorical_handling="auto",
+        impute_missing_values=True,
+        scale_features=False,
+        remainder="drop",
     )
 
-    pipeline = Pipeline(
-        predictor=predictor,
-        rating_generators=rating_generator,
-        pre_lag_transformers=[pre_transformer],
-        lag_transformers=[lag_generator],
-        post_lag_transformers=[post_transformer],
-        column_names=column_names,
+    X = _select(df, ["num1", "num2", "cat1"])
+    y = _col(df, "y")
+    model.fit(X, y=y)
+
+    inner = _inner_estimator(model)
+    assert inner.fit_columns is not None
+    assert "cat1" in inner.fit_columns
+
+    df_out = model.sklearn_pipeline.named_steps["pre"].transform(X)
+    assert isinstance(df_out['cat1'].dtype, pd.CategoricalDtype)
+
+
+class CaptureFitEstimator(BaseEstimator):
+    def __init__(self):
+        self.fit_columns = None
+        self.fit_X_type = None
+        self.fit_shape = None
+        self.fit_sample_weight_is_none = None
+
+    @nw.narwhalify
+    def fit(self, X: IntoFrameT, y, sample_weight=None):
+        X = X.to_pandas()
+        self.fit_X_type = type(X)
+        self.fit_shape = getattr(X, "shape", None)
+        self.fit_sample_weight_is_none = sample_weight is None
+        self.fit_columns = list(X.columns) if hasattr(X, "columns") else None
+        return self
+
+    def predict(self, X):
+        n = len(X) if hasattr(X, "__len__") else 0
+        return np.zeros(n)
+class AddConstantPredictionTransformer(BaseEstimator):
+    def __init__(self, col_name: str):
+        self.col_name = col_name
+        self.features_out = [col_name]
+
+    @nw.narwhalify
+    def fit(self, X: IntoFrameT, y=None):
+        return self
+
+    @nw.narwhalify
+    def transform(self, X: IntoFrameT) -> IntoFrameT:
+        return X.with_columns(
+            nw.new_series(
+                name=self.col_name,
+                values=[1.23] * len(X),
+                backend=nw.get_native_namespace(X),
+            )
+        )
+
+def _find_fitted(obj, predicate):
+    for _, v in obj.get_params(deep=True).items():
+        if predicate(v):
+            return v
+    raise AssertionError("Did not find fitted object matching predicate")
+
+
+def _fitted_estimator_transformer(model):
+    sk = model.sklearn_pipeline
+    ct = sk.named_steps["t1"]  # your second stage ColumnTransformer
+
+    # ct.transformers_ contains the FITTED transformers
+    for name, trans, cols in ct.transformers_:
+        if name != "features":
+            continue
+
+        # your 'features' transformer is _OnlyOutputColumns(...)
+        only = trans
+
+        # depending on your wrapper implementation, the wrapped transformer is usually here:
+        if hasattr(only, "transformer"):
+            return only.transformer
+        if hasattr(only, "_transformer"):
+            return only._transformer
+
+        raise AssertionError("Found 'features' transformer but couldn't unwrap _OnlyOutputColumns")
+
+    raise AssertionError("Could not find t1 'features' transformer in ct.transformers_")
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_final_sklearn_enhancer_estimator_gets_expected_feature_columns(frame):
+    df_pd = pd.DataFrame(
+        {
+            "num1": [1.0, 2.0, np.nan, 4.0],
+            "num2": [10.0, 20.0, 30.0, 40.0],
+            "location": ["home", "away", "home", "away"],
+            "start_date": ["2022-10-18", "2022-10-18", "2022-10-19", "2022-10-20"],
+            "player_id": [11, 11, 12, 12],
+            "team_id": [1, 1, 2, 2],
+            "match_id": [100, 100, 101, 101],
+            "y": [1.2, 2.4, 2.0, 4.2],
+        }
     )
-    train_df = df[df[column_names.start_date] < pd.to_datetime("2023-01-04")]
-    future_df = df[df[column_names.start_date] >= pd.to_datetime("2023-01-04")]
-    pipeline.train(train_df)
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
 
-    assert predictor.pred_column not in train_df.columns
+    inner = CaptureFitEstimator()
+    enhancer = SkLearnEnhancerEstimator(
+        estimator=inner,
+        date_column="start_date",
+        day_weight_epsilon=0.1,
+    )
 
-    predicted_df = pipeline.predict(future_df, return_features=True)
-    for f in rating_generator._features_out:
-        assert f in predicted_df.columns
-        assert f not in future_df.columns
+    dummy_prev = AddConstantPredictionTransformer(col_name="points_estimate_raw")
 
-    for f in lag_generator.predictor_features_out:
-        assert f in predicted_df.columns
-        assert f not in future_df.columns
+    final_transformer = EstimatorTransformer(
+        features=["num1", "num2", "location", "start_date"],
+        prediction_column_name="points_estimate",
+        estimator=enhancer,
+    )
 
-    for f in rating_generator.unknown_features_out:
-        assert f in predicted_df.columns
-        assert f not in future_df.columns
+    model = Pipeline(
+        estimator=CaptureFitEstimator(),
+        feature_names=["num1", "num2", "location"],
+        context_predictor_transformer_feature_names=["player_id", "team_id", "match_id", "start_date"],
+        predictor_transformers=[dummy_prev, final_transformer],
+        categorical_handling="auto",
+        impute_missing_values=True,
+        scale_features=False,
+        remainder="drop",
+    )
 
-    for f in post_transformer.predictor_features_out:
-        assert f in predicted_df.columns
-        assert f not in future_df.columns
+    if isinstance(df, pl.DataFrame):
+        X = df.select(["num1", "num2", "location", "player_id", "team_id", "match_id", "start_date"])
+        y = df["y"]
+    else:
+        X = df[["num1", "num2", "location", "player_id", "team_id", "match_id", "start_date"]]
+        y = df["y"]
 
-    for f in pre_transformer.predictor_features_out:
-        assert f in predicted_df.columns
-        assert f not in future_df.columns
+    model.fit(X, y=y)
 
-    for f in rating_generator.non_estimator_known_features_out:
-        assert f in predicted_df.columns
-        assert f not in future_df.columns
+    sk = model.sklearn_pipeline
 
-    assert predictor.pred_column in predicted_df.columns
-    assert predictor.pred_column not in future_df.columns
+    fitted_final = _find_fitted(
+        sk,
+        lambda o: isinstance(o, EstimatorTransformer) and getattr(o, "prediction_column_name", None) == "points_estimate",
+    )
+
+    expected_cols = ["num1", "num2", "location", "points_estimate_raw"] + list(fitted_final.get_feature_names_out())
+
+    assert model.estimator.fit_columns == expected_cols
+    assert model.estimator.fit_X_type is pd.DataFrame
+    et = _fitted_estimator_transformer(model)
+    assert et.estimator_.estimator_.fit_columns == ['num1', 'num2', 'location']
+    u =2
