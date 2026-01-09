@@ -6,7 +6,7 @@ from sklearn.base import BaseEstimator, TransformerMixin, is_regressor
 
 
 
-class NetOverPredictedTransformer(TransformerMixin):
+class NetOverPredictedTransformer(BaseEstimator, TransformerMixin):
     def __init__(
         self,
         estimator: BaseEstimator | Any,
@@ -40,13 +40,13 @@ class NetOverPredictedTransformer(TransformerMixin):
         X: IntoFrameT,
         y,
     )  :
-        self.estimator.fit(X, y)
+        self.estimator.fit(X.to_pandas(), y)
         return self
 
 
     @nw.narwhalify
     def transform(self, X: IntoFrameT) -> IntoFrameT:
-        predictions = self.estimator.predict(X)
+        predictions = self.estimator.predict(X.to_pandas())
         X = X.with_columns(
             nw.new_series(name=self.pred_column, values=predictions, backend=nw.get_native_namespace(X))
         )

@@ -151,7 +151,7 @@ def lgbm_in_root(root) -> bool:
 def _to_pandas(X):
     return X.to_pandas() if hasattr(X, "to_pandas") else X
 
-class Pipeline(BaseEstimator):
+class AutoPipeline(BaseEstimator):
     def __init__(
             self,
             estimator: Any,

@@ -17,7 +17,7 @@ def sigmoid_subtract_half_and_multiply2(value: float, x: float) -> float:
     return (1 / (1 + math.exp(-value / x)) - 0.5) * 2
 
 
-class PerformancePredictor(ABC):
+class PlayerPerformancePredictor(ABC):
 
     @abstractmethod
     def reset(self):
@@ -33,108 +33,8 @@ class PerformancePredictor(ABC):
         pass
 
 
-class RatingMeanCustomOpponentRatingPerformancePredictor(PerformancePredictor):
 
-    def __init__(
-        self,
-        opponent_rating_column_name: str,
-        opponent_rating_std: float,
-        opponent_rating_mean: float,
-        player_rating_expected_mean: float = 1000,
-        min_count: int = 2500,
-        coef: float = 0.001757,
-    ):
-        self.opponent_rating_column_name = opponent_rating_column_name
-        self.opponent_rating_std = opponent_rating_std
-        self.opponent_rating_mean = opponent_rating_mean
-        self.player_rating_expected_mean = player_rating_expected_mean
-        self.min_count = min_count
-        self.coef = coef
-        self._player_ratings = []
-        self._backup_performance_predictor = RatingNonOpponentPerformancePredictor()
-        self._sum_rating = 0
-        self._rating_count = 0
-        self._actual_player_rating_std = 0
-        self._actual_player_rating_mean = 0
-
-    def reset(self):
-        self._player_ratings = []
-        self._sum_rating = 0
-        self._rating_count = 0
-        self._actual_player_rating_std = 0
-        self._actual_player_rating_mean = 0
-        self._backup_performance_predictor.reset()
-
-    def predict_performance(
-        self,
-        player_rating: PreMatchPlayerRating,
-        opponent_team_rating: PreMatchTeamRating,
-        team_rating: PreMatchTeamRating,
-    ) -> float:
-
-        opponent_team_rating_value = sum(
-            [opponent_player.rating_value for opponent_player in opponent_team_rating.players]
-        ) / len(opponent_team_rating.players)
-
-        if len(self._player_ratings) == 0:
-            actual_player_rating_mean = 0
-            weight_actual_data = 0
-        else:
-            weight_actual_data = min(1, len(self._player_ratings) / 4000)
-
-            if (
-                len(self._player_ratings) % 200 == 0
-                and len(self._player_ratings) >= self.min_count
-                or self._actual_player_rating_std == 0
-                and len(self._player_ratings) >= self.min_count
-            ):
-                self._actual_player_rating_std = np.array(self._player_ratings).std()
-                self._actual_player_rating_mean = sum(self._player_ratings) / len(
-                    self._player_ratings
-                )
-
-        player_rating_mean = (
-            (1 - weight_actual_data) * self.player_rating_expected_mean
-            + weight_actual_data * self._actual_player_rating_mean
-        )
-
-        player_rating_std = (
-            1 - weight_actual_data
-        ) * self.opponent_rating_std + weight_actual_data * self._actual_player_rating_std
-        opponent_rating_adjusted = (
-            (opponent_team_rating_value - self.opponent_rating_mean + player_rating_mean)
-            / self.opponent_rating_std
-            * player_rating_std
-        )
-
-        if len(self._player_ratings) < self.min_count:
-            predicted_performance = self._backup_performance_predictor.predict_performance(
-                player_rating=player_rating,
-                opponent_team_rating=opponent_team_rating,
-                team_rating=team_rating,
-            )
-
-        else:
-            historical_average_rating = self._sum_rating / self._rating_count
-            net_mean_rating_over_historical_average = (
-                player_rating.rating_value * 0.5
-                + opponent_rating_adjusted * 0.5
-                - historical_average_rating
-            )
-            value = self.coef * net_mean_rating_over_historical_average
-            predicted_performance = (math.exp(value)) / (1 + math.exp(value))
-
-        self._sum_rating += player_rating.rating_value * 0.5 + opponent_rating_adjusted * 0.5
-        self._rating_count += 1
-
-        self._player_ratings.append(player_rating.rating_value)
-        # print(predicted_performance, self._backup_performance_predictor.predict_performance(player_rating=player_rating,
-        #                                                                                      opponent_team_rating=opponent_team_rating,
-        #                                                                                     team_rating=team_rating))
-        return predicted_performance
-
-
-class RatingNonOpponentPerformancePredictor(PerformancePredictor):
+class PlayerRatingNonOpponentPerformancePredictor(PlayerPerformancePredictor):
 
     def __init__(
         self,
@@ -179,7 +79,7 @@ class RatingNonOpponentPerformancePredictor(PerformancePredictor):
         return prediction
 
 
-class RatingDifferencePerformancePredictor(PerformancePredictor):
+class RatingPlayerDifferencePerformancePredictor(PlayerPerformancePredictor):
 
     # TODO: Performance prediction based on team-players sharing time with.
     def __init__(
@@ -285,7 +185,7 @@ class RatingDifferencePerformancePredictor(PerformancePredictor):
         return prediction
 
 
-class RatingMeanPerformancePredictor(PerformancePredictor):
+class RatingMeanPerformancePredictor(PlayerPerformancePredictor):
 
     def __init__(
         self,

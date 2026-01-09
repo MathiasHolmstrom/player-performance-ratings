@@ -12,7 +12,7 @@ from spforge.estimator import (
     NegativeBinomialEstimator,
     NormalDistributionPredictor,
 )
-from spforge.pipeline import Pipeline
+from spforge.autopipeline import AutoPipeline
 
 
 # Mocking internal dependencies for the sake of the test environment

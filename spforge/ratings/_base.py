@@ -22,10 +22,10 @@ from spforge.performance_transformers._performance_manager import (
 )
 from spforge.ratings.enums import RatingKnownFeatures, RatingUnknownFeatures
 from spforge.ratings.league_identifier import LeagueIdentifer2
-from spforge.ratings.performance_predictor import (
-    RatingDifferencePerformancePredictor,
+from spforge.ratings.player_performance_predictor import (
+    RatingPlayerDifferencePerformancePredictor,
     RatingMeanPerformancePredictor,
-    RatingNonOpponentPerformancePredictor,
+    PlayerRatingNonOpponentPerformancePredictor,
 )
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
@@ -61,10 +61,10 @@ class RatingGenerator(FeatureGenerator):
             _performance_predictor_class = RatingMeanPerformancePredictor
             default_features = [RatingKnownFeatures.RATING_MEAN_PROJECTED]
         elif performance_predictor == "difference":
-            _performance_predictor_class = RatingDifferencePerformancePredictor
+            _performance_predictor_class = RatingPlayerDifferencePerformancePredictor
             default_features = [RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED]
         elif performance_predictor == "ignore_opponent":
-            _performance_predictor_class = RatingNonOpponentPerformancePredictor
+            _performance_predictor_class = PlayerRatingNonOpponentPerformancePredictor
             default_features = [RatingKnownFeatures.TEAM_RATING_PROJECTED]
         else:
             raise ValueError(f"performance_predictor {performance_predictor} is not supported")
@@ -249,16 +249,26 @@ class RatingGenerator(FeatureGenerator):
         return None
 
     def _add_day_number(
-        self, df: pl.DataFrame, date_col: str | None = None, out_col: str = "__day_number"
+            self,
+            df: pl.DataFrame,
+            date_col: str | None = None,
+            out_col: str = "__day_number",
+            ref_date: str = "2000-01-01",  # <- new: reference epoch (YYYY-MM-DD)
+            one_based: bool = True,  # <- optional: keep 1-based numbering like before
     ) -> pl.DataFrame:
         """
-        Add day_number column to dataframe based on start_date.
+        Add day_number column to dataframe relative to a fixed reference date.
+
+        day_number = (date - ref_date) + (1 if one_based else 0)
+
         Supports various date formats: string, Date, Datetime (with or without timezone).
 
         Args:
             df: Input dataframe
             date_col: Column name containing dates (defaults to column_names.start_date)
             out_col: Output column name (defaults to "__day_number")
+            ref_date: Reference date in YYYY-MM-DD (defaults to 2000-01-01)
+            one_based: If True, 2000-01-01 -> 1. If False, 2000-01-01 -> 0.
 
         Returns:
             DataFrame with added day_number column
@@ -275,38 +285,34 @@ class RatingGenerator(FeatureGenerator):
         c = pl.col(date_column)
 
         if dtype == pl.Utf8 or (hasattr(pl, "String") and dtype == pl.String):
-
-            dt = c.str.strptime(pl.Datetime(time_zone=None), "%Y-%m-%d", strict=False).fill_null(
-                c.str.strptime(
-                    pl.Datetime(time_zone=None), "%Y-%m-%d %H:%M:%S", strict=False
-                ).fill_null(
-                    c.str.strptime(
-                        pl.Datetime(time_zone=None), "%Y-%m-%dT%H:%M:%S", strict=False
-                    ).fill_null(c.cast(pl.Datetime(time_zone=None), strict=False))
+            dt = (
+                c.str.strptime(pl.Datetime(time_zone=None), "%Y-%m-%d", strict=False)
+                .fill_null(
+                    c.str.strptime(pl.Datetime(time_zone=None), "%Y-%m-%d %H:%M:%S", strict=False)
                 )
+                .fill_null(
+                    c.str.strptime(pl.Datetime(time_zone=None), "%Y-%m-%dT%H:%M:%S", strict=False)
+                )
+                .fill_null(c.cast(pl.Datetime(time_zone=None), strict=False))
             )
             dt = dt.dt.replace_time_zone(None)
         elif dtype == pl.Date:
             dt = c.cast(pl.Datetime(time_zone=None))
         elif isinstance(dtype, pl.Datetime):
-            if dtype.time_zone is None:
-                # Datetime without timezone
-                dt = c
-            else:
-                # Datetime with timezone - convert to UTC then remove timezone
-                dt = c.dt.convert_time_zone("UTC").dt.replace_time_zone(None)
+            dt = c if dtype.time_zone is None else c.dt.convert_time_zone("UTC").dt.replace_time_zone(None)
         else:
-            # Unknown type - try to cast to datetime as fallback
-            # This handles edge cases where dtype might be something unexpected
             dt = c.cast(pl.Datetime(time_zone=None), strict=False).dt.replace_time_zone(None)
 
-        # Convert to Date, then to Int32 for day number calculation
         start_as_int = dt.cast(pl.Date).cast(pl.Int32)
 
-        # Calculate day_number: (date - min_date + 1) so earliest date is day 1
-        # Ensure no None values - fill with min if needed
-        min_date = start_as_int.min()
-        day_number = (start_as_int - min_date + 1).fill_null(1)
+        ref_int = (
+            pl.lit(ref_date)
+            .str.strptime(pl.Date, "%Y-%m-%d", strict=True)
+            .cast(pl.Int32)
+        )
+
+        offset = 1 if one_based else 0
+        day_number = (start_as_int - ref_int + offset).fill_null(offset)
 
         return df.with_columns(day_number.alias(out_col))
 

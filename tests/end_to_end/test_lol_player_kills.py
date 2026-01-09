@@ -3,7 +3,7 @@ from lightgbm import LGBMRegressor
 from sklearn.linear_model import LogisticRegression
 
 from examples import get_sub_sample_lol_data
-from spforge import ColumnNames, FeatureGeneratorPipeline, Pipeline
+from spforge import ColumnNames, FeatureGeneratorPipeline, AutoPipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
 from spforge.estimator import NegativeBinomialEstimator
 from spforge.feature_generator import LagTransformer, RollingWindowTransformer
@@ -74,7 +74,7 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
 
     historical_df = features_generator.fit_transform(historical_df)
 
-    game_winner_model = Pipeline(
+    game_winner_model = AutoPipeline(
         estimator=LogisticRegression(max_iter=1000),
         impute_missing_values=True,
         scale_features=False,
@@ -103,7 +103,7 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
 
     player_kills_features = ["result_prob1", *features_generator.features_out]
 
-    player_kills_model = Pipeline(
+    player_kills_model = AutoPipeline(
         estimator=LGBMRegressor(verbose=-100),
         impute_missing_values=True,
         scale_features=False,

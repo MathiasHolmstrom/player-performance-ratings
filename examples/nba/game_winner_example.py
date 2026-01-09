@@ -3,7 +3,7 @@ from sklearn.linear_model import LogisticRegression
 
 from spforge.data_structures import ColumnNames
 from spforge.estimator import SkLearnEnhancerEstimator
-from spforge.pipeline import Pipeline
+from spforge.autopipeline import AutoPipeline
 from spforge.ratings import RatingKnownFeatures
 from spforge.ratings._player_rating import PlayerRatingGenerator
 
@@ -60,7 +60,7 @@ historical_df = rating_generator.fit_transform(historical_df)
 
 # Pipeline is whether we define all the steps. Other transformations can take place as well.
 # However, in our simple example we only have a simple rating-generator and a predictor.
-pipeline = Pipeline(
+pipeline = AutoPipeline(
     estimator=LogisticRegression(),
     granularity=['game_id', 'team_id'],
     one_hot_encode_cat_features=True,

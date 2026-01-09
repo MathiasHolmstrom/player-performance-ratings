@@ -13,7 +13,7 @@ from spforge.feature_generator import (
     LagTransformer,
     RollingWindowTransformer,
 )
-from spforge.pipeline import Pipeline
+from spforge.autopipeline import AutoPipeline
 from spforge.scorer import Filter, Operator, OrdinalLossScorer, SklearnScorer
 from spforge.transformers import EstimatorTransformer
 
@@ -51,7 +51,7 @@ predictor = NegativeBinomialEstimator(
     column_names=column_names,
 )
 
-pipeline = Pipeline(
+pipeline = AutoPipeline(
     convert_cat_features_to_cat_dtype=True,
     estimator=predictor,
     feature_names=features_generator.features_out,

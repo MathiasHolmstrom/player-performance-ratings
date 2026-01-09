@@ -2,7 +2,7 @@ from lightgbm import LGBMRegressor
 from sklearn.linear_model import LogisticRegression
 
 from examples import get_sub_sample_lol_data
-from spforge import ColumnNames, FeatureGeneratorPipeline, Pipeline
+from spforge import ColumnNames, FeatureGeneratorPipeline, AutoPipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
 from spforge.estimator import (
     NegativeBinomialEstimator,
@@ -79,7 +79,7 @@ game_winner_predictor = SklearnPredictor(
     features=rating_generator_result.features_out,
     granularity=[column_names.match_id, column_names.team_id],
 )
-game_winner_pipeline = Pipeline(
+game_winner_pipeline = AutoPipeline(
     predictor=game_winner_predictor, one_hot_encode_cat_features=True, impute_missing_values=True
 )
 

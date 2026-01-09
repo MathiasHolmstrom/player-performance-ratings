@@ -15,7 +15,7 @@ from spforge.feature_generator import (
     LagTransformer,
     RollingWindowTransformer,
 )
-from spforge.pipeline import Pipeline
+from spforge.autopipeline import AutoPipeline
 from spforge.ratings import TeamRatingGenerator, PlayerRatingGenerator, RatingKnownFeatures
 from spforge.scorer import Filter, Operator, OrdinalLossScorer, SklearnScorer
 from spforge.transformers import EstimatorTransformer, RatioEstimatorTransformer
@@ -90,7 +90,7 @@ def test_nba_player_points(dataframe_type):
         df = df.to_pandas()
     df = features_generator.fit_transform(df)
 
-    game_winner_pipeline = Pipeline(
+    game_winner_pipeline = AutoPipeline(
         granularity=['game_id', 'team_id'],
         estimator=LogisticRegression(),
         feature_names=player_plus_minus_rating_generator.features_out +['location']
@@ -156,7 +156,7 @@ def test_nba_player_points(dataframe_type):
             day_weight_epsilon=0.1
         )
     )
-    pipeline = Pipeline(
+    pipeline = AutoPipeline(
         estimator=negative_binomial,
         feature_names=features_generator.features_out + ['location', 'game_winner_probability'],
         context_feature_names=[column_names.player_id, column_names.start_date, column_names.team_id,

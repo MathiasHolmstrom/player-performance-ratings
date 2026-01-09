@@ -927,7 +927,7 @@ def test_threshold_event_score_logloss_basic_ge_ceil():
         dist_column="dist",
         threshold_column="ydstogo",
         outcome_column="yards_gained",
-        comparator=">=",
+        comparator=Operator.GREATER_THAN_OR_EQUALS,
         threshold_rounding="ceil",
     )
 

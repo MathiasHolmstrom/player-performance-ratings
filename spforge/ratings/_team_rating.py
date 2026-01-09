@@ -1,6 +1,7 @@
 # team_rating_generator.py
 from __future__ import annotations
 
+import inspect
 import math
 from typing import Any, Literal
 
@@ -10,6 +11,13 @@ from spforge.data_structures import ColumnNames
 from spforge.performance_transformers._performance_manager import ColumnWeight, PerformanceManager
 from spforge.ratings._base import RatingGenerator, RatingState
 from spforge.ratings.enums import RatingKnownFeatures, RatingUnknownFeatures
+from spforge.ratings.player_performance_predictor import RatingMeanPerformancePredictor, RatingPlayerDifferencePerformancePredictor, \
+    PlayerRatingNonOpponentPerformancePredictor, PlayerPerformancePredictor
+from spforge.ratings.start_rating_generator import StartRatingGenerator
+from spforge.ratings.team_performance_predictor import TeamPerformancePredictor, \
+    TeamRatingNonOpponentPerformancePredictor, TeamRatingDifferencePerformancePredictor, \
+    TeamRatingMeanPerformancePredictor
+from spforge.ratings.team_start_rating_generator import TeamStartRatingGenerator
 
 TEAM_PRED_OFF_COL = "__TEAM_PREDICTED_OFF_PERFORMANCE"
 TEAM_PRED_DEF_COL = "__TEAM_PREDICTED_DEF_PERFORMANCE"
@@ -37,11 +45,10 @@ class TeamRatingGenerator(RatingGenerator):
         league_rating_adjustor_multiplier: float = 0.05,
         column_names: ColumnNames | None = None,
         output_suffix: str | None = None,
-        start_team_rating: float = 1000.0,
-        rating_center: float | None = None,
-        rating_diff_coef: float = 0.001,
-        rating_mean_coef: float = 0.001,
-        team_rating_coef: float = 0.001,
+        start_harcoded_start_rating: float = 1000.0,
+        start_league_ratings: dict[str, float] | None = None,
+        start_league_quantile: float = 0.2,
+        start_min_count_for_percentiles: int = 50,
         **kwargs: Any,
     ):
         super().__init__(
@@ -79,6 +86,16 @@ class TeamRatingGenerator(RatingGenerator):
         self.OPP_DEF_RATING_PROJ_COL = self._suffix(
             str(RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED)
         )
+        self.start_league_ratings = start_league_ratings
+        self.start_league_quantile = start_league_quantile
+        self.start_min_count_for_percentiles = start_min_count_for_percentiles
+        self.start_harcoded_start_rating =start_harcoded_start_rating
+        self.start_rating_generator = TeamStartRatingGenerator(
+            league_ratings=self.start_league_ratings,
+            league_quantile=self.start_league_quantile,
+            min_count_for_percentiles=self.start_min_count_for_percentiles,
+            harcoded_start_rating=start_harcoded_start_rating
+        )
 
         self.TEAM_PRED_OFF_PERF_COL = self._suffix(TEAM_PRED_OFF_COL)
         self.TEAM_PRED_DEF_PERF_COL = self._suffix(TEAM_PRED_DEF_COL)
@@ -91,30 +108,39 @@ class TeamRatingGenerator(RatingGenerator):
 
         self.DIFF_COL = self._suffix(str(RatingUnknownFeatures.TEAM_RATING_DIFFERENCE))
 
-        self.start_team_rating = float(start_team_rating)
-        self.rating_center = float(
-            self.start_team_rating if rating_center is None else rating_center
-        )
 
         self._team_off_ratings: dict[str, RatingState] = {}
         self._team_def_ratings: dict[str, RatingState] = {}
+        if performance_predictor == "mean":
+            _performance_predictor_class = TeamRatingMeanPerformancePredictor
+        elif performance_predictor == "difference":
+            _performance_predictor_class =TeamRatingDifferencePerformancePredictor
+        elif performance_predictor == "ignore_opponent":
+            _performance_predictor_class = TeamRatingNonOpponentPerformancePredictor
+        else:
+            raise ValueError(f"performance_predictor {performance_predictor} is not supported")
+
 
         self.performance_predictor = performance_predictor
-        self.rating_diff_coef = float(rating_diff_coef)
-        self.rating_mean_coef = float(rating_mean_coef)
-        self.team_rating_coef = float(team_rating_coef)
+        sig = inspect.signature(_performance_predictor_class.__init__)
+        init_params = [name for name, _param in sig.parameters.items() if name != "self"]
+        performance_predictor_params = {k: v for k, v in kwargs.items() if k in init_params}
+        self._performance_predictor: TeamPerformancePredictor = _performance_predictor_class(**performance_predictor_params)
 
-    def _ensure_team_off(self, team_id: str) -> RatingState:
+
+    def _ensure_team_off(self, team_id: str, day_number: int , league:str) -> RatingState:
         if team_id not in self._team_off_ratings:
+            rating = self.start_rating_generator.generate_rating_value(day_number=day_number, league=league)
             self._team_off_ratings[team_id] = RatingState(
-                id=team_id, rating_value=self.start_team_rating
+                id=team_id, rating_value=rating
             )
         return self._team_off_ratings[team_id]
 
-    def _ensure_team_def(self, team_id: str) -> RatingState:
+    def _ensure_team_def(self, team_id: str, day_number: int , league:str) -> RatingState:
         if team_id not in self._team_def_ratings:
+            rating = self.start_rating_generator.generate_rating_value(day_number=day_number, league=league)
             self._team_def_ratings[team_id] = RatingState(
-                id=team_id, rating_value=self.start_team_rating
+                id=team_id, rating_value=rating
             )
         return self._team_def_ratings[team_id]
 
@@ -145,17 +171,7 @@ class TeamRatingGenerator(RatingGenerator):
         match_df = self._add_day_number(match_df, cn.start_date, "__day_number")
         return match_df
 
-    def _predict_performance(self, team_rating: float, opp_rating: float) -> float:
-        if self.performance_predictor == "difference":
-            pred = 0.5 + self.rating_diff_coef * (team_rating - opp_rating)
-        elif self.performance_predictor == "mean":
-            mean_rating = (team_rating + opp_rating) / 2.0
-            pred = 0.5 + self.rating_mean_coef * (mean_rating - self.rating_center)
-        elif self.performance_predictor == "ignore_opponent":
-            pred = 0.5 + self.team_rating_coef * (team_rating - self.rating_center)
-        else:
-            raise ValueError(f"Unsupported performance_predictor={self.performance_predictor}")
-        return max(0.0, min(1.0, float(pred)))
+
 
     def _historical_transform(self, df: pl.DataFrame) -> pl.DataFrame:
         cn = self.column_names
@@ -189,18 +205,18 @@ class TeamRatingGenerator(RatingGenerator):
             opp_id = r[f"{cn.team_id}_opponent"]
             update_id = r[cn.update_match_id]
             day_number = int(r["__day_number"])
+            league = r[self.column_names.league] if self.column_names.league else None
 
-            s_off = self._ensure_team_off(team_id)
-            s_def = self._ensure_team_def(team_id)
-            o_off = self._ensure_team_off(opp_id)
-            o_def = self._ensure_team_def(opp_id)
+            s_off = self._ensure_team_off(team_id, league=league, day_number=day_number)
+            s_def = self._ensure_team_def(team_id, league=league, day_number=day_number)
+            o_off = self._ensure_team_off(opp_id, league=league, day_number=day_number)
+            o_def = self._ensure_team_def(opp_id, league=league, day_number=day_number)
 
             team_off_pre = float(s_off.rating_value)
             team_def_pre = float(s_def.rating_value)
             opp_off_pre = float(o_off.rating_value)
             opp_def_pre = float(o_def.rating_value)
 
-            # Observed performances
             off_perf = (
                 float(r[self.performance_column])
                 if r.get(self.performance_column) is not None
@@ -209,7 +225,7 @@ class TeamRatingGenerator(RatingGenerator):
             opp_off_perf = float(r[perf_opp_col]) if r.get(perf_opp_col) is not None else 0.0
             def_perf = 1.0 - opp_off_perf
 
-            pred_off = self._predict_performance(team_off_pre, opp_def_pre)
+            pred_off = self._performance_predictor.predict_performance(team_rating=)
             pred_def = self._predict_performance(team_def_pre, opp_off_pre)
 
             mult_off = self._applied_multiplier(s_off, self.rating_change_multiplier_offense)
@@ -233,7 +249,6 @@ class TeamRatingGenerator(RatingGenerator):
                     self.OPP_DEF_RATING_PROJ_COL: opp_def_pre,
                     self.TEAM_PRED_OFF_PERF_COL: pred_off,
                     self.TEAM_PRED_DEF_PERF_COL: pred_def,
-                    # Backwards-compat column if anyone expects TEAM_RATING_PROJECTED
                     self.TEAM_RATING_PROJ_COL: team_off_pre,
                 }
             )
@@ -245,8 +260,6 @@ class TeamRatingGenerator(RatingGenerator):
                 last_update_id = update_id
 
             if update_id != last_update_id:
-                # apply everything up to (but not including) the current row’s updates
-                # (note: since we append 2 updates per row, slice must remove 2)
                 self._apply_team_updates(pending_updates[:-2])
                 pending_updates = pending_updates[-2:]
                 last_update_id = update_id
@@ -271,32 +284,16 @@ class TeamRatingGenerator(RatingGenerator):
             s.last_match_day_number = int(day_number)
 
     def _add_rating_features(self, df: pl.DataFrame) -> pl.DataFrame:
-        """
-        If you want to keep your existing feature behavior:
-        - treat "TEAM_RATING_PROJECTED" as OFF rating
-        - OPPONENT_RATING_PROJECTED can be interpreted depending on predictor:
-            * for offense prediction you likely want opp DEF rating
-        Here we keep your original "opp/mean/diff" logic but map it to OFF vs DEF
-        in a reasonable way:
-          - OPPONENT_RATING_PROJECTED := opponent DEF projected (when needed)
-          - TEAM_RATING_PROJECTED := team OFF projected (already present)
-        """
-        # self._features_out and self.non_predictor_features_out are already suffixed from __init__
-        # So we can use them directly
-        cols_to_add = set((self._features_out or []) + (self.non_predictor_features_out or []))
-        cn = self.column_names
 
-        # Add PERFORMANCE column if requested
+        cols_to_add = set((self._features_out or []) + (self.non_predictor_features_out or []))
+
         perf_col_name = self._suffix(str(RatingUnknownFeatures.PERFORMANCE))
         if perf_col_name in cols_to_add and perf_col_name not in df.columns:
-            # Use the performance_column from input, but with suffix applied
             if self.performance_column in df.columns:
                 df = df.with_columns(pl.col(self.performance_column).alias(perf_col_name))
             elif RatingUnknownFeatures.PERFORMANCE in (self.non_predictor_features_out or []):
-                # If performance column doesn't exist, create it (shouldn't happen, but handle it)
                 df = df.with_columns(pl.lit(0.0).alias(perf_col_name))
 
-        # Map requested opponent rating to opponent DEF by default
         need_opp = (
             self.OPP_RATING_PROJ_COL in cols_to_add
             or self.DIFF_PROJ_COL in cols_to_add
@@ -306,8 +303,6 @@ class TeamRatingGenerator(RatingGenerator):
         need_mean = self.MEAN_PROJ_COL in cols_to_add
 
         if need_opp and self.OPP_RATING_PROJ_COL not in df.columns:
-            # Opponent "rating" for offense context: use opponent DEF rating
-            # (If you later want both, expose explicit columns instead)
             df = df.with_columns(
                 pl.col(self.OPP_DEF_RATING_PROJ_COL).alias(self.OPP_RATING_PROJ_COL)
             )
@@ -326,12 +321,8 @@ class TeamRatingGenerator(RatingGenerator):
                 ).alias(self.MEAN_PROJ_COL)
             )
 
-        # Compute non-predictor RATING_DIFFERENCE if requested
-        # For team ratings, this is computed from projected ratings (same as DIFF_PROJ_COL)
         if self.DIFF_COL in cols_to_add and self.DIFF_COL not in df.columns:
-            # Ensure we have the required columns
             if self.TEAM_RATING_PROJ_COL not in df.columns:
-                # Use TEAM_OFF_RATING_PROJ_COL as fallback
                 df = df.with_columns(
                     pl.col(self.TEAM_OFF_RATING_PROJ_COL).alias(self.TEAM_RATING_PROJ_COL)
                 )
@@ -364,13 +355,8 @@ class TeamRatingGenerator(RatingGenerator):
             perf_col_name,
         }
 
-        # Only drop columns that are in candidates and NOT in cols_to_add
-        # This ensures that columns from _calculate_ratings are only kept if they're requested
         drop_cols = [c for c in candidates if (c in df.columns and c not in cols_to_add)]
         result = df.drop(drop_cols)
-
-        # Also ensure that any columns not in candidates (like input columns) are preserved
-        # This is already handled by only dropping columns in candidates
 
         return result
 
@@ -397,10 +383,12 @@ class TeamRatingGenerator(RatingGenerator):
 
         rows: list[dict] = []
         for r in match_df.iter_rows(named=True):
+            day_number = r['__day_number']
+            league = r[self.column_names.league] if self.column_names.league else None
             team_id = r[cn.team_id]
             opp_id = r[f"{cn.team_id}_opponent"]
 
-            s_off = self._ensure_team_off(team_id)
+            s_off = self._ensure_team_off(team_id, day_number=day_number, league=league)
             s_def = self._ensure_team_def(team_id)
             o_off = self._ensure_team_off(opp_id)
             o_def = self._ensure_team_def(opp_id)

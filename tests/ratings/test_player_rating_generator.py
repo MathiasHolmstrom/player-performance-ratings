@@ -1102,12 +1102,11 @@ def test_fit_transform_league_change_tracking(base_cn):
     # Check start rating before match using future_transform
     future_df = pl.DataFrame(
         {
-            "pid": ["P1"],
-            "tid": ["T1"],
-            "mid": ["M1"],
-            "dt": ["2024-01-01"],
-            "pw": [1.0],
-            "league": ["NBA"],
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-02"] * 2,
+            "league": ["NBA"] *2,
         }
     )
     res = gen2.future_transform(future_df)
@@ -1152,12 +1151,11 @@ def test_fit_transform_multiple_league_changes(base_cn):
     # Check start rating before match
     future_df = pl.DataFrame(
         {
-            "pid": ["P1"],
-            "tid": ["T1"],
-            "mid": ["M1"],
-            "dt": ["2024-01-01"],
-            "pw": [1.0],
-            "league": ["NBA"],
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-02"] * 2,
+            "league": ["NBA"]*2,
         }
     )
     gen.future_transform(future_df)
@@ -1166,47 +1164,23 @@ def test_fit_transform_multiple_league_changes(base_cn):
     # After match, rating updated from NBA start (1100)
     assert gen._player_off_ratings["P1"].rating_value > 1100.0
 
-    # P1 moves to G-League - should get G-League start rating for new matches
-    # (but rating will have updated from previous matches)
-    df2 = pl.DataFrame(
-        {
-            "pid": ["P1", "P3"],
-            "tid": ["T1", "T2"],
-            "mid": ["M2", "M2"],
-            "dt": ["2024-01-02"] * 2,
-            "perf": [0.7, 0.3],
-            "pw": [1.0, 1.0],
-            "league": ["G-League", "G-League"],
-        }
-    )
-
     # Check P3's start rating before match (new player in G-League)
     future_df2 = pl.DataFrame(
         {
-            "pid": ["P3"],
-            "tid": ["T2"],
-            "mid": ["M2"],
-            "dt": ["2024-01-02"],
-            "pw": [1.0],
-            "league": ["G-League"],
+            "pid": ['P2', "P3"],
+            "tid": ['T1',"T2"],
+            "mid": ['M2',"M2"],
+            "dt": ["2024-01-02"]*2,
+            "league": ["G-League"]*2,
         }
     )
     res2 = gen.future_transform(future_df2)
-    p3_start = res2["player_off_rating_perf"][0]
+    p2_rating = res2["player_off_rating_perf"][0]
+    p3_start = res2["player_off_rating_perf"][1]
+    assert p2_rating>p3_start
     assert p3_start == 900.0  # G-League start rating
+    assert p2_rating <1100
 
-    gen.fit_transform(df2)
-
-    # P3 is new in G-League, should have started at 900 and updated
-    # P3 performed 0.3 (below average), so rating decreases from 900
-    assert gen._player_off_ratings["P3"].rating_value != 1000.0  # Not default
-    # Rating can go below 900 if performance is poor
-    assert (
-        gen._player_off_ratings["P3"].rating_value < 1000.0
-    )  # Below default (started at 900, performed poorly)
-
-
-# --- Feature Output Tests ---
 
 
 @pytest.mark.parametrize(

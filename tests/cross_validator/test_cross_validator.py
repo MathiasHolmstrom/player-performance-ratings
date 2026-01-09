@@ -5,7 +5,7 @@ import pytest
 from sklearn.base import BaseEstimator
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
-from spforge import Pipeline
+from spforge import AutoPipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
 
 
@@ -145,7 +145,7 @@ def test_match_kfold_cv_auto_infers_features(df_pd_cv_binary):
     "estimator",
     [
         LinearRegression(),
-        Pipeline(estimator=LinearRegression(), feature_names=['x']),
+        AutoPipeline(estimator=LinearRegression(), feature_names=['x']),
     ],
 )
 def test_match_kfold_cv_auto_infers_features_regression(df_pd_cv_reg, estimator):
@@ -375,7 +375,7 @@ def _assert_multiclass_pred_column_is_vectorized(pred_series, n_classes: int):
 
 def test_match_kfold_cv_multiclass_predict_proba_pandas_creates_vector_column(df_pd_cv_multiclass):
     cv = _make_cv(
-        LogisticRegression(max_iter=2000, multi_class="auto"),
+        LogisticRegression(max_iter=2000),
         features=["x", "team"],
         n_splits=3,
     )
@@ -392,7 +392,7 @@ def test_match_kfold_cv_multiclass_predict_proba_polars_creates_vector_column(df
     df_pl = pl.from_pandas(df_pd_cv_multiclass)
 
     cv = _make_cv(
-        LogisticRegression(max_iter=2000, multi_class="auto"),
+        LogisticRegression(max_iter=2000),
         features=["x", "team"],
         n_splits=3,
     )
