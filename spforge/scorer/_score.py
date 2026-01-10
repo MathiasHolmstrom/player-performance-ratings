@@ -270,7 +270,9 @@ class PWMSE(BaseScorer):
         if self.granularity:
             results = {}
             granularity_values = df.select(self.granularity).unique().to_dict(as_series=False)
-            granularity_tuples = list(zip(*[granularity_values[col] for col in self.granularity], strict=False))
+            granularity_tuples = list(
+                zip(*[granularity_values[col] for col in self.granularity], strict=False)
+            )
 
             for gran_tuple in granularity_tuples:
                 mask = None
@@ -512,7 +514,9 @@ class ProbabilisticMeanBias(BaseScorer):
         sum_lr = 0
         for variation_idx, distinct_class_variation in enumerate(distinct_classes_variations):
 
-            if not isinstance(distinct_class_variation, list) and math.isnan(distinct_class_variation):
+            if not isinstance(distinct_class_variation, list) and math.isnan(
+                distinct_class_variation
+            ):
                 continue
 
             rows_target_group = df[
@@ -627,14 +631,17 @@ class OrdinalLossScorer(BaseScorer):
                 raise ValueError(
                     f"OrdinalLossScorer: pred_column Array width ({width}) does not match len(classes) ({expected_len})."
                 )
+
             def get_expr(i):
                 return pl.col(self.pred_column).arr.get(i)
+
         else:
             max_len = df.select(pl.col(self.pred_column).list.len().max()).item()
             if max_len is not None and int(max_len) != expected_len:
                 raise ValueError(
                     f"OrdinalLossScorer: pred_column List length ({int(max_len)}) does not match len(classes) ({expected_len})."
                 )
+
             def get_expr(i):
                 return pl.col(self.pred_column).list.get(i)
 
@@ -712,7 +719,9 @@ class OrdinalLossScorer(BaseScorer):
         if self.granularity:
             results = {}
             granularity_values = df_pl.select(self.granularity).unique().to_dict(as_series=False)
-            granularity_tuples = list(zip(*[granularity_values[col] for col in self.granularity], strict=False))
+            granularity_tuples = list(
+                zip(*[granularity_values[col] for col in self.granularity], strict=False)
+            )
 
             for gran_tuple in granularity_tuples:
                 mask = None

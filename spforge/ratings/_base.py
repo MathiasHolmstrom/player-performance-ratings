@@ -105,12 +105,14 @@ class RatingGenerator(FeatureGenerator):
         self.auto_scale_performance = bool(auto_scale_performance)
         self.performance_manager = performance_manager
         self.performance_column = performance_column
+        self.performance_manager = self._create_performance_manager()
+        self.performance_column = (
+            self.performance_manager.performance_column
+            if self.performance_manager
+            else self.performance_column
+        )
         self.column_names = column_names
         self.kwargs = kwargs
-
-        self.performance_manager = self._create_performance_manager()
-
-        self.performances_generator = self.performance_manager
 
         self.confidence_days_ago_multiplier = float(confidence_days_ago_multiplier)
         self.confidence_value_denom = float(confidence_value_denom)

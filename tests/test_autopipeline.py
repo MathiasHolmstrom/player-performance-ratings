@@ -539,6 +539,7 @@ def test_final_sklearn_enhancer_estimator_gets_expected_feature_columns(frame):
     et = _fitted_estimator_transformer(model)
     assert et.estimator_.estimator_.fit_columns == ["num1", "num2", "location"]
 
+
 def test_autopipeline_is_picklable_after_fit():
     df = pd.DataFrame(
         {

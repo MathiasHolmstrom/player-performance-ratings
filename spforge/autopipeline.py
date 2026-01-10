@@ -20,6 +20,7 @@ _logger = logging.getLogger(__name__)
 
 # --- Serializable Global Helpers ---
 
+
 def _dedupe_preserve_order(cols):
     return list(dict.fromkeys(cols))
 
@@ -55,6 +56,7 @@ def _drop_columns_transformer(X, drop_cols):
 
 class _ColumnSelectorExcluding:
     """Class-based callable for ColumnTransformer selection to ensure picklability."""
+
     def __init__(self, drop_cols):
         self.drop_cols = drop_cols
 
@@ -412,9 +414,7 @@ class AutoPipeline(BaseEstimator):
 
         # Replaced lambda and internal function with global function + kw_args
         final = FunctionTransformer(
-            _drop_columns_transformer,
-            validate=False,
-            kw_args={'drop_cols': drop_ctx_set}
+            _drop_columns_transformer, validate=False, kw_args={"drop_cols": drop_ctx_set}
         )
         steps.append(("final", final))
 
