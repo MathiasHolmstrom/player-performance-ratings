@@ -55,8 +55,8 @@ class TeamPerformancePredictor(ABC):
     @abstractmethod
     def predict_performance(
         self,
-        team_rating: PreMatchTeamRating,
-        opponent_team_rating: PreMatchTeamRating,
+        rating_value: float,
+        opponent_team_rating_value: float,
     ) -> float:
         """
         Return a probability-like prediction for team vs opponent (e.g., win prob proxy).
@@ -90,8 +90,8 @@ class TeamRatingNonOpponentPerformancePredictor(TeamPerformancePredictor):
 
     def predict_performance(
         self,
-        team_rating: PreMatchTeamRating,
-        opponent_team_rating: PreMatchTeamRating,
+        rating_value: float,
+        opponent_team_rating_value: float,
     ) -> float:
         start_index = max(0, len(self._prev_entries_ratings) - self.last_sample_count)
         recent = self._prev_entries_ratings[start_index:]
@@ -101,11 +101,11 @@ class TeamRatingNonOpponentPerformancePredictor(TeamPerformancePredictor):
         else:
             historical_average = self.historical_average_value_default
 
-        net_over_hist = team_rating.rating_value - historical_average
+        net_over_hist = rating_value - historical_average
         value = self.coef * net_over_hist
         prediction = _logistic(value)
 
-        self._prev_entries_ratings.append(team_rating.rating_value)
+        self._prev_entries_ratings.append(rating_value)
         return prediction
 
 
@@ -138,11 +138,11 @@ class TeamRatingDifferencePerformancePredictor(TeamPerformancePredictor):
 
     def predict_performance(
         self,
-        team_rating: PreMatchTeamRating,
-        opponent_team_rating: PreMatchTeamRating,
+        rating_value: float,
+        opponent_team_rating_value: float,
     ) -> float:
         # base term: team vs opponent
-        rating_difference = team_rating.rating_value - opponent_team_rating.rating_value
+        rating_difference = rating_value - opponent_team_rating_value
 
         # In the player version these were:
         #   rating_diff_team_from_entity = team_rating_value - player_rating.rating_value
@@ -187,13 +187,13 @@ class TeamRatingMeanPerformancePredictor(TeamPerformancePredictor):
 
     def predict_performance(
         self,
-        team_rating: PreMatchTeamRating,
-        opponent_team_rating: PreMatchTeamRating,
+        rating_value: float,
+        opponent_team_rating_value: float,
     ) -> float:
         # update history with TEAM rating
-        self._entries.append(team_rating.rating_value)
+        self._entries.append(rating_value)
         self._count += 1
-        self._sum += team_rating.rating_value
+        self._sum += rating_value
 
         # keep a rolling window list (note: sum/count still track full history like your original)
         start_index = max(0, len(self._entries) - self.last_sample_count)
@@ -202,8 +202,8 @@ class TeamRatingMeanPerformancePredictor(TeamPerformancePredictor):
         historical_average = self._sum / self._count
 
         net_over_hist = (
-            0.5 * team_rating.rating_value
-            + 0.5 * opponent_team_rating.rating_value
+            0.5 * rating_value
+            + 0.5 * opponent_team_rating_value
             - historical_average
         )
 

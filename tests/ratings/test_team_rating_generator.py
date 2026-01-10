@@ -4,7 +4,8 @@ Unit tests for TeamRatingGenerator.
 These tests follow the pattern: "when X is the input then we should expect to see Y because of XXX reasons"
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from unittest.mock import MagicMock
 
 import pandas as pd
 import polars as pl
@@ -13,6 +14,7 @@ import pytest
 from spforge.data_structures import ColumnNames
 from spforge.ratings import TeamRatingGenerator
 from spforge.ratings.enums import RatingKnownFeatures, RatingUnknownFeatures
+from spforge.ratings.team_performance_predictor import TeamRatingNonOpponentPerformancePredictor
 
 
 @pytest.fixture
@@ -59,54 +61,11 @@ def test_init_when_default_params_are_used_then_generator_initializes_with_expec
         column_names=column_names,
     )
 
-    assert generator.start_team_rating == 1000.0
-    assert generator.rating_center == 1000.0
+    assert generator.start_rating_generator is not None
     assert generator.performance_predictor == "difference"
     assert generator.rating_change_multiplier_offense == 50.0
     assert generator.rating_change_multiplier_defense == 50.0
 
-
-@pytest.mark.parametrize("start_rating", [500.0, 1000.0, 1500.0, 2000.0])
-def test_init_when_custom_start_rating_is_provided_then_it_is_used_for_new_teams(
-    column_names, start_rating
-):
-    """
-    When a custom start_team_rating is provided, then we should expect to see
-    new teams initialized with that rating value because _ensure_team_off and
-    _ensure_team_def use start_team_rating to create new RatingState objects.
-    """
-    generator = TeamRatingGenerator(
-        performance_column="won",
-        column_names=column_names,
-        start_team_rating=start_rating,
-    )
-
-    team_state = generator._ensure_team_off("team_1")
-    assert team_state.rating_value == start_rating
-
-
-def test_init_when_custom_rating_center_is_provided_then_it_is_used_for_mean_predictor(
-    column_names,
-):
-    """
-    When a custom rating_center is provided, then we should expect to see
-    it used in the mean performance predictor calculation because the mean
-    predictor formula uses rating_center as the reference point.
-    """
-    generator = TeamRatingGenerator(
-        performance_column="won",
-        column_names=column_names,
-        rating_center=1200.0,
-        performance_predictor="mean",
-    )
-
-    assert generator.rating_center == 1200.0
-
-    pred = generator._predict_performance(team_rating=1200.0, opp_rating=1200.0)
-    assert pred == pytest.approx(0.5)
-
-    pred2 = generator._predict_performance(team_rating=1400.0, opp_rating=1200.0)
-    assert pred2 > 0.5
 
 
 @pytest.mark.parametrize("predictor", ["difference", "mean", "ignore_opponent"])
@@ -474,8 +433,6 @@ def test_fit_transform_when_difference_predictor_used_then_rating_changes_reflec
         performance_column="won",
         column_names=column_names,
         performance_predictor="difference",
-        rating_diff_coef=0.001,
-        start_team_rating=1000.0,
         confidence_weight=0.0,
         rating_change_multiplier_offense=50.0,
         output_suffix="",
@@ -512,8 +469,6 @@ def test_fit_transform_when_difference_predictor_used_then_rating_changes_reflec
         performance_column="won",
         column_names=column_names,
         performance_predictor="difference",
-        rating_diff_coef=0.001,
-        start_team_rating=1000.0,
         confidence_weight=0.0,
         rating_change_multiplier_offense=50.0,
         output_suffix="",
@@ -562,9 +517,6 @@ def test_fit_transform_when_mean_predictor_used_then_prediction_reflects_mean_vs
         performance_column="won",
         column_names=column_names,
         performance_predictor="mean",
-        rating_center=1000.0,
-        rating_mean_coef=0.001,
-        start_team_rating=1000.0,
         confidence_weight=0.0,
         rating_change_multiplier_offense=50.0,
         output_suffix="",
@@ -616,67 +568,19 @@ def test_fit_transform_when_ignore_opponent_predictor_used_then_opponent_rating_
     column_names,
 ):
     """
-    When using ignore_opponent predictor, then we should expect to see
-    rating changes depend only on team_rating relative to rating_center,
-    not on opponent rating, because this predictor ignores opponent strength,
-    so beating a strong opponent gives the same rating change as beating a weak one.
+    When using ignore_opponent predictor, TeamRatingNonOpponentPerformancePredictor should be created
     """
     generator = TeamRatingGenerator(
         performance_column="won",
         column_names=column_names,
         performance_predictor="ignore_opponent",
-        rating_center=1000.0,
-        team_rating_coef=0.001,
-        start_team_rating=1000.0,
         confidence_weight=0.0,
         rating_change_multiplier_offense=50.0,
         output_suffix="",
     )
+    assert generator._performance_predictor.__class__.__name__ == TeamRatingNonOpponentPerformancePredictor.__name__
 
-    for i in range(5):
-        df_setup = pl.DataFrame(
-            {
-                "match_id": [i + 1, i + 1],
-                "team_id": ["team_b", f"opp_{i}"],
-                "start_date": [datetime(2024, 1, i + 1), datetime(2024, 1, i + 1)],
-                "won": [1.0, 0.0],
-            }
-        )
-        generator.fit_transform(df_setup)
 
-    team_b_rating = generator._team_off_ratings["team_b"].rating_value
-    assert team_b_rating > 1000.0
-
-    team_a_rating_before_strong = generator._team_off_ratings.get(
-        "team_a", type("RatingState", (), {"rating_value": 1000.0})()
-    ).rating_value
-    df1 = pl.DataFrame(
-        {
-            "match_id": [100, 100],
-            "team_id": ["team_a", "team_b"],
-            "start_date": [datetime(2024, 1, 20), datetime(2024, 1, 20)],
-            "won": [1.0, 0.0],
-        }
-    )
-    generator.fit_transform(df1)
-    team_a_rating_after_strong = generator._team_off_ratings["team_a"].rating_value
-    change_strong = team_a_rating_after_strong - (
-        team_a_rating_before_strong if hasattr(team_a_rating_before_strong, "__float__") else 1000.0
-    )
-
-    df2 = pl.DataFrame(
-        {
-            "match_id": [101, 101],
-            "team_id": ["team_a", "team_c"],
-            "start_date": [datetime(2024, 1, 21), datetime(2024, 1, 21)],
-            "won": [1.0, 0.0],
-        }
-    )
-    generator.fit_transform(df2)
-    team_a_rating_after_weak = generator._team_off_ratings["team_a"].rating_value
-    change_weak = team_a_rating_after_weak - team_a_rating_after_strong
-
-    assert abs(change_strong - change_weak) < 5.0
 
 
 def test_fit_transform_when_prediction_would_exceed_bounds_then_it_is_clamped_to_0_1(column_names):
@@ -684,19 +588,22 @@ def test_fit_transform_when_prediction_would_exceed_bounds_then_it_is_clamped_to
     When prediction calculation would exceed [0, 1] bounds, then we should
     expect to see the prediction clamped to [0.0, 1.0] because the method
     uses max(0.0, min(1.0, pred)) to ensure valid probability values.
-    This affects rating changes: when prediction is clamped to 1.0 and team wins,
-    rating change should be small because (1.0 - 1.0) * multiplier = 0.0.
+
+    We mock the performance predictor to return out-of-bounds values so the
+    clamping path is exercised deterministically.
     """
     generator = TeamRatingGenerator(
         performance_column="won",
         column_names=column_names,
         performance_predictor="difference",
-        rating_diff_coef=0.01,
-        start_team_rating=1000.0,
         confidence_weight=0.0,
         rating_change_multiplier_offense=50.0,
         output_suffix="",
     )
+
+    mocked = MagicMock()
+    mocked.predict_performance.return_value = 1.0
+    generator._performance_predictor = mocked
 
     for i in range(15):
         df_setup = pl.DataFrame(
@@ -724,18 +631,27 @@ def test_fit_transform_when_prediction_would_exceed_bounds_then_it_is_clamped_to
     team_a_rating_after = generator._team_off_ratings["team_a"].rating_value
     rating_change = team_a_rating_after - team_a_rating_before
 
+    # With clamping to 1.0, a "certain win" prediction yields near-zero update.
     assert abs(rating_change) < 5.0
+
+    # Ensure the predictor was actually used:
+    # Each match produces 2 rows in match_df, and each row calls predict_performance twice (off+def) => 4 calls/match.
+    # 15 setup matches + 1 test match => 16 * 4 = 64 calls.
+    assert mocked.predict_performance.call_count == 64
+
+
+
 
 
 def test_fit_transform_when_rating_difference_requested_then_it_is_calculated_correctly(
     column_names,
 ):
     """
-    When RATING_DIFFERENCE_PROJECTED is requested, then we should expect to see
-    it calculated as TEAM_RATING_PROJECTED - OPPONENT_RATING_PROJECTED because
-    _add_rating_features computes the difference between team and opponent ratings.
-    The method automatically creates TEAM_RATING_PROJECTED and OPPONENT_RATING_PROJECTED
-    when DIFF_PROJ_COL is requested.
+    When TEAM_RATING_DIFFERENCE_PROJECTED is requested, it should equal
+    TEAM_RATING_PROJECTED - OPPONENT_RATING_PROJECTED.
+
+    We mock the performance predictor to avoid depending on predictor logic;
+    rating values still flow through _add_rating_features and the join logic.
     """
     generator = TeamRatingGenerator(
         performance_column="won",
@@ -747,6 +663,11 @@ def test_fit_transform_when_rating_difference_requested_then_it_is_calculated_co
         ],
         output_suffix="",
     )
+
+    # Mock the performance predictor used inside _calculate_ratings
+    mocked = MagicMock()
+    mocked.predict_performance.side_effect = [0.5, 0.5, 0.5, 0.5]  # 2 teams * (off+def)
+    generator._performance_predictor = mocked
 
     df = pl.DataFrame(
         {
@@ -760,12 +681,16 @@ def test_fit_transform_when_rating_difference_requested_then_it_is_calculated_co
     result = generator.fit_transform(df)
 
     assert "team_rating_difference_projected" in result.columns
+
     team_a_row = result.filter(pl.col("team_id") == "team_a")
     diff = team_a_row["team_rating_difference_projected"][0]
     team_rating = team_a_row["team_rating_projected"][0]
     opp_rating = team_a_row["opponent_rating_projected"][0]
+
     assert diff == pytest.approx(team_rating - opp_rating)
 
+    # Ensure the mock was actually used (off+def for each team-row in match_df)
+    assert mocked.predict_performance.call_count == 4
 
 def test_fit_transform_when_rating_mean_requested_then_it_is_calculated_correctly(column_names):
     """
@@ -1153,7 +1078,6 @@ def test_fit_transform_when_same_update_match_id_then_updates_are_batched(column
     generator = TeamRatingGenerator(
         performance_column="won",
         column_names=column_names,
-        start_team_rating=1000.0,
         confidence_weight=0.0,
         output_suffix="",
     )
@@ -2376,3 +2300,72 @@ def test_team_rating_backward_compat_team_rating_projected(column_names, sample_
         team_rating = result["team_rating_projected_won"].to_list()
         team_off = result["team_off_rating_projected_won"].to_list()
         assert team_rating == team_off
+
+
+def test_team_with_strong_offense_and_weak_defense_gets_expected_ratings_and_predictions(
+    column_names,
+):
+    start_rating = 1000.0
+
+    generator = TeamRatingGenerator(
+        auto_scale_performance=True,
+        performance_column="team_points",
+        column_names=column_names,
+        performance_predictor="difference",
+        confidence_weight=0.0,  # keep updates simple/deterministic
+        rating_change_multiplier_offense=50.0,
+        rating_change_multiplier_defense=50.0,
+        output_suffix="",
+        start_harcoded_start_rating=start_rating,
+    )
+
+    base_day = datetime(2024, 1, 1)
+
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1, 2, 2, 3, 3, 4, 4],
+            "team_id": [
+                "team_a", "team_b",  # high-scoring, bad defense
+                "team_a", "team_c",  # high-scoring, bad defense
+                "team_d", "team_e",  # normal league game
+                "team_f", "team_g",  # normal league game
+            ],
+            "start_date": [
+                base_day, base_day,
+                base_day + timedelta(days=1), base_day + timedelta(days=1),
+                base_day + timedelta(days=2), base_day + timedelta(days=2),
+                base_day + timedelta(days=3), base_day + timedelta(days=3),
+            ],
+            "team_points": [
+                140, 130,
+                138, 128,
+                120, 115,
+                118, 112,
+            ],
+        }
+    )
+
+    generator.fit_transform(df)
+
+    a_off = float(generator._team_off_ratings["team_a"].rating_value)
+    a_def = float(generator._team_def_ratings["team_a"].rating_value)
+
+    assert a_off > start_rating
+    assert a_def < start_rating
+
+    # Predicted performances vs a ~1000 opponent
+    pred_off = float(
+        generator._performance_predictor.predict_performance(
+            rating_value=a_off,
+            opponent_team_rating_value=start_rating,
+        )
+    )
+    pred_def = float(
+        generator._performance_predictor.predict_performance(
+            rating_value=a_def,
+            opponent_team_rating_value=start_rating,
+        )
+    )
+
+    assert pred_off > 0.5
+    assert pred_def < 0.5

@@ -521,4 +521,3 @@ def test_final_sklearn_enhancer_estimator_gets_expected_feature_columns(frame):
     assert model.estimator.fit_X_type is pd.DataFrame
     et = _fitted_estimator_transformer(model)
     assert et.estimator_.estimator_.fit_columns == ['num1', 'num2', 'location']
-    u =2

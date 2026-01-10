@@ -1108,3 +1108,4 @@ class PlayerRatingGenerator(RatingGenerator):
             )
 
         return pl.DataFrame(out, strict=False)
+

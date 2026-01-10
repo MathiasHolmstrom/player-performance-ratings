@@ -158,7 +158,7 @@ class NegativeBinomialEstimator(BaseEstimator):
         )
         self._mean_r = float(result.x[0])
         if self.r_specific_granularity:
-            gran_grp = self._grp_to_r_granularity(df, is_train=True)
+            gran_grp = self._grp_to_r_granularity(positive_predicted_rows, is_train=True)
             column_names_lag = copy.deepcopy(self.column_names)
             if self.column_names.player_id not in self.r_specific_granularity:
                 column_names_lag.player_id = None
@@ -199,17 +199,19 @@ class NegativeBinomialEstimator(BaseEstimator):
                         final_group = final_group.filter(
                             nw.col(self._rolling_var.features_out[0]) < next_var_bin
                         )
-
-                    result = minimize(
-                        neg_binom_log_likelihood,
-                        x0=np.array([1.0]),
-                        args=(
-                            final_group[self.target].to_numpy(),
-                            final_group[self.point_estimate_pred_column].to_numpy(),
-                        ),
-                        method="L-BFGS-B",
-                        bounds=[(0.01, None)],
-                    )
+                    try:
+                        result = minimize(
+                            neg_binom_log_likelihood,
+                            x0=np.array([1.0]),
+                            args=(
+                                final_group[self.target].to_numpy(),
+                                final_group[self.point_estimate_pred_column].to_numpy(),
+                            ),
+                            method="L-BFGS-B",
+                            bounds=[(0.01, None)],
+                        )
+                    except:
+                        h = 2
                     self._r_estimates[(mu_bin, var_bin)] = float(result.x[0])
 
             self._historical_game_ids = gran_grp[self.column_names.match_id].unique().to_list()

@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 import polars as pl
 import pytest
 
@@ -1358,3 +1360,66 @@ def test_player_rating_only_requested_features_present(base_cn, sample_df):
             assert (
                 feature not in result_cols
             ), f"Unrequested feature '{feature}' should not be in output"
+
+
+def test_player_rating_team_with_strong_offense_and_weak_defense_gets_expected_ratings_and_predictions(
+    base_cn,
+):
+    start_rating = 1000.0
+
+    generator = PlayerRatingGenerator(
+        auto_scale_performance=True,
+        performance_column="team_points",
+        column_names=base_cn,
+        performance_predictor="difference",
+        confidence_weight=0.0,  # keep updates simple/deterministic
+        rating_change_multiplier_offense=50.0,
+        rating_change_multiplier_defense=50.0,
+        output_suffix="",
+        start_harcoded_start_rating=start_rating,
+    )
+
+    base_day = datetime(2024, 1, 1)
+
+    df = pl.DataFrame(
+        {
+            "mid": [
+                1, 1, 1, 1,  # team_a vs team_b (high scoring)
+                2, 2, 2, 2,  # team_a vs team_c (high scoring)
+                3, 3, 3, 3,  # team_b vs team_c (normal)
+            ],
+            "tid": [
+                "team_a", "team_a", "team_b", "team_b",
+                "team_a", "team_a", "team_c", "team_c",
+                "team_b", "team_b", "team_c", "team_c",
+            ],
+            "pid": [
+                "a_1", "a_2", "b_1", "b_2",
+                "a_1", "a_2", "c_1", "c_2",
+                "b_1", "b_2", "c_1", "c_2",
+            ],
+            "dt": [
+                base_day, base_day, base_day, base_day,
+                base_day + timedelta(days=1), base_day + timedelta(days=1),
+                base_day + timedelta(days=1), base_day + timedelta(days=1),
+                base_day + timedelta(days=2), base_day + timedelta(days=2),
+                base_day + timedelta(days=2), base_day + timedelta(days=2),
+            ],
+            "team_points": [
+                140, 140, 130, 130,
+                138, 138, 128, 128,
+                115, 115, 120, 120,
+            ],
+        }
+    )
+
+    generator.fit_transform(df)
+
+    a_off = float(generator._player_off_ratings["a_1"].rating_value)
+    a_def = float(generator._player_def_ratings["a_1"].rating_value)
+    assert float(generator._player_off_ratings["a_1"].rating_value) == float(generator._player_off_ratings["a_2"].rating_value)
+    assert float(generator._player_def_ratings["a_1"].rating_value) == float(
+        generator._player_def_ratings["a_2"].rating_value)
+
+    assert a_off > start_rating
+    assert a_def < start_rating

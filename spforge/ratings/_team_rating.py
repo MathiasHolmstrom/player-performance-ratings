@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 import polars as pl
 
-from spforge.data_structures import ColumnNames
+from spforge.data_structures import ColumnNames, PreMatchTeamRating
 from spforge.performance_transformers._performance_manager import ColumnWeight, PerformanceManager
 from spforge.ratings._base import RatingGenerator, RatingState
 from spforge.ratings.enums import RatingKnownFeatures, RatingUnknownFeatures
@@ -49,7 +49,7 @@ class TeamRatingGenerator(RatingGenerator):
         start_league_ratings: dict[str, float] | None = None,
         start_league_quantile: float = 0.2,
         start_min_count_for_percentiles: int = 50,
-        **kwargs: Any,
+        **kwargs,
     ):
         super().__init__(
             output_suffix=output_suffix,
@@ -71,7 +71,6 @@ class TeamRatingGenerator(RatingGenerator):
             min_rating_change_multiplier_ratio=min_rating_change_multiplier_ratio,
             league_rating_change_update_threshold=league_rating_change_update_threshold,
             league_rating_adjustor_multiplier=league_rating_adjustor_multiplier,
-            **kwargs,
         )
 
         self.TEAM_OFF_RATING_PROJ_COL = self._suffix(
@@ -171,8 +170,6 @@ class TeamRatingGenerator(RatingGenerator):
         match_df = self._add_day_number(match_df, cn.start_date, "__day_number")
         return match_df
 
-
-
     def _historical_transform(self, df: pl.DataFrame) -> pl.DataFrame:
         cn = self.column_names
         assert (
@@ -225,8 +222,8 @@ class TeamRatingGenerator(RatingGenerator):
             opp_off_perf = float(r[perf_opp_col]) if r.get(perf_opp_col) is not None else 0.0
             def_perf = 1.0 - opp_off_perf
 
-            pred_off = self._performance_predictor.predict_performance(team_rating=)
-            pred_def = self._predict_performance(team_def_pre, opp_off_pre)
+            pred_off = self._performance_predictor.predict_performance(rating_value=s_off.rating_value,opponent_team_rating_value= o_def.rating_value)
+            pred_def = self._performance_predictor.predict_performance(rating_value=s_def.rating_value,opponent_team_rating_value= o_off.rating_value)
 
             mult_off = self._applied_multiplier(s_off, self.rating_change_multiplier_offense)
             mult_def = self._applied_multiplier(s_def, self.rating_change_multiplier_defense)
@@ -389,17 +386,17 @@ class TeamRatingGenerator(RatingGenerator):
             opp_id = r[f"{cn.team_id}_opponent"]
 
             s_off = self._ensure_team_off(team_id, day_number=day_number, league=league)
-            s_def = self._ensure_team_def(team_id)
-            o_off = self._ensure_team_off(opp_id)
-            o_def = self._ensure_team_def(opp_id)
+            s_def = self._ensure_team_def(team_id, day_number=day_number, league=league)
+            o_off = self._ensure_team_off(opp_id, day_number=day_number, league=league)
+            o_def = self._ensure_team_def(opp_id, day_number=day_number, league=league)
 
             team_off_pre = float(s_off.rating_value)
             team_def_pre = float(s_def.rating_value)
             opp_off_pre = float(o_off.rating_value)
             opp_def_pre = float(o_def.rating_value)
 
-            pred_off = self._predict_performance(team_off_pre, opp_def_pre)
-            pred_def = self._predict_performance(team_def_pre, opp_off_pre)
+            pred_off = self._performance_predictor.predict_performance(rating_value=s_off.rating_value, opponent_team_rating_value=o_off.rating_value)
+            pred_def = self._performance_predictor.predict_performance(rating_value=s_def.rating_value,opponent_team_rating_value= o_off.rating_value)
 
             rows.append(
                 {
