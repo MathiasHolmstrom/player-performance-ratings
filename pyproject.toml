@@ -45,8 +45,10 @@ dev = [
 Homepage = "https://github.com/Hiderdk/player-performance-ratings"
 Repository = "https://github.com/Hiderdk/player-performance-ratings"
 
-[tool.setuptools]
-packages = ["spforge", "examples"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["spforge*", "examples*"]
+
 
 [tool.setuptools.package-data]
 "examples.nba" = ["data/*.parquet"]
