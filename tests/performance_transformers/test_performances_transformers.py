@@ -3,10 +3,7 @@ import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from spforge import ColumnNames
-from spforge.autopipeline import AutoPipeline
 from spforge.performance_transformers import (
     DiminishingValueTransformer,
     SymmetricDistributionTransformer,
@@ -15,7 +12,6 @@ from spforge.performance_transformers._performances_transformers import (
     GroupByTransformer,
     SklearnEstimatorImputer,
 )
-from spforge.transformers import RatioEstimatorTransformer
 
 dfs = [
     pl.DataFrame(

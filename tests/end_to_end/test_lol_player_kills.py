@@ -42,7 +42,7 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
 
     rating_generator_player_kills = PlayerRatingGenerator(
         features_out=[RatingKnownFeatures.PLAYER_RATING],
-        performance_column="performance_kills",
+        performance_column="kills",
         auto_scale_performance=True,
         performance_weights=[ColumnWeight(name="kills", weight=1)],
         column_names=column_names,

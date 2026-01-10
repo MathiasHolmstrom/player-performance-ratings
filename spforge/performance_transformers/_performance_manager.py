@@ -37,39 +37,41 @@ def create_performance_scalers_transformers(
     transformer_names: list[TransformerName],
     pre_transformers: list[NarwhalsFeatureTransformer],
     features: list[str],
+    prefix: str,
 ) -> list[NarwhalsFeatureTransformer]:
     if not transformer_names:
         return pre_transformers
 
-    all_features = features.copy()
+    all_features = [prefix + f for f in features]
 
     for transformer_name in transformer_names:
         if transformer_name == "symmetric":
-            pre_transformers.append(
-                SymmetricDistributionTransformer(features=all_features, prefix="")
-            )
+            t = SymmetricDistributionTransformer(features=all_features, prefix="")
         elif transformer_name == "partial_standard_scaler":
-            pre_transformers.append(
-                PartialStandardScaler(
-                    features=all_features,
-                    ratio=1,
-                    max_value=9999,
-                    target_mean=0,
-                    prefix="",
-                )
+            t = PartialStandardScaler(
+                features=all_features,
+                ratio=1,
+                max_value=9999,
+                target_mean=0,
+                prefix="",
             )
         elif transformer_name == "partial_standard_scaler_mean0.5":
-            pre_transformers.append(
-                PartialStandardScaler(
-                    features=all_features,
-                    ratio=1,
-                    max_value=9999,
-                    target_mean=0.5,
-                    prefix="",
-                )
+            t = PartialStandardScaler(
+                features=all_features,
+                ratio=1,
+                max_value=9999,
+                target_mean=0.5,
+                prefix="",
             )
         elif transformer_name == "min_max":
-            pre_transformers.append(MinMaxTransformer(features=all_features, prefix=""))
+            t = MinMaxTransformer(features=all_features, prefix="")
+        else:
+            raise ValueError(f"Unknown transformer_name: {transformer_name}")
+
+        pre_transformers.append(t)
+
+        # Chain: next transformer consumes the previous transformer's outputs
+        all_features = t.features_out
 
     return pre_transformers
 
@@ -78,10 +80,10 @@ class PerformanceManager(BaseEstimator, TransformerMixin):
     def __init__(
         self,
         features: list[str],
+        performance_column: str,
         transformer_names: list[TransformerName] | None = None,
         custom_transformers: list[NarwhalsFeatureTransformer] | None = None,
         prefix: str = "performance__",
-        performance_column: str = "weighted_performance",
         min_value: float = -0.02,
         max_value: float = 1.02,
     ):
@@ -94,7 +96,7 @@ class PerformanceManager(BaseEstimator, TransformerMixin):
         ]
         self.custom_transformers = custom_transformers or []
         self.original_transformers = [copy.deepcopy(p) for p in self.custom_transformers]
-        self.performance_column = performance_column
+        self.performance_column = self.prefix + performance_column
         self.min_value = min_value
         self.max_value = max_value
 
@@ -102,6 +104,7 @@ class PerformanceManager(BaseEstimator, TransformerMixin):
             transformer_names=self.transformer_names,
             pre_transformers=self.custom_transformers,
             features=self.features,
+            prefix=self.prefix,
         )
 
     @nw.narwhalify
@@ -156,19 +159,18 @@ class PerformanceWeightsManager(PerformanceManager):
     def __init__(
         self,
         weights: list[ColumnWeight],
+        performance_column: str = "weighted_performance",
         custom_transformers: list[NarwhalsFeatureTransformer] | None = None,
         transformer_names: (
             list[Literal["partial_standard_scaler", "symmetric", "min_max"]] | None
         ) = None,
         max_value: float = 1.02,
         min_value: float = -0.02,
-        performance_column: str = "weighted_performance",
         prefix: str = "performance__",
         return_all_features: bool = False,
     ):
         self.weights = weights
         self.return_all_features = return_all_features
-        self.performance_column = performance_column
 
         super().__init__(
             features=[p.name for p in weights],
@@ -193,16 +195,8 @@ class PerformanceWeightsManager(PerformanceManager):
         return df.select(list(set([*input_cols, *self.features_out]))).to_native()
 
     def _calculate_weights(self, df: IntoFrameT) -> IntoFrameT:
-        if self.transformers:
-            max_idx = len(self.transformers) - 1
-            column_weighs_mapping = {
-                self.performance_column: self.transformers[max_idx].features_out[idx]  # noqa: B035
-                for idx, _ in enumerate(self.weights)
-            }
-        else:
-            column_weighs_mapping = None
 
-        df = self._weight_columns(df=df, column_weighs_mapping=column_weighs_mapping)
+        df = self._weight_columns(df=df)
 
         if len(df.filter(nw.col(self.performance_column).is_null())) > 0 or len(
             df.filter(nw.col(self.performance_column).is_finite())
@@ -217,18 +211,18 @@ class PerformanceWeightsManager(PerformanceManager):
     def _weight_columns(
         self,
         df: IntoFrameT,
-        column_weighs_mapping: dict[str, str] | None,
     ) -> IntoFrameT:
+        tmp_out_performance_colum_name = f"__{self.performance_column}"
         df = df.with_columns(
             [
-                nw.lit(0).alias(self.performance_column),
+                nw.lit(0).alias(tmp_out_performance_colum_name),
                 nw.lit(0).alias("sum_cols_weights"),
             ]
         )
 
         for column_weight in self.weights:
             weight_col = f"weight__{column_weight.name}"
-            feature_col = column_weight.name
+            feature_col = f"{self.prefix}{column_weight.name}"
 
             df = df.with_columns(
                 nw.when((nw.col(feature_col).is_null()) | (~nw.col(feature_col).is_finite()))
@@ -260,28 +254,26 @@ class PerformanceWeightsManager(PerformanceManager):
         for column_weight in self.weights:
             weight_col = f"weight__{column_weight.name}"
             feature_col = column_weight.name
-            feature_name = (
-                column_weighs_mapping.get(feature_col, feature_col)
-                if column_weighs_mapping
-                else feature_col
-            )
+            feature_name = f"{self.prefix}{feature_col}"
 
             if column_weight.lower_is_better:
                 df = df.with_columns(
                     (
-                        nw.col(self.performance_column)
+                        nw.col(tmp_out_performance_colum_name)
                         + (nw.col(weight_col) / sum_weight * (1 - nw.col(feature_name)))
-                    ).alias(self.performance_column)
+                    ).alias(tmp_out_performance_colum_name)
                 )
             else:
                 df = df.with_columns(
                     (
-                        nw.col(self.performance_column)
+                        nw.col(tmp_out_performance_colum_name)
                         + (nw.col(weight_col) / sum_weight * nw.col(feature_name))
-                    ).alias(self.performance_column)
+                    ).alias(tmp_out_performance_colum_name)
                 )
 
-        return df
+        return df.with_columns(
+            nw.col(tmp_out_performance_colum_name).alias(self.performance_column)
+        )
 
     @property
     def features_out(self) -> list[str]:

@@ -267,6 +267,8 @@ class SymmetricDistributionTransformer(BaseEstimator, TransformerMixin):
             )
 
         for feature in self.features:
+            if len(df.filter(nw.col(feature).is_null(), nw.col(feature).is_nan())) == len(df):
+                raise ValueError("performance contains nan values")
             feature_min = df[feature].min()
             feature_max = df[feature].max()
             if feature_min == feature_max:

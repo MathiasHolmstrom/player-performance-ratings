@@ -942,7 +942,10 @@ def test_threshold_event_score_logloss_basic_ge_ceil():
         dtype=float,
     )
     p = np.array(
-        [_p_event_from_dist(d, t, labels=None, comparator=">=") for d, t in zip(df["dist"], thr, strict=False)],
+        [
+            _p_event_from_dist(d, t, labels=None, comparator=">=")
+            for d, t in zip(df["dist"], thr, strict=False)
+        ],
         dtype=float,
     )
 
@@ -973,9 +976,14 @@ def test_threshold_event_score_logloss_less_than_comparator():
     got = scorer.score(df)
 
     thr = np.array([_thr_int(x, "ceil") for x in df["thr"]], dtype=int)
-    y = np.array([_y_event(o, t, "<") for o, t in zip(df["out"].to_numpy(), thr, strict=False)], dtype=float)
+    y = np.array(
+        [_y_event(o, t, "<") for o, t in zip(df["out"].to_numpy(), thr, strict=False)], dtype=float
+    )
     p = np.array(
-        [_p_event_from_dist(d, t, labels=None, comparator="<") for d, t in zip(df["dist"], thr, strict=False)],
+        [
+            _p_event_from_dist(d, t, labels=None, comparator="<")
+            for d, t in zip(df["dist"], thr, strict=False)
+        ],
         dtype=float,
     )
 

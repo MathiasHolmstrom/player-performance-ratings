@@ -18,6 +18,8 @@ from spforge.transformers._other_transformer import ConvertDataFrameToCategorica
 
 _logger = logging.getLogger(__name__)
 
+# --- Serializable Global Helpers ---
+
 
 def _dedupe_preserve_order(cols):
     return list(dict.fromkeys(cols))
@@ -39,6 +41,27 @@ def _safe_feature_names_out(transformer, input_features):
         if out:
             return out
     return list(input_features)
+
+
+def _to_pandas(X):
+    return X.to_pandas() if hasattr(X, "to_pandas") else X
+
+
+def _drop_columns_transformer(X, drop_cols):
+    """Global function to replace lambda for dropping columns."""
+    if not drop_cols:
+        return X
+    return X[[c for c in X.columns if c not in drop_cols]]
+
+
+class _ColumnSelectorExcluding:
+    """Class-based callable for ColumnTransformer selection to ensure picklability."""
+
+    def __init__(self, drop_cols):
+        self.drop_cols = drop_cols
+
+    def __call__(self, X):
+        return [c for c in X.columns if c not in self.drop_cols]
 
 
 class _OnlyOutputColumns(BaseEstimator, TransformerMixin):
@@ -137,10 +160,6 @@ def _walk_objects(root: object):
 
 def lgbm_in_root(root) -> bool:
     return any(_is_lightgbm_estimator(obj) for obj in _walk_objects(root))
-
-
-def _to_pandas(X):
-    return X.to_pandas() if hasattr(X, "to_pandas") else X
 
 
 class AutoPipeline(BaseEstimator):
@@ -375,14 +394,14 @@ class AutoPipeline(BaseEstimator):
                     f"Duplicate names in feats_out for transformer {transformer}: {feats_out}"
                 )
 
-            def _keep_cols(X, drop=frozenset(feats_out)):  # noqa: B006
-                return [c for c in X.columns if c not in drop]
+            # Replaced internal function with picklable class
+            column_selector = _ColumnSelectorExcluding(frozenset(feats_out))
 
             wrapped = _OnlyOutputColumns(transformer, feats_out)
 
             t_ct = ColumnTransformer(
                 transformers=[
-                    ("keep", "passthrough", _keep_cols),
+                    ("keep", "passthrough", column_selector),
                     ("features", wrapped, input_cols),
                 ],
                 remainder="drop",
@@ -393,10 +412,10 @@ class AutoPipeline(BaseEstimator):
 
             prev_transformer_feats_out.extend(feats_out)
 
-        def _final_keep_cols(X, drop=drop_ctx_set):
-            return [c for c in X.columns if c not in drop]
-
-        final = FunctionTransformer(lambda X: X[_final_keep_cols(X)], validate=False)
+        # Replaced lambda and internal function with global function + kw_args
+        final = FunctionTransformer(
+            _drop_columns_transformer, validate=False, kw_args={"drop_cols": drop_ctx_set}
+        )
         steps.append(("final", final))
 
         steps.append(("est", est))

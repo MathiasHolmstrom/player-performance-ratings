@@ -67,7 +67,8 @@ def validate_sorting(df: IntoFrameT, column_names: ColumnNames) -> None:
 
     df_sorted = df.sort(by=sort_cols)
     if (
-        df.select(select_cols).to_numpy().tolist() != df_sorted.select(select_cols).to_numpy().tolist()
+        df.select(select_cols).to_numpy().tolist()
+        != df_sorted.select(select_cols).to_numpy().tolist()
     ):
         for column in select_cols:
             df = df.with_columns(nw.col(column).cast(nw.String))

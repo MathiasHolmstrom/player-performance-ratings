@@ -6,7 +6,6 @@ from spforge import AutoPipeline, ColumnNames, FeatureGeneratorPipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
 from spforge.estimator import (
     NegativeBinomialEstimator,
-    SklearnPredictor,
 )
 from spforge.feature_generator import LagTransformer, RollingWindowTransformer
 from spforge.performance_transformers._performance_manager import ColumnWeight
