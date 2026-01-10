@@ -1,6 +1,6 @@
 import math
 from abc import ABC, abstractmethod
-from typing import Optional, Mapping
+from collections.abc import Mapping
 
 from spforge.data_structures import PreMatchTeamRating
 
@@ -24,7 +24,7 @@ def _clamp_probability(p: float, max_predict_value: float) -> float:
 
 def weighted_team_rating_from_players(
     team_rating: PreMatchTeamRating,
-    players_playing_time: Optional[Mapping[str, float]] = None,
+    players_playing_time: Mapping[str, float] | None = None,
 ) -> float:
     """
     Optional helper for team predictors if you *do* have a team-level playing-time map.
@@ -201,11 +201,7 @@ class TeamRatingMeanPerformancePredictor(TeamPerformancePredictor):
 
         historical_average = self._sum / self._count
 
-        net_over_hist = (
-            0.5 * rating_value
-            + 0.5 * opponent_team_rating_value
-            - historical_average
-        )
+        net_over_hist = 0.5 * rating_value + 0.5 * opponent_team_rating_value - historical_average
 
         value = self.coef * net_over_hist
         prediction = _logistic(value)

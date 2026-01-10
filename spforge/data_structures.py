@@ -59,16 +59,43 @@ class RatingState:
 
 
 @dataclass
+class PlayerRating(RatingState):
+    most_recent_team_id: str | None = None
+
+
+@dataclass
+class TeamRatingsResult:
+    """Combined offense and defense ratings for a team."""
+
+    id: str
+    offense_rating: float
+    defense_rating: float
+    offense_games_played: float = 0.0
+    defense_games_played: float = 0.0
+    offense_confidence_sum: float = 0.0
+    defense_confidence_sum: float = 0.0
+
+
+@dataclass
+class PlayerRatingsResult:
+    """Combined offense and defense ratings for a player."""
+
+    id: str
+    offense_rating: float
+    defense_rating: float
+    offense_games_played: float = 0.0
+    defense_games_played: float = 0.0
+    offense_confidence_sum: float = 0.0
+    defense_confidence_sum: float = 0.0
+    most_recent_team_id: str | None = None
+
+
+@dataclass
 class Team:
     id: str
     player_ids: list[str]
     last_match_day_number: int
     name: str | None = None
-
-
-@dataclass
-class PlayerRating(RatingState):
-    most_recent_team_id: str | None = None
 
 
 @dataclass

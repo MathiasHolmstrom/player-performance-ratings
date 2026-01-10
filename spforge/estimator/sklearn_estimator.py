@@ -1,4 +1,5 @@
-from typing import Any, Optional, Hashable, Callable
+import contextlib
+from typing import Any
 
 import narwhals.stable.v2 as nw
 import numpy as np
@@ -7,7 +8,6 @@ from narwhals.typing import IntoFrameT
 from sklearn import clone
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.linear_model import LogisticRegression
-from sklearn.utils.validation import check_is_fitted
 
 from spforge.transformers._other_transformer import GroupByReducer
 
@@ -48,9 +48,8 @@ class GroupByEstimator(BaseEstimator):
         if not self.__sklearn_is_fitted__():
             raise RuntimeError("GroupByEstimator not fitted. Call fit() first.")
         X_red = nw.from_native(self._reducer.transform(X))
-        predicted =  self._est.predict(X_red.drop(self.granularity).to_pandas())
-        return self._return_predicted(X=X,X_red=X_red, predicted=predicted)
-
+        predicted = self._est.predict(X_red.drop(self.granularity).to_pandas())
+        return self._return_predicted(X=X, X_red=X_red, predicted=predicted)
 
     @nw.narwhalify
     def predict_proba(self, X: IntoFrameT) -> np.ndarray:
@@ -58,14 +57,16 @@ class GroupByEstimator(BaseEstimator):
             raise RuntimeError("GroupByEstimator not fitted. Call fit() first.")
         X_red = nw.from_native(self._reducer.transform(X))
         predicted = self._est.predict_proba(X_red.drop(self.granularity).to_pandas())
-        return self._return_predicted(X=X,X_red=X_red, predicted=predicted)
+        return self._return_predicted(X=X, X_red=X_red, predicted=predicted)
 
-    def _return_predicted(self,X: IntoFrameT, X_red: IntoFrameT, predicted: np.ndarray) -> np.ndarray:
+    def _return_predicted(
+        self, X: IntoFrameT, X_red: IntoFrameT, predicted: np.ndarray
+    ) -> np.ndarray:
         X_red = X_red.with_columns(
             nw.new_series(
                 values=predicted.tolist(),
-                name='__predicted',
-                backend=nw.get_native_namespace(X_red)
+                name="__predicted",
+                backend=nw.get_native_namespace(X_red),
             )
         )
         joined = X.join(
@@ -76,12 +77,13 @@ class GroupByEstimator(BaseEstimator):
 
         return np.vstack(joined["__predicted"].to_list())
 
+
 class SkLearnEnhancerEstimator(BaseEstimator):
     def __init__(
         self,
         estimator: Any,
-        date_column: Optional[str] = None,
-        day_weight_epsilon: Optional[float] = None,
+        date_column: str | None = None,
+        day_weight_epsilon: float | None = None,
     ):
         self.estimator = estimator
         self.date_column = date_column
@@ -89,7 +91,7 @@ class SkLearnEnhancerEstimator(BaseEstimator):
         self.classes_ = []
         self.estimator_ = None  # fitted clone
 
-    def _resolve_date_column(self, cols: list[str]) -> Optional[str]:
+    def _resolve_date_column(self, cols: list[str]) -> str | None:
         if not self.date_column:
             return None
 
@@ -109,7 +111,11 @@ class SkLearnEnhancerEstimator(BaseEstimator):
 
     @nw.narwhalify
     def fit(self, X: IntoFrameT, y: Any, sample_weight: np.ndarray | None = None):
-        y = y.to_numpy() if hasattr(y, "to_numpy") else (np.asarray(y) if not isinstance(y, np.ndarray) else y)
+        y = (
+            y.to_numpy()
+            if hasattr(y, "to_numpy")
+            else (np.asarray(y) if not isinstance(y, np.ndarray) else y)
+        )
 
         cols = list(X.columns)
         resolved_date_col = self._resolve_date_column(cols)
@@ -123,7 +129,7 @@ class SkLearnEnhancerEstimator(BaseEstimator):
             days_diff = (date_series - max_date).dt.total_seconds() / (24 * 60 * 60)
             min_diff = days_diff.min()
 
-            denom = (min_diff * -2 + self.day_weight_epsilon)
+            denom = min_diff * -2 + self.day_weight_epsilon
             date_weights = (days_diff - min_diff + self.day_weight_epsilon) / denom
             date_weights = date_weights.to_numpy()
 
@@ -177,11 +183,10 @@ class SkLearnEnhancerEstimator(BaseEstimator):
         return self.estimator_.predict_proba(X_features)
 
 
-
 class OrdinalClassifier(BaseEstimator, ClassifierMixin):
     def __init__(
-            self,
-            estimator: Optional[Any] = None,
+        self,
+        estimator: Any | None = None,
     ):
         self.estimator = estimator or LogisticRegression()
         self.clfs = {}
@@ -206,10 +211,8 @@ class OrdinalClassifier(BaseEstimator, ClassifierMixin):
             clf = clone(self.estimator)
             clf.fit(X_pd, binary_y)
             self.clfs[i] = clf
-            try:
+            with contextlib.suppress(AttributeError):
                 self.coef_.append(clf.coef_)
-            except AttributeError:
-                pass
         return self
 
     @nw.narwhalify
@@ -233,9 +236,9 @@ class OrdinalClassifier(BaseEstimator, ClassifierMixin):
 
 class GranularityEstimator(BaseEstimator):
     def __init__(
-            self,
-            estimator: Any,
-            granularity_column_name: str,
+        self,
+        estimator: Any,
+        granularity_column_name: str,
     ):
         self.estimator = estimator
         self.granularity_column_name = granularity_column_name
@@ -273,8 +276,8 @@ class GranularityEstimator(BaseEstimator):
 
     @nw.narwhalify
     def predict(self, X: IntoFrameT) -> np.ndarray:
-        if len(self._granularity_estimators) ==0:
-            raise ValueError('not been fitted')
+        if len(self._granularity_estimators) == 0:
+            raise ValueError("not been fitted")
         X_pd = X.to_pandas()
         predictions = np.empty(len(X_pd), dtype=object)
 
@@ -293,7 +296,9 @@ class GranularityEstimator(BaseEstimator):
     def predict_proba(self, X: IntoFrameT) -> np.ndarray:
         X_pd = X.to_pandas()
         first_est = next(iter(self._granularity_estimators.values()))
-        n_classes = first_est.predict_proba(X_pd[:1].drop(columns=[self.granularity_column_name])).shape[1]
+        n_classes = first_est.predict_proba(
+            X_pd[:1].drop(columns=[self.granularity_column_name])
+        ).shape[1]
 
         probabilities = np.zeros((len(X_pd), n_classes), dtype=float)
 
@@ -305,7 +310,10 @@ class GranularityEstimator(BaseEstimator):
         return probabilities
 
     def get_params(self, deep: bool = True) -> dict:
-        params = {"estimator": self.estimator, "granularity_column_name": self.granularity_column_name}
+        params = {
+            "estimator": self.estimator,
+            "granularity_column_name": self.granularity_column_name,
+        }
         if deep and hasattr(self.estimator, "get_params"):
             estimator_params = self.estimator.get_params(deep=True)
             params.update({f"estimator__ {k}": v for k, v in estimator_params.items()})
@@ -330,54 +338,52 @@ class ConditionalEstimator(BaseEstimator, ClassifierMixin):
         outcome_1_value: str | int,
         outcome_0_estimator: Any,
         outcome_1_estimator: Any,
-        gate_distance_col_is_feature: bool =True
+        gate_distance_col_is_feature: bool = True,
     ):
         self.gate_estimator = gate_estimator
         self.gate_distance_col = gate_distance_col
         self.outcome_0_estimator = outcome_0_estimator
         self.outcome_1_estimator = outcome_1_estimator
         self.outcome_0_value = outcome_0_value
-        self.outcome_1_value =outcome_1_value
+        self.outcome_1_value = outcome_1_value
         self.gate_distance_col_is_feature = gate_distance_col_is_feature
 
-
     @nw.narwhalify
-    def fit(self, X: IntoFrameT, y: list[int] | np.ndarray, sample_weight: Optional[np.ndarray] = None):
-        self.fitted_feats = X.columns if self.gate_distance_col_is_feature else X.drop(self.gate_distance_col)
+    def fit(
+        self, X: IntoFrameT, y: list[int] | np.ndarray, sample_weight: np.ndarray | None = None
+    ):
+        self.fitted_feats = (
+            X.columns if self.gate_distance_col_is_feature else X.drop(self.gate_distance_col)
+        )
 
         df = X.with_columns(
-            nw.new_series(
-                name='__target',
-                values=y,
-                backend=nw.get_native_namespace(X)
-            )
+            nw.new_series(name="__target", values=y, backend=nw.get_native_namespace(X))
         )
 
         df = df.with_columns(
-            nw.when(
-                nw.col(self.gate_distance_col)>=nw.col('__target')
-            ).then(nw.lit(1))
+            nw.when(nw.col(self.gate_distance_col) >= nw.col("__target"))
+            .then(nw.lit(1))
             .otherwise(nw.lit(0))
-            .alias('__gate_target')
+            .alias("__gate_target")
         )
 
-        y_gate = df['__gate_target'].to_numpy()
+        y_gate = df["__gate_target"].to_numpy()
         self.gate_estimator.fit(df.select(self.fitted_feats).to_pandas(), y_gate)
         self.classes_ = np.unique(y).tolist() if isinstance(y, list) else list(dict.fromkeys(y))
         self.classes_.sort()
 
         df = df.with_columns(
-            (nw.col('__target') - nw.col(self.gate_distance_col)).alias('__diff_gate')
+            (nw.col("__target") - nw.col(self.gate_distance_col)).alias("__diff_gate")
         )
 
-        df0_rows = df.filter(nw.col('__gate_target') == self.outcome_0_value)
-        df1_rows = df.filter(nw.col('__gate_target') == self.outcome_1_value)
+        df0_rows = df.filter(nw.col("__gate_target") == self.outcome_0_value)
+        df1_rows = df.filter(nw.col("__gate_target") == self.outcome_1_value)
 
         X0 = df0_rows.select(self.fitted_feats).to_pandas()
         X1 = df1_rows.select(self.fitted_feats).to_pandas()
 
-        y0 = df0_rows['__diff_gate'].to_numpy()
-        y1 = df1_rows['__diff_gate'].to_numpy()
+        y0 = df0_rows["__diff_gate"].to_numpy()
+        y1 = df1_rows["__diff_gate"].to_numpy()
 
         self.outcome_0_estimator.fit(X0, y0)
         self.outcome_1_estimator.fit(X1, y1)
@@ -433,12 +439,9 @@ class ConditionalEstimator(BaseEstimator, ClassifierMixin):
 
         return out
 
-
-
     @nw.narwhalify
     def predict(self, X: Any) -> np.ndarray:
         """Predict most likely global expert label."""
         proba = self.predict_proba(X)
         idx = np.argmax(proba, axis=1)
         return self.classes_[idx]
-

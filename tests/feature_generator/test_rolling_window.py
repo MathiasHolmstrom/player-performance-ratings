@@ -42,7 +42,7 @@ def test_rolling_mean_transform_historical_game_team(
     )
     try:
         original_df = data.copy()
-    except:
+    except Exception:
         original_df = data.clone()
 
     if not use_column_names:
@@ -143,7 +143,7 @@ def test_rolling_mean_transform_historical_player(df, column_names):
     )
     try:
         original_df = data.copy()
-    except:
+    except Exception:
         original_df = data.clone()
 
     rolling_mean_transformation = RollingWindowTransformer(
@@ -273,7 +273,7 @@ def test_rolling_mean_transform_historical_and_transform_future(df, column_names
     )
     try:
         original_future_df = future_df.copy()
-    except:
+    except Exception:
         original_future_df = future_df.clone()
     rolling_mean_transformation = RollingWindowTransformer(
         features=["points"],

@@ -1,10 +1,9 @@
-
 import numpy as np
 import pandas as pd
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal as pl_assert_frame_equal
-from sklearn.base import RegressorMixin, BaseEstimator
+from sklearn.base import BaseEstimator, RegressorMixin
 
 from spforge.transformers import NetOverPredictedTransformer
 
@@ -19,6 +18,7 @@ class ConstantPredRegressor(RegressorMixin, BaseEstimator):
     def predict(self, X):
         # ensure correct length if X changes shape
         return np.asarray(self.preds)[: len(X)]
+
 
 @pytest.mark.parametrize("backend", ["pandas", "polars"])
 def test_net_over_predicted_pandas_polars_and_lazy(backend: str):
@@ -69,7 +69,6 @@ def test_net_over_predicted_pandas_polars_and_lazy(backend: str):
             check_dtype=False,
         )
 
-
     transform_data = {
         "feature1": [1, 2, 3, 4],
         "target": [0.5, 1.0, 2.0, 3.0],
@@ -103,4 +102,3 @@ def test_net_over_predicted_pandas_polars_and_lazy(backend: str):
             expected_tr.select(transformed_out.columns),
             check_dtype=False,
         )
-

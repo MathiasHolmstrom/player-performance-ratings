@@ -15,7 +15,7 @@ class MatchKFoldCrossValidator:
         n_splits: int = 3,
         min_validation_date: str | None = None,
         features: list[str] | None = None,
-        binomial_probabilities_to_index1: bool = True
+        binomial_probabilities_to_index1: bool = True,
     ):
         self.match_id_column_name = match_id_column_name
         self.date_column_name = date_column_name
@@ -27,7 +27,6 @@ class MatchKFoldCrossValidator:
         self.features = features  # Optional: if None, will infer from DataFrame
         self.binomial_probabilities_to_index1 = binomial_probabilities_to_index1
 
-
     def _get_features(self, df):
         if self.features is not None:
             return self.features
@@ -36,7 +35,7 @@ class MatchKFoldCrossValidator:
             "__match_num",
             self.prediction_column_name,
             self.date_column_name,
-            self.match_id_column_name
+            self.match_id_column_name,
         }
 
         return [c for c in df.columns if c not in exclude_cols]
@@ -58,17 +57,11 @@ class MatchKFoldCrossValidator:
                 if self.binomial_probabilities_to_index1:
                     if getattr(proba, "ndim", None) == 2:
                         n_cols = proba.shape[1]
-                        if n_cols == 2:
-                            values = proba[:, 1]
-                        else:
-                            values = proba.tolist()
+                        values = proba[:, 1] if n_cols == 2 else proba.tolist()
                     else:
                         values = proba
                 else:
-                    if getattr(proba, "ndim", None) == 2:
-                        values = proba.tolist()
-                    else:
-                        values = proba
+                    values = proba.tolist() if getattr(proba, "ndim", None) == 2 else proba
 
             except AttributeError:
                 values = est.predict(X)
@@ -95,10 +88,7 @@ class MatchKFoldCrossValidator:
                 Xt = step.transform(Xt)
 
             if ok and Xt is not None:
-                if isinstance(Xt, nw.DataFrame):
-                    feat_df = Xt
-                else:
-                    feat_df = nw.from_native(Xt)
+                feat_df = Xt if isinstance(Xt, nw.DataFrame) else nw.from_native(Xt)
 
                 pred_col = self.prediction_column_name
                 keep = [c for c in feat_df.columns if c != pred_col]
@@ -116,7 +106,9 @@ class MatchKFoldCrossValidator:
         return out
 
     @nw.narwhalify
-    def generate_validation_df(self, df: IntoFrameT, add_trainining_predictions: bool = False) -> IntoFrameT:
+    def generate_validation_df(
+        self, df: IntoFrameT, add_trainining_predictions: bool = False
+    ) -> IntoFrameT:
         df = df.sort([self.date_column_name, self.match_id_column_name])
 
         df = df.with_columns(
@@ -132,7 +124,9 @@ class MatchKFoldCrossValidator:
             self.min_validation_date = unique_dates[median_number]
 
         max_m = df["__match_num"].max()
-        min_m = df.filter(nw.col(self.date_column_name) >= self.min_validation_date)["__match_num"].min()
+        min_m = df.filter(nw.col(self.date_column_name) >= self.min_validation_date)[
+            "__match_num"
+        ].min()
 
         step = (max_m - min_m) // self.n_splits
 
@@ -164,7 +158,9 @@ class MatchKFoldCrossValidator:
                 results.append(train_pred_df)
                 added_train_preds = True
 
-            pred_df = self._predict_smart(est, val_df).with_columns(nw.lit(1).alias("is_validation"))
+            pred_df = self._predict_smart(est, val_df).with_columns(
+                nw.lit(1).alias("is_validation")
+            )
             results.append(pred_df)
 
             curr_cut += step

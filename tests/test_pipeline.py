@@ -4,12 +4,10 @@ import pandas as pd
 import polars as pl
 import pytest
 from narwhals._native import IntoFrameT
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from spforge import AutoPipeline
-
-from sklearn.base import BaseEstimator, TransformerMixin
-
 from spforge.estimator import SkLearnEnhancerEstimator
 from spforge.transformers import EstimatorTransformer
 
@@ -47,6 +45,7 @@ class CaptureEstimator(BaseEstimator):
         out[:, 0] = 0.25
         out[:, 1] = 0.75
         return out
+
 
 class CaptureDtypesEstimator(CaptureEstimator):
     def __init__(self, has_proba: bool = False):
@@ -92,7 +91,6 @@ class EstimatorHoldingTransformer(BaseEstimator, TransformerMixin):
 
     def set_output(self, *, transform=None):
         return self
-
 
 
 @pytest.fixture(params=["pd", "pl"])
@@ -157,6 +155,7 @@ def _inner_estimator(model: AutoPipeline):
     if hasattr(est, "_est") and est._est is not None:
         return est._est
     return est
+
 
 def test_fit_predict_returns_ndarray(df_reg):
     model = AutoPipeline(
@@ -338,7 +337,7 @@ def test_pipeline_uses_feature_names_subset_even_if_extra_columns_present(df_reg
     model = AutoPipeline(
         estimator=cap,
         feature_names=["num1", "cat1"],
-        categorical_features=['cat1'],
+        categorical_features=["cat1"],
         impute_missing_values=True,
         scale_features=True,
         remainder="drop",
@@ -388,7 +387,7 @@ def test_categorical_handling_auto_uses_native_when_lightgbm_in_predictor_transf
     assert "cat1" in inner.fit_columns
 
     df_out = model.sklearn_pipeline.named_steps["pre"].transform(X)
-    assert isinstance(df_out['cat1'].dtype, pd.CategoricalDtype)
+    assert isinstance(df_out["cat1"].dtype, pd.CategoricalDtype)
 
 
 class CaptureFitEstimator(BaseEstimator):
@@ -410,6 +409,8 @@ class CaptureFitEstimator(BaseEstimator):
     def predict(self, X):
         n = len(X) if hasattr(X, "__len__") else 0
         return np.zeros(n)
+
+
 class AddConstantPredictionTransformer(BaseEstimator):
     def __init__(self, col_name: str):
         self.col_name = col_name
@@ -429,6 +430,7 @@ class AddConstantPredictionTransformer(BaseEstimator):
             )
         )
 
+
 def _find_fitted(obj, predicate):
     for _, v in obj.get_params(deep=True).items():
         if predicate(v):
@@ -441,7 +443,7 @@ def _fitted_estimator_transformer(model):
     ct = sk.named_steps["t1"]  # your second stage ColumnTransformer
 
     # ct.transformers_ contains the FITTED transformers
-    for name, trans, cols in ct.transformers_:
+    for name, trans, _cols in ct.transformers_:
         if name != "features":
             continue
 
@@ -457,6 +459,8 @@ def _fitted_estimator_transformer(model):
         raise AssertionError("Found 'features' transformer but couldn't unwrap _OnlyOutputColumns")
 
     raise AssertionError("Could not find t1 'features' transformer in ct.transformers_")
+
+
 @pytest.mark.parametrize("frame", ["pd", "pl"])
 def test_final_sklearn_enhancer_estimator_gets_expected_feature_columns(frame):
     df_pd = pd.DataFrame(
@@ -491,7 +495,12 @@ def test_final_sklearn_enhancer_estimator_gets_expected_feature_columns(frame):
     model = AutoPipeline(
         estimator=CaptureFitEstimator(),
         feature_names=["num1", "num2", "location"],
-        context_predictor_transformer_feature_names=["player_id", "team_id", "match_id", "start_date"],
+        context_predictor_transformer_feature_names=[
+            "player_id",
+            "team_id",
+            "match_id",
+            "start_date",
+        ],
         predictor_transformers=[dummy_prev, final_transformer],
         categorical_handling="auto",
         impute_missing_values=True,
@@ -500,7 +509,9 @@ def test_final_sklearn_enhancer_estimator_gets_expected_feature_columns(frame):
     )
 
     if isinstance(df, pl.DataFrame):
-        X = df.select(["num1", "num2", "location", "player_id", "team_id", "match_id", "start_date"])
+        X = df.select(
+            ["num1", "num2", "location", "player_id", "team_id", "match_id", "start_date"]
+        )
         y = df["y"]
     else:
         X = df[["num1", "num2", "location", "player_id", "team_id", "match_id", "start_date"]]
@@ -512,12 +523,15 @@ def test_final_sklearn_enhancer_estimator_gets_expected_feature_columns(frame):
 
     fitted_final = _find_fitted(
         sk,
-        lambda o: isinstance(o, EstimatorTransformer) and getattr(o, "prediction_column_name", None) == "points_estimate",
+        lambda o: isinstance(o, EstimatorTransformer)
+        and getattr(o, "prediction_column_name", None) == "points_estimate",
     )
 
-    expected_cols = ["num1", "num2", "location", "points_estimate_raw"] + list(fitted_final.get_feature_names_out())
+    expected_cols = ["num1", "num2", "location", "points_estimate_raw"] + list(
+        fitted_final.get_feature_names_out()
+    )
 
     assert model.estimator.fit_columns == expected_cols
     assert model.estimator.fit_X_type is pd.DataFrame
     et = _fitted_estimator_transformer(model)
-    assert et.estimator_.estimator_.fit_columns == ['num1', 'num2', 'location']
+    assert et.estimator_.estimator_.fit_columns == ["num1", "num2", "location"]

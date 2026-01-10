@@ -1,25 +1,29 @@
+import contextlib
+
 import narwhals.stable.v2 as nw
 import numpy as np
 import pandas as pd
 import polars as pl
 from narwhals.typing import IntoFrameT
 
-from spforge import ColumnNames
+from spforge.data_structures import ColumnNames
+
 
 def is_lightgbm_estimator(est) -> bool:
     try:
         import lightgbm as lgb
+
         return isinstance(est, lgb.sklearn.LGBMModel)
     except Exception:
         return est.__class__.__module__.startswith("lightgbm")
+
+
 def coerce_for_lightgbm(X):
     try:
         import narwhals.stable.v2 as nw
 
-        try:
+        with contextlib.suppress(Exception):
             X = nw.to_native(X)
-        except Exception:
-            pass
     except Exception:
         pass
 
@@ -63,8 +67,7 @@ def validate_sorting(df: IntoFrameT, column_names: ColumnNames) -> None:
 
     df_sorted = df.sort(by=sort_cols)
     if (
-        not df.select(select_cols).to_numpy().tolist()
-        == df_sorted.select(select_cols).to_numpy().tolist()
+        df.select(select_cols).to_numpy().tolist() != df_sorted.select(select_cols).to_numpy().tolist()
     ):
         for column in select_cols:
             df = df.with_columns(nw.col(column).cast(nw.String))
@@ -77,11 +80,8 @@ def validate_sorting(df: IntoFrameT, column_names: ColumnNames) -> None:
         ):
             return
         for column in select_cols:
-            try:
+            with contextlib.suppress(Exception):
                 df = df.with_columns(nw.col(column).cast(nw.Int64))
-
-            except:
-                pass
 
         df_sorted = df.sort(by=sort_cols)
 

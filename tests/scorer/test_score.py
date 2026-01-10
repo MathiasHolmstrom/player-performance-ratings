@@ -6,7 +6,8 @@ import polars as pl
 import pytest
 from sklearn.metrics import (
     log_loss,
-    mean_absolute_error, root_mean_squared_error,
+    mean_absolute_error,
+    root_mean_squared_error,
 )
 
 from spforge.scorer import (
@@ -906,9 +907,11 @@ def _y_event(outcome, thr, comparator):
         return float(outcome < thr)
     raise ValueError(comparator)
 
+
 def _clip01(p, eps=1e-15):
     p = np.asarray(p, dtype=float)
     return np.clip(p, eps, 1.0 - eps)
+
 
 def test_threshold_event_score_logloss_basic_ge_ceil():
     df = pd.DataFrame(
@@ -935,17 +938,16 @@ def test_threshold_event_score_logloss_basic_ge_ceil():
 
     thr = np.array([_thr_int(x, "ceil") for x in df["ydstogo"]], dtype=int)
     y = np.array(
-        [_y_event(o, t, ">=") for o, t in zip(df["yards_gained"].to_numpy(), thr)],
+        [_y_event(o, t, ">=") for o, t in zip(df["yards_gained"].to_numpy(), thr, strict=False)],
         dtype=float,
     )
     p = np.array(
-        [_p_event_from_dist(d, t, labels=None, comparator=">=") for d, t in zip(df["dist"], thr)],
+        [_p_event_from_dist(d, t, labels=None, comparator=">=") for d, t in zip(df["dist"], thr, strict=False)],
         dtype=float,
     )
 
     expected = float(log_loss(y, _clip01(p), labels=[0.0, 1.0]))
     assert got == pytest.approx(expected, rel=0, abs=1e-12)
-
 
 
 def test_threshold_event_score_logloss_less_than_comparator():
@@ -971,9 +973,9 @@ def test_threshold_event_score_logloss_less_than_comparator():
     got = scorer.score(df)
 
     thr = np.array([_thr_int(x, "ceil") for x in df["thr"]], dtype=int)
-    y = np.array([_y_event(o, t, "<") for o, t in zip(df["out"].to_numpy(), thr)], dtype=float)
+    y = np.array([_y_event(o, t, "<") for o, t in zip(df["out"].to_numpy(), thr, strict=False)], dtype=float)
     p = np.array(
-        [_p_event_from_dist(d, t, labels=None, comparator="<") for d, t in zip(df["dist"], thr)],
+        [_p_event_from_dist(d, t, labels=None, comparator="<") for d, t in zip(df["dist"], thr, strict=False)],
         dtype=float,
     )
 

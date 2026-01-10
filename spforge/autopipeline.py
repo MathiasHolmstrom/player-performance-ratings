@@ -1,4 +1,4 @@
-import datetime
+import contextlib
 import logging
 from typing import Any, Literal
 
@@ -10,7 +10,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline as SkPipeline
-from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler, FunctionTransformer
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, OrdinalEncoder, StandardScaler
 
 from spforge.estimator.sklearn_estimator import GroupByEstimator
 from spforge.scorer import Filter, apply_filters
@@ -29,10 +29,8 @@ def _safe_feature_names_out(transformer, input_features):
             out = transformer.get_feature_names_out(input_features)
         except TypeError:
             out = transformer.get_feature_names_out()
-        try:
+        with contextlib.suppress(Exception):
             out = out.tolist()
-        except Exception:
-            pass
         out = list(out)
         if out:
             return out
@@ -79,7 +77,6 @@ class _OnlyOutputColumns(BaseEstimator, TransformerMixin):
         return np.asarray(list(self.output_cols), dtype=object)
 
 
-
 CategoricalHandling = Literal["auto", "onehot", "ordinal", "native"]
 
 
@@ -88,19 +85,15 @@ def _is_lightgbm_estimator(obj: object) -> bool:
     name = type(obj).__name__
     if "lightgbm" in mod:
         return True
-    if name.startswith("LGBM"):
-        return True
-    return False
+    return bool(name.startswith("LGBM"))
 
 
 def _is_linear_estimator(obj: object) -> bool:
     mod = (getattr(type(obj), "__module__", "") or "").lower()
     name = type(obj).__name__
-    if "logistic" in mod or 'linear' in mod:
+    if "logistic" in mod or "linear" in mod:
         return True
-    if name.startswith("Logistic"):
-        return True
-    return False
+    return bool(name.startswith("Logistic"))
 
 
 def _walk_objects(root: object):
@@ -116,7 +109,7 @@ def _walk_objects(root: object):
         yield obj
 
         if hasattr(obj, "estimator"):
-            est = getattr(obj, "estimator")
+            est = obj.estimator
             if est is not None:
                 stack.append(est)
 
@@ -143,33 +136,32 @@ def _walk_objects(root: object):
 
 
 def lgbm_in_root(root) -> bool:
-    for obj in _walk_objects(root):
-        if _is_lightgbm_estimator(obj):
-            return True
-    return False
+    return any(_is_lightgbm_estimator(obj) for obj in _walk_objects(root))
+
 
 def _to_pandas(X):
     return X.to_pandas() if hasattr(X, "to_pandas") else X
 
+
 class AutoPipeline(BaseEstimator):
     def __init__(
-            self,
-            estimator: Any,
-            feature_names: list[str],
-            predictor_transformers: list[Any] | None = None,
-            context_feature_names: list[str] | None = None,
-            context_predictor_transformer_feature_names: list[str] | None = None,
-            granularity: list[str] | None = None,
-            filters: list[Filter] | None = None,
-            scale_features: bool = False,
-            categorical_handling: CategoricalHandling = "auto",
-            impute_missing_values: bool = False,
-            drop_rows_where_target_is_nan: bool = True,
-            min_target: int | float | None = None,
-            max_target: int | float | None = None,
-            categorical_features: list[str] | None = None,
-            numeric_features: list[str] | None = None,
-            remainder: str = "drop",
+        self,
+        estimator: Any,
+        feature_names: list[str],
+        predictor_transformers: list[Any] | None = None,
+        context_feature_names: list[str] | None = None,
+        context_predictor_transformer_feature_names: list[str] | None = None,
+        granularity: list[str] | None = None,
+        filters: list[Filter] | None = None,
+        scale_features: bool = False,
+        categorical_handling: CategoricalHandling = "auto",
+        impute_missing_values: bool = False,
+        drop_rows_where_target_is_nan: bool = True,
+        min_target: int | float | None = None,
+        max_target: int | float | None = None,
+        categorical_features: list[str] | None = None,
+        numeric_features: list[str] | None = None,
+        remainder: str = "drop",
     ):
         self.feature_names = feature_names
         self.granularity = granularity or []
@@ -185,14 +177,15 @@ class AutoPipeline(BaseEstimator):
         self.min_target = min_target
         self.max_target = max_target
         self.categorical_features = categorical_features
-        self.context_predictor_transformer_feature_names = context_predictor_transformer_feature_names or []
+        self.context_predictor_transformer_feature_names = (
+            context_predictor_transformer_feature_names or []
+        )
         self.numeric_features = numeric_features
         self.remainder = remainder
         self._cat_feats = []
         for c in self.granularity:
             if c not in self.context_feature_names and c not in self.feature_names:
                 self.context_feature_names.append(c)
-
 
         assert len([c for c in self.context_feature_names if c in self.feature_names]) == 0
         self.sklearn_pipeline: SkPipeline | None = None
@@ -263,10 +256,8 @@ class AutoPipeline(BaseEstimator):
             return self.categorical_handling
 
         if self._contains_linear_anywhere():
-            return 'onehot'
+            return "onehot"
         return "native" if self._contains_lightgbm_anywhere() else "ordinal"
-
-
 
     def _build_sklearn_pipeline(self, df: IntoFrameT) -> SkPipeline:
         num_feats, cat_feats = self._infer_feature_types(df)
@@ -328,7 +319,8 @@ class AutoPipeline(BaseEstimator):
             transformers.append(("cat", cat_pipe, cat_feats))
 
         ctx_cols = _dedupe_preserve_order(
-            (self.context_feature_names or []) + (self.context_predictor_transformer_feature_names or [])
+            (self.context_feature_names or [])
+            + (self.context_predictor_transformer_feature_names or [])
         )
 
         if do_groupby:
@@ -347,7 +339,11 @@ class AutoPipeline(BaseEstimator):
         )
         pre.set_output(transform="pandas")
 
-        est = GroupByEstimator(self.estimator, granularity=[f"{c}" for c in self.granularity]) if do_groupby else self.estimator
+        est = (
+            GroupByEstimator(self.estimator, granularity=[f"{c}" for c in self.granularity])
+            if do_groupby
+            else self.estimator
+        )
 
         steps: list[tuple[str, Any]] = [
             ("to_pd", FunctionTransformer(_to_pandas, validate=False)),
@@ -370,11 +366,16 @@ class AutoPipeline(BaseEstimator):
         context_feature_names = list(set(self.context_feature_names + context_pred_feats))
 
         for idx, transformer in enumerate(self.predictor_transformers or []):
-            input_cols = _dedupe_preserve_order(self.feature_names + context_feature_names + prev_transformer_feats_out)
+            input_cols = _dedupe_preserve_order(
+                self.feature_names + context_feature_names + prev_transformer_feats_out
+            )
             feats_out = list(_safe_feature_names_out(transformer, input_cols))
             if len(feats_out) != len(set(feats_out)):
-                raise ValueError(f"Duplicate names in feats_out for transformer {transformer}: {feats_out}")
-            def _keep_cols(X, drop=set(feats_out)):
+                raise ValueError(
+                    f"Duplicate names in feats_out for transformer {transformer}: {feats_out}"
+                )
+
+            def _keep_cols(X, drop=frozenset(feats_out)):  # noqa: B006
                 return [c for c in X.columns if c not in drop]
 
             wrapped = _OnlyOutputColumns(transformer, feats_out)
@@ -413,14 +414,21 @@ class AutoPipeline(BaseEstimator):
             pre_row_count = len(df)
             df = df.filter(~nw.col(target).is_null())
             if pre_row_count != len(df):
-                _logger.info('dropped %d rows with target nan', len(df)-pre_row_count)
+                _logger.info("dropped %d rows with target nan", len(df) - pre_row_count)
 
         return df
 
     @nw.narwhalify
     def fit(self, X: IntoFrameT, y: Any, sample_weight: np.ndarray | None = None):
         self._target_name = getattr(y, "name", "target")
-        self._fitted_features = list(set(self.feature_names + self.context_feature_names + self.context_predictor_transformer_feature_names + self.granularity))
+        self._fitted_features = list(
+            set(
+                self.feature_names
+                + self.context_feature_names
+                + self.context_predictor_transformer_feature_names
+                + self.granularity
+            )
+        )
 
         y_values = y.to_list() if hasattr(y, "to_list") else y
         df = X.with_columns(

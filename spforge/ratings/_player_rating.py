@@ -12,6 +12,7 @@ from spforge.data_structures import (
     MatchPerformance,
     MatchPlayer,
     PlayerRating,
+    PlayerRatingsResult,
     PreMatchPlayerRating,
     PreMatchPlayersCollection,
     PreMatchTeamRating,
@@ -100,7 +101,6 @@ class PlayerRatingGenerator(RatingGenerator):
             **kwargs,
         )
 
-
         self.PLAYER_OFF_RATING_COL = self._suffix(str(RatingKnownFeatures.PLAYER_OFF_RATING))
         self.PLAYER_DEF_RATING_COL = self._suffix(str(RatingKnownFeatures.PLAYER_DEF_RATING))
 
@@ -119,7 +119,9 @@ class PlayerRatingGenerator(RatingGenerator):
         self.TEAM_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.TEAM_RATING_PROJECTED))
         self.OPP_RATING_PROJ_COL = self._suffix(str(RatingKnownFeatures.OPPONENT_RATING_PROJECTED))
         self.DIFF_PROJ_COL = self._suffix(str(RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED))
-        self.PLAYER_DIFF_PROJ_COL =   self._suffix(str(RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED))
+        self.PLAYER_DIFF_PROJ_COL = self._suffix(
+            str(RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED)
+        )
         self.MEAN_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_MEAN_PROJECTED))
 
         self.TEAM_OFF_RATING_PROJ_COL = self._suffix(
@@ -190,7 +192,6 @@ class PlayerRatingGenerator(RatingGenerator):
             day_number=day_number,
             participation_weight=particpation_weight,
         )
-
 
     def _historical_transform(self, df: pl.DataFrame) -> pl.DataFrame:
         match_df = self._create_match_df(df)
@@ -447,9 +448,9 @@ class PlayerRatingGenerator(RatingGenerator):
                 def_pre,
                 pred_off,
                 pred_def,
-                off_change,
-                def_change,
-                dn,
+                _off_change,
+                _def_change,
+                _dn,
             ) in player_updates:
                 out[cn.player_id].append(pid)
                 out[cn.match_id].append(match_id)
@@ -578,9 +579,10 @@ class PlayerRatingGenerator(RatingGenerator):
             )
         if self.PLAYER_DIFF_PROJ_COL in cols_to_add:
             df = df.with_columns(
-                (pl.col(self.PLAYER_RATING_COL)-pl.col(self.OPP_DEF_RATING_PROJ_COL)).alias(self.PLAYER_DIFF_PROJ_COL)
+                (pl.col(self.PLAYER_RATING_COL) - pl.col(self.OPP_DEF_RATING_PROJ_COL)).alias(
+                    self.PLAYER_DIFF_PROJ_COL
+                )
             )
-
 
         if (
             self.TEAM_RATING_COL in cols_to_add
@@ -648,8 +650,8 @@ class PlayerRatingGenerator(RatingGenerator):
         return df.drop(cols_to_drop)
 
     def _create_match_df(self, df: pl.DataFrame) -> pl.DataFrame:
-        if len(df[self.column_names.team_id].unique())<2:
-            raise ValueError('df needs at least two different team ids')
+        if len(df[self.column_names.team_id].unique()) < 2:
+            raise ValueError("df needs at least two different team ids")
         if self.league_identifier:
             df = self.league_identifier.add_leagues(df)
 
@@ -864,19 +866,18 @@ class PlayerRatingGenerator(RatingGenerator):
             w = [float(x) for x in c.projected_particiation_weights]
             wsum = sum(w) if w else 0.0
             off = (
-                (sum(v * ww for v, ww in zip(off_vals, w)) / wsum)
+                (sum(v * ww for v, ww in zip(off_vals, w, strict=False)) / wsum)
                 if wsum
                 else (sum(off_vals) / len(off_vals))
             )
             dff = (
-                (sum(v * ww for v, ww in zip(def_vals, w)) / wsum)
+                (sum(v * ww for v, ww in zip(def_vals, w, strict=False)) / wsum)
                 if wsum
                 else (sum(def_vals) / len(def_vals))
             )
             return float(off), float(dff)
 
         return float(sum(off_vals) / len(off_vals)), float(sum(def_vals) / len(def_vals))
-
 
     def _calculate_future_ratings(self, match_df: pl.DataFrame) -> pl.DataFrame:
         """
@@ -946,7 +947,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 off_vals: list[float] = []
                 psum, wsum = 0.0, 0.0
 
-                for tp in r[stats_col]:
+                for tp in r[stats_col]:  # noqa: B023
                     pid = tp[cn.player_id]
                     player_ids.append(pid)
 
@@ -967,7 +968,7 @@ class PlayerRatingGenerator(RatingGenerator):
                         participation_weight=pw,
                     )
 
-                    ensure_new_player(pid, day_number, mp, league, position, pre_list)
+                    ensure_new_player(pid, day_number, mp, league, position, pre_list)  # noqa: B023
 
                     pre_list.append(
                         PreMatchPlayerRating(
@@ -1000,8 +1001,8 @@ class PlayerRatingGenerator(RatingGenerator):
                 if cn.projected_participation_weight and w and sum(w):
                     ws = sum(w)
                     return (
-                        sum(v * ww for v, ww in zip(off, w)) / ws,
-                        sum(v * ww for v, ww in zip(dff, w)) / ws,
+                        sum(v * ww for v, ww in zip(off, w, strict=False)) / ws,
+                        sum(v * ww for v, ww in zip(dff, w, strict=False)) / ws,
                     )
                 return sum(off) / len(off), sum(dff) / len(dff)
 
@@ -1109,3 +1110,25 @@ class PlayerRatingGenerator(RatingGenerator):
 
         return pl.DataFrame(out, strict=False)
 
+    @property
+    def player_ratings(self) -> dict[str, PlayerRatingsResult]:
+        """Return combined offense and defense ratings for all players."""
+        result: dict[str, PlayerRatingsResult] = {}
+        all_player_ids = set(self._player_off_ratings.keys()) | set(self._player_def_ratings.keys())
+
+        for player_id in all_player_ids:
+            off_state = self._player_off_ratings.get(player_id)
+            def_state = self._player_def_ratings.get(player_id)
+
+            result[player_id] = PlayerRatingsResult(
+                id=player_id,
+                offense_rating=off_state.rating_value if off_state else 0.0,
+                defense_rating=def_state.rating_value if def_state else 0.0,
+                offense_games_played=off_state.games_played if off_state else 0.0,
+                defense_games_played=def_state.games_played if def_state else 0.0,
+                offense_confidence_sum=off_state.confidence_sum if off_state else 0.0,
+                defense_confidence_sum=def_state.confidence_sum if def_state else 0.0,
+                most_recent_team_id=off_state.most_recent_team_id if off_state else None,
+            )
+
+        return result

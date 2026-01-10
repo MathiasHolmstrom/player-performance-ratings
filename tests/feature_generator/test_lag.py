@@ -50,7 +50,7 @@ def test_team_lag_transform_historical_group_to_team_granularity(
 
     try:
         original_df = data.copy()
-    except:
+    except Exception:
         original_df = data.clone()
 
     if use_column_names:
@@ -167,7 +167,7 @@ def test_lag_fit_transform_group_to_team_granularity_update_match_id(
 
     try:
         original_df = data.copy()
-    except:
+    except Exception:
         original_df = data.clone()
 
     if not use_column_names:
@@ -255,10 +255,7 @@ def test_lag_transform_historical_2_features_update_match_id(df, column_names, u
             ],
         }
     )
-    if isinstance(data, pl.DataFrame):
-        original_df = data.clone()
-    else:
-        original_df = data.copy()
+    original_df = data.clone() if isinstance(data, pl.DataFrame) else data.copy()
 
     if use_column_names:
         lag_transformation = LagTransformer(
@@ -318,7 +315,7 @@ def test_lag_transform_historical_lag_length_2(df, column_names):
     )
     try:
         original_df = data.copy()
-    except:
+    except Exception:
         original_df = data.clone()
 
     lag_transformation = LagTransformer(
@@ -385,7 +382,7 @@ def test_lag_transform_historical_and_transform_future(df, column_names):
     )
     try:
         future_df_copy = future_df.copy()
-    except:
+    except Exception:
         future_df_copy = future_df.clone()
 
     lag_transformation = LagTransformer(
@@ -449,7 +446,7 @@ def test_lag_transformation_transform_2_lags(df, column_names):
     )
     try:
         future_df_copy = future_df.copy()
-    except:
+    except Exception:
         future_df_copy = future_df.clone()
 
     lag_transformation = LagTransformer(
@@ -503,7 +500,7 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
     )
     try:
         original_df = data.copy()
-    except:
+    except Exception:
         original_df = data.clone()
 
     lag_transformation = LagTransformer(
@@ -554,7 +551,7 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
     )
     try:
         expected_future_df = future_df.copy()
-    except:
+    except Exception:
         expected_future_df = future_df.clone()
 
     future_df = lag_transformation.future_transform(future_df)

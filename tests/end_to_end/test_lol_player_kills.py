@@ -3,7 +3,7 @@ from lightgbm import LGBMRegressor
 from sklearn.linear_model import LogisticRegression
 
 from examples import get_sub_sample_lol_data
-from spforge import ColumnNames, FeatureGeneratorPipeline, AutoPipeline
+from spforge import AutoPipeline, ColumnNames, FeatureGeneratorPipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
 from spforge.estimator import NegativeBinomialEstimator
 from spforge.feature_generator import LagTransformer, RollingWindowTransformer
@@ -45,13 +45,13 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
         performance_column="performance_kills",
         auto_scale_performance=True,
         performance_weights=[ColumnWeight(name="kills", weight=1)],
-        column_names=column_names
+        column_names=column_names,
     )
     rating_generator_result = PlayerRatingGenerator(
         features_out=[RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED],
         performance_column="result",
         non_predictor_features_out=[RatingKnownFeatures.PLAYER_RATING],
-        column_names=column_names
+        column_names=column_names,
     )
 
     lag_generators = [
@@ -69,7 +69,12 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
     ]
 
     features_generator = FeatureGeneratorPipeline(
-        feature_generators=[rating_generator_player_kills, rating_generator_result, *lag_generators],column_names=column_names
+        feature_generators=[
+            rating_generator_player_kills,
+            rating_generator_result,
+            *lag_generators,
+        ],
+        column_names=column_names,
     )
 
     historical_df = features_generator.fit_transform(historical_df)
@@ -78,7 +83,7 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
         estimator=LogisticRegression(max_iter=1000),
         impute_missing_values=True,
         scale_features=False,
-        feature_names=rating_generator_result.features_out
+        feature_names=rating_generator_result.features_out,
     )
 
     cv_game_winner = MatchKFoldCrossValidator(
@@ -89,7 +94,6 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
         n_splits=3,
         target_column="result",
     )
-
 
     historical_df = cv_game_winner.generate_validation_df(historical_df)
     assert "result_oof" in historical_df.columns
@@ -107,7 +111,7 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
         estimator=LGBMRegressor(verbose=-100),
         impute_missing_values=True,
         scale_features=False,
-        feature_names=player_kills_features
+        feature_names=player_kills_features,
     )
 
     cv_player_kills = MatchKFoldCrossValidator(
@@ -153,7 +157,6 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
         n_classes,
     ), f"Probabilities shape should be ({n_samples}, {n_classes}), got {probabilities.shape}"
 
-
     neg_mask = probabilities < 0
 
     if neg_mask.any():
@@ -163,7 +166,8 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
         bad = idx[:10]
         raise AssertionError(
             f"Found negative probabilities at indices (row, class): {bad.tolist()}\n"
-            f"Values: {[probabilities[i, j] for i, j in bad]}")
+            f"Values: {[probabilities[i, j] for i, j in bad]}"
+        )
     prob_sums = probabilities.sum(axis=1)
 
     if not np.allclose(prob_sums, 1.0, atol=1e-6):
@@ -187,8 +191,7 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
             )
 
         raise AssertionError(
-            "Probabilities should sum to 1.0 for each sample.\n"
-            f"Bad rows (first 10): {details}"
+            "Probabilities should sum to 1.0 for each sample.\n" f"Bad rows (first 10): {details}"
         )
 
     # Assert 3: Calculate expected value using dot product: E[X] = sum(probabilities * classes)

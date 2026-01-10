@@ -48,7 +48,7 @@ def test_binary_granularity_rolling_mean_transformer(
 
     try:
         expected_df = historical_df.copy()
-    except:
+    except Exception:
         expected_df = historical_df.clone()
 
     if use_column_names:
@@ -306,7 +306,7 @@ def test_binary_granularity_rolling_mean_generate_future(df, column_names, min_p
 
     try:
         expected_historical_df = historical_df.copy()
-    except:
+    except Exception:
         expected_historical_df = historical_df.to_pandas()
 
     transformer = BinaryOutcomeRollingMeanTransformer(
@@ -388,7 +388,7 @@ def test_binary_granularity_rolling_mean_generate_future(df, column_names, min_p
     )
     try:
         expected_future_df = future_df.copy()
-    except:
+    except Exception:
         expected_future_df = future_df.to_pandas()
 
     future_df = transformer.future_transform(future_df)
@@ -444,7 +444,7 @@ def test_binary_granularity_rolling_mean_generate_historical_opponent(df, column
 
     try:
         expected_historical_df = df.copy()
-    except:
+    except Exception:
         expected_historical_df = df.to_pandas()
 
     rolling_mean_transformation = BinaryOutcomeRollingMeanTransformer(

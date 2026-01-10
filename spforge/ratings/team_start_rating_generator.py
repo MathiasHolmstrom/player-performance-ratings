@@ -5,9 +5,7 @@ from typing import Any
 import numpy as np
 
 from spforge.data_structures import (
-    MatchPlayer,
     PlayerRatingChange,
-    PreMatchPlayerRating,
 )
 
 DEFAULT_START_RATING = 1000
@@ -72,12 +70,10 @@ class TeamStartRatingGenerator:
         if league not in self._league_team_ratings:
             self._league_team_ratings[league] = []
 
-
         return self._calculate_start_rating_value(
             match_day_number=day_number,
             league=league,
         )
-
 
     def _calculate_start_rating_value(
         self,

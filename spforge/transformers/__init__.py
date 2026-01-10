@@ -1,6 +1,6 @@
 from ._net_over_predicted import (
-    NetOverPredictedTransformer,
+    NetOverPredictedTransformer as NetOverPredictedTransformer,
 )
-from ._operator import OperatorTransformer
-from ._predictor import EstimatorTransformer
-from ._team_ratio_predictor import RatioEstimatorTransformer
+from ._operator import OperatorTransformer as OperatorTransformer
+from ._predictor import EstimatorTransformer as EstimatorTransformer
+from ._team_ratio_predictor import RatioEstimatorTransformer as RatioEstimatorTransformer

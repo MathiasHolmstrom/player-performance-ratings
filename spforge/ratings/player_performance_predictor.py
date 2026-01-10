@@ -1,8 +1,6 @@
 import math
 from abc import ABC, abstractmethod
 
-import numpy as np
-
 from spforge.data_structures import (
     PreMatchPlayerRating,
     PreMatchTeamRating,
@@ -31,7 +29,6 @@ class PlayerPerformancePredictor(ABC):
         team_rating: PreMatchTeamRating,
     ) -> float:
         pass
-
 
 
 class PlayerRatingNonOpponentPerformancePredictor(PlayerPerformancePredictor):

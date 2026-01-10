@@ -1,7 +1,7 @@
 import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
 
-from spforge import ColumnNames
+from spforge.data_structures import ColumnNames
 from spforge.feature_generator._base import LagGenerator
 from spforge.feature_generator._utils import (
     future_lag_transformations_wrapper,
@@ -117,9 +117,8 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
     @transformation_validator
     def future_transform(self, df: IntoFrameT) -> IntoFrameT:
 
-        if self.binary_column in df.columns:
-            if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
-                df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
+        if self.binary_column in df.columns and df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
+            df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
         add_cols = (
             [self.binary_column, self.prob_column] if self.prob_column else [self.binary_column]
         )
@@ -136,7 +135,7 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
     def _get_known_future_features(self) -> list[str]:
         known_future_features = []
         if self.prob_column:
-            for idx, feature_name in enumerate(self.features):
+            for _idx, feature_name in enumerate(self.features):
                 weighted_prob_feat_name = (
                     f"{self.prefix}_{feature_name}_{self.prob_column}{self.window}"
                 )
@@ -212,7 +211,7 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
     def _add_weighted_prob(self, transformed_df: IntoFrameT) -> IntoFrameT:
 
         if self.prob_column:
-            for idx, feature_name in enumerate(self.features):
+            for _idx, feature_name in enumerate(self.features):
 
                 transformed_df = transformed_df.with_columns(
                     (

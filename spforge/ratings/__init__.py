@@ -1,8 +1,8 @@
-from ._player_rating import PlayerRatingGenerator
-from ._team_rating import TeamRatingGenerator
+from ._player_rating import PlayerRatingGenerator as PlayerRatingGenerator
+from ._team_rating import TeamRatingGenerator as TeamRatingGenerator
 from .enums import (
-    PredictedRatingMethod,
-    RatingKnownFeatures,
-    RatingUnknownFeatures,
+    PredictedRatingMethod as PredictedRatingMethod,
+    RatingKnownFeatures as RatingKnownFeatures,
+    RatingUnknownFeatures as RatingUnknownFeatures,
 )
-from .league_identifier import LeagueIdentifier
+from .league_identifier import LeagueIdentifier as LeagueIdentifier

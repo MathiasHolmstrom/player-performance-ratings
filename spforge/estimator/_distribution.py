@@ -1,20 +1,19 @@
+import contextlib
 import copy
-from typing import Sequence
+from collections.abc import Sequence
 
 import narwhals.stable.v2 as nw
 import numpy as np
-import pandas as pd
 import polars as pl
 from narwhals.typing import IntoFrameT
 from scipy.optimize import minimize
 from scipy.special import gammaln, logsumexp
-from scipy.stats import nbinom, norm, t as student_t, poisson
+from scipy.stats import nbinom, norm, poisson, t as student_t
 from sklearn.base import BaseEstimator
 from sklearn.preprocessing import StandardScaler
 
-from spforge import ColumnNames
+from spforge.data_structures import ColumnNames
 from spforge.feature_generator._rolling_window import RollingWindowTransformer
-from spforge.scorer import Filter, apply_filters
 
 
 def neg_binom_log_likelihood(r, actual_points, predicted_points):
@@ -199,7 +198,7 @@ class NegativeBinomialEstimator(BaseEstimator):
                         final_group = final_group.filter(
                             nw.col(self._rolling_var.features_out[0]) < next_var_bin
                         )
-                    try:
+                    with contextlib.suppress(Exception):
                         result = minimize(
                             neg_binom_log_likelihood,
                             x0=np.array([1.0]),
@@ -210,8 +209,6 @@ class NegativeBinomialEstimator(BaseEstimator):
                             method="L-BFGS-B",
                             bounds=[(0.01, None)],
                         )
-                    except:
-                        h = 2
                     self._r_estimates[(mu_bin, var_bin)] = float(result.x[0])
 
             self._historical_game_ids = gran_grp[self.column_names.match_id].unique().to_list()
@@ -282,8 +279,12 @@ class NegativeBinomialEstimator(BaseEstimator):
                     self._rolling_var.fit_transform(historical_gran_group)
                 )
             if len(future_gran_group) > 0:
-                future_gran_group = nw.from_native(self._rolling_mean.future_transform(future_gran_group))
-                future_gran_group = nw.from_native(self._rolling_var.future_transform(future_gran_group))
+                future_gran_group = nw.from_native(
+                    self._rolling_mean.future_transform(future_gran_group)
+                )
+                future_gran_group = nw.from_native(
+                    self._rolling_var.future_transform(future_gran_group)
+                )
 
             if len(historical_gran_group) > 0 and len(future_gran_group) > 0:
                 gran_grp = nw.concat([historical_gran_group, future_gran_group]).unique(
@@ -370,10 +371,7 @@ class NegativeBinomialEstimator(BaseEstimator):
                 m[1] for m in self._r_estimates if m[1] > var_bin and m[0] == mu_bin
             ]
 
-            if len(next_higher_mu_bins) == 0:
-                next_higher_mu_bin = 9999
-            else:
-                next_higher_mu_bin = min(next_higher_mu_bins)
+            next_higher_mu_bin = 9999 if len(next_higher_mu_bins) == 0 else min(next_higher_mu_bins)
             if len(next_higher_var_bins) == 0:
                 next_higher_var_bin = 9999
             else:
@@ -396,7 +394,6 @@ class NegativeBinomialEstimator(BaseEstimator):
     def _add_probabilities(self, df: IntoFrameT) -> IntoFrameT:
 
         all_outcome_probs = []
-        classes_ = []
 
         if self.predict_granularity:
             if self.column_names and self.column_names.projected_participation_weight:
@@ -584,6 +581,7 @@ class NormalDistributionPredictor(BaseEstimator):
         probabilities = self.predict_proba(X)
         return np.argmax(probabilities, axis=1) + self.min_value
 
+
 class StudentTDistributionEstimator(BaseEstimator):
     """
     Discretized Student-t over integer outcomes [min_value, max_value].
@@ -604,23 +602,23 @@ class StudentTDistributionEstimator(BaseEstimator):
     """
 
     def __init__(
-            self,
-            point_estimate_pred_column: str,
-            max_value: int,
-            min_value: int,
-            target: str,
-            df: float = 5.0,
-            sigma: float | None = None,
-            min_sigma: float = 1.0,
-            min_train_rows: int = 50,
-            sigma_fallback_if_no_data: float = 10.0,
-            sigma_bins: int = 8,
-            min_bin_rows: int = 25,
-            sigma_conditioning_columns: tuple[str, ...] | None = None,
-            sigma_bins_per_column: tuple[int, ...] | None = None,
-            support_cap_column: str | None = None,
-            support_cap_offset: int = 0,
-            support_cap_min: int | None = None,
+        self,
+        point_estimate_pred_column: str,
+        max_value: int,
+        min_value: int,
+        target: str,
+        df: float = 5.0,
+        sigma: float | None = None,
+        min_sigma: float = 1.0,
+        min_train_rows: int = 50,
+        sigma_fallback_if_no_data: float = 10.0,
+        sigma_bins: int = 8,
+        min_bin_rows: int = 25,
+        sigma_conditioning_columns: tuple[str, ...] | None = None,
+        sigma_bins_per_column: tuple[int, ...] | None = None,
+        support_cap_column: str | None = None,
+        support_cap_offset: int = 0,
+        support_cap_min: int | None = None,
     ):
         self.point_estimate_pred_column = point_estimate_pred_column
         self.max_value = int(max_value)
@@ -657,7 +655,9 @@ class StudentTDistributionEstimator(BaseEstimator):
 
         self.support_cap_column = support_cap_column
         self.support_cap_offset = int(support_cap_offset)
-        self.support_cap_min = int(support_cap_min) if support_cap_min is not None else self.min_value
+        self.support_cap_min = (
+            int(support_cap_min) if support_cap_min is not None else self.min_value
+        )
 
         self._classes: np.ndarray | None = None
 
@@ -698,7 +698,9 @@ class StudentTDistributionEstimator(BaseEstimator):
     @nw.narwhalify
     def fit(self, X, y: list[int] | np.ndarray, sample_weight: np.ndarray | None = None):
         if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array")
+            raise TypeError(
+                "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
+            )
         for c in self.sigma_conditioning_columns:
             if c not in X.columns:
                 raise ValueError(f"conditioning column '{c}' not found in X.columns: {X.columns}")
@@ -743,7 +745,7 @@ class StudentTDistributionEstimator(BaseEstimator):
 
         edges_list: list[np.ndarray] = []
         bin_counts: list[int] = []
-        for arr, bins in zip(cond_arrays, self.sigma_bins_per_column):
+        for arr, bins in zip(cond_arrays, self.sigma_bins_per_column, strict=False):
             edges = self._compute_edges(arr, bins)
             if edges.size < 3:
                 self.sigma_global = sigma_global
@@ -754,7 +756,9 @@ class StudentTDistributionEstimator(BaseEstimator):
         cell_to_resids: dict[tuple[int, ...], list[float]] = {}
         n = resid.shape[0]
         for i in range(n):
-            key = tuple(self._bin_index(edges_list[d], cond_arrays[d][i]) for d in range(len(edges_list)))
+            key = tuple(
+                self._bin_index(edges_list[d], cond_arrays[d][i]) for d in range(len(edges_list))
+            )
             cell_to_resids.setdefault(key, []).append(float(resid[i]))
 
         sigma_by_cell: dict[tuple[int, ...], float] = {}
@@ -770,8 +774,10 @@ class StudentTDistributionEstimator(BaseEstimator):
 
     def _sigma_for_row(self, cond_vals: Sequence[float]) -> float:
         if self._cond_bin_edges is not None and self._sigma_by_cell is not None:
-            key = tuple(self._bin_index(self._cond_bin_edges[d], float(cond_vals[d]))
-                        for d in range(len(self._cond_bin_edges)))
+            key = tuple(
+                self._bin_index(self._cond_bin_edges[d], float(cond_vals[d]))
+                for d in range(len(self._cond_bin_edges))
+            )
             sigma = self._sigma_by_cell.get(key)
             if sigma is None:
                 return max(self.min_sigma, float(self.sigma_fallback_if_no_data))
@@ -796,16 +802,21 @@ class StudentTDistributionEstimator(BaseEstimator):
     @nw.narwhalify
     def predict_proba(self, X) -> np.ndarray:
         if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array")
+            raise TypeError(
+                "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
+            )
         if self._classes is None:
-            raise ValueError("StudentTDistributionEstimator has not been fitted yet. Call fit() first.")
+            raise ValueError(
+                "StudentTDistributionEstimator has not been fitted yet. Call fit() first."
+            )
 
         for c in self.sigma_conditioning_columns:
             if c not in X.columns:
                 raise ValueError(f"conditioning column '{c}' not found in X.columns: {X.columns}")
         if self.support_cap_column is not None and self.support_cap_column not in X.columns:
             raise ValueError(
-                f"support_cap_column '{self.support_cap_column}' not found in X.columns: {X.columns}")
+                f"support_cap_column '{self.support_cap_column}' not found in X.columns: {X.columns}"
+            )
 
         classes = self._classes
         lower_bounds = classes - 0.5
@@ -814,7 +825,9 @@ class StudentTDistributionEstimator(BaseEstimator):
 
         # pull needed columns as python lists (narwhals friendly)
         cond_lists = [X[c].to_list() for c in self.sigma_conditioning_columns]
-        cap_list = X[self.support_cap_column].to_list() if self.support_cap_column is not None else None
+        cap_list = (
+            X[self.support_cap_column].to_list() if self.support_cap_column is not None else None
+        )
 
         probabilities = []
         for i in range(len(cond_lists[0])):
@@ -845,6 +858,8 @@ class StudentTDistributionEstimator(BaseEstimator):
     @nw.narwhalify
     def predict(self, X) -> np.ndarray:
         if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
-            raise TypeError("X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array")
+            raise TypeError(
+                "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"
+            )
         probabilities = self.predict_proba(X)
         return np.argmax(probabilities, axis=1) + self.min_value

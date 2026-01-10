@@ -1,8 +1,8 @@
 import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
 
-from spforge import ColumnNames
 from spforge.base_feature_generator import FeatureGenerator
+from spforge.data_structures import ColumnNames
 
 
 class LagGenerator(FeatureGenerator):
@@ -64,7 +64,6 @@ class LagGenerator(FeatureGenerator):
         if self._are_estimator_features:
             return self.features_out
         return []
-
 
     def _maybe_group(self, df: IntoFrameT, additional_cols: list[str] | None = None) -> IntoFrameT:
         if (

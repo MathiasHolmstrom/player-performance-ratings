@@ -67,7 +67,6 @@ def test_init_when_default_params_are_used_then_generator_initializes_with_expec
     assert generator.rating_change_multiplier_defense == 50.0
 
 
-
 @pytest.mark.parametrize("predictor", ["difference", "mean", "ignore_opponent"])
 def test_init_when_performance_predictor_is_set_then_it_is_stored_correctly(
     column_names, predictor
@@ -144,7 +143,7 @@ def test_fit_transform_when_called_then_ratings_are_updated(df_type, basic_ratin
         }
     )
 
-    result = basic_rating_generator.fit_transform(df)
+    basic_rating_generator.fit_transform(df)
 
     team_a_off = basic_rating_generator._team_off_ratings["team_a"]
     assert team_a_off.rating_value != 1000.0
@@ -206,7 +205,7 @@ def test_fit_transform_when_team_wins_against_equal_opponent_then_offense_rating
         }
     )
 
-    result = basic_rating_generator.fit_transform(df)
+    basic_rating_generator.fit_transform(df)
 
     team_a_off = basic_rating_generator._team_off_ratings["team_a"]
     assert team_a_off.rating_value > 1000.0
@@ -230,7 +229,7 @@ def test_fit_transform_when_team_loses_against_equal_opponent_then_offense_ratin
         }
     )
 
-    result = basic_rating_generator.fit_transform(df)
+    basic_rating_generator.fit_transform(df)
 
     team_a_off = basic_rating_generator._team_off_ratings["team_a"]
     assert team_a_off.rating_value < 1000.0
@@ -252,7 +251,7 @@ def test_fit_transform_when_opponent_wins_then_defense_rating_decreases(basic_ra
         }
     )
 
-    result = basic_rating_generator.fit_transform(df)
+    basic_rating_generator.fit_transform(df)
 
     team_a_def = basic_rating_generator._team_def_ratings["team_a"]
     assert team_a_def.rating_value < 1000.0
@@ -287,7 +286,7 @@ def test_fit_transform_when_multipliers_differ_then_offense_and_defense_change_d
         }
     )
 
-    result = generator.fit_transform(df)
+    generator.fit_transform(df)
 
     team_a_off = generator._team_off_ratings["team_a"]
     team_a_def = generator._team_def_ratings["team_a"]
@@ -578,9 +577,10 @@ def test_fit_transform_when_ignore_opponent_predictor_used_then_opponent_rating_
         rating_change_multiplier_offense=50.0,
         output_suffix="",
     )
-    assert generator._performance_predictor.__class__.__name__ == TeamRatingNonOpponentPerformancePredictor.__name__
-
-
+    assert (
+        generator._performance_predictor.__class__.__name__
+        == TeamRatingNonOpponentPerformancePredictor.__name__
+    )
 
 
 def test_fit_transform_when_prediction_would_exceed_bounds_then_it_is_clamped_to_0_1(column_names):
@@ -640,9 +640,6 @@ def test_fit_transform_when_prediction_would_exceed_bounds_then_it_is_clamped_to
     assert mocked.predict_performance.call_count == 64
 
 
-
-
-
 def test_fit_transform_when_rating_difference_requested_then_it_is_calculated_correctly(
     column_names,
 ):
@@ -691,6 +688,7 @@ def test_fit_transform_when_rating_difference_requested_then_it_is_calculated_co
 
     # Ensure the mock was actually used (off+def for each team-row in match_df)
     assert mocked.predict_performance.call_count == 4
+
 
 def test_fit_transform_when_rating_mean_requested_then_it_is_calculated_correctly(column_names):
     """
@@ -1039,7 +1037,7 @@ def test_fit_transform_when_team_plays_different_opponents_then_ratings_reflect_
         }
     )
     basic_rating_generator.fit_transform(df1)
-    team_b_rating = basic_rating_generator._team_off_ratings["team_b"].rating_value
+    _ = basic_rating_generator._team_off_ratings["team_b"].rating_value
 
     df2 = pl.DataFrame(
         {
@@ -1105,7 +1103,7 @@ def test_fit_transform_when_same_update_match_id_then_updates_are_batched(column
         }
     )
 
-    result = generator.fit_transform(df)
+    generator.fit_transform(df)
 
     assert len(generator._team_off_ratings) >= 3
 
@@ -1150,7 +1148,7 @@ def test_fit_transform_when_different_update_match_ids_then_updates_applied_sepa
         }
     )
 
-    result = generator.fit_transform(df)
+    generator.fit_transform(df)
 
     assert len(generator._team_off_ratings) >= 3
 
@@ -1243,7 +1241,7 @@ def test_transform_when_called_then_ratings_are_updated(df_type, basic_rating_ge
         }
     )
 
-    result = basic_rating_generator.transform(df)
+    basic_rating_generator.transform(df)
 
     team_a_off = basic_rating_generator._team_off_ratings["team_a"]
     assert team_a_off.rating_value != 1000.0
@@ -1320,7 +1318,7 @@ def test_transform_when_called_without_performance_column_then_defaults_to_zero(
         }
     )
 
-    result = generator.transform(df)
+    generator.transform(df)
     team_a_rating_after = generator._team_off_ratings["team_a"].rating_value
 
     assert team_a_rating_after < team_a_rating_before
@@ -1356,7 +1354,7 @@ def test_future_transform_when_called_then_ratings_not_updated(basic_rating_gene
         }
     )
 
-    result = basic_rating_generator.future_transform(future_df)
+    basic_rating_generator.future_transform(future_df)
 
     team_a_off_after = basic_rating_generator._team_off_ratings["team_a"].rating_value
     team_a_def_after = basic_rating_generator._team_def_ratings["team_a"].rating_value
@@ -2170,7 +2168,10 @@ def test_team_rating_suffix_applied_to_all_features(column_names, sample_team_df
         RatingKnownFeatures.TEAM_DEF_RATING_PROJECTED,
         RatingKnownFeatures.OPPONENT_OFF_RATING_PROJECTED,
     ]
-    non_predictor = [RatingUnknownFeatures.TEAM_RATING_DIFFERENCE, RatingUnknownFeatures.PERFORMANCE]
+    non_predictor = [
+        RatingUnknownFeatures.TEAM_RATING_DIFFERENCE,
+        RatingUnknownFeatures.PERFORMANCE,
+    ]
 
     gen = TeamRatingGenerator(
         performance_column="won",
@@ -2201,11 +2202,11 @@ def test_team_rating_suffix_applied_to_all_features(column_names, sample_team_df
             "performance_won",
         ]
 
+    result_cols = (
+        result.columns.tolist() if hasattr(result.columns, "tolist") else list(result.columns)
+    )
     for col in expected_cols:
-        result_cols = (
-            result.columns.tolist() if hasattr(result.columns, "tolist") else list(result.columns)
-        )
-    assert col in result_cols, f"Expected column '{col}' not found. Columns: {result_cols}"
+        assert col in result_cols, f"Expected column '{col}' not found. Columns: {result_cols}"
 
 
 def test_team_rating_only_requested_features_present(column_names, sample_team_df):
@@ -2325,22 +2326,34 @@ def test_team_with_strong_offense_and_weak_defense_gets_expected_ratings_and_pre
         {
             "match_id": [1, 1, 2, 2, 3, 3, 4, 4],
             "team_id": [
-                "team_a", "team_b",  # high-scoring, bad defense
-                "team_a", "team_c",  # high-scoring, bad defense
-                "team_d", "team_e",  # normal league game
-                "team_f", "team_g",  # normal league game
+                "team_a",
+                "team_b",  # high-scoring, bad defense
+                "team_a",
+                "team_c",  # high-scoring, bad defense
+                "team_d",
+                "team_e",  # normal league game
+                "team_f",
+                "team_g",  # normal league game
             ],
             "start_date": [
-                base_day, base_day,
-                base_day + timedelta(days=1), base_day + timedelta(days=1),
-                base_day + timedelta(days=2), base_day + timedelta(days=2),
-                base_day + timedelta(days=3), base_day + timedelta(days=3),
+                base_day,
+                base_day,
+                base_day + timedelta(days=1),
+                base_day + timedelta(days=1),
+                base_day + timedelta(days=2),
+                base_day + timedelta(days=2),
+                base_day + timedelta(days=3),
+                base_day + timedelta(days=3),
             ],
             "team_points": [
-                140, 130,
-                138, 128,
-                120, 115,
-                118, 112,
+                140,
+                130,
+                138,
+                128,
+                120,
+                115,
+                118,
+                112,
             ],
         }
     )

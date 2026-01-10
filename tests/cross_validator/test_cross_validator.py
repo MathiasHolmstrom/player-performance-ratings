@@ -14,7 +14,7 @@ def df_pd_cv_binary():
     dates = pd.date_range("2024-01-01", periods=12, freq="D")
     match_ids = [f"m{i:02d}" for i in range(12)]
     rows = []
-    for i, (d, mid) in enumerate(zip(dates, match_ids)):
+    for i, (d, mid) in enumerate(zip(dates, match_ids, strict=False)):
         for team in (0, 1):
             x = float(i) + (0.1 if team == 1 else 0.0)
             y = int(i % 2 == 1)
@@ -30,8 +30,9 @@ def df_pd_cv_reg():
     y = 2.0 * x + 1.0
     return pd.DataFrame({"date": dates, "gameid": match_ids, "x": x, "y": y})
 
-def make_cv(estimator, pred_col="pred", n_splits=3, features=None, params= None):
-    features = features or ['x', 'y']
+
+def make_cv(estimator, pred_col="pred", n_splits=3, features=None, params=None):
+    features = features or ["x", "y"]
     params = params or {}
     cv = MatchKFoldCrossValidator(
         match_id_column_name="gameid",
@@ -41,10 +42,9 @@ def make_cv(estimator, pred_col="pred", n_splits=3, features=None, params= None)
         prediction_column_name=pred_col,
         n_splits=n_splits,
         features=features,
-        **params
+        **params,
     )
     return cv
-
 
 
 def test_match_kfold_cv_binary_validation_only_subset(df_pd_cv_binary):
@@ -57,7 +57,6 @@ def test_match_kfold_cv_binary_validation_only_subset(df_pd_cv_binary):
     assert 0 < len(out) < len(df_pd_cv_binary)
 
     assert pd.api.types.is_numeric_dtype(out["pred"])
-
 
 
 def test_match_kfold_cv_regression_subset(df_pd_cv_reg):
@@ -145,7 +144,7 @@ def test_match_kfold_cv_auto_infers_features(df_pd_cv_binary):
     "estimator",
     [
         LinearRegression(),
-        AutoPipeline(estimator=LinearRegression(), feature_names=['x']),
+        AutoPipeline(estimator=LinearRegression(), feature_names=["x"]),
     ],
 )
 def test_match_kfold_cv_auto_infers_features_regression(df_pd_cv_reg, estimator):
@@ -323,7 +322,7 @@ def df_pd_cv_multiclass():
     dates = pd.date_range("2024-01-01", periods=30, freq="D")
     match_ids = [f"m{i:02d}" for i in range(30)]
     rows = []
-    for i, (d, mid) in enumerate(zip(dates, match_ids)):
+    for i, (d, mid) in enumerate(zip(dates, match_ids, strict=False)):
         for team in (0, 1):
             x = float(i) + (0.1 if team == 1 else 0.0)
             # 3-class target
@@ -440,7 +439,7 @@ def test_predict_smart_binary_predict_proba_is_vector(df_pd_cv_multiclass):
         LogisticRegression(max_iter=2000),
         features=["x", "team"],
         n_splits=3,
-        params={'binomial_probabilities_to_index1': False}
+        params={"binomial_probabilities_to_index1": False},
     )
     out = cv.generate_validation_df(df_bin)
 
@@ -497,14 +496,14 @@ def test_generate_validation_df_add_training_predictions_pd_returns_pd_and_marks
     # training preds should be the earliest chunk (before min_validation_date median)
     # With 12 dates, median index = 6 => min_validation_date = 2024-01-07
     # So validation dates are >= 2024-01-07
-    median_date = df_pd_cv_reg["date"].sort_values().unique()[len(df_pd_cv_reg["date"].unique()) // 2]
+    median_date = (
+        df_pd_cv_reg["date"].sort_values().unique()[len(df_pd_cv_reg["date"].unique()) // 2]
+    )
     train_mask = out["date"] < median_date
     val_mask = out["date"] >= median_date
 
     assert (out.loc[train_mask, "is_validation"] == 0).all()
     assert (out.loc[val_mask, "is_validation"] == 1).all()
-
-
 
 
 def test_generate_validation_df_add_training_predictions_pl_roundtrip_type(

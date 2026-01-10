@@ -3,20 +3,20 @@ from __future__ import annotations
 
 import inspect
 import math
-from typing import Any, Literal
+from typing import Literal
 
 import polars as pl
 
-from spforge.data_structures import ColumnNames, PreMatchTeamRating
+from spforge.data_structures import ColumnNames, TeamRatingsResult
 from spforge.performance_transformers._performance_manager import ColumnWeight, PerformanceManager
 from spforge.ratings._base import RatingGenerator, RatingState
 from spforge.ratings.enums import RatingKnownFeatures, RatingUnknownFeatures
-from spforge.ratings.player_performance_predictor import RatingMeanPerformancePredictor, RatingPlayerDifferencePerformancePredictor, \
-    PlayerRatingNonOpponentPerformancePredictor, PlayerPerformancePredictor
-from spforge.ratings.start_rating_generator import StartRatingGenerator
-from spforge.ratings.team_performance_predictor import TeamPerformancePredictor, \
-    TeamRatingNonOpponentPerformancePredictor, TeamRatingDifferencePerformancePredictor, \
-    TeamRatingMeanPerformancePredictor
+from spforge.ratings.team_performance_predictor import (
+    TeamPerformancePredictor,
+    TeamRatingDifferencePerformancePredictor,
+    TeamRatingMeanPerformancePredictor,
+    TeamRatingNonOpponentPerformancePredictor,
+)
 from spforge.ratings.team_start_rating_generator import TeamStartRatingGenerator
 
 TEAM_PRED_OFF_COL = "__TEAM_PREDICTED_OFF_PERFORMANCE"
@@ -88,12 +88,12 @@ class TeamRatingGenerator(RatingGenerator):
         self.start_league_ratings = start_league_ratings
         self.start_league_quantile = start_league_quantile
         self.start_min_count_for_percentiles = start_min_count_for_percentiles
-        self.start_harcoded_start_rating =start_harcoded_start_rating
+        self.start_harcoded_start_rating = start_harcoded_start_rating
         self.start_rating_generator = TeamStartRatingGenerator(
             league_ratings=self.start_league_ratings,
             league_quantile=self.start_league_quantile,
             min_count_for_percentiles=self.start_min_count_for_percentiles,
-            harcoded_start_rating=start_harcoded_start_rating
+            harcoded_start_rating=start_harcoded_start_rating,
         )
 
         self.TEAM_PRED_OFF_PERF_COL = self._suffix(TEAM_PRED_OFF_COL)
@@ -107,40 +107,39 @@ class TeamRatingGenerator(RatingGenerator):
 
         self.DIFF_COL = self._suffix(str(RatingUnknownFeatures.TEAM_RATING_DIFFERENCE))
 
-
         self._team_off_ratings: dict[str, RatingState] = {}
         self._team_def_ratings: dict[str, RatingState] = {}
         if performance_predictor == "mean":
             _performance_predictor_class = TeamRatingMeanPerformancePredictor
         elif performance_predictor == "difference":
-            _performance_predictor_class =TeamRatingDifferencePerformancePredictor
+            _performance_predictor_class = TeamRatingDifferencePerformancePredictor
         elif performance_predictor == "ignore_opponent":
             _performance_predictor_class = TeamRatingNonOpponentPerformancePredictor
         else:
             raise ValueError(f"performance_predictor {performance_predictor} is not supported")
 
-
         self.performance_predictor = performance_predictor
         sig = inspect.signature(_performance_predictor_class.__init__)
         init_params = [name for name, _param in sig.parameters.items() if name != "self"]
         performance_predictor_params = {k: v for k, v in kwargs.items() if k in init_params}
-        self._performance_predictor: TeamPerformancePredictor = _performance_predictor_class(**performance_predictor_params)
+        self._performance_predictor: TeamPerformancePredictor = _performance_predictor_class(
+            **performance_predictor_params
+        )
 
-
-    def _ensure_team_off(self, team_id: str, day_number: int , league:str) -> RatingState:
+    def _ensure_team_off(self, team_id: str, day_number: int, league: str) -> RatingState:
         if team_id not in self._team_off_ratings:
-            rating = self.start_rating_generator.generate_rating_value(day_number=day_number, league=league)
-            self._team_off_ratings[team_id] = RatingState(
-                id=team_id, rating_value=rating
+            rating = self.start_rating_generator.generate_rating_value(
+                day_number=day_number, league=league
             )
+            self._team_off_ratings[team_id] = RatingState(id=team_id, rating_value=rating)
         return self._team_off_ratings[team_id]
 
-    def _ensure_team_def(self, team_id: str, day_number: int , league:str) -> RatingState:
+    def _ensure_team_def(self, team_id: str, day_number: int, league: str) -> RatingState:
         if team_id not in self._team_def_ratings:
-            rating = self.start_rating_generator.generate_rating_value(day_number=day_number, league=league)
-            self._team_def_ratings[team_id] = RatingState(
-                id=team_id, rating_value=rating
+            rating = self.start_rating_generator.generate_rating_value(
+                day_number=day_number, league=league
             )
+            self._team_def_ratings[team_id] = RatingState(id=team_id, rating_value=rating)
         return self._team_def_ratings[team_id]
 
     def _calculate_post_match_confidence_sum(self, state: RatingState, day_number: int) -> float:
@@ -222,8 +221,12 @@ class TeamRatingGenerator(RatingGenerator):
             opp_off_perf = float(r[perf_opp_col]) if r.get(perf_opp_col) is not None else 0.0
             def_perf = 1.0 - opp_off_perf
 
-            pred_off = self._performance_predictor.predict_performance(rating_value=s_off.rating_value,opponent_team_rating_value= o_def.rating_value)
-            pred_def = self._performance_predictor.predict_performance(rating_value=s_def.rating_value,opponent_team_rating_value= o_off.rating_value)
+            pred_off = self._performance_predictor.predict_performance(
+                rating_value=s_off.rating_value, opponent_team_rating_value=o_def.rating_value
+            )
+            pred_def = self._performance_predictor.predict_performance(
+                rating_value=s_def.rating_value, opponent_team_rating_value=o_off.rating_value
+            )
 
             mult_off = self._applied_multiplier(s_off, self.rating_change_multiplier_offense)
             mult_def = self._applied_multiplier(s_def, self.rating_change_multiplier_defense)
@@ -380,7 +383,7 @@ class TeamRatingGenerator(RatingGenerator):
 
         rows: list[dict] = []
         for r in match_df.iter_rows(named=True):
-            day_number = r['__day_number']
+            day_number = r["__day_number"]
             league = r[self.column_names.league] if self.column_names.league else None
             team_id = r[cn.team_id]
             opp_id = r[f"{cn.team_id}_opponent"]
@@ -395,8 +398,12 @@ class TeamRatingGenerator(RatingGenerator):
             opp_off_pre = float(o_off.rating_value)
             opp_def_pre = float(o_def.rating_value)
 
-            pred_off = self._performance_predictor.predict_performance(rating_value=s_off.rating_value, opponent_team_rating_value=o_off.rating_value)
-            pred_def = self._performance_predictor.predict_performance(rating_value=s_def.rating_value,opponent_team_rating_value= o_off.rating_value)
+            pred_off = self._performance_predictor.predict_performance(
+                rating_value=s_off.rating_value, opponent_team_rating_value=o_off.rating_value
+            )
+            pred_def = self._performance_predictor.predict_performance(
+                rating_value=s_def.rating_value, opponent_team_rating_value=o_off.rating_value
+            )
 
             rows.append(
                 {
@@ -413,3 +420,25 @@ class TeamRatingGenerator(RatingGenerator):
             )
 
         return pl.DataFrame(rows, strict=False)
+
+    @property
+    def team_ratings(self) -> dict[str, TeamRatingsResult]:
+        """Return combined offense and defense ratings for all teams."""
+        result: dict[str, TeamRatingsResult] = {}
+        all_team_ids = set(self._team_off_ratings.keys()) | set(self._team_def_ratings.keys())
+
+        for team_id in all_team_ids:
+            off_state = self._team_off_ratings.get(team_id)
+            def_state = self._team_def_ratings.get(team_id)
+
+            result[team_id] = TeamRatingsResult(
+                id=team_id,
+                offense_rating=off_state.rating_value if off_state else 0.0,
+                defense_rating=def_state.rating_value if def_state else 0.0,
+                offense_games_played=off_state.games_played if off_state else 0.0,
+                defense_games_played=def_state.games_played if def_state else 0.0,
+                offense_confidence_sum=off_state.confidence_sum if off_state else 0.0,
+                defense_confidence_sum=def_state.confidence_sum if def_state else 0.0,
+            )
+
+        return result

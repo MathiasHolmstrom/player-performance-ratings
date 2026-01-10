@@ -6,6 +6,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from spforge import ColumnNames
+from spforge.autopipeline import AutoPipeline
 from spforge.performance_transformers import (
     DiminishingValueTransformer,
     SymmetricDistributionTransformer,
@@ -14,7 +15,6 @@ from spforge.performance_transformers._performances_transformers import (
     GroupByTransformer,
     SklearnEstimatorImputer,
 )
-from spforge.autopipeline import AutoPipeline
 from spforge.transformers import RatioEstimatorTransformer
 
 dfs = [
@@ -179,7 +179,7 @@ def test_reverse_diminshing_value_transformer(df):
     transformer = DiminishingValueTransformer(features=["performance"], reverse=True)
     try:
         ori_df = data.copy()
-    except:
+    except Exception:
         ori_df = data.clone()
     transformed_df = transformer.fit_transform(data)
 

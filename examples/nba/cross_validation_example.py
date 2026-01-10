@@ -4,16 +4,17 @@ from sklearn.metrics import mean_absolute_error
 
 from examples import get_sub_sample_nba_data
 from spforge import FeatureGeneratorPipeline
+from spforge.autopipeline import AutoPipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
 from spforge.data_structures import ColumnNames
 from spforge.estimator import (
-    NegativeBinomialEstimator, SkLearnEnhancerEstimator,
+    NegativeBinomialEstimator,
+    SkLearnEnhancerEstimator,
 )
 from spforge.feature_generator import (
     LagTransformer,
     RollingWindowTransformer,
 )
-from spforge.autopipeline import AutoPipeline
 from spforge.scorer import Filter, Operator, OrdinalLossScorer, SklearnScorer
 from spforge.transformers import EstimatorTransformer
 
@@ -52,27 +53,33 @@ predictor = NegativeBinomialEstimator(
 )
 
 pipeline = AutoPipeline(
-    convert_cat_features_to_cat_dtype=True,
     estimator=predictor,
     feature_names=features_generator.features_out,
-    context_feature_names=[column_names.player_id, column_names.start_date, column_names.team_id, column_names.match_id],
-    predictor_transformers=[EstimatorTransformer(
-        prediction_column_name='points_estimate',
-        estimator=SkLearnEnhancerEstimator(
-            estimator=LGBMRegressor(verbose=-100, random_state=42),
-            date_column=column_names.start_date,
-            day_weight_epsilon=0.1
+    context_feature_names=[
+        column_names.player_id,
+        column_names.start_date,
+        column_names.team_id,
+        column_names.match_id,
+    ],
+    predictor_transformers=[
+        EstimatorTransformer(
+            prediction_column_name="points_estimate",
+            estimator=SkLearnEnhancerEstimator(
+                estimator=LGBMRegressor(verbose=-100, random_state=42),
+                date_column=column_names.start_date,
+                day_weight_epsilon=0.1,
+            ),
         )
-    )]
-
+    ],
 )
 
 cross_validator = MatchKFoldCrossValidator(
     date_column_name=column_names.start_date,
     match_id_column_name=column_names.match_id,
     estimator=pipeline,
-    prediction_column_name='points_probabilities',
-    target_column='points'
+    prediction_column_name="points_probabilities",
+    target_column="points",
+    features=pipeline.context_feature_names + pipeline.feature_names,
 )
 validation_df = cross_validator.generate_validation_df(df=df)
 

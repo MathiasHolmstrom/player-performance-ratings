@@ -1,2 +1,2 @@
-from ._base import CrossValidator
-from .cross_validator import MatchKFoldCrossValidator
+from ._base import CrossValidator as CrossValidator
+from .cross_validator import MatchKFoldCrossValidator as MatchKFoldCrossValidator

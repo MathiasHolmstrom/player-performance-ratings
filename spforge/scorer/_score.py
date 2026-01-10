@@ -112,7 +112,7 @@ def apply_filters(df: IntoFrameT, filters: list[Filter]) -> IntoFrameT:
                             filter_value = parsed_dt.replace(tzinfo=None)
                 else:
                     filter_value = parsed_dt.replace(tzinfo=None)
-            except:
+            except Exception:
                 filter_value = parsed_dt.replace(tzinfo=None)
         else:
             filter_value = filter.value
@@ -183,7 +183,7 @@ class BaseScorer(ABC):
                 try:
                     # Use sum for aggregation
                     agg_exprs.append(nw.col(col).sum().alias(col))
-                except:
+                except Exception:
                     # Fallback to mean or first
                     agg_exprs.append(nw.col(col).mean().alias(col))
 
@@ -195,7 +195,7 @@ class BaseScorer(ABC):
         if not self.granularity:
             return []
         granularity_values = df.select(self.granularity).unique().to_dict(as_series=False)
-        return list(zip(*[granularity_values[col] for col in self.granularity]))
+        return list(zip(*[granularity_values[col] for col in self.granularity], strict=False))
 
     def _filter_to_granularity(self, df: IntoFrameT, gran_tuple: tuple) -> IntoFrameT:
         """Filter dataframe to specific granularity combination"""
@@ -270,7 +270,7 @@ class PWMSE(BaseScorer):
         if self.granularity:
             results = {}
             granularity_values = df.select(self.granularity).unique().to_dict(as_series=False)
-            granularity_tuples = list(zip(*[granularity_values[col] for col in self.granularity]))
+            granularity_tuples = list(zip(*[granularity_values[col] for col in self.granularity], strict=False))
 
             for gran_tuple in granularity_tuples:
                 mask = None
@@ -415,7 +415,6 @@ class SklearnScorer(BaseScorer):
         self.scorer_function = scorer_function
         self.params = params or {}
 
-
     @narwhals.narwhalify
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
 
@@ -513,12 +512,11 @@ class ProbabilisticMeanBias(BaseScorer):
         sum_lr = 0
         for variation_idx, distinct_class_variation in enumerate(distinct_classes_variations):
 
-            if not isinstance(distinct_class_variation, list):
-                if math.isnan(distinct_class_variation):
-                    continue
+            if not isinstance(distinct_class_variation, list) and math.isnan(distinct_class_variation):
+                continue
 
             rows_target_group = df[
-                df[self.class_column_name].apply(lambda x: x == distinct_class_variation)
+                df[self.class_column_name].apply(lambda x, dcv=distinct_class_variation: x == dcv)
             ]
             probs = rows_target_group[self.pred_column_name]
             last_column_name = f"prob_under_{distinct_class_variation[0] - 0.5}"
@@ -528,7 +526,7 @@ class ProbabilisticMeanBias(BaseScorer):
 
                 prob_under = "prob_under_" + str(class_ + 0.5)
                 rows_target_group[prob_under] = (
-                    probs.apply(lambda x: x[idx + 1]) + rows_target_group[last_column_name]
+                    probs.apply(lambda x, i=idx: x[i + 1]) + rows_target_group[last_column_name]
                 )
 
                 count_exact = len(rows_target_group[rows_target_group[self.target] == class_])
@@ -629,14 +627,16 @@ class OrdinalLossScorer(BaseScorer):
                 raise ValueError(
                     f"OrdinalLossScorer: pred_column Array width ({width}) does not match len(classes) ({expected_len})."
                 )
-            get_expr = lambda i: pl.col(self.pred_column).arr.get(i)
+            def get_expr(i):
+                return pl.col(self.pred_column).arr.get(i)
         else:
             max_len = df.select(pl.col(self.pred_column).list.len().max()).item()
             if max_len is not None and int(max_len) != expected_len:
                 raise ValueError(
                     f"OrdinalLossScorer: pred_column List length ({int(max_len)}) does not match len(classes) ({expected_len})."
                 )
-            get_expr = lambda i: pl.col(self.pred_column).list.get(i)
+            def get_expr(i):
+                return pl.col(self.pred_column).list.get(i)
 
         df = df.with_columns([get_expr(i).alias(f"prob_{c}") for i, c in enumerate(class_labels)])
 
@@ -699,10 +699,7 @@ class OrdinalLossScorer(BaseScorer):
             df = nw.from_native(df)
 
         df_native = df.to_native()
-        if isinstance(df_native, pd.DataFrame):
-            df_pl = pl.DataFrame(df_native)
-        else:
-            df_pl = df_native
+        df_pl = pl.DataFrame(df_native) if isinstance(df_native, pd.DataFrame) else df_native
 
         if self.aggregation_level:
             df_pl = df_pl.group_by(self.aggregation_level).agg(
@@ -715,7 +712,7 @@ class OrdinalLossScorer(BaseScorer):
         if self.granularity:
             results = {}
             granularity_values = df_pl.select(self.granularity).unique().to_dict(as_series=False)
-            granularity_tuples = list(zip(*[granularity_values[col] for col in self.granularity]))
+            granularity_tuples = list(zip(*[granularity_values[col] for col in self.granularity], strict=False))
 
             for gran_tuple in granularity_tuples:
                 mask = None
@@ -729,6 +726,7 @@ class OrdinalLossScorer(BaseScorer):
             return results
 
         return self._calculate_score_for_group(df_pl)
+
 
 class ThresholdEventScorer(BaseScorer):
     """
@@ -749,19 +747,19 @@ class ThresholdEventScorer(BaseScorer):
     _P_EVENT_COL = "__p_event__"
 
     def __init__(
-            self,
-            dist_column: str,
-            *,
-            threshold_column: str,
-            outcome_column: str,
-            binary_scorer: BaseScorer | None = None,
-            labels: list[int] | None = None,
-            comparator: Operator = Operator.GREATER_THAN_OR_EQUALS,
-            threshold_rounding: str = "ceil",
-            validation_column: str | None = None,
-            aggregation_level: list[str] | None = None,
-            granularity: list[str] | None = None,
-            filters: list["Filter"] | None = None,
+        self,
+        dist_column: str,
+        *,
+        threshold_column: str,
+        outcome_column: str,
+        binary_scorer: BaseScorer | None = None,
+        labels: list[int] | None = None,
+        comparator: Operator = Operator.GREATER_THAN_OR_EQUALS,
+        threshold_rounding: str = "ceil",
+        validation_column: str | None = None,
+        aggregation_level: list[str] | None = None,
+        granularity: list[str] | None = None,
+        filters: list["Filter"] | None = None,
     ):
         self.pred_column_name = dist_column
         super().__init__(
@@ -834,8 +832,8 @@ class ThresholdEventScorer(BaseScorer):
             cut_right = np.searchsorted(labs, thr, side="right").astype(np.int64)
 
         if self.comparator in (
-                Operator.GREATER_THAN_OR_EQUALS,
-                Operator.GREATER_THAN,
+            Operator.GREATER_THAN_OR_EQUALS,
+            Operator.GREATER_THAN,
         ):
             tail = np.cumsum(probs[:, ::-1], axis=1)[:, ::-1]
             cut = cut_left if self.comparator == Operator.GREATER_THAN_OR_EQUALS else cut_right
@@ -848,8 +846,8 @@ class ThresholdEventScorer(BaseScorer):
             return out.astype(np.float64)
 
         if self.comparator in (
-                Operator.LESS_THAN_OR_EQUALS,
-                Operator.LESS_THAN,
+            Operator.LESS_THAN_OR_EQUALS,
+            Operator.LESS_THAN,
         ):
             head = np.cumsum(probs, axis=1)
             cut = cut_right - 1 if self.comparator == Operator.LESS_THAN_OR_EQUALS else cut_left - 1
@@ -889,7 +887,8 @@ class ThresholdEventScorer(BaseScorer):
                 p = np.asarray(probs_list[i], dtype=np.float64)
                 if p.shape[0] != labs.shape[0]:
                     raise ValueError(
-                        "ragged distributions not supported when labels are provided (length mismatch)")
+                        "ragged distributions not supported when labels are provided (length mismatch)"
+                    )
                 t = int(thr[i])
                 if self.comparator == ">=":
                     cut = int(np.searchsorted(labs, t, side="left"))
@@ -962,5 +961,3 @@ class ThresholdEventScorer(BaseScorer):
         )
 
         return self.binary_scorer.score(df)
-
-
