@@ -477,7 +477,7 @@ def test_generate_validation_df_add_training_predictions_pd_returns_pd_and_marks
         features=["x"],
     )
 
-    out = cv.generate_validation_df(df_pd_cv_reg, add_trainining_predictions=True)
+    out = cv.generate_validation_df(df_pd_cv_reg, add_training_predictions=True)
 
     # narwhalify should return the original type
     assert isinstance(out, pd.DataFrame)
@@ -516,7 +516,7 @@ def test_generate_validation_df_add_training_predictions_pl_roundtrip_type(
         features=["x"],
     )
 
-    out = cv.generate_validation_df(pl.DataFrame(df_pd_cv_reg), add_trainining_predictions=True)
+    out = cv.generate_validation_df(pl.DataFrame(df_pd_cv_reg), add_training_predictions=True)
 
     assert isinstance(out, pl.DataFrame)
     assert "pred" in out.columns

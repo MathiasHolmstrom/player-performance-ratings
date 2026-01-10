@@ -63,7 +63,8 @@ class OperatorTransformer(TransformerMixin):
 
     def _transform(self, df: IntoFrameT) -> IntoFrameT:
         if self.feature1 not in df.columns or self.feature2 not in df.columns:
-            return df
+            raise ValueError(f"{self.feature1} and {self.feature2} are both missing indf")
+
         if self.operation == Operation.SUBTRACT:
             df = df.with_columns(
                 (nw.col(self.feature1) - nw.col(self.feature2)).alias(self.new_column_name)

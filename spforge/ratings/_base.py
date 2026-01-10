@@ -148,7 +148,10 @@ class RatingGenerator(FeatureGenerator):
             self.league_identifier = LeagueIdentifer2(column_names=self.column_names)
 
         if self.performance_manager:
-            df = nw.from_native(self.performance_manager.fit_transform(df))
+            if self.performance_manager:
+                ori_perf_values = df[self.performance_manager.ori_performance_column].to_list()
+                df = nw.from_native(self.performance_manager.fit_transform(df))
+                assert df[self.performance_manager.ori_performance_column].to_list() == ori_perf_values
 
         perf = df[self.performance_column]
         if perf.max() > 1.02 or perf.min() < -0.02:
