@@ -1,9 +1,8 @@
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
-from spforge.data_structures import ColumnNames
-from spforge.estimator import SkLearnEnhancerEstimator
 from spforge.autopipeline import AutoPipeline
+from spforge.data_structures import ColumnNames
 from spforge.ratings import RatingKnownFeatures
 from spforge.ratings._player_rating import PlayerRatingGenerator
 
@@ -57,30 +56,27 @@ historical_df = rating_generator.fit_transform(historical_df)
 # It will also use the location of the game as a feature.
 
 
-
 # Pipeline is whether we define all the steps. Other transformations can take place as well.
 # However, in our simple example we only have a simple rating-generator and a predictor.
 pipeline = AutoPipeline(
     estimator=LogisticRegression(),
-    granularity=['game_id', 'team_id'],
-    one_hot_encode_cat_features=True,
-    categorical_features=['location'],
-    feature_names=rating_generator.features_out + ['location']
+    granularity=["game_id", "team_id"],
+    feature_names=rating_generator.features_out + ["location"],
 )
 
-pipeline.fit(X=historical_df, y=historical_df['won'])
+pipeline.fit(X=historical_df, y=historical_df["won"])
 
 # Future predictions on future results
 future_df = rating_generator.future_transform(future_df)
-future_predictions = pipeline.predict_proba(future_df)[:,1]
-future_df['game_winner_probability'] = future_predictions
+future_predictions = pipeline.predict_proba(future_df)[:, 1]
+future_df["game_winner_probability"] = future_predictions
 # Grouping predictions from game-player level to game-level.
 team_grouped_predictions = future_df.groupby(column_names.match_id).first()[
     [
         column_names.start_date,
         column_names.team_id,
         "team_id_opponent",
-        'game_winner_probability',
+        "game_winner_probability",
     ]
 ]
 

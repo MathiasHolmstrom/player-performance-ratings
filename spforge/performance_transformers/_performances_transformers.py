@@ -1,5 +1,5 @@
 import logging
-from typing import Literal, Optional, Protocol
+from typing import Literal, Protocol
 
 import narwhals
 import narwhals.stable.v2 as nw
@@ -21,7 +21,7 @@ class SklearnEstimatorImputer(BaseEstimator, TransformerMixin):
         self,
         features: list[str],
         target_name: str,
-        estimator: Optional[object] = None,
+        estimator: object | None = None,
     ):
         self.features = features
         self.features_out = features
@@ -253,7 +253,9 @@ class SymmetricDistributionTransformer(BaseEstimator, TransformerMixin):
         self.min_rows = min_rows
         self.min_excessive_multiplier = min_excessive_multiplier
 
-        self._diminishing_value_transformer: dict[str, dict[Optional[str], DiminishingValueTransformer]] = {}
+        self._diminishing_value_transformer: dict[
+            str, dict[str | None, DiminishingValueTransformer]
+        ] = {}
 
     @nw.narwhalify
     def fit(self, df: IntoFrameT, y=None):
@@ -297,11 +299,13 @@ class SymmetricDistributionTransformer(BaseEstimator, TransformerMixin):
         ):
             reverse = skewness < 0
 
-            self._diminishing_value_transformer[feature][granularity_value] = DiminishingValueTransformer(
-                features=[feature],
-                reverse=reverse,
-                excessive_multiplier=excessive_multiplier,
-                quantile_cutoff=quantile_cutoff,
+            self._diminishing_value_transformer[feature][granularity_value] = (
+                DiminishingValueTransformer(
+                    features=[feature],
+                    reverse=reverse,
+                    excessive_multiplier=excessive_multiplier,
+                    quantile_cutoff=quantile_cutoff,
+                )
             )
 
             transformed_rows = self._diminishing_value_transformer[feature][

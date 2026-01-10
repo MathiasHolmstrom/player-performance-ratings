@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 from narwhals.stable.v1.typing import IntoFrameT
 
-from spforge import ColumnNames
+from spforge.data_structures import ColumnNames
 
 
 class FeatureGenerator(ABC):
@@ -21,7 +21,6 @@ class FeatureGenerator(ABC):
     def transform(self, df: IntoFrameT) -> IntoFrameT:
         raise NotImplementedError
 
-
     @property
-    def features_out(self) ->list[str]:
+    def features_out(self) -> list[str]:
         return self._features_out

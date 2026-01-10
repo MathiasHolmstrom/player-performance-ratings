@@ -46,7 +46,7 @@ class OperatorTransformer(TransformerMixin):
         super().__init__(features=[feature1, feature2], features_out=[alias])
 
     @nw.narwhalify
-    def fit(self, df: IntoFrameT, column_names=None) -> "OperatorTransformer" :
+    def fit(self, df: IntoFrameT, column_names=None) -> "OperatorTransformer":
         return self
 
     @nw.narwhalify

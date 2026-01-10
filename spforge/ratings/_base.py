@@ -11,9 +11,8 @@ import polars as pl
 from narwhals.stable.v2 import DataFrame
 from narwhals.stable.v2.typing import IntoFrameT
 
-from spforge import ColumnNames
 from spforge.base_feature_generator import FeatureGenerator
-from spforge.data_structures import RatingState
+from spforge.data_structures import ColumnNames, RatingState
 from spforge.feature_generator._utils import to_polars
 from spforge.performance_transformers._performance_manager import (
     ColumnWeight,
@@ -23,9 +22,9 @@ from spforge.performance_transformers._performance_manager import (
 from spforge.ratings.enums import RatingKnownFeatures, RatingUnknownFeatures
 from spforge.ratings.league_identifier import LeagueIdentifer2
 from spforge.ratings.player_performance_predictor import (
-    RatingPlayerDifferencePerformancePredictor,
-    RatingMeanPerformancePredictor,
     PlayerRatingNonOpponentPerformancePredictor,
+    RatingMeanPerformancePredictor,
+    RatingPlayerDifferencePerformancePredictor,
 )
 
 MATCH_CONTRIBUTION_TO_SUM_VALUE = 1
@@ -76,7 +75,6 @@ class RatingGenerator(FeatureGenerator):
             _features_out = [self._suffix(str(f)) for f in features_out]
         super().__init__(features_out=_features_out)
 
-
         self.performance_predictor = performance_predictor
         self.performance_weights = performance_weights
 
@@ -98,7 +96,6 @@ class RatingGenerator(FeatureGenerator):
         self.non_predictor_features_out = [
             self._suffix(str(c)) for c in self.non_predictor_features_out
         ]
-
 
         sig = inspect.signature(_performance_predictor_class.__init__)
         init_params = [name for name, _param in sig.parameters.items() if name != "self"]
@@ -165,10 +162,7 @@ class RatingGenerator(FeatureGenerator):
             )
 
         pl_df: pl.DataFrame
-        if df.implementation.is_polars():
-            pl_df = df.to_native()
-        else:
-            pl_df = df.to_polars().to_native()
+        pl_df = df.to_native() if df.implementation.is_polars() else df.to_polars().to_native()
 
         return self._historical_transform(pl_df)
 
@@ -176,10 +170,7 @@ class RatingGenerator(FeatureGenerator):
     @nw.narwhalify
     def transform(self, df: IntoFrameT) -> IntoFrameT:
         pl_df: pl.DataFrame
-        if df.implementation.is_polars():
-            pl_df = df.to_native()
-        else:
-            pl_df = df.to_polars().to_native()
+        pl_df = df.to_native() if df.implementation.is_polars() else df.to_polars().to_native()
         return self._historical_transform(pl_df)
 
     @to_polars
@@ -191,10 +182,7 @@ class RatingGenerator(FeatureGenerator):
         - do NOT update ratings
         """
         pl_df: pl.DataFrame
-        if df.implementation.is_polars():
-            pl_df = df.to_native()
-        else:
-            pl_df = df.to_polars().to_native()
+        pl_df = df.to_native() if df.implementation.is_polars() else df.to_polars().to_native()
         return self._future_transform(pl_df)
 
     @abstractmethod
@@ -249,12 +237,12 @@ class RatingGenerator(FeatureGenerator):
         return None
 
     def _add_day_number(
-            self,
-            df: pl.DataFrame,
-            date_col: str | None = None,
-            out_col: str = "__day_number",
-            ref_date: str = "2000-01-01",  # <- new: reference epoch (YYYY-MM-DD)
-            one_based: bool = True,  # <- optional: keep 1-based numbering like before
+        self,
+        df: pl.DataFrame,
+        date_col: str | None = None,
+        out_col: str = "__day_number",
+        ref_date: str = "2000-01-01",  # <- new: reference epoch (YYYY-MM-DD)
+        one_based: bool = True,  # <- optional: keep 1-based numbering like before
     ) -> pl.DataFrame:
         """
         Add day_number column to dataframe relative to a fixed reference date.
@@ -299,17 +287,17 @@ class RatingGenerator(FeatureGenerator):
         elif dtype == pl.Date:
             dt = c.cast(pl.Datetime(time_zone=None))
         elif isinstance(dtype, pl.Datetime):
-            dt = c if dtype.time_zone is None else c.dt.convert_time_zone("UTC").dt.replace_time_zone(None)
+            dt = (
+                c
+                if dtype.time_zone is None
+                else c.dt.convert_time_zone("UTC").dt.replace_time_zone(None)
+            )
         else:
             dt = c.cast(pl.Datetime(time_zone=None), strict=False).dt.replace_time_zone(None)
 
         start_as_int = dt.cast(pl.Date).cast(pl.Int32)
 
-        ref_int = (
-            pl.lit(ref_date)
-            .str.strptime(pl.Date, "%Y-%m-%d", strict=True)
-            .cast(pl.Int32)
-        )
+        ref_int = pl.lit(ref_date).str.strptime(pl.Date, "%Y-%m-%d", strict=True).cast(pl.Int32)
 
         offset = 1 if one_based else 0
         day_number = (start_as_int - ref_int + offset).fill_null(offset)

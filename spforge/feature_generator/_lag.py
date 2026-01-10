@@ -1,7 +1,7 @@
 import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
 
-from spforge import ColumnNames
+from spforge.data_structures import ColumnNames
 from spforge.feature_generator._base import LagGenerator
 from spforge.feature_generator._utils import (
     future_lag_transformations_wrapper,

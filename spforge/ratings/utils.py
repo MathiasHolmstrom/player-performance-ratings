@@ -1,6 +1,6 @@
 import polars as pl
 
-from spforge import ColumnNames
+from spforge.data_structures import ColumnNames
 
 
 def add_team_rating(

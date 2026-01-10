@@ -1,12 +1,7 @@
 from typing import Any
 
-import numpy as np
-import pandas as pd
-from sklearn.base import TransformerMixin, BaseEstimator, clone
-
 import narwhals.stable.v2 as nw
-from narwhals.typing import IntoFrameT
-
+from sklearn.base import BaseEstimator, TransformerMixin, clone
 
 
 class EstimatorTransformer(BaseEstimator, TransformerMixin):
@@ -14,7 +9,9 @@ class EstimatorTransformer(BaseEstimator, TransformerMixin):
     Transformer that fits an estimator and appends its predictions as a new column.
     """
 
-    def __init__(self, estimator: Any, prediction_column_name: str, features: list[str] | None = None):
+    def __init__(
+        self, estimator: Any, prediction_column_name: str, features: list[str] | None = None
+    ):
         self.estimator = estimator
         self.prediction_column_name = prediction_column_name
         self.features = features
@@ -37,16 +34,13 @@ class EstimatorTransformer(BaseEstimator, TransformerMixin):
             raise RuntimeError("EstimatorTransformer is not fitted")
 
         prediction = self.estimator_.predict(X=X.select(self.features_))
-        return (
-            X.with_columns(
-                nw.new_series(
-                    name=self.prediction_column_name,
-                    values=prediction,
-                    backend=nw.get_native_namespace(X),
-                )
+        return X.with_columns(
+            nw.new_series(
+                name=self.prediction_column_name,
+                values=prediction,
+                backend=nw.get_native_namespace(X),
             )
-            .select(self.get_feature_names_out())
-        )
+        ).select(self.get_feature_names_out())
 
     def get_feature_names_out(self, input_features=None):
         return [self.prediction_column_name]
@@ -57,4 +51,3 @@ class EstimatorTransformer(BaseEstimator, TransformerMixin):
         if hasattr(target, "set_output"):
             target.set_output(transform=transform)
         return self
-

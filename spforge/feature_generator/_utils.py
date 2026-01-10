@@ -8,7 +8,7 @@ import pandas as pd
 import polars as pl
 from narwhals.typing import IntoFrameT
 
-from spforge import ColumnNames
+from spforge.data_structures import ColumnNames
 
 
 def future_validator(method):
@@ -111,7 +111,7 @@ def future_lag_transformations_wrapper(method):
                 df
             ), f"Specified unique constraint {self.unique_constraint} is not unique on the input dataframe"
 
-        result = method(self=self, df=df, *args, **kwargs).sort("__row_index")
+        result = method(self, df, *args, **kwargs).sort("__row_index")
 
         input_cols = [c for c in input_cols]
         if ori_native == "pd":
@@ -128,7 +128,7 @@ def historical_lag_transformations_wrapper(method):
         if "__row_index" not in df.columns:
             df = df.with_row_index(name="__row_index")
         self.column_names = column_names or self.column_names
-        if not self.__class__.__name__ == "RollingMeanDaysTransformer":
+        if self.__class__.__name__ != "RollingMeanDaysTransformer":
             if self.match_id_column is None and not self.column_names:
                 raise ValueError("Either match_id_column or column_names must be passed")
             self.match_id_column = self.match_id_column or self.column_names.match_id
@@ -189,7 +189,7 @@ def historical_lag_transformations_wrapper(method):
         else:
             ori_native = "pl"
 
-        result = method(self=self, df=df, *args, **kwargs).sort("__row_index")
+        result = method(self, df, *args, **kwargs).sort("__row_index")
 
         input_cols = [c for c in input_cols]
         if ori_native == "pd":

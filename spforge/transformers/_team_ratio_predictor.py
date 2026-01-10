@@ -7,6 +7,7 @@ import pandas as pd
 from narwhals.typing import IntoFrameT
 from sklearn.base import BaseEstimator, TransformerMixin, is_regressor
 
+
 class RatioEstimatorTransformer(BaseEstimator, TransformerMixin):
     def __init__(
         self,
@@ -35,9 +36,7 @@ class RatioEstimatorTransformer(BaseEstimator, TransformerMixin):
         if not self.granularity:
             raise ValueError("granularity must be non-empty")
         if not is_regressor(self.estimator):
-            raise TypeError(
-                f"estimator must be a regressor, got {type(self.estimator).__name__}"
-            )
+            raise TypeError(f"estimator must be a regressor, got {type(self.estimator).__name__}")
 
         if not self.predict_row and not self.prediction_column_name:
             raise ValueError("prediction_column_name must be provided when predict_row=False")
@@ -125,12 +124,11 @@ class RatioEstimatorTransformer(BaseEstimator, TransformerMixin):
             df_grp_feat = df.group_by(self.granularity).agg(self._group_agg_exprs())
             grp_pred = self.estimator.predict(df_grp_feat.select(self.features))
 
-            df_grp_pred = (
-                df_grp_feat.with_columns(
-                    nw.new_series("__grp_pred__", grp_pred, backend=nw.get_native_namespace(df_grp_feat))
+            df_grp_pred = df_grp_feat.with_columns(
+                nw.new_series(
+                    "__grp_pred__", grp_pred, backend=nw.get_native_namespace(df_grp_feat)
                 )
-                .select(self.granularity + ["__grp_pred__"])
-            )
+            ).select(self.granularity + ["__grp_pred__"])
 
             df = df.join(df_grp_pred, on=self.granularity, how="left")
         else:
@@ -138,7 +136,9 @@ class RatioEstimatorTransformer(BaseEstimator, TransformerMixin):
                 raise ValueError(
                     f"Expected existing column {self.granularity_prediction_column_name!r} in X when predict_granularity=False"
                 )
-            df = df.with_columns(nw.col(self.granularity_prediction_column_name).alias("__grp_pred__"))
+            df = df.with_columns(
+                nw.col(self.granularity_prediction_column_name).alias("__grp_pred__")
+            )
 
         df = df.with_columns(
             (nw.col("__row_pred__") / nw.col("__grp_pred__")).alias(self.ratio_column_name)
@@ -148,7 +148,9 @@ class RatioEstimatorTransformer(BaseEstimator, TransformerMixin):
             df = df.with_columns(nw.col("__row_pred__").alias(self.prediction_column_name))
 
         if self.granularity_prediction_column_name and self.predict_granularity:
-            df = df.with_columns(nw.col("__grp_pred__").alias(self.granularity_prediction_column_name))
+            df = df.with_columns(
+                nw.col("__grp_pred__").alias(self.granularity_prediction_column_name)
+            )
 
         out = df.select(self.get_feature_names_out())
 
@@ -169,4 +171,3 @@ class RatioEstimatorTransformer(BaseEstimator, TransformerMixin):
             if c not in set(out):
                 out.append(c)
         return list(set(out))
-

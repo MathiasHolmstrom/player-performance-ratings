@@ -3,7 +3,7 @@ import pandas as pd
 import polars as pl
 from narwhals.typing import IntoFrameT
 
-from spforge import ColumnNames
+from spforge.data_structures import ColumnNames
 from spforge.feature_generator._base import LagGenerator
 from spforge.feature_generator._utils import (
     future_lag_transformations_wrapper,
@@ -113,17 +113,16 @@ class RollingMeanDaysTransformer(LagGenerator):
     @transformation_validator
     def future_transform(self, df: IntoFrameT) -> IntoFrameT:
         ori_cols = df.columns
-        if self.column_names:
-            if df[self.date_column].dtype not in (nw.Date, nw.Datetime):
-                df = df.with_columns(nw.col(self.date_column).alias("__ori_date"))
-                try:
-                    df = df.with_columns(
-                        nw.col("__ori_date")
-                        .str.to_datetime(format="%Y-%m-%d %H:%M:%S")
-                        .alias(self.date_column)
-                    )
-                except nw.exceptions.InvalidOperationError:
-                    df = df.with_columns(nw.col("__ori_date").cast(nw.Date).alias(self.date_column))
+        if self.column_names and df[self.date_column].dtype not in (nw.Date, nw.Datetime):
+            df = df.with_columns(nw.col(self.date_column).alias("__ori_date"))
+            try:
+                df = df.with_columns(
+                    nw.col("__ori_date")
+                    .str.to_datetime(format="%Y-%m-%d %H:%M:%S")
+                    .alias(self.date_column)
+                )
+            except nw.exceptions.InvalidOperationError:
+                df = df.with_columns(nw.col("__ori_date").cast(nw.Date).alias(self.date_column))
 
         if isinstance(df.to_native(), pd.DataFrame):
             ori_type = "pd"

@@ -53,7 +53,7 @@ def test_returns_ratio_and_row_prediction(df_factory):
 
     y = data["target"] if isinstance(data, pd.DataFrame) else data.get_column("target")
     out = transformer.fit_transform(data, y)
-    for e_c in ['row_pred', 'ratio']:
+    for e_c in ["row_pred", "ratio"]:
         assert e_c in out
 
 
@@ -80,7 +80,7 @@ def test_returns_ratio_and_granularity_prediction(df_factory):
     out = transformer.fit_transform(data, y)
 
     cols = out.columns if isinstance(out, pd.DataFrame) else out.columns
-    for e_c in ['ratio', 'team_pred']:
+    for e_c in ["ratio", "team_pred"]:
         assert e_c in cols
 
 
@@ -108,7 +108,7 @@ def test_returns_ratio_row_and_granularity_predictions(df_factory):
     out = transformer.fit_transform(data, y)
 
     cols = out.columns if isinstance(out, pd.DataFrame) else out.columns
-    for expected_col in ['ratio', 'row_pred', 'team_pred']:
+    for expected_col in ["ratio", "row_pred", "team_pred"]:
         assert expected_col in cols
 
 
@@ -166,6 +166,7 @@ def test_predict_row_false_uses_existing_row_prediction_column(df_factory):
     ratio_values = ratio.to_list() if hasattr(ratio, "to_list") else ratio.tolist()
     assert all(v == 1.0 for v in ratio_values)
 
+
 @pytest.mark.parametrize("df_factory", [pd.DataFrame, pl.DataFrame])
 def test_predict_row_false_uses_existing_row_prediction_column(df_factory):
     data = df_factory(
@@ -191,9 +192,8 @@ def test_predict_row_false_uses_existing_row_prediction_column(df_factory):
 
     y = data["target"] if isinstance(data, pd.DataFrame) else data.get_column("target")
     out = transformer.fit_transform(data, y)
-    for e_c in ['ratio', 'row_pred', 'team_pred']:
+    for e_c in ["ratio", "row_pred", "team_pred"]:
         assert e_c in out
-
 
     if isinstance(out, pd.DataFrame):
         ratio_vals = out["ratio"].to_list()
@@ -208,14 +208,13 @@ def test_predict_row_false_uses_existing_row_prediction_column(df_factory):
 
     assert row_vals == input_row_vals
 
-    expected = [r / t for r, t in zip(row_vals, team_vals)]
+    expected = [r / t for r, t in zip(row_vals, team_vals, strict=False)]
     assert np.allclose(ratio_vals, expected, rtol=1e-12, atol=1e-12)
-
 
 
 @pytest.mark.parametrize("df_factory", [pd.DataFrame, pl.DataFrame])
 def test_predict_row_false_requires_prediction_column_name(df_factory):
-    data = df_factory(
+    df_factory(
         {
             "performance": [0.2, 0.8],
             "target": [1.0, 0.0],
@@ -237,7 +236,7 @@ def test_predict_row_false_requires_prediction_column_name(df_factory):
 
 @pytest.mark.parametrize("df_factory", [pd.DataFrame, pl.DataFrame])
 def test_predict_granularity_false_requires_granularity_prediction_column_name(df_factory):
-    data = df_factory(
+    df_factory(
         {
             "performance": [0.2, 0.8],
             "target": [1.0, 0.0],
@@ -255,6 +254,3 @@ def test_predict_granularity_false_requires_granularity_prediction_column_name(d
             granularity_prediction_column_name=None,
             predict_granularity=False,
         )
-
-
-

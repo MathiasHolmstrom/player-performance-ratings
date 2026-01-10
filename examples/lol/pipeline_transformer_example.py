@@ -2,7 +2,7 @@ from lightgbm import LGBMRegressor
 from sklearn.linear_model import LogisticRegression
 
 from examples import get_sub_sample_lol_data
-from spforge import ColumnNames, FeatureGeneratorPipeline, AutoPipeline
+from spforge import AutoPipeline, ColumnNames, FeatureGeneratorPipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
 from spforge.estimator import (
     NegativeBinomialEstimator,

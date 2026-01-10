@@ -8,11 +8,11 @@ import pytest
 from sklearn.linear_model import LinearRegression
 
 from spforge import ColumnNames
+from spforge.autopipeline import AutoPipeline
 from spforge.estimator import (
     NegativeBinomialEstimator,
     NormalDistributionPredictor,
 )
-from spforge.autopipeline import AutoPipeline
 
 
 # Mocking internal dependencies for the sake of the test environment
@@ -229,4 +229,3 @@ def test_normal_distribution_predictor_predict_proba_not_fitted():
 # ============================================================================
 # DistributionManagerPredictor Tests
 # ============================================================================
-

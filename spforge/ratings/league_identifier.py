@@ -119,7 +119,7 @@ class LeagueIdentifier:
 
     def _get_opponent_league(self, team_id: str, team_leagues: dict[str, str]) -> str:
 
-        for team_id2, league in team_leagues.items():
+        for team_id2, _league in team_leagues.items():
             if team_id2 != team_id:
                 return team_leagues[team_id2]
 

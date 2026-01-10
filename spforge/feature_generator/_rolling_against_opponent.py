@@ -5,7 +5,7 @@ import pandas as pd
 import polars as pl
 from narwhals.typing import IntoFrameT
 
-from spforge import ColumnNames
+from spforge.data_structures import ColumnNames
 from spforge.feature_generator._base import LagGenerator
 from spforge.feature_generator._rolling_window import RollingWindowTransformer
 from spforge.feature_generator._utils import (
@@ -15,7 +15,6 @@ from spforge.feature_generator._utils import (
     required_lag_column_names,
     transformation_validator,
 )
-
 
 
 class RollingAgainstOpponentTransformer(LagGenerator):

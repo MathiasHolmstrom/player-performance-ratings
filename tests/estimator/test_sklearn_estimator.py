@@ -6,13 +6,12 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import pytest
-
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from spforge.estimator import (
     GranularityEstimator,
-    SkLearnEnhancerEstimator,
     OrdinalClassifier,
+    SkLearnEnhancerEstimator,
 )
 
 
@@ -23,7 +22,6 @@ def create_dataframe(df_type, data: dict):
         return pl.DataFrame(data).lazy()
     else:
         return df_type(data)
-
 
 
 def test_lgbm_wrapper_initialization():
@@ -223,10 +221,10 @@ def test_lgbm_wrapper_predict_proba_raises_error():
     X_pred = pd.DataFrame(
         {"feature1": [4, 5], "date_col": pd.date_range("2024-01-04", periods=2, freq="D")}
     )
-    with pytest.raises(AttributeError, match="LinearRegression' object has no attribute 'predict_proba"):
+    with pytest.raises(
+        AttributeError, match="LinearRegression' object has no attribute 'predict_proba"
+    ):
         wrapper.predict_proba(X_pred)
-
-
 
 
 def test_granularity_estimator_predict_proba_no_data():

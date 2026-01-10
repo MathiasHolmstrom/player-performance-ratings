@@ -1,7 +1,10 @@
-from ._performance_manager import PerformanceManager, PerformanceWeightsManager
+from ._performance_manager import (
+    PerformanceManager as PerformanceManager,
+    PerformanceWeightsManager as PerformanceWeightsManager,
+)
 from ._performances_transformers import (
-    DiminishingValueTransformer,
-    MinMaxTransformer,
-    PartialStandardScaler,
-    SymmetricDistributionTransformer,
+    DiminishingValueTransformer as DiminishingValueTransformer,
+    MinMaxTransformer as MinMaxTransformer,
+    PartialStandardScaler as PartialStandardScaler,
+    SymmetricDistributionTransformer as SymmetricDistributionTransformer,
 )

@@ -1,7 +1,7 @@
 import copy
 import logging
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Literal
 
 import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
@@ -9,12 +9,10 @@ from sklearn.base import BaseEstimator, TransformerMixin
 
 from spforge.performance_transformers._performances_transformers import (
     MinMaxTransformer,
+    NarwhalsFeatureTransformer,
     PartialStandardScaler,
-    SymmetricDistributionTransformer, NarwhalsFeatureTransformer,
+    SymmetricDistributionTransformer,
 )
-
-
-
 
 
 @dataclass
@@ -30,7 +28,9 @@ class ColumnWeight:
             raise ValueError("Weight must be less than 1")
 
 
-TransformerName = Literal["partial_standard_scaler", "symmetric", "min_max", "partial_standard_scaler_mean0.5"]
+TransformerName = Literal[
+    "partial_standard_scaler", "symmetric", "min_max", "partial_standard_scaler_mean0.5"
+]
 
 
 def create_performance_scalers_transformers(
@@ -87,7 +87,11 @@ class PerformanceManager(BaseEstimator, TransformerMixin):
     ):
         self.features = features
         self.prefix = prefix
-        self.transformer_names = transformer_names or ["symmetric", "partial_standard_scaler", "min_max"]
+        self.transformer_names = transformer_names or [
+            "symmetric",
+            "partial_standard_scaler",
+            "min_max",
+        ]
         self.custom_transformers = custom_transformers or []
         self.original_transformers = [copy.deepcopy(p) for p in self.custom_transformers]
         self.performance_column = performance_column
@@ -153,7 +157,9 @@ class PerformanceWeightsManager(PerformanceManager):
         self,
         weights: list[ColumnWeight],
         custom_transformers: list[NarwhalsFeatureTransformer] | None = None,
-        transformer_names: list[Literal["partial_standard_scaler", "symmetric", "min_max"]] | None = None,
+        transformer_names: (
+            list[Literal["partial_standard_scaler", "symmetric", "min_max"]] | None
+        ) = None,
         max_value: float = 1.02,
         min_value: float = -0.02,
         performance_column: str = "weighted_performance",
@@ -190,7 +196,7 @@ class PerformanceWeightsManager(PerformanceManager):
         if self.transformers:
             max_idx = len(self.transformers) - 1
             column_weighs_mapping = {
-                self.performance_column: self.transformers[max_idx].features_out[idx]
+                self.performance_column: self.transformers[max_idx].features_out[idx]  # noqa: B035
                 for idx, _ in enumerate(self.weights)
             }
         else:

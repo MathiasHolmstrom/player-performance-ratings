@@ -1,5 +1,9 @@
 from ._distribution import (
-    NegativeBinomialEstimator,
-    NormalDistributionPredictor,
+    NegativeBinomialEstimator as NegativeBinomialEstimator,
+    NormalDistributionPredictor as NormalDistributionPredictor,
 )
-from .sklearn_estimator import GranularityEstimator, SkLearnEnhancerEstimator, OrdinalClassifier
+from .sklearn_estimator import (
+    GranularityEstimator as GranularityEstimator,
+    OrdinalClassifier as OrdinalClassifier,
+    SkLearnEnhancerEstimator as SkLearnEnhancerEstimator,
+)

@@ -3,9 +3,8 @@ from itertools import chain
 import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
 
-from spforge import ColumnNames
 from spforge.base_feature_generator import FeatureGenerator
-
+from spforge.data_structures import ColumnNames
 
 
 class FeatureGeneratorPipeline(FeatureGenerator):
