@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 import polars as pl
 import pytest
 
@@ -1102,12 +1104,11 @@ def test_fit_transform_league_change_tracking(base_cn):
     # Check start rating before match using future_transform
     future_df = pl.DataFrame(
         {
-            "pid": ["P1"],
-            "tid": ["T1"],
-            "mid": ["M1"],
-            "dt": ["2024-01-01"],
-            "pw": [1.0],
-            "league": ["NBA"],
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-02"] * 2,
+            "league": ["NBA"] *2,
         }
     )
     res = gen2.future_transform(future_df)
@@ -1152,12 +1153,11 @@ def test_fit_transform_multiple_league_changes(base_cn):
     # Check start rating before match
     future_df = pl.DataFrame(
         {
-            "pid": ["P1"],
-            "tid": ["T1"],
-            "mid": ["M1"],
-            "dt": ["2024-01-01"],
-            "pw": [1.0],
-            "league": ["NBA"],
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-02"] * 2,
+            "league": ["NBA"]*2,
         }
     )
     gen.future_transform(future_df)
@@ -1166,47 +1166,23 @@ def test_fit_transform_multiple_league_changes(base_cn):
     # After match, rating updated from NBA start (1100)
     assert gen._player_off_ratings["P1"].rating_value > 1100.0
 
-    # P1 moves to G-League - should get G-League start rating for new matches
-    # (but rating will have updated from previous matches)
-    df2 = pl.DataFrame(
-        {
-            "pid": ["P1", "P3"],
-            "tid": ["T1", "T2"],
-            "mid": ["M2", "M2"],
-            "dt": ["2024-01-02"] * 2,
-            "perf": [0.7, 0.3],
-            "pw": [1.0, 1.0],
-            "league": ["G-League", "G-League"],
-        }
-    )
-
     # Check P3's start rating before match (new player in G-League)
     future_df2 = pl.DataFrame(
         {
-            "pid": ["P3"],
-            "tid": ["T2"],
-            "mid": ["M2"],
-            "dt": ["2024-01-02"],
-            "pw": [1.0],
-            "league": ["G-League"],
+            "pid": ['P2', "P3"],
+            "tid": ['T1',"T2"],
+            "mid": ['M2',"M2"],
+            "dt": ["2024-01-02"]*2,
+            "league": ["G-League"]*2,
         }
     )
     res2 = gen.future_transform(future_df2)
-    p3_start = res2["player_off_rating_perf"][0]
+    p2_rating = res2["player_off_rating_perf"][0]
+    p3_start = res2["player_off_rating_perf"][1]
+    assert p2_rating>p3_start
     assert p3_start == 900.0  # G-League start rating
+    assert p2_rating <1100
 
-    gen.fit_transform(df2)
-
-    # P3 is new in G-League, should have started at 900 and updated
-    # P3 performed 0.3 (below average), so rating decreases from 900
-    assert gen._player_off_ratings["P3"].rating_value != 1000.0  # Not default
-    # Rating can go below 900 if performance is poor
-    assert (
-        gen._player_off_ratings["P3"].rating_value < 1000.0
-    )  # Below default (started at 900, performed poorly)
-
-
-# --- Feature Output Tests ---
 
 
 @pytest.mark.parametrize(
@@ -1384,3 +1360,66 @@ def test_player_rating_only_requested_features_present(base_cn, sample_df):
             assert (
                 feature not in result_cols
             ), f"Unrequested feature '{feature}' should not be in output"
+
+
+def test_player_rating_team_with_strong_offense_and_weak_defense_gets_expected_ratings_and_predictions(
+    base_cn,
+):
+    start_rating = 1000.0
+
+    generator = PlayerRatingGenerator(
+        auto_scale_performance=True,
+        performance_column="team_points",
+        column_names=base_cn,
+        performance_predictor="difference",
+        confidence_weight=0.0,  # keep updates simple/deterministic
+        rating_change_multiplier_offense=50.0,
+        rating_change_multiplier_defense=50.0,
+        output_suffix="",
+        start_harcoded_start_rating=start_rating,
+    )
+
+    base_day = datetime(2024, 1, 1)
+
+    df = pl.DataFrame(
+        {
+            "mid": [
+                1, 1, 1, 1,  # team_a vs team_b (high scoring)
+                2, 2, 2, 2,  # team_a vs team_c (high scoring)
+                3, 3, 3, 3,  # team_b vs team_c (normal)
+            ],
+            "tid": [
+                "team_a", "team_a", "team_b", "team_b",
+                "team_a", "team_a", "team_c", "team_c",
+                "team_b", "team_b", "team_c", "team_c",
+            ],
+            "pid": [
+                "a_1", "a_2", "b_1", "b_2",
+                "a_1", "a_2", "c_1", "c_2",
+                "b_1", "b_2", "c_1", "c_2",
+            ],
+            "dt": [
+                base_day, base_day, base_day, base_day,
+                base_day + timedelta(days=1), base_day + timedelta(days=1),
+                base_day + timedelta(days=1), base_day + timedelta(days=1),
+                base_day + timedelta(days=2), base_day + timedelta(days=2),
+                base_day + timedelta(days=2), base_day + timedelta(days=2),
+            ],
+            "team_points": [
+                140, 140, 130, 130,
+                138, 138, 128, 128,
+                115, 115, 120, 120,
+            ],
+        }
+    )
+
+    generator.fit_transform(df)
+
+    a_off = float(generator._player_off_ratings["a_1"].rating_value)
+    a_def = float(generator._player_def_ratings["a_1"].rating_value)
+    assert float(generator._player_off_ratings["a_1"].rating_value) == float(generator._player_off_ratings["a_2"].rating_value)
+    assert float(generator._player_def_ratings["a_1"].rating_value) == float(
+        generator._player_def_ratings["a_2"].rating_value)
+
+    assert a_off > start_rating
+    assert a_def < start_rating

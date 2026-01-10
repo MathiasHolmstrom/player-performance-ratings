@@ -14,7 +14,7 @@ from spforge.performance_transformers._performances_transformers import (
     GroupByTransformer,
     SklearnEstimatorImputer,
 )
-from spforge.pipeline import Pipeline
+from spforge.autopipeline import AutoPipeline
 from spforge.transformers import RatioEstimatorTransformer
 
 dfs = [

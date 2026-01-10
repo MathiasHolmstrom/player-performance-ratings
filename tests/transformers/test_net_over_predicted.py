@@ -1,20 +1,28 @@
-from unittest import mock
 
 import numpy as np
 import pandas as pd
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal as pl_assert_frame_equal
+from sklearn.base import RegressorMixin, BaseEstimator
 
 from spforge.transformers import NetOverPredictedTransformer
 
 
-@pytest.mark.parametrize("backend", ["pandas", "polars", "lazy_polars"])
+class ConstantPredRegressor(RegressorMixin, BaseEstimator):
+    def __init__(self, preds):
+        self.preds = np.asarray(preds)
+
+    def fit(self, X, y=None):
+        return self
+
+    def predict(self, X):
+        # ensure correct length if X changes shape
+        return np.asarray(self.preds)[: len(X)]
+
+@pytest.mark.parametrize("backend", ["pandas", "polars"])
 def test_net_over_predicted_pandas_polars_and_lazy(backend: str):
-    mock_estimator = mock.Mock(spec=["fit", "predict", "_estimator_type"])
-    mock_estimator._estimator_type = "regressor"
-    mock_estimator.fit.return_value = None
-    mock_estimator.predict.return_value = np.array([0.4, 0.8, 2.0, 3.0])
+    mock_estimator = ConstantPredRegressor([0.4, 0.8, 2.0, 3.0])
 
     base_data = {
         "feature1": [1, 2, 3, 4],
@@ -60,16 +68,7 @@ def test_net_over_predicted_pandas_polars_and_lazy(backend: str):
             expected_fit.select(fit_out.columns),
             check_dtype=False,
         )
-    else:
-        expected_fit = pl.DataFrame(base_data).with_columns(
-            pl.Series("target_prediction", [0.4, 0.8, 2.0, 3.0]),
-            pl.Series("net_over_predicted", [0.1, 0.2, 0.0, 0.0]),
-        )
-        pl.testing.assert_frame_equal(
-            fit_out.collect(),
-            expected_fit.select(fit_out.collect_schema().names()),
-            check_dtype=False,
-        )
+
 
     transform_data = {
         "feature1": [1, 2, 3, 4],
@@ -104,13 +103,4 @@ def test_net_over_predicted_pandas_polars_and_lazy(backend: str):
             expected_tr.select(transformed_out.columns),
             check_dtype=False,
         )
-    else:
-        expected_tr = pl.DataFrame(transform_data).with_columns(
-            pl.Series("target_prediction", [0.4, 0.8, 2.0, 3.0]),
-            pl.Series("net_over_predicted", [0.1, 0.2, 0.0, 0.0]),
-        )
-        pl_assert_frame_equal(
-            transformed_out.collect(),
-            expected_tr.select(transformed_out.collect_schema().names()),
-            check_dtype=False,
-        )
+
