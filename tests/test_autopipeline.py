@@ -1,3 +1,5 @@
+import pickle
+
 import narwhals as nw
 import numpy as np
 import pandas as pd
@@ -5,6 +7,7 @@ import polars as pl
 import pytest
 from narwhals._native import IntoFrameT
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.dummy import DummyRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from spforge import AutoPipeline
@@ -535,3 +538,21 @@ def test_final_sklearn_enhancer_estimator_gets_expected_feature_columns(frame):
     assert model.estimator.fit_X_type is pd.DataFrame
     et = _fitted_estimator_transformer(model)
     assert et.estimator_.estimator_.fit_columns == ["num1", "num2", "location"]
+
+def test_autopipeline_is_picklable_after_fit():
+    df = pd.DataFrame(
+        {
+            "x": [1.0, 2.0, 3.0, 4.0],
+        }
+    )
+    y = pd.Series([1.0, 2.0, 3.0, 4.0], name="y")
+
+    model = AutoPipeline(
+        estimator=DummyRegressor(),
+        feature_names=["x"],
+        categorical_handling="ordinal",
+    )
+
+    model.fit(df, y)
+
+    pickle.dumps(model)
