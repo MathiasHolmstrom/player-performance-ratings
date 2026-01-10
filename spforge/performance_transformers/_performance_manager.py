@@ -96,6 +96,7 @@ class PerformanceManager(BaseEstimator, TransformerMixin):
         ]
         self.custom_transformers = custom_transformers or []
         self.original_transformers = [copy.deepcopy(p) for p in self.custom_transformers]
+        self.ori_performance_column = performance_column
         self.performance_column = self.prefix + performance_column
         self.min_value = min_value
         self.max_value = max_value

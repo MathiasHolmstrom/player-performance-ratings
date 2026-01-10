@@ -107,7 +107,7 @@ class MatchKFoldCrossValidator:
 
     @nw.narwhalify
     def generate_validation_df(
-        self, df: IntoFrameT, add_trainining_predictions: bool = False
+        self, df: IntoFrameT, add_training_predictions: bool = False
     ) -> IntoFrameT:
         df = df.sort([self.date_column_name, self.match_id_column_name])
 
@@ -151,7 +151,7 @@ class MatchKFoldCrossValidator:
             est = copy.deepcopy(self.estimator)
             self._fit_estimator(est, train_df)
 
-            if add_trainining_predictions and not added_train_preds:
+            if add_training_predictions and not added_train_preds:
                 train_pred_df = self._predict_smart(est, train_df).with_columns(
                     nw.lit(0).alias("is_validation")
                 )

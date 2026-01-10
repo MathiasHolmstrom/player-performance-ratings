@@ -107,7 +107,7 @@ def test_nba_player_points(dataframe_type):
         features=game_winner_pipeline.feature_names + game_winner_pipeline.context_feature_names,
     )
     pre_row_count = len(df)
-    df = cross_validator_game_winnner.generate_validation_df(df=df, add_trainining_predictions=True)
+    df = cross_validator_game_winnner.generate_validation_df(df=df, add_training_predictions=True)
     assert pre_row_count == len(df)
     assert cross_validator_game_winnner.prediction_column_name in df.columns
     game_winner_score = SklearnScorer(
@@ -177,7 +177,7 @@ def test_nba_player_points(dataframe_type):
         target_column="points",
         features=pipeline.context_feature_names + pipeline.feature_names,
     )
-    validation_df = cross_validator.generate_validation_df(df=df, add_trainining_predictions=True)
+    validation_df = cross_validator.generate_validation_df(df=df, add_training_predictions=True)
     if isinstance(validation_df, pl.DataFrame):
         validation_df = validation_df.to_pandas()
     high_player_rating_rows = validation_df[
