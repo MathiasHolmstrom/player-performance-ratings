@@ -407,6 +407,35 @@ def test_sklearn_scorer_multiclass_list_predictions(df_type):
 
 
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_sklearn_scorer_log_loss_pads_labels(df_type):
+    """SklearnScorer pads probabilities when labels are passed but y_true has extra values."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [[0.7, 0.2, 0.1], [0.1, 0.2, 0.7], [0.2, 0.5, 0.3]],
+            "target": [0, 3, 1],
+        },
+    )
+    labels = [0, 1, 2]
+    scorer = SklearnScorer(
+        pred_column="pred",
+        scorer_function=log_loss,
+        target="target",
+        params={"labels": labels},
+    )
+    score = scorer.score(df)
+    assert isinstance(score, float)
+
+    eps = 1e-4
+    padded = []
+    for row in df["pred"].to_list():
+        total = sum(row) + eps
+        padded.append([p / total for p in row] + [eps / total])
+    expected = log_loss([0, 3, 1], padded, labels=[0, 1, 2, 3])
+    assert abs(score - expected) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
 def test_sklearn_scorer_with_granularity(df_type):
     """SklearnScorer with granularity grouping"""
     df = create_dataframe(
