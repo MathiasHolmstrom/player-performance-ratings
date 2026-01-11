@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spforge"
-version = "0.6.7"
+version = "0.6.8"
 description = "A flexible framework for generating features, ratings, and building machine learning or other models for training and inference on sports data."
 readme = "README.md"
 requires-python = ">=3.11"
