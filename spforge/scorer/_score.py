@@ -52,32 +52,24 @@ def _naive_point_predictions_for_df(
     if not naive_granularity:
         return _naive_point_predictions_from_targets(df_nw[target_column].to_list())
 
-    try:
-        naive_df = df_nw.with_columns(
-            nw.col(target_column).mean().over(naive_granularity).alias("__naive__")
+    targets = df_nw[target_column].to_list()
+    granularity_values = df_nw.select(naive_granularity).to_dict(as_series=False)
+    if len(naive_granularity) == 1:
+        group_keys = granularity_values[naive_granularity[0]]
+    else:
+        group_keys = list(
+            zip(*[granularity_values[col] for col in naive_granularity], strict=False)
         )
-        return naive_df["__naive__"].to_list()
-    except Exception:
-        df_native = df_nw.to_native()
-        if isinstance(df_native, pd.DataFrame):
-            def _mode(s):
-                m = s.mode()
-                return m.iloc[0] if not m.empty else None
 
-            naive_series = df_native.groupby(naive_granularity, dropna=False)[
-                target_column
-            ].transform(_mode)
-            return naive_series.tolist()
-        if isinstance(df_native, pl.DataFrame):
-            naive_df = df_native.with_columns(
-                pl.col(target_column)
-                .mode()
-                .over(naive_granularity)
-                .list.first()
-                .alias("__naive__")
-            )
-            return naive_df["__naive__"].to_list()
-        return _naive_point_predictions_from_targets(df_native[target_column].to_list())
+    grouped_targets: dict[Any, list[Any]] = {}
+    for key, target in zip(group_keys, targets, strict=False):
+        grouped_targets.setdefault(key, []).append(target)
+
+    baseline_by_group = {
+        key: (_naive_point_predictions_from_targets(values) or [None])[0]
+        for key, values in grouped_targets.items()
+    }
+    return [baseline_by_group[key] for key in group_keys]
 
 
 def _naive_probability_predictions_for_df(
@@ -86,43 +78,29 @@ def _naive_probability_predictions_for_df(
     labels: list[Any] | None,
     naive_granularity: list[str] | None,
 ) -> list[list[float]]:
+    df_nw = nw.from_native(df)
     if not naive_granularity:
-        probs = _empirical_probabilities_from_targets(df[target_column].to_list(), labels)
-        return [probs] * len(df)
+        probs = _empirical_probabilities_from_targets(df_nw[target_column].to_list(), labels)
+        return [probs] * len(df_nw)
 
-    df_native = df.to_native() if hasattr(df, "to_native") else df
-    if isinstance(df_native, pd.DataFrame):
-        grouped = (
-            df_native.groupby(naive_granularity, dropna=False)[target_column]
-            .apply(list)
-            .to_dict()
+    targets = df_nw[target_column].to_list()
+    granularity_values = df_nw.select(naive_granularity).to_dict(as_series=False)
+    if len(naive_granularity) == 1:
+        group_keys = granularity_values[naive_granularity[0]]
+    else:
+        group_keys = list(
+            zip(*[granularity_values[col] for col in naive_granularity], strict=False)
         )
-        if len(naive_granularity) == 1:
-            keys = df_native[naive_granularity[0]].tolist()
-        else:
-            keys = [tuple(row) for row in df_native[naive_granularity].itertuples(index=False)]
-        return [
-            _empirical_probabilities_from_targets(grouped[key], labels) for key in keys
-        ]
 
-    if isinstance(df_native, pl.DataFrame):
-        grouped = df_native.group_by(naive_granularity).agg(
-            pl.col(target_column).alias("__targets__")
-        )
-        grouped_map = {}
-        for row in grouped.iter_rows():
-            key = row[0] if len(naive_granularity) == 1 else tuple(row[:-1])
-            grouped_map[key] = _empirical_probabilities_from_targets(row[-1], labels)
+    grouped_targets: dict[Any, list[Any]] = {}
+    for key, target in zip(group_keys, targets, strict=False):
+        grouped_targets.setdefault(key, []).append(target)
 
-        if len(naive_granularity) == 1:
-            keys = df_native[naive_granularity[0]].to_list()
-        else:
-            keys = list(df_native.select(naive_granularity).iter_rows())
-
-        return [grouped_map[key] for key in keys]
-
-    probs = _empirical_probabilities_from_targets(df_native[target_column].to_list(), labels)
-    return [probs] * len(df_native)
+    probs_by_group = {
+        key: _empirical_probabilities_from_targets(values, labels)
+        for key, values in grouped_targets.items()
+    }
+    return [probs_by_group[key] for key in group_keys]
 
 
 class Operator(Enum):
