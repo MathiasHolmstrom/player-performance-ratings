@@ -11,10 +11,24 @@ Sklearn-compatible transformers that wrap estimators, perform column operations,
 - Transformers convert to pandas internally for estimator fitting (`.to_pandas()`).
 
 ## Where things live
+- `_base.py`: `PredictorTransformer` - base class for predictor transformers used in AutoPipeline.
 - `_predictor.py`: `EstimatorTransformer` - fits estimator, outputs predictions.
 - `_operator.py`: `OperatorTransformer` - arithmetic between columns.
 - `_net_over_predicted.py`: `NetOverPredictedTransformer` - residual computation.
 - `_team_ratio_predictor.py`: `RatioEstimatorTransformer` - row vs granularity ratio.
+
+## Base PredictorTransformer class
+
+All predictor transformers (EstimatorTransformer, RatioEstimatorTransformer, NetOverPredictedTransformer) inherit from `PredictorTransformer`.
+
+**Key property:**
+- `context_features`: Returns list of columns needed by the transformer but NOT used in the estimator's fit()
+  - EstimatorTransformer: Returns date_column if estimator is SkLearnEnhancerEstimator
+  - RatioEstimatorTransformer: Returns granularity columns
+  - NetOverPredictedTransformer: Returns target_name
+  - OperatorTransformer: Not a predictor transformer (doesn't inherit from base)
+
+AutoPipeline auto-introspects `context_features` from predictor_transformers to determine which columns to pass through.
 
 ## Transformer types
 

@@ -31,12 +31,19 @@ Time-series aware cross-validation for sports predictions. Splits data chronolog
 5. For each fold: train on all prior matches, validate on chunk
 
 ## Feature selection (`_get_features`)
-If `features` is None, auto-infers by excluding:
-- `target_column`, `date_column_name`, `match_id_column_name`, `prediction_column_name`, `__match_num`
 
-**Pitfall**: If estimator needs context columns (e.g., `AutoPipeline` needs `context_feature_names`), you MUST pass `features` explicitly:
+If `features` is None:
+1. If estimator has `required_features` property (e.g., AutoPipeline), use it automatically
+2. Otherwise, auto-infer by excluding: target, date, match_id, prediction, __match_num
+
+**Before (verbose):**
 ```python
 features=pipeline.context_feature_names + pipeline.feature_names
+```
+
+**After (clean):**
+```python
+features=pipeline.required_features  # Or omit - auto-detected!
 ```
 
 ## Main methods
@@ -44,7 +51,7 @@ features=pipeline.context_feature_names + pipeline.feature_names
 - `cross_validation_score(validation_df, scorer)`: compute score using a `BaseScorer`.
 
 ## Common pitfalls
-- Not passing `features` when using `AutoPipeline` (causes "Missing required feature columns" error).
+- AutoPipeline now auto-provides features via `required_features` property (no manual specification needed).
 - Empty training/validation splits (check `min_validation_date` isn't too early/late).
 - Estimator not deep-copyable (must support `copy.deepcopy()`).
 - Forgetting `is_validation` filter when computing final metrics and `add_training_predictions` is set to True

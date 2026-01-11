@@ -23,6 +23,7 @@ Supports pandas/polars via narwhals.
 - Any class or Enum intended to be instantiated or referenced by users MUST be importable from the package’s `__init__.py`.
 - Users should not need to import from private modules (`_*.py`).
 - Update version when in toml pushing a new change.
+- When working on a new task. Always create a new branch.
 
 
 ## Core classes (high level)
@@ -37,8 +38,23 @@ Supports pandas/polars via narwhals.
 
 ### AutoPipeline
 Sklearn-compatible estimator pipeline with preprocessing + optional predictor_transformers.
+
+**Breaking change (v0.7.0):** `context_feature_names` and `context_predictor_transformer_feature_names` parameters have been **removed**. Context features are now auto-computed from predictor_transformers.
+
+**New property:**
+- `required_features`: All features needed by the pipeline (feature_names + context + granularity + filters)
+
+**Cross-validator usage:**
+```python
+cross_validator = MatchKFoldCrossValidator(
+    estimator=pipeline,
+    features=pipeline.required_features,  # Or omit entirely - auto-detected!
+    ...
+)
+```
+
 Key gotchas:
-- Provide `context_feature_names` for any columns needed by predictor_transformers but not the final estimator.
+- Context features are auto-computed from predictor_transformers' `context_features` property.
 - `categorical_handling="auto"` must be deterministic and covered by tests.
 - `native` categorical handling is for LightGBM (category dtype).
 

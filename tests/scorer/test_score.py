@@ -395,6 +395,22 @@ def test_sklearn_scorer_basic(df_type):
 
 
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_sklearn_scorer_compare_to_naive_point_estimates(df_type):
+    """SklearnScorer compares against naive baseline for point estimates."""
+    df = create_dataframe(df_type, {"pred": [0, 1, 0, 1], "target": [0, 1, 0, 1]})
+    scorer = SklearnScorer(
+        pred_column="pred",
+        scorer_function=mean_absolute_error,
+        target="target",
+        compare_to_naive=True,
+    )
+    score = scorer.score(df)
+    naive = mean_absolute_error([0, 1, 0, 1], [0.5, 0.5, 0.5, 0.5])
+    expected = naive - 0.0
+    assert abs(score - expected) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
 def test_sklearn_scorer_multiclass_list_predictions(df_type):
     """SklearnScorer with multiclass (list predictions)"""
     df = create_dataframe(
@@ -404,6 +420,29 @@ def test_sklearn_scorer_multiclass_list_predictions(df_type):
     score = scorer.score(df)
     assert isinstance(score, float)
     assert score > 0
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_sklearn_scorer_compare_to_naive_probabilities(df_type):
+    """SklearnScorer compares against naive baseline for probabilities."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [[0.9, 0.1], [0.1, 0.9], [0.8, 0.2], [0.2, 0.8]],
+            "target": [0, 1, 0, 1],
+        },
+    )
+    scorer = SklearnScorer(
+        pred_column="pred",
+        scorer_function=log_loss,
+        target="target",
+        compare_to_naive=True,
+    )
+    score = scorer.score(df)
+    naive_probs = [[0.5, 0.5]] * 4
+    naive = log_loss([0, 1, 0, 1], naive_probs)
+    expected = naive - log_loss([0, 1, 0, 1], df["pred"].to_list())
+    assert abs(score - expected) < 1e-10
 
 
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])

@@ -1,10 +1,12 @@
 from typing import Any
 
 import narwhals.stable.v2 as nw
-from sklearn.base import BaseEstimator, TransformerMixin, clone
+from sklearn.base import clone
+
+from spforge.transformers._base import PredictorTransformer
 
 
-class EstimatorTransformer(BaseEstimator, TransformerMixin):
+class EstimatorTransformer(PredictorTransformer):
     """
     Transformer that fits an estimator and appends its predictions as a new column.
     """
@@ -51,3 +53,22 @@ class EstimatorTransformer(BaseEstimator, TransformerMixin):
         if hasattr(target, "set_output"):
             target.set_output(transform=transform)
         return self
+
+    @property
+    def context_features(self) -> list[str]:
+        """Returns date_column if estimator is SkLearnEnhancerEstimator."""
+        context = []
+
+        # Check wrapped estimator (may be nested)
+        est = self.estimator
+        while hasattr(est, 'estimator'):
+            if hasattr(est, 'date_column') and est.date_column:
+                context.append(est.date_column)
+                return context
+            est = est.estimator
+
+        # Check top-level
+        if hasattr(self.estimator, 'date_column') and self.estimator.date_column:
+            context.append(self.estimator.date_column)
+
+        return context

@@ -2,10 +2,12 @@ from typing import Any
 
 import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
-from sklearn.base import BaseEstimator, TransformerMixin, is_regressor
+from sklearn.base import BaseEstimator, is_regressor
+
+from spforge.transformers._base import PredictorTransformer
 
 
-class NetOverPredictedTransformer(BaseEstimator, TransformerMixin):
+class NetOverPredictedTransformer(PredictorTransformer):
     def __init__(
         self,
         estimator: BaseEstimator | Any,
@@ -61,3 +63,8 @@ class NetOverPredictedTransformer(BaseEstimator, TransformerMixin):
 
     def get_feature_names_out(self, input_features=None) -> list[str]:
         return [self.net_over_predicted_col]
+
+    @property
+    def context_features(self) -> list[str]:
+        """Returns target column needed for residual computation."""
+        return [self.target_name] if self.target_name else []

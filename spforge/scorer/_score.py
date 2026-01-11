@@ -2,6 +2,7 @@ import datetime
 import logging
 import math
 from abc import ABC, abstractmethod
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
@@ -393,6 +394,7 @@ class SklearnScorer(BaseScorer):
         granularity: list[str] | None = None,
         filters: list[Filter] | None = None,
         params: dict[str, Any] = None,
+        compare_to_naive: bool = False,
     ):
         """
         :param pred_column: The column name of the predictions
@@ -416,6 +418,7 @@ class SklearnScorer(BaseScorer):
         self.pred_column_name = pred_column
         self.scorer_function = scorer_function
         self.params = params or {}
+        self.compare_to_naive = compare_to_naive
 
     def _pad_probabilities(
         self, y_true: list[Any], probabilities: list[list[float]]
@@ -445,6 +448,49 @@ class SklearnScorer(BaseScorer):
         new_params["labels"] = labels_list + extra_labels
         return padded, new_params
 
+    def _naive_point_predictions(self, y_true: list[Any]) -> list[Any]:
+        if not y_true:
+            return []
+        try:
+            values = np.asarray(y_true, dtype=np.float64)
+            if np.all(np.isfinite(values)):
+                baseline = float(values.mean())
+                return [baseline] * len(y_true)
+        except (TypeError, ValueError):
+            pass
+        baseline = Counter(y_true).most_common(1)[0][0]
+        return [baseline] * len(y_true)
+
+    def _empirical_label_probabilities(
+        self, y_true: list[Any], labels: list[Any] | None
+    ) -> list[list[float]]:
+        if not y_true:
+            return []
+        if labels is None:
+            labels = sorted(set(y_true))
+        counts = Counter(y_true)
+        total = len(y_true)
+        probs = [counts.get(label, 0) / total for label in labels]
+        return [probs] * total
+
+    def _score_group(self, y_true: list[Any], preds: list[Any], is_probabilistic: bool) -> float:
+        if is_probabilistic:
+            probs = [item for item in preds]
+            probs, params = self._pad_probabilities(y_true, probs)
+            score = self.scorer_function(y_true, probs, **params)
+            if not self.compare_to_naive:
+                return float(score)
+            naive_probs = self._empirical_label_probabilities(y_true, params.get("labels"))
+            naive_score = self.scorer_function(y_true, naive_probs, **params)
+            return float(naive_score - score)
+
+        score = self.scorer_function(y_true, preds, **self.params)
+        if not self.compare_to_naive:
+            return float(score)
+        naive_preds = self._naive_point_predictions(y_true)
+        naive_score = self.scorer_function(y_true, naive_preds, **self.params)
+        return float(naive_score - score)
+
     @narwhals.narwhalify
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
         df = nw.from_native(apply_filters(df=df, filters=self.filters))
@@ -472,34 +518,17 @@ class SklearnScorer(BaseScorer):
                     mask = col_mask if mask is None else (mask & col_mask)
                 gran_df = df.filter(mask)
 
-                if len(gran_df) > 0 and isinstance(
-                    gran_df[self.pred_column_name].to_list()[0], list
-                ):
-                    y_true = gran_df[self.target].to_list()
-                    probs = [item for item in gran_df[self.pred_column_name].to_list()]
-                    probs, params = self._pad_probabilities(y_true, probs)
-                    score = self.scorer_function(y_true, probs, **params)
-                else:
-                    score = self.scorer_function(
-                        gran_df[self.target].to_list(),
-                        gran_df[self.pred_column_name].to_list(),
-                        **self.params,
-                    )
-                results[gran_tuple] = float(score)
+                preds = gran_df[self.pred_column_name].to_list()
+                is_probabilistic = len(preds) > 0 and isinstance(preds[0], list)
+                y_true = gran_df[self.target].to_list()
+                results[gran_tuple] = self._score_group(y_true, preds, is_probabilistic)
 
             return results
 
-        if len(df) > 0 and isinstance(df[self.pred_column_name].to_list()[0], list):
-            y_true = df[self.target].to_list()
-            probs = [item for item in df[self.pred_column_name].to_list()]
-            probs, params = self._pad_probabilities(y_true, probs)
-            return float(self.scorer_function(y_true, probs, **params))
-
-        return float(
-            self.scorer_function(
-                df[self.target].to_list(), df[self.pred_column_name].to_list(), **self.params
-            )
-        )
+        preds = df[self.pred_column_name].to_list()
+        is_probabilistic = len(preds) > 0 and isinstance(preds[0], list)
+        y_true = df[self.target].to_list()
+        return self._score_group(y_true, preds, is_probabilistic)
 
 
 class ProbabilisticMeanBias(BaseScorer):
