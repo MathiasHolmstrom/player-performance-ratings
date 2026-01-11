@@ -426,7 +426,8 @@ class MeanBiasScorer(BaseScorer):
                 # Calculate score for this group
                 score = self._mean_bias_score(gran_df)
                 if self.compare_to_naive:
-                    score = -score
+                    naive_score = 0.0
+                    score = naive_score - score
                 results[gran_tuple] = score
 
             return results
@@ -434,7 +435,8 @@ class MeanBiasScorer(BaseScorer):
         # Single score calculation
         score = self._mean_bias_score(df)
         if self.compare_to_naive:
-            return float(-score)
+            naive_score = 0.0
+            return float(naive_score - score)
         return float(score)
 
 
