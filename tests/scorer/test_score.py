@@ -299,6 +299,31 @@ def test_pwmse_with_validation_column(df_type):
     # Should only use rows where valid == 1
 
 
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_pwmse_compare_to_naive(df_type):
+    """PWMSE compares against naive empirical distribution."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [[0.8, 0.2], [0.2, 0.8], [0.7, 0.3], [0.1, 0.9]],
+            "target": [0, 1, 0, 1],
+        },
+    )
+    scorer = PWMSE(pred_column="pred", target="target", labels=[0, 1], compare_to_naive=True)
+    score = scorer.score(df)
+
+    labels = np.asarray([0, 1], dtype=np.float64)
+    targets = np.asarray([0, 1, 0, 1], dtype=np.float64)
+    preds = np.asarray(df["pred"].to_list(), dtype=np.float64)
+    diffs_sqd = (labels[None, :] - targets[:, None]) ** 2
+    actual = float((diffs_sqd * preds).sum(axis=1).mean())
+    naive_probs = np.asarray([0.5, 0.5], dtype=np.float64)
+    naive_preds = np.tile(naive_probs, (len(targets), 1))
+    naive = float((diffs_sqd * naive_preds).sum(axis=1).mean())
+    expected = naive - actual
+    assert abs(score - expected) < 1e-10
+
+
 # ============================================================================
 # D. MeanBiasScorer Tests
 # ============================================================================
@@ -395,6 +420,32 @@ def test_sklearn_scorer_basic(df_type):
 
 
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_mean_bias_scorer_compare_to_naive(df_type):
+    """MeanBiasScorer compares against naive mean prediction baseline."""
+    df = create_dataframe(df_type, {"pred": [1.0, 2.0], "target": [1.0, 3.0]})
+    scorer = MeanBiasScorer(pred_column="pred", target="target", compare_to_naive=True)
+    score = scorer.score(df)
+    expected = 0.0 - ((1.0 - 1.0) + (2.0 - 3.0)) / 2
+    assert abs(score - expected) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_sklearn_scorer_compare_to_naive_point_estimates(df_type):
+    """SklearnScorer compares against naive baseline for point estimates."""
+    df = create_dataframe(df_type, {"pred": [0, 1, 0, 1], "target": [0, 1, 0, 1]})
+    scorer = SklearnScorer(
+        pred_column="pred",
+        scorer_function=mean_absolute_error,
+        target="target",
+        compare_to_naive=True,
+    )
+    score = scorer.score(df)
+    naive = mean_absolute_error([0, 1, 0, 1], [0.5, 0.5, 0.5, 0.5])
+    expected = naive - 0.0
+    assert abs(score - expected) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
 def test_sklearn_scorer_multiclass_list_predictions(df_type):
     """SklearnScorer with multiclass (list predictions)"""
     df = create_dataframe(
@@ -404,6 +455,29 @@ def test_sklearn_scorer_multiclass_list_predictions(df_type):
     score = scorer.score(df)
     assert isinstance(score, float)
     assert score > 0
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_sklearn_scorer_compare_to_naive_probabilities(df_type):
+    """SklearnScorer compares against naive baseline for probabilities."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [[0.9, 0.1], [0.1, 0.9], [0.8, 0.2], [0.2, 0.8]],
+            "target": [0, 1, 0, 1],
+        },
+    )
+    scorer = SklearnScorer(
+        pred_column="pred",
+        scorer_function=log_loss,
+        target="target",
+        compare_to_naive=True,
+    )
+    score = scorer.score(df)
+    naive_probs = [[0.5, 0.5]] * 4
+    naive = log_loss([0, 1, 0, 1], naive_probs)
+    expected = naive - log_loss([0, 1, 0, 1], df["pred"].to_list())
+    assert abs(score - expected) < 1e-10
 
 
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
@@ -634,7 +708,56 @@ def test_ordinal_loss_scorer_basic_list(df_type):
     scorer = OrdinalLossScorer(pred_column="pred", target="target", classes=[0, 1, 2])
     score = scorer.score(df)
     assert isinstance(score, float)
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame])
+def test_probabilistic_mean_bias_compare_to_naive(df_type):
+    """ProbabilisticMeanBias compares against naive empirical distribution."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [[0.6, 0.3, 0.1], [0.2, 0.5, 0.3], [0.1, 0.2, 0.7]],
+            "__target": [0, 1, 2],
+            "classes": [[0, 1, 2], [0, 1, 2], [0, 1, 2]],
+        },
+    )
+    scorer = ProbabilisticMeanBias(
+        pred_column="pred", target="__target", class_column_name="classes", compare_to_naive=True
+    )
+    score = scorer.score(df)
+
+    naive_probs = [1 / 3, 1 / 3, 1 / 3]
+    naive_df = df.copy()
+    naive_df["pred"] = [naive_probs] * len(naive_df)
+    baseline = ProbabilisticMeanBias(
+        pred_column="pred", target="__target", class_column_name="classes"
+    )
+    expected = baseline.score(naive_df) - baseline.score(df)
+    assert abs(score - expected) < 1e-10
     assert score >= 0
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_ordinal_loss_scorer_compare_to_naive(df_type):
+    """OrdinalLossScorer compares against naive empirical distribution."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [[0.7, 0.2, 0.1], [0.1, 0.7, 0.2], [0.2, 0.3, 0.5]],
+            "target": [0, 1, 2],
+        },
+    )
+    classes = [0, 1, 2]
+    scorer = OrdinalLossScorer(
+        pred_column="pred", target="target", classes=classes, compare_to_naive=True
+    )
+    score = scorer.score(df)
+
+    naive_probs = [1 / 3, 1 / 3, 1 / 3]
+    naive_df = create_dataframe(df_type, {"pred": [naive_probs] * 3, "target": [0, 1, 2]})
+    baseline = OrdinalLossScorer(pred_column="pred", target="target", classes=classes)
+    expected = baseline.score(naive_df) - baseline.score(df)
+    assert abs(score - expected) < 1e-10
 
 
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
@@ -1018,3 +1141,37 @@ def test_threshold_event_score_logloss_less_than_comparator():
 
     expected = float(log_loss(y, _clip01(p), labels=[0.0, 1.0]))
     assert got == pytest.approx(expected, rel=0, abs=1e-12)
+
+
+def test_threshold_event_score_compare_to_naive():
+    """ThresholdEventScorer compares against naive empirical distribution."""
+    df = pd.DataFrame(
+        {
+            "dist": [
+                [0.7, 0.2, 0.1],
+                [0.1, 0.7, 0.2],
+                [0.2, 0.3, 0.5],
+                [0.3, 0.4, 0.3],
+            ],
+            "line": [1.0, 1.0, 1.0, 1.0],
+            "outcome": [0, 1, 2, 1],
+        }
+    )
+    scorer = ThresholdEventScorer(
+        dist_column="dist",
+        threshold_column="line",
+        outcome_column="outcome",
+        compare_to_naive=True,
+    )
+    score = scorer.score(df)
+
+    naive_probs = [0.25, 0.5, 0.25]
+    naive_df = df.copy()
+    naive_df["dist"] = [naive_probs] * len(naive_df)
+    baseline = ThresholdEventScorer(
+        dist_column="dist",
+        threshold_column="line",
+        outcome_column="outcome",
+    )
+    expected = baseline.score(naive_df) - baseline.score(df)
+    assert abs(score - expected) < 1e-10
