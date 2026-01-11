@@ -7,6 +7,7 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from spforge import AutoPipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
+from spforge.estimator import SkLearnEnhancerEstimator
 
 
 @pytest.fixture
@@ -479,17 +480,13 @@ def test_generate_validation_df_add_training_predictions_pd_returns_pd_and_marks
 
     out = cv.generate_validation_df(df_pd_cv_reg, add_training_predictions=True)
 
-    # narwhalify should return the original type
     assert isinstance(out, pd.DataFrame)
 
-    # has required columns
     assert "pred" in out.columns
     assert "is_validation" in out.columns
 
-    # should cover ALL rows exactly once when add_trainining_predictions=True
     assert len(out) == len(df_pd_cv_reg)
 
-    # is_validation should be 0/1 and both should exist
     vals = set(out["is_validation"].tolist())
     assert vals == {0, 1}
 
@@ -523,3 +520,45 @@ def test_generate_validation_df_add_training_predictions_pl_roundtrip_type(
     assert "is_validation" in out.columns
     assert out.height == len(df_pd_cv_reg)
     assert set(out["is_validation"].to_list()) == {0, 1}
+
+def test_generate_validation_df_preserves_timezone():
+    n = 12
+    dates = pd.date_range("2024-01-01", periods=n, freq="D", tz="UTC")
+
+    df = pd.DataFrame(
+        {
+            "game_id": range(n),
+            "game_date": dates,
+            "x": np.arange(n, dtype=float),
+            "y": np.arange(n, dtype=float) + 1.0,
+        }
+    )
+
+    base_estimator = SkLearnEnhancerEstimator(
+        estimator=LinearRegression(),
+        date_column="game_date",
+    )
+
+    pipeline = AutoPipeline(
+        estimator=base_estimator,
+        feature_names=["x"],
+        context_feature_names=["game_date"],
+    )
+
+    cv = MatchKFoldCrossValidator(
+        prediction_column_name="pred",
+        target_column="y",
+        date_column_name="game_date",
+        match_id_column_name="game_id",
+        estimator=pipeline,
+        features=pipeline.feature_names + pipeline.context_feature_names,
+        n_splits=2,
+    )
+
+    out = cv.generate_validation_df(df)
+    if not isinstance(out, pd.DataFrame):
+        out = out.to_pandas()
+
+    assert out["game_date"].dt.tz is not None
+    assert str(out["game_date"].dt.tz) == "UTC"
+
