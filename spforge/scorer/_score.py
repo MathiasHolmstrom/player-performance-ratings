@@ -48,17 +48,18 @@ def _empirical_probabilities_from_targets(
 def _naive_point_predictions_for_df(
     df: IntoFrameT, target_column: str, naive_granularity: list[str] | None
 ) -> list[Any]:
+    df_nw = df if hasattr(df, "to_native") else nw.from_native(df)
     if not naive_granularity:
-        return _naive_point_predictions_from_targets(df[target_column].to_list())
+        return _naive_point_predictions_from_targets(df_nw[target_column].to_list())
 
-    df_native = df.to_native() if hasattr(df, "to_native") else df
-    if isinstance(df_native, pd.DataFrame):
-        series = df_native[target_column]
-        if pd.api.types.is_numeric_dtype(series):
-            naive_series = df_native.groupby(naive_granularity, dropna=False)[
-                target_column
-            ].transform("mean")
-        else:
+    try:
+        naive_df = df_nw.with_columns(
+            nw.col(target_column).mean().over(naive_granularity).alias("__naive__")
+        )
+        return naive_df["__naive__"].to_list()
+    except Exception:
+        df_native = df_nw.to_native()
+        if isinstance(df_native, pd.DataFrame):
             def _mode(s):
                 m = s.mode()
                 return m.iloc[0] if not m.empty else None
@@ -66,15 +67,8 @@ def _naive_point_predictions_for_df(
             naive_series = df_native.groupby(naive_granularity, dropna=False)[
                 target_column
             ].transform(_mode)
-        return naive_series.tolist()
-
-    if isinstance(df_native, pl.DataFrame):
-        dtype = df_native[target_column].dtype
-        if dtype.is_numeric():
-            naive_df = df_native.with_columns(
-                pl.col(target_column).mean().over(naive_granularity).alias("__naive__")
-            )
-        else:
+            return naive_series.tolist()
+        if isinstance(df_native, pl.DataFrame):
             naive_df = df_native.with_columns(
                 pl.col(target_column)
                 .mode()
@@ -82,9 +76,8 @@ def _naive_point_predictions_for_df(
                 .list.first()
                 .alias("__naive__")
             )
-        return naive_df["__naive__"].to_list()
-
-    return _naive_point_predictions_from_targets(df_native[target_column].to_list())
+            return naive_df["__naive__"].to_list()
+        return _naive_point_predictions_from_targets(df_native[target_column].to_list())
 
 
 def _naive_probability_predictions_for_df(
