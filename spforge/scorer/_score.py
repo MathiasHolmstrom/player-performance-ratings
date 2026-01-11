@@ -417,9 +417,36 @@ class SklearnScorer(BaseScorer):
         self.scorer_function = scorer_function
         self.params = params or {}
 
+    def _pad_probabilities(
+        self, y_true: list[Any], probabilities: list[list[float]]
+    ) -> tuple[list[list[float]], dict[str, Any]]:
+        labels = self.params.get("labels")
+        if not labels:
+            return probabilities, self.params
+
+        labels_list = list(labels)
+        labels_set = set(labels_list)
+        extra_labels = sorted({v for v in y_true if v not in labels_set})
+        if not extra_labels:
+            return probabilities, self.params
+
+        eps = 1e-4
+        pad_count = len(extra_labels)
+        padded = []
+        for row in probabilities:
+            row_list = list(row)
+            total = sum(row_list) + (eps * pad_count)
+            if total <= 0:
+                padded.append([1.0 / (len(row_list) + pad_count)] * (len(row_list) + pad_count))
+                continue
+            padded.append([p / total for p in row_list] + [eps / total] * pad_count)
+
+        new_params = dict(self.params)
+        new_params["labels"] = labels_list + extra_labels
+        return padded, new_params
+
     @narwhals.narwhalify
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
-
         df = nw.from_native(apply_filters(df=df, filters=self.filters))
 
         if self.aggregation_level:
@@ -448,10 +475,10 @@ class SklearnScorer(BaseScorer):
                 if len(gran_df) > 0 and isinstance(
                     gran_df[self.pred_column_name].to_list()[0], list
                 ):
-                    score = self.scorer_function(
-                        gran_df[self.target],
-                        [item for item in gran_df[self.pred_column_name].to_list()],
-                    )
+                    y_true = gran_df[self.target].to_list()
+                    probs = [item for item in gran_df[self.pred_column_name].to_list()]
+                    probs, params = self._pad_probabilities(y_true, probs)
+                    score = self.scorer_function(y_true, probs, **params)
                 else:
                     score = self.scorer_function(
                         gran_df[self.target].to_list(),
@@ -463,12 +490,10 @@ class SklearnScorer(BaseScorer):
             return results
 
         if len(df) > 0 and isinstance(df[self.pred_column_name].to_list()[0], list):
-            return float(
-                self.scorer_function(
-                    df[self.target],
-                    [item for item in df[self.pred_column_name].to_list()],
-                )
-            )
+            y_true = df[self.target].to_list()
+            probs = [item for item in df[self.pred_column_name].to_list()]
+            probs, params = self._pad_probabilities(y_true, probs)
+            return float(self.scorer_function(y_true, probs, **params))
 
         return float(
             self.scorer_function(
@@ -605,6 +630,7 @@ class OrdinalLossScorer(BaseScorer):
         aggregation_level: list[str] | None = None,
         granularity: list[str] | None = None,
         filters: list[Filter] | None = None,
+        labels: list[int] | None = None
     ):
         self.pred_column_name = pred_column
         super().__init__(
