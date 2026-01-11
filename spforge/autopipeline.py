@@ -205,6 +205,9 @@ class AutoPipeline(BaseEstimator):
         for c in self.granularity:
             if c not in self.context_feature_names and c not in self.feature_names:
                 self.context_feature_names.append(c)
+        for f in self.filters:
+            if f.column_name not in self.context_feature_names:
+                self.context_feature_names.append(f.column_name)
 
         assert len([c for c in self.context_feature_names if c in self.feature_names]) == 0
         self.sklearn_pipeline: SkPipeline | None = None
