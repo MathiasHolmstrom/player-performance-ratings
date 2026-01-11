@@ -25,7 +25,7 @@ class EstimatorTransformer(BaseEstimator, TransformerMixin):
         self.features_ = list(feats)
 
         self.estimator_ = clone(self.estimator)
-        self.estimator_.fit(X=X.select(self.features_), y=y)
+        self.estimator_.fit(X=X.select(self.features_).to_pandas(), y=y)
         return self
 
     @nw.narwhalify
@@ -33,7 +33,7 @@ class EstimatorTransformer(BaseEstimator, TransformerMixin):
         if self.estimator_ is None or self.features_ is None:
             raise RuntimeError("EstimatorTransformer is not fitted")
 
-        prediction = self.estimator_.predict(X=X.select(self.features_))
+        prediction = self.estimator_.predict(X=X.select(self.features_).to_pandas())
         return X.with_columns(
             nw.new_series(
                 name=self.prediction_column_name,

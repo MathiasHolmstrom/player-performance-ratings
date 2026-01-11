@@ -606,6 +606,7 @@ class OrdinalLossScorer(BaseScorer):
         granularity: list[str] | None = None,
         filters: list[Filter] | None = None,
     ):
+        self.pred_column_name = pred_column
         super().__init__(
             target=target,
             pred_column=pred_column,
@@ -616,83 +617,50 @@ class OrdinalLossScorer(BaseScorer):
         )
         self.classes = classes
 
-    def _class_labels(self) -> list[int]:
+    def _calculate_score_for_group(self, df: pl.DataFrame) -> float:
+        """Calculate score for a single group (used for granularity)"""
+        pred_dtype = df.schema[self.pred_column]
+
         class_labels = [int(c) for c in self.classes]
         class_labels.sort()
-        if len(class_labels) < 2:
-            raise ValueError("OrdinalLossScorer: need at least 2 classes.")
-        if class_labels != list(range(class_labels[0], class_labels[0] + len(class_labels))):
-            raise ValueError(f"OrdinalLossScorer: classes must be consecutive integers. Got: {class_labels[:10]}...")
-        return class_labels
-
-    def _ensure_prob_columns(self, df: pl.DataFrame, class_labels: list[int]) -> pl.DataFrame:
-        pred_col = self.pred_column
         expected_len = len(class_labels)
 
-        missing_prob_cols = [f"prob_{c}" for c in class_labels if f"prob_{c}" not in df.columns]
-        if not missing_prob_cols:
-            return df
-
-        if pred_col not in df.columns:
-            raise ValueError(f"OrdinalLossScorer: pred_column '{pred_col}' not found in df.")
-
-        pred_dtype = df.schema[pred_col]
-
-        is_array = isinstance(pred_dtype, pl.datatypes.Array)
-        is_list = isinstance(pred_dtype, pl.datatypes.List)
-
-        if not (is_array or is_list):
-            raise TypeError(f"OrdinalLossScorer: pred_column must be Array or List, got {pred_dtype}.")
-
-        if is_array:
-            width = pred_dtype.width
-            if int(width) != expected_len:
+        if pred_dtype == pl.Array:
+            width = int(pred_dtype.shape[0])
+            if width != expected_len:
                 raise ValueError(
-                    f"OrdinalLossScorer: pred_column Array width ({int(width)}) does not match len(classes) ({expected_len})."
+                    f"OrdinalLossScorer: pred_column Array width ({width}) does not match len(classes) ({expected_len})."
                 )
 
-            def get_expr(i: int) -> pl.Expr:
-                return pl.col(pred_col).arr.get(i)
+            def get_expr(i):
+                return pl.col(self.pred_column).arr.get(i)
 
         else:
-            max_len = df.select(pl.col(pred_col).list.len().max()).item()
+            max_len = df.select(pl.col(self.pred_column).list.len().max()).item()
             if max_len is not None and int(max_len) != expected_len:
                 raise ValueError(
                     f"OrdinalLossScorer: pred_column List length ({int(max_len)}) does not match len(classes) ({expected_len})."
                 )
 
-            def get_expr(i: int) -> pl.Expr:
-                return pl.col(pred_col).list.get(i)
+            def get_expr(i):
+                return pl.col(self.pred_column).list.get(i)
 
-        df = df.with_columns(
-            [
-                get_expr(i)
-                .cast(pl.Float64)
-                .fill_null(0.0)
-                .alias(f"prob_{c}")
-                for i, c in enumerate(class_labels)
-            ]
-        )
-        return df
+        df = df.with_columns([get_expr(i).alias(f"prob_{c}") for i, c in enumerate(class_labels)])
 
-    def _calculate_score_for_group(self, df: pl.DataFrame) -> float:
-        class_labels = self._class_labels()
-        df = self._ensure_prob_columns(df, class_labels)
+        if len(class_labels) < 2:
+            raise ValueError("OrdinalLossScorer: need at least 2 classes.")
 
-        prob_col_under = "sum_prob_under"
+        if class_labels != list(range(class_labels[0], class_labels[0] + len(class_labels))):
+            raise ValueError(
+                f"OrdinalLossScorer: classes must be consecutive integers. Got: {class_labels[:10]}..."
+            )
+
         min_field = class_labels[0]
-
-        df = df.with_columns(
-            pl.col(f"prob_{min_field}")
-            .cast(pl.Float64)
-            .fill_null(0.0)
-            .clip(0.0, 1.0)
-            .alias(prob_col_under)
-        )
+        prob_col_under = "sum_prob_under"
+        df = df.with_columns(pl.col(f"prob_{min_field}").alias(prob_col_under))
 
         counts = df.group_by(self.target).len().rename({"len": "n"})
-
-        total = counts.filter(pl.col(self.target) < class_labels[-1]).select(pl.col("n").sum()).item()
+        total = counts.filter(pl.col(self.target) < class_labels[-1])["n"].sum()
         total = int(total) if total is not None else 0
         if total <= 0:
             return 0.0
@@ -700,34 +668,30 @@ class OrdinalLossScorer(BaseScorer):
         sum_lr = 0.0
 
         for class_ in class_labels[1:]:
-            n_exact = counts.filter(pl.col(self.target) == (class_ - 1)).select(pl.col("n").sum()).item()
+            n_exact = counts.filter(pl.col(self.target) == class_ - 1)["n"].sum()
             n_exact = int(n_exact) if n_exact is not None else 0
             weight_class = n_exact / total
-
-            df = df.with_columns(
-                pl.col(prob_col_under)
-                .cast(pl.Float64)
-                .fill_null(0.0)
-                .clip(0.0001, 0.9999)
-                .alias(prob_col_under)
-            )
-
-            if weight_class != 0.0:
-                log_loss = (
-                    df.select(
-                        pl.when(pl.col(self.target) < class_)
-                        .then(pl.col(prob_col_under).log())
-                        .otherwise((1 - pl.col(prob_col_under)).log())
-                        .mean()
-                    )
-                    .item()
+            if weight_class == 0.0:
+                df = df.with_columns(
+                    (pl.col(f"prob_{class_}") + pl.col(prob_col_under))
+                    .clip(0.0, 1.0)
+                    .alias(prob_col_under)
                 )
-                if log_loss is not None:
-                    sum_lr -= float(log_loss) * float(weight_class)
+                continue
+
+            df = df.with_columns(pl.col(prob_col_under).clip(0.0001, 0.9999).alias(prob_col_under))
+
+            log_loss = df.select(
+                pl.when(pl.col(self.target) < class_)
+                .then(pl.col(prob_col_under).log())
+                .otherwise((1 - pl.col(prob_col_under)).log())
+                .mean()
+            ).item()
+
+            sum_lr -= float(log_loss) * float(weight_class)
 
             df = df.with_columns(
                 (pl.col(f"prob_{class_}") + pl.col(prob_col_under))
-                .fill_null(pl.col(prob_col_under))
                 .clip(0.0, 1.0)
                 .alias(prob_col_under)
             )
@@ -736,23 +700,28 @@ class OrdinalLossScorer(BaseScorer):
 
     @narwhals.narwhalify
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
-        df = nw.from_native(apply_filters(df, self.filters))
+        df = apply_filters(df, self.filters)
+        # Ensure df is a Narwhals DataFrame
+        if not hasattr(df, "to_native"):
+            df = nw.from_native(df)
 
-        df_pl = df.to_polars()
-
-        class_labels = self._class_labels()
-        df_pl = self._ensure_prob_columns(df_pl, class_labels)
+        df_native = df.to_native()
+        df_pl = pl.DataFrame(df_native) if isinstance(df_native, pd.DataFrame) else df_native
 
         if self.aggregation_level:
             df_pl = df_pl.group_by(self.aggregation_level).agg(
-                [pl.col(f"prob_{c}").mean().alias(f"prob_{c}") for c in class_labels]
-                + [pl.col(self.target).mode().first().alias(self.target)]
+                [
+                    pl.col(self.pred_column).mean().alias(self.pred_column),
+                    pl.col(self.target).mean().alias(self.target),
+                ]
             )
 
         if self.granularity:
-            results: dict[tuple, float] = {}
+            results = {}
             granularity_values = df_pl.select(self.granularity).unique().to_dict(as_series=False)
-            granularity_tuples = list(zip(*[granularity_values[col] for col in self.granularity], strict=False))
+            granularity_tuples = list(
+                zip(*[granularity_values[col] for col in self.granularity], strict=False)
+            )
 
             for gran_tuple in granularity_tuples:
                 mask = None
@@ -760,12 +729,12 @@ class OrdinalLossScorer(BaseScorer):
                     col_mask = pl.col(col) == gran_tuple[i]
                     mask = col_mask if mask is None else (mask & col_mask)
                 gran_df = df_pl.filter(mask)
+
                 results[gran_tuple] = self._calculate_score_for_group(gran_df)
 
             return results
 
         return self._calculate_score_for_group(df_pl)
-
 
 
 class ThresholdEventScorer(BaseScorer):
