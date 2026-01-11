@@ -48,7 +48,7 @@ def _empirical_probabilities_from_targets(
 def _naive_point_predictions_for_df(
     df: IntoFrameT, target_column: str, naive_granularity: list[str] | None
 ) -> list[Any]:
-    df_nw = df if hasattr(df, "to_native") else nw.from_native(df)
+    df_nw = nw.from_native(df)
     if not naive_granularity:
         return _naive_point_predictions_from_targets(df_nw[target_column].to_list())
 
