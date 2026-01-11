@@ -22,6 +22,7 @@ Supports pandas/polars via narwhals.
 - No mutations - always return a new frame via `with_columns` / assignment copy.
 - Any class or Enum intended to be instantiated or referenced by users MUST be importable from the package’s `__init__.py`.
 - Users should not need to import from private modules (`_*.py`).
+- Update version when in toml pushing a new change.
 
 
 ## Core classes (high level)
@@ -47,7 +48,7 @@ Key gotchas:
 - Anything affecting feature names => update downstream consumers + tests.
 - Anything stateful => add tests that assert “future_transform does not mutate state”.
 
-## Coding standards
+## Code style guide
 - Public methods/classes: docstring explaining intended usage + key parameters.
 - Avoid extra comments; only comment where logic is genuinely unintuitive.
 - Prefer minimal diffs; do not add new abstractions unless they remove more complexity than they add.
@@ -55,6 +56,8 @@ Key gotchas:
 - Fail fast on unexpected or invalid input.
 - Do NOT infer intent, auto-correct input, or silently fall back.
 - Any non-strict behavior must be explicit (e.g. `strict=False`) and documented; otherwise raise a clear error.
+- Write the methods of the classes in a chronological order based on when they are called.
+  - Public methods should generally be the at the top
 
 
 
