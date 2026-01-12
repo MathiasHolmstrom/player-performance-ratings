@@ -20,10 +20,31 @@ Supports pandas/polars via narwhals.
 - Pipelines may filter rows during `fit` only (if designed that way), but `transform/future_transform` must preserve row count unless explicitly documented.
 - Stateful generators store internal mutable state in private dicts; feature-only paths must not mutate state.
 - No mutations - always return a new frame via `with_columns` / assignment copy.
-- Any class or Enum intended to be instantiated or referenced by users MUST be importable from the package’s `__init__.py`.
+- Any class or Enum intended to be instantiated or referenced by users MUST be importable from the package's `__init__.py`.
 - Users should not need to import from private modules (`_*.py`).
 - Update version when in toml pushing a new change.
 - When working on a new task. Always create a new branch.
+
+## Git hygiene
+**CRITICAL: Never commit IDE or temporary files.**
+
+Before committing, always check `git status` and ensure you're not adding:
+- IDE configuration files (`.idea/`, `.vscode/`, `*.iml`, etc.)
+- Temporary files (tmpclaude-*, tmp*, *.tmp, etc.)
+- OS-specific files (.DS_Store, Thumbs.db, etc.)
+- Python cache (`__pycache__/`, `*.pyc`, etc.)
+- Virtual environments (`.venv/`, `venv/`, etc.)
+
+These files are listed in `.gitignore`. If you see them in `git status`:
+1. DO NOT add them to commits
+2. Verify they're in `.gitignore`
+3. Use `git rm --cached <file>` if accidentally staged
+
+Only commit:
+- Source code (`.py` files in `spforge/`, `tests/`)
+- Configuration files (`.toml`, `.md`, `.yml` if relevant)
+- Test data files (in `tests/` or `examples/data/`)
+- Documentation
 
 
 ## Core classes (high level)
