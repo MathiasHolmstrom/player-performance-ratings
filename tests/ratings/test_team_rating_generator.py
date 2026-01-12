@@ -2620,3 +2620,107 @@ def test_TeamRatingGenerator__with_GameColumnNames_multiple_performance_columns(
     # (team_a: won match 1 and 2, team_b: lost to A, won against C, team_c: lost both)
     assert team_a_rating > team_b_rating
     assert team_a_rating > team_c_rating
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_TeamRatingGenerator__with_GameColumnNames_verifies_weighted_performance_affects_ratings(
+    df_type,
+):
+    """
+    When different performance weights are used, then we should expect ratings to reflect
+    the weighted performance calculation because the PerformanceWeightsManager combines
+    metrics according to the specified weights.
+
+    This test verifies that the weighting is actually being applied by showing that
+    changing the weights changes which team ends up with higher rating.
+    """
+    from spforge.performance_transformers._performance_manager import ColumnWeight
+
+    # Scenario: Team A dominates points, Team B dominates assists
+    # Match: Team A (high points, low assists) vs Team B (low points, high assists)
+    game_df = df_type(
+        {
+            "match_id": [1],
+            "start_date": [datetime(2024, 1, 1)],
+            "home": ["team_a"],
+            "away": ["team_b"],
+            "home_points": [100],  # Team A: strong on points
+            "away_points": [60],   # Team B: weak on points
+            "home_assists": [10],  # Team A: weak on assists
+            "away_assists": [30],  # Team B: strong on assists
+        }
+    )
+
+    gcn = GameColumnNames(
+        match_id="match_id",
+        start_date="start_date",
+        team1_name="home",
+        team2_name="away",
+        performance_column_pairs={
+            "points": ("home_points", "away_points"),
+            "assists": ("home_assists", "away_assists"),
+        },
+    )
+
+    # Test 1: Weight points heavily (90% points, 10% assists)
+    # Expected: Team A should have higher rating (because it dominates points)
+    generator_points_heavy = TeamRatingGenerator(
+        performance_column="points",
+        column_names=gcn,
+        performance_weights=[
+            ColumnWeight(name="points", weight=0.9, lower_is_better=False),
+            ColumnWeight(name="assists", weight=0.1, lower_is_better=False),
+        ],
+        output_suffix="",
+    )
+
+    generator_points_heavy.fit_transform(game_df)
+
+    team_a_rating_points_heavy = generator_points_heavy._team_off_ratings["team_a"].rating_value
+    team_b_rating_points_heavy = generator_points_heavy._team_off_ratings["team_b"].rating_value
+
+    # Team A should have higher rating when points are weighted heavily
+    assert team_a_rating_points_heavy > team_b_rating_points_heavy, (
+        f"When points are weighted 90%, team_a (100 points, 10 assists) should have higher "
+        f"rating than team_b (60 points, 30 assists). Got: team_a={team_a_rating_points_heavy:.2f}, "
+        f"team_b={team_b_rating_points_heavy:.2f}"
+    )
+
+    # Test 2: Weight assists heavily (10% points, 90% assists)
+    # Expected: Team B should have higher rating (because it dominates assists)
+    generator_assists_heavy = TeamRatingGenerator(
+        performance_column="points",
+        column_names=gcn,
+        performance_weights=[
+            ColumnWeight(name="points", weight=0.1, lower_is_better=False),
+            ColumnWeight(name="assists", weight=0.9, lower_is_better=False),
+        ],
+        output_suffix="",
+    )
+
+    generator_assists_heavy.fit_transform(game_df)
+
+    team_a_rating_assists_heavy = generator_assists_heavy._team_off_ratings["team_a"].rating_value
+    team_b_rating_assists_heavy = generator_assists_heavy._team_off_ratings["team_b"].rating_value
+
+    # Team B should have higher rating when assists are weighted heavily
+    assert team_b_rating_assists_heavy > team_a_rating_assists_heavy, (
+        f"When assists are weighted 90%, team_b (60 points, 30 assists) should have higher "
+        f"rating than team_a (100 points, 10 assists). Got: team_a={team_a_rating_assists_heavy:.2f}, "
+        f"team_b={team_b_rating_assists_heavy:.2f}"
+    )
+
+    # The ratings should change significantly based on weights
+    # This proves the weighting is actually being applied
+    team_a_rating_difference = team_a_rating_points_heavy - team_a_rating_assists_heavy
+    team_b_rating_difference = team_b_rating_assists_heavy - team_b_rating_points_heavy
+
+    # Both teams should have meaningfully different ratings based on weighting scheme
+    assert abs(team_a_rating_difference) > 10, (
+        f"Team A's rating should change significantly based on weights. "
+        f"Difference: {team_a_rating_difference:.2f}"
+    )
+    assert abs(team_b_rating_difference) > 10, (
+        f"Team B's rating should change significantly based on weights. "
+        f"Difference: {team_b_rating_difference:.2f}"
+    )
