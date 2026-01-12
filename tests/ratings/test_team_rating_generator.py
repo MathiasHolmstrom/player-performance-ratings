@@ -11,7 +11,7 @@ import pandas as pd
 import polars as pl
 import pytest
 
-from spforge.data_structures import ColumnNames
+from spforge.data_structures import ColumnNames, GameColumnNames
 from spforge.ratings import TeamRatingGenerator
 from spforge.ratings.enums import RatingKnownFeatures, RatingUnknownFeatures
 from spforge.ratings.team_performance_predictor import TeamRatingNonOpponentPerformancePredictor
@@ -2382,3 +2382,294 @@ def test_team_with_strong_offense_and_weak_defense_gets_expected_ratings_and_pre
 
     assert pred_off > 0.5
     assert pred_def < 0.5
+
+
+# ========================================
+# Tests for GameColumnNames and game-level data conversion
+# ========================================
+
+
+def test_GameColumnNames__validation_raises_when_performance_column_pairs_is_empty():
+    """
+    When performance_column_pairs is empty, then we should expect to see
+    a ValueError raised because at least one performance column pair must be specified.
+    """
+    with pytest.raises(ValueError, match="performance_column_pairs must contain at least one"):
+        GameColumnNames(
+            match_id="match_id",
+            start_date="start_date",
+            team1_name="team1",
+            team2_name="team2",
+            performance_column_pairs={},
+        )
+
+
+def test_GameColumnNames__validation_raises_when_column_name_is_empty():
+    """
+    When a column name in performance_column_pairs is an empty string, then we should expect to see
+    a ValueError raised because all column names must be non-empty strings.
+    """
+    with pytest.raises(ValueError, match="All column names in performance_column_pairs must be"):
+        GameColumnNames(
+            match_id="match_id",
+            start_date="start_date",
+            team1_name="team1",
+            team2_name="team2",
+            performance_column_pairs={"score": ("", "team2_score")},
+        )
+
+
+def test_GameColumnNames__update_match_id_defaults_to_match_id():
+    """
+    When update_match_id is not provided, then we should expect to see
+    it default to match_id because this is the standard behavior.
+    """
+    gcn = GameColumnNames(
+        match_id="game_id",
+        start_date="start_date",
+        team1_name="home_team",
+        team2_name="away_team",
+        performance_column_pairs={"score": ("home_score", "away_score")},
+    )
+
+    assert gcn.update_match_id == "game_id"
+
+
+def test_convert_game_to_game_team__converts_single_match_correctly():
+    """
+    When a game-level dataframe with 1 row is converted, then we should expect to see
+    2 rows in the output (one per team) with correct team_id and performance columns
+    because each match has 2 teams.
+    """
+    game_df = pl.DataFrame(
+        {
+            "match_id": [1],
+            "start_date": [datetime(2024, 1, 1)],
+            "team1": ["team_a"],
+            "team2": ["team_b"],
+            "team1_score": [100],
+            "team2_score": [95],
+        }
+    )
+
+    gcn = GameColumnNames(
+        match_id="match_id",
+        start_date="start_date",
+        team1_name="team1",
+        team2_name="team2",
+        performance_column_pairs={"score": ("team1_score", "team2_score")},
+    )
+
+    generator = TeamRatingGenerator(
+        performance_column="score",
+        column_names=gcn,
+        output_suffix="",
+    )
+
+    result_df = generator._convert_game_to_game_team(game_df, gcn)
+
+    assert len(result_df) == 2
+    assert set(result_df["team_id"].to_list()) == {"team_a", "team_b"}
+    assert result_df.filter(pl.col("team_id") == "team_a")["score"][0] == 100
+    assert result_df.filter(pl.col("team_id") == "team_b")["score"][0] == 95
+
+
+def test_convert_game_to_game_team__converts_multiple_performance_columns():
+    """
+    When a game-level dataframe has multiple performance metrics, then we should expect to see
+    all performance columns correctly mapped in the output because the conversion handles
+    multiple column pairs.
+    """
+    game_df = pl.DataFrame(
+        {
+            "match_id": [1],
+            "start_date": [datetime(2024, 1, 1)],
+            "home": ["team_a"],
+            "away": ["team_b"],
+            "home_points": [100],
+            "away_points": [95],
+            "home_assists": [20],
+            "away_assists": [18],
+        }
+    )
+
+    gcn = GameColumnNames(
+        match_id="match_id",
+        start_date="start_date",
+        team1_name="home",
+        team2_name="away",
+        performance_column_pairs={
+            "points": ("home_points", "away_points"),
+            "assists": ("home_assists", "away_assists"),
+        },
+    )
+
+    generator = TeamRatingGenerator(
+        performance_column="points",
+        column_names=gcn,
+        output_suffix="",
+    )
+
+    result_df = generator._convert_game_to_game_team(game_df, gcn)
+
+    assert len(result_df) == 2
+    team_a_row = result_df.filter(pl.col("team_id") == "team_a")
+    team_b_row = result_df.filter(pl.col("team_id") == "team_b")
+
+    assert team_a_row["points"][0] == 100
+    assert team_a_row["assists"][0] == 20
+    assert team_b_row["points"][0] == 95
+    assert team_b_row["assists"][0] == 18
+
+
+def test_convert_game_to_game_team__preserves_optional_columns():
+    """
+    When a game-level dataframe has optional columns like league, then we should expect to see
+    them preserved in the output because these columns are not team-specific.
+    """
+    game_df = pl.DataFrame(
+        {
+            "match_id": [1],
+            "start_date": [datetime(2024, 1, 1)],
+            "team1": ["team_a"],
+            "team2": ["team_b"],
+            "team1_score": [100],
+            "team2_score": [95],
+            "league": ["NBA"],
+        }
+    )
+
+    gcn = GameColumnNames(
+        match_id="match_id",
+        start_date="start_date",
+        team1_name="team1",
+        team2_name="team2",
+        performance_column_pairs={"score": ("team1_score", "team2_score")},
+        league="league",
+    )
+
+    generator = TeamRatingGenerator(
+        performance_column="score",
+        column_names=gcn,
+        output_suffix="",
+    )
+
+    result_df = generator._convert_game_to_game_team(game_df, gcn)
+
+    assert "league" in result_df.columns
+    assert all(result_df["league"] == "NBA")
+
+
+def test_TeamRatingGenerator__fit_transform_with_GameColumnNames():
+    """
+    When TeamRatingGenerator is initialized with GameColumnNames and game-level data is passed,
+    then we should expect to see rating features generated correctly because the conversion
+    to game+team format happens automatically.
+    """
+    game_df = pl.DataFrame(
+        {
+            "match_id": [1, 2],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 2)],
+            "home": ["team_a", "team_a"],
+            "away": ["team_b", "team_c"],
+            "home_score": [100, 105],
+            "away_score": [95, 90],
+        }
+    )
+
+    gcn = GameColumnNames(
+        match_id="match_id",
+        start_date="start_date",
+        team1_name="home",
+        team2_name="away",
+        performance_column_pairs={"score": ("home_score", "away_score")},
+    )
+
+    generator = TeamRatingGenerator(
+        performance_column="score",
+        column_names=gcn,
+        auto_scale_performance=True,
+        output_suffix="",
+        features_out=[
+            RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
+            RatingKnownFeatures.OPPONENT_DEF_RATING_PROJECTED,
+        ],
+    )
+
+    result_df = generator.fit_transform(game_df)
+
+    # Should have 4 rows (2 per game, since game-level data is converted to game+team format)
+    assert len(result_df) == 4
+
+    # Should have rating features
+    assert "team_off_rating_projected" in result_df.columns
+    assert "opponent_def_rating_projected" in result_df.columns
+
+    # Check team ratings were updated
+    assert "team_a" in generator._team_off_ratings
+    assert "team_b" in generator._team_off_ratings
+    assert "team_c" in generator._team_off_ratings
+
+
+def test_TeamRatingGenerator__future_transform_with_GameColumnNames():
+    """
+    When future_transform is called with game-level data, then we should expect to see
+    rating features generated without updating internal ratings because future_transform
+    only adds pre-match features.
+    """
+    # Training data
+    train_df = pl.DataFrame(
+        {
+            "match_id": [1],
+            "start_date": [datetime(2024, 1, 1)],
+            "home": ["team_a"],
+            "away": ["team_b"],
+            "home_score": [100],
+            "away_score": [95],
+        }
+    )
+
+    # Future data
+    future_df = pl.DataFrame(
+        {
+            "match_id": [2],
+            "start_date": [datetime(2024, 1, 2)],
+            "home": ["team_a"],
+            "away": ["team_c"],
+            "home_score": [105],  # These won't be used
+            "away_score": [90],
+        }
+    )
+
+    gcn = GameColumnNames(
+        match_id="match_id",
+        start_date="start_date",
+        team1_name="home",
+        team2_name="away",
+        performance_column_pairs={"score": ("home_score", "away_score")},
+    )
+
+    generator = TeamRatingGenerator(
+        performance_column="score",
+        column_names=gcn,
+        auto_scale_performance=True,
+        output_suffix="",
+        features_out=[RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
+    )
+
+    # Fit on training data
+    generator.fit_transform(train_df)
+
+    team_a_rating_before = generator._team_off_ratings["team_a"].rating_value
+
+    # Future transform on future data
+    result_df = generator.future_transform(future_df)
+
+    # Ratings should not change
+    team_a_rating_after = generator._team_off_ratings["team_a"].rating_value
+    assert team_a_rating_before == team_a_rating_after
+
+    # Should still generate features
+    assert "team_off_rating_projected" in result_df.columns
+    # Should have 2 rows (1 game with 2 teams in game+team format)
+    assert len(result_df) == 2
