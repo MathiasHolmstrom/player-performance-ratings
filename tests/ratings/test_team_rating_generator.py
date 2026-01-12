@@ -2550,3 +2550,73 @@ def test_TeamRatingGenerator__future_transform_with_GameColumnNames(df_type):
     assert "team_off_rating_projected" in result_df.columns
     # Should have 2 rows (1 game with 2 teams in game+team format)
     assert len(result_df) == 2
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_TeamRatingGenerator__with_GameColumnNames_multiple_performance_columns(df_type):
+    """
+    When GameColumnNames has multiple performance column pairs and performance_weights
+    are provided, then we should expect the weighted performance to be used for rating
+    updates because the PerformanceWeightsManager combines multiple metrics.
+    """
+    from spforge.performance_transformers._performance_manager import ColumnWeight
+
+    game_df = df_type(
+        {
+            "match_id": [1, 2, 3],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)],
+            "home": ["team_a", "team_a", "team_b"],
+            "away": ["team_b", "team_c", "team_c"],
+            "home_points": [100, 105, 98],
+            "away_points": [95, 90, 102],
+            "home_assists": [20, 22, 18],
+            "away_assists": [18, 19, 20],
+        }
+    )
+
+    gcn = GameColumnNames(
+        match_id="match_id",
+        start_date="start_date",
+        team1_name="home",
+        team2_name="away",
+        performance_column_pairs={
+            "points": ("home_points", "away_points"),
+            "assists": ("home_assists", "away_assists"),
+        },
+    )
+
+    generator = TeamRatingGenerator(
+        performance_column="points",  # Must match one of the columns from performance_column_pairs
+        column_names=gcn,
+        performance_weights=[
+            ColumnWeight(name="points", weight=0.7, lower_is_better=False),
+            ColumnWeight(name="assists", weight=0.3, lower_is_better=False),
+        ],
+        output_suffix="",
+        features_out=[RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
+    )
+
+    result_df = generator.fit_transform(game_df)
+
+    # Should have 6 rows (3 games × 2 teams each)
+    assert len(result_df) == 6
+
+    # Performance columns should be present
+    assert "points" in result_df.columns
+    assert "assists" in result_df.columns
+
+    # Weighted performance column should be created by PerformanceWeightsManager
+    assert "performance__points" in result_df.columns
+
+    # Rating features should be present
+    assert "team_off_rating_projected" in result_df.columns
+
+    # Team ratings should be updated (team_a won both matches with higher combined performance)
+    team_a_rating = generator._team_off_ratings["team_a"].rating_value
+    team_b_rating = generator._team_off_ratings["team_b"].rating_value
+    team_c_rating = generator._team_off_ratings["team_c"].rating_value
+
+    # team_a should have higher rating than team_b and team_c
+    # (team_a: won match 1 and 2, team_b: lost to A, won against C, team_c: lost both)
+    assert team_a_rating > team_b_rating
+    assert team_a_rating > team_c_rating
