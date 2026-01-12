@@ -45,7 +45,7 @@ class TeamRatingGenerator(RatingGenerator):
         league_rating_adjustor_multiplier: float = 0.05,
         column_names: ColumnNames | None = None,
         output_suffix: str | None = None,
-        start_harcoded_start_rating: float = 1000.0,
+        start_harcoded_start_rating: float | None = None,
         start_league_ratings: dict[str, float] | None = None,
         start_league_quantile: float = 0.2,
         start_min_count_for_percentiles: int = 50,
@@ -155,6 +155,8 @@ class TeamRatingGenerator(RatingGenerator):
         )
         if self.performance_column in df.columns:
             base_cols.append(self.performance_column)
+        if self.column_names.league:
+            base_cols.append(self.column_names.league)
 
         team_rows = df.select([c for c in base_cols if c in df.columns]).unique(
             [cn.match_id, cn.team_id]

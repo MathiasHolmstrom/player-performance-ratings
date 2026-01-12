@@ -1,6 +1,7 @@
 from typing import Any
 
 import narwhals.stable.v2 as nw
+import numpy as np
 from narwhals.typing import IntoFrameT
 from sklearn.base import BaseEstimator, TransformerMixin, is_regressor
 
@@ -40,6 +41,7 @@ class NetOverPredictedTransformer(BaseEstimator, TransformerMixin):
         X: IntoFrameT,
         y,
     ):
+        y = y.to_numpy() if not isinstance(y, np.ndarray) else y
         self.estimator.fit(X.to_pandas(), y)
         return self
 
