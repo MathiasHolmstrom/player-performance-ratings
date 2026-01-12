@@ -427,14 +427,15 @@ class AutoPipeline(BaseEstimator):
                     f"Duplicate names in feats_out for transformer {transformer}: {feats_out}"
                 )
 
-            def _keep_cols(X, drop=set(feats_out)):  # noqa: B006
-                return [c for c in X.columns if c not in drop]
+            # Compute columns to keep statically (all except feats_out)
+            feats_out_set = set(feats_out)
+            keep_cols = [c for c in input_cols if c not in feats_out_set]
 
             wrapped = _OnlyOutputColumns(transformer, feats_out)
 
             t_ct = ColumnTransformer(
                 transformers=[
-                    ("keep", "passthrough", _keep_cols),
+                    ("keep", "passthrough", keep_cols),
                     ("features", wrapped, input_cols),
                 ],
                 remainder="drop",
@@ -445,15 +446,10 @@ class AutoPipeline(BaseEstimator):
 
             prev_transformer_feats_out.extend(feats_out)
 
-        def _final_keep_cols(X, drop=drop_ctx_set):
-            return [c for c in X.columns if c not in drop]
-
-        final = ColumnTransformer(
-            transformers=[("keep", "passthrough", _final_keep_cols)],
-            remainder="drop",
-            verbose_feature_names_out=False,
+        # Use FunctionTransformer with global function for serializability
+        final = FunctionTransformer(
+            _drop_columns_transformer, validate=False, kw_args={"drop_cols": drop_ctx_set}
         )
-        final.set_output(transform="pandas")
         steps.append(("final", final))
 
         steps.append(("est", est))

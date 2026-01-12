@@ -87,7 +87,7 @@ class ConvertDataFrameToCategoricalTransformer(BaseEstimator, TransformerMixin):
 
     @nw.narwhalify
     def fit(self, df: IntoFrameT, y: Any):
-        self._feature_names_in = df.columns
+        self.feature_names_in_ = df.columns
         return self
 
     @nw.narwhalify
