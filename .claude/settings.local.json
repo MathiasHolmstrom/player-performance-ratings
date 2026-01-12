@@ -21,7 +21,8 @@
       "Bash(pip install:*)",
       "Bash(PYTHONPATH=. python:*)",
       "Bash(git reset:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git merge:*)"
     ]
   }
 }

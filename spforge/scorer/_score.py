@@ -19,6 +19,90 @@ from sklearn.metrics import log_loss
 _logger = logging.getLogger(__name__)
 
 
+def _naive_point_predictions_from_targets(y_true: list[Any]) -> list[Any]:
+    if not y_true:
+        return []
+    try:
+        values = np.asarray(y_true, dtype=np.float64)
+        if np.all(np.isfinite(values)):
+            baseline = float(values.mean())
+            return [baseline] * len(y_true)
+    except (TypeError, ValueError):
+        pass
+    baseline = Counter(y_true).most_common(1)[0][0]
+    return [baseline] * len(y_true)
+
+
+def _empirical_probabilities_from_targets(
+    y_true: list[Any], labels: list[Any] | None = None
+) -> list[float]:
+    if not y_true:
+        return []
+    if labels is None:
+        labels = sorted(set(y_true))
+    counts = Counter(y_true)
+    total = len(y_true)
+    return [counts.get(label, 0) / total for label in labels]
+
+
+def _naive_point_predictions_for_df(
+    df: IntoFrameT, target_column: str, naive_granularity: list[str] | None
+) -> list[Any]:
+    df_nw = nw.from_native(df)
+    if not naive_granularity:
+        return _naive_point_predictions_from_targets(df_nw[target_column].to_list())
+
+    targets = df_nw[target_column].to_list()
+    granularity_values = df_nw.select(naive_granularity).to_dict(as_series=False)
+    if len(naive_granularity) == 1:
+        group_keys = granularity_values[naive_granularity[0]]
+    else:
+        group_keys = list(
+            zip(*[granularity_values[col] for col in naive_granularity], strict=False)
+        )
+
+    grouped_targets: dict[Any, list[Any]] = {}
+    for key, target in zip(group_keys, targets, strict=False):
+        grouped_targets.setdefault(key, []).append(target)
+
+    baseline_by_group = {
+        key: (_naive_point_predictions_from_targets(values) or [None])[0]
+        for key, values in grouped_targets.items()
+    }
+    return [baseline_by_group[key] for key in group_keys]
+
+
+def _naive_probability_predictions_for_df(
+    df: IntoFrameT,
+    target_column: str,
+    labels: list[Any] | None,
+    naive_granularity: list[str] | None,
+) -> list[list[float]]:
+    df_nw = nw.from_native(df)
+    if not naive_granularity:
+        probs = _empirical_probabilities_from_targets(df_nw[target_column].to_list(), labels)
+        return [probs] * len(df_nw)
+
+    targets = df_nw[target_column].to_list()
+    granularity_values = df_nw.select(naive_granularity).to_dict(as_series=False)
+    if len(naive_granularity) == 1:
+        group_keys = granularity_values[naive_granularity[0]]
+    else:
+        group_keys = list(
+            zip(*[granularity_values[col] for col in naive_granularity], strict=False)
+        )
+
+    grouped_targets: dict[Any, list[Any]] = {}
+    for key, target in zip(group_keys, targets, strict=False):
+        grouped_targets.setdefault(key, []).append(target)
+
+    probs_by_group = {
+        key: _empirical_probabilities_from_targets(values, labels)
+        for key, values in grouped_targets.items()
+    }
+    return [probs_by_group[key] for key in group_keys]
+
+
 class Operator(Enum):
     EQUALS = "=="
     NOT_EQUALS = "!="
@@ -148,6 +232,8 @@ class BaseScorer(ABC):
         filters: list[Filter] | None = None,
         aggregation_level: list[str] | None = None,
         granularity: list[str] | None = None,
+        compare_to_naive: bool = False,
+        naive_granularity: list[str] | None = None,
     ):
         """
         :param target: The column name of the target
@@ -172,6 +258,8 @@ class BaseScorer(ABC):
             )
         self.aggregation_level = aggregation_level
         self.granularity = granularity
+        self.compare_to_naive = compare_to_naive
+        self.naive_granularity = naive_granularity
 
     def _apply_aggregation_level(self, df: IntoFrameT) -> IntoFrameT:
         """Apply aggregation_level grouping if set"""
@@ -228,6 +316,8 @@ class PWMSE(BaseScorer):
         granularity: list[str] | None = None,
         filters: list[Filter] | None = None,
         labels: list[int] | None = None,
+        compare_to_naive: bool = False,
+        naive_granularity: list[str] | None = None,
     ):
         self.pred_column_name = pred_column
         super().__init__(
@@ -237,8 +327,15 @@ class PWMSE(BaseScorer):
             granularity=granularity,
             filters=filters,
             validation_column=validation_column,
+            compare_to_naive=compare_to_naive,
+            naive_granularity=naive_granularity,
         )
         self.labels = labels
+
+    def _pwmse_score(self, targets: np.ndarray, preds: np.ndarray) -> float:
+        labels = np.asarray(self.labels, dtype=np.float64)
+        diffs_sqd = (labels[None, :] - targets[:, None]) ** 2
+        return float((diffs_sqd * preds).sum(axis=1).mean())
 
     @narwhals.narwhalify
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
@@ -282,19 +379,37 @@ class PWMSE(BaseScorer):
                     mask = col_mask if mask is None else (mask & col_mask)
                 gran_df = df.filter(mask)
 
-                labels = np.asarray(self.labels, dtype=np.float64)
                 targets = gran_df[self.target].to_numpy().astype(np.float64)
                 preds = np.asarray(gran_df[self.pred_column].to_list(), dtype=np.float64)
-                diffs_sqd = (labels[None, :] - targets[:, None]) ** 2
-                results[gran_tuple] = float((diffs_sqd * preds).sum(axis=1).mean())
+                score = self._pwmse_score(targets, preds)
+                if self.compare_to_naive:
+                    naive_probs_list = _naive_probability_predictions_for_df(
+                        gran_df,
+                        self.target,
+                        list(self.labels) if self.labels else None,
+                        self.naive_granularity,
+                    )
+                    naive_preds = np.asarray(naive_probs_list, dtype=np.float64)
+                    naive_score = self._pwmse_score(targets, naive_preds)
+                    score = naive_score - score
+                results[gran_tuple] = float(score)
 
             return results
 
-        labels = np.asarray(self.labels, dtype=np.float64)
         targets = df[self.target].to_numpy().astype(np.float64)
         preds = np.asarray(df[self.pred_column].to_list(), dtype=np.float64)
-        diffs_sqd = (labels[None, :] - targets[:, None]) ** 2
-        return float((diffs_sqd * preds).sum(axis=1).mean())
+        score = self._pwmse_score(targets, preds)
+        if self.compare_to_naive:
+            naive_probs_list = _naive_probability_predictions_for_df(
+                df,
+                self.target,
+                list(self.labels) if self.labels else None,
+                self.naive_granularity,
+            )
+            naive_preds = np.asarray(naive_probs_list, dtype=np.float64)
+            naive_score = self._pwmse_score(targets, naive_preds)
+            return float(naive_score - score)
+        return float(score)
 
 
 class MeanBiasScorer(BaseScorer):
@@ -306,6 +421,8 @@ class MeanBiasScorer(BaseScorer):
         aggregation_level: list[str] | None = None,
         granularity: list[str] | None = None,
         filters: list[Filter] | None = None,
+        compare_to_naive: bool = False,
+        naive_granularity: list[str] | None = None,
     ):
         """
         :param pred_column: The column name of the predictions
@@ -325,7 +442,23 @@ class MeanBiasScorer(BaseScorer):
             granularity=granularity,
             filters=filters,
             validation_column=validation_column,
+            compare_to_naive=compare_to_naive,
+            naive_granularity=naive_granularity,
         )
+
+    def _mean_bias_score(self, df: IntoFrameT) -> float:
+        mean_score = (df[self.pred_column] - df[self.target]).mean()
+        if mean_score is None or (isinstance(mean_score, float) and pd.isna(mean_score)):
+            return 0.0
+        return float(mean_score)
+
+    def _mean_bias_from_lists(self, preds: list[Any], targets: list[Any]) -> float:
+        if not preds:
+            return 0.0
+        diffs = np.asarray(preds, dtype=np.float64) - np.asarray(targets, dtype=np.float64)
+        if diffs.size == 0 or np.isnan(diffs).all():
+            return 0.0
+        return float(np.nanmean(diffs))
 
     @narwhals.narwhalify
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
@@ -369,17 +502,26 @@ class MeanBiasScorer(BaseScorer):
                 gran_df = df.filter(mask)
 
                 # Calculate score for this group
-                score = float((gran_df[self.pred_column] - gran_df[self.target]).mean())
+                score = self._mean_bias_score(gran_df)
+                if self.compare_to_naive:
+                    targets = gran_df[self.target].to_list()
+                    naive_preds = _naive_point_predictions_for_df(
+                        gran_df, self.target, self.naive_granularity
+                    )
+                    naive_score = self._mean_bias_from_lists(naive_preds, targets)
+                    score = naive_score - score
                 results[gran_tuple] = score
 
             return results
 
         # Single score calculation
-        mean_score = (df[self.pred_column] - df[self.target]).mean()
-        # Handle NaN/None from empty dataframes
-        if mean_score is None or (isinstance(mean_score, float) and pd.isna(mean_score)):
-            return 0.0
-        return float(mean_score)
+        score = self._mean_bias_score(df)
+        if self.compare_to_naive:
+            targets = df[self.target].to_list()
+            naive_preds = _naive_point_predictions_for_df(df, self.target, self.naive_granularity)
+            naive_score = self._mean_bias_from_lists(naive_preds, targets)
+            return float(naive_score - score)
+        return float(score)
 
 
 class SklearnScorer(BaseScorer):
@@ -395,6 +537,7 @@ class SklearnScorer(BaseScorer):
         filters: list[Filter] | None = None,
         params: dict[str, Any] = None,
         compare_to_naive: bool = False,
+        naive_granularity: list[str] | None = None,
     ):
         """
         :param pred_column: The column name of the predictions
@@ -414,11 +557,12 @@ class SklearnScorer(BaseScorer):
             granularity=granularity,
             filters=filters,
             validation_column=validation_column,
+            compare_to_naive=compare_to_naive,
+            naive_granularity=naive_granularity,
         )
         self.pred_column_name = pred_column
         self.scorer_function = scorer_function
         self.params = params or {}
-        self.compare_to_naive = compare_to_naive
 
     def _pad_probabilities(
         self, y_true: list[Any], probabilities: list[list[float]]
@@ -448,46 +592,24 @@ class SklearnScorer(BaseScorer):
         new_params["labels"] = labels_list + extra_labels
         return padded, new_params
 
-    def _naive_point_predictions(self, y_true: list[Any]) -> list[Any]:
-        if not y_true:
-            return []
-        try:
-            values = np.asarray(y_true, dtype=np.float64)
-            if np.all(np.isfinite(values)):
-                baseline = float(values.mean())
-                return [baseline] * len(y_true)
-        except (TypeError, ValueError):
-            pass
-        baseline = Counter(y_true).most_common(1)[0][0]
-        return [baseline] * len(y_true)
-
-    def _empirical_label_probabilities(
-        self, y_true: list[Any], labels: list[Any] | None
-    ) -> list[list[float]]:
-        if not y_true:
-            return []
-        if labels is None:
-            labels = sorted(set(y_true))
-        counts = Counter(y_true)
-        total = len(y_true)
-        probs = [counts.get(label, 0) / total for label in labels]
-        return [probs] * total
-
-    def _score_group(self, y_true: list[Any], preds: list[Any], is_probabilistic: bool) -> float:
+    def _score_group(self, df: IntoFrameT, preds: list[Any], is_probabilistic: bool) -> float:
+        y_true = df[self.target].to_list()
         if is_probabilistic:
             probs = [item for item in preds]
             probs, params = self._pad_probabilities(y_true, probs)
             score = self.scorer_function(y_true, probs, **params)
             if not self.compare_to_naive:
                 return float(score)
-            naive_probs = self._empirical_label_probabilities(y_true, params.get("labels"))
+            naive_probs = _naive_probability_predictions_for_df(
+                df, self.target, params.get("labels"), self.naive_granularity
+            )
             naive_score = self.scorer_function(y_true, naive_probs, **params)
             return float(naive_score - score)
 
         score = self.scorer_function(y_true, preds, **self.params)
         if not self.compare_to_naive:
             return float(score)
-        naive_preds = self._naive_point_predictions(y_true)
+        naive_preds = _naive_point_predictions_for_df(df, self.target, self.naive_granularity)
         naive_score = self.scorer_function(y_true, naive_preds, **self.params)
         return float(naive_score - score)
 
@@ -520,15 +642,13 @@ class SklearnScorer(BaseScorer):
 
                 preds = gran_df[self.pred_column_name].to_list()
                 is_probabilistic = len(preds) > 0 and isinstance(preds[0], list)
-                y_true = gran_df[self.target].to_list()
-                results[gran_tuple] = self._score_group(y_true, preds, is_probabilistic)
+                results[gran_tuple] = self._score_group(gran_df, preds, is_probabilistic)
 
             return results
 
         preds = df[self.pred_column_name].to_list()
         is_probabilistic = len(preds) > 0 and isinstance(preds[0], list)
-        y_true = df[self.target].to_list()
-        return self._score_group(y_true, preds, is_probabilistic)
+        return self._score_group(df, preds, is_probabilistic)
 
 
 class ProbabilisticMeanBias(BaseScorer):
@@ -542,6 +662,8 @@ class ProbabilisticMeanBias(BaseScorer):
         aggregation_level: list[str] | None = None,
         granularity: list[str] | None = None,
         filters: list[Filter] | None = None,
+        compare_to_naive: bool = False,
+        naive_granularity: list[str] | None = None,
     ):
 
         self.pred_column_name = pred_column
@@ -553,6 +675,8 @@ class ProbabilisticMeanBias(BaseScorer):
             granularity=granularity,
             filters=filters,
             validation_column=validation_column,
+            compare_to_naive=compare_to_naive,
+            naive_granularity=naive_granularity,
         )
 
     def _calculate_score_for_group(self, df: pd.DataFrame) -> float:
@@ -619,6 +743,55 @@ class ProbabilisticMeanBias(BaseScorer):
             sum_lr += sum_lrs[variation_idx] * len(rows_target_group) / len(df)
         return sum_lr
 
+    def _naive_predictions_for_group(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        distinct_classes_variations = df.drop_duplicates(subset=[self.class_column_name])[
+            self.class_column_name
+        ].tolist()
+
+        for distinct_class_variation in distinct_classes_variations:
+            if not isinstance(distinct_class_variation, list) and math.isnan(
+                distinct_class_variation
+            ):
+                continue
+
+            rows_mask = df[self.class_column_name].apply(
+                lambda x, dcv=distinct_class_variation: x == dcv
+            )
+            rows_target_group = df[rows_mask]
+            if rows_target_group.empty:
+                continue
+
+            if not self.naive_granularity:
+                probs = _empirical_probabilities_from_targets(
+                    rows_target_group[self.target].tolist(), distinct_class_variation
+                )
+                df.loc[rows_mask, self.pred_column_name] = pd.Series(
+                    [probs] * len(rows_target_group), index=df.loc[rows_mask].index
+                )
+                continue
+
+            grouped = (
+                rows_target_group.groupby(self.naive_granularity, dropna=False)[self.target]
+                .apply(list)
+                .to_dict()
+            )
+            if len(self.naive_granularity) == 1:
+                group_keys = rows_target_group[self.naive_granularity[0]].tolist()
+            else:
+                group_keys = [
+                    tuple(row)
+                    for row in rows_target_group[self.naive_granularity].itertuples(index=False)
+                ]
+
+            for idx, key in zip(rows_target_group.index, group_keys, strict=False):
+                probs = _empirical_probabilities_from_targets(
+                    grouped[key], distinct_class_variation
+                )
+                df.at[idx, self.pred_column_name] = probs
+
+        return df
+
     def score(self, df: pd.DataFrame) -> float | dict[tuple, float]:
         df = df.copy()
         df = apply_filters(df, self.filters)
@@ -639,14 +812,29 @@ class ProbabilisticMeanBias(BaseScorer):
             granularity_groups = df.groupby(self.granularity)
             for gran_tuple, gran_df in granularity_groups:
                 if isinstance(gran_tuple, tuple):
-                    results[gran_tuple] = self._calculate_score_for_group(gran_df)
+                    score = self._calculate_score_for_group(gran_df)
+                    if self.compare_to_naive:
+                        naive_df = self._naive_predictions_for_group(gran_df)
+                        naive_score = self._calculate_score_for_group(naive_df)
+                        score = naive_score - score
+                    results[gran_tuple] = score
                 else:
                     # Single column granularity
-                    results[(gran_tuple,)] = self._calculate_score_for_group(gran_df)
+                    score = self._calculate_score_for_group(gran_df)
+                    if self.compare_to_naive:
+                        naive_df = self._naive_predictions_for_group(gran_df)
+                        naive_score = self._calculate_score_for_group(naive_df)
+                        score = naive_score - score
+                    results[(gran_tuple,)] = score
             return results
 
         # Single score calculation
-        return self._calculate_score_for_group(df)
+        score = self._calculate_score_for_group(df)
+        if self.compare_to_naive:
+            naive_df = self._naive_predictions_for_group(df)
+            naive_score = self._calculate_score_for_group(naive_df)
+            return float(naive_score - score)
+        return score
 
 
 class OrdinalLossScorer(BaseScorer):
@@ -659,7 +847,9 @@ class OrdinalLossScorer(BaseScorer):
         aggregation_level: list[str] | None = None,
         granularity: list[str] | None = None,
         filters: list[Filter] | None = None,
-        labels: list[int] | None = None
+        labels: list[int] | None = None,
+        compare_to_naive: bool = False,
+        naive_granularity: list[str] | None = None,
     ):
         self.pred_column_name = pred_column
         super().__init__(
@@ -669,6 +859,8 @@ class OrdinalLossScorer(BaseScorer):
             granularity=granularity,
             filters=filters,
             validation_column=validation_column,
+            compare_to_naive=compare_to_naive,
+            naive_granularity=naive_granularity,
         )
         self.classes = classes
 
@@ -785,11 +977,35 @@ class OrdinalLossScorer(BaseScorer):
                     mask = col_mask if mask is None else (mask & col_mask)
                 gran_df = df_pl.filter(mask)
 
-                results[gran_tuple] = self._calculate_score_for_group(gran_df)
+                score = self._calculate_score_for_group(gran_df)
+                if self.compare_to_naive:
+                    class_labels = [int(c) for c in self.classes]
+                    class_labels.sort()
+                    naive_probs = _naive_probability_predictions_for_df(
+                        gran_df, self.target, class_labels, self.naive_granularity
+                    )
+                    naive_df = gran_df.with_columns(
+                        pl.Series(self.pred_column, naive_probs)
+                    )
+                    naive_score = self._calculate_score_for_group(naive_df)
+                    score = naive_score - score
+                results[gran_tuple] = score
 
             return results
 
-        return self._calculate_score_for_group(df_pl)
+        score = self._calculate_score_for_group(df_pl)
+        if self.compare_to_naive:
+            class_labels = [int(c) for c in self.classes]
+            class_labels.sort()
+            naive_probs = _naive_probability_predictions_for_df(
+                df_pl, self.target, class_labels, self.naive_granularity
+            )
+            naive_df = df_pl.with_columns(
+                pl.Series(self.pred_column, naive_probs)
+            )
+            naive_score = self._calculate_score_for_group(naive_df)
+            return float(naive_score - score)
+        return score
 
 
 class ThresholdEventScorer(BaseScorer):
@@ -824,6 +1040,8 @@ class ThresholdEventScorer(BaseScorer):
         aggregation_level: list[str] | None = None,
         granularity: list[str] | None = None,
         filters: list["Filter"] | None = None,
+        compare_to_naive: bool = False,
+        naive_granularity: list[str] | None = None,
     ):
         self.pred_column_name = dist_column
         super().__init__(
@@ -833,6 +1051,8 @@ class ThresholdEventScorer(BaseScorer):
             granularity=granularity,
             filters=filters,
             validation_column=validation_column,
+            compare_to_naive=compare_to_naive,
+            naive_granularity=naive_granularity,
         )
 
         self.dist_column = dist_column
@@ -992,18 +1212,7 @@ class ThresholdEventScorer(BaseScorer):
 
         return out
 
-    @narwhals.narwhalify
-    def score(self, df: "IntoFrameT") -> float | dict[tuple, float]:
-        df = nw.from_native(apply_filters(df, self.filters))
-
-        required = [self.dist_column, self.threshold_column, self.outcome_column]
-        mask = None
-        for c in required:
-            m = ~nw.col(c).is_null()
-            mask = m if mask is None else (mask & m)
-        df = df.filter(mask)
-
-        probs_list = df[self.dist_column].to_list()
+    def _score_with_probabilities(self, df: "IntoFrameT", probs_list: list) -> float:
         thresholds = np.asarray(df[self.threshold_column].to_numpy(), dtype=np.float64)
         outcomes = np.asarray(df[self.outcome_column].to_numpy(), dtype=np.float64)
 
@@ -1025,3 +1234,31 @@ class ThresholdEventScorer(BaseScorer):
         )
 
         return self.binary_scorer.score(df)
+
+    @narwhals.narwhalify
+    def score(self, df: "IntoFrameT") -> float | dict[tuple, float]:
+        df = nw.from_native(apply_filters(df, self.filters))
+
+        required = [self.dist_column, self.threshold_column, self.outcome_column]
+        mask = None
+        for c in required:
+            m = ~nw.col(c).is_null()
+            mask = m if mask is None else (mask & m)
+        df = df.filter(mask)
+
+        probs_list = df[self.dist_column].to_list()
+        score = self._score_with_probabilities(df, probs_list)
+        if not self.compare_to_naive:
+            return score
+
+        if self.labels is None:
+            max_len = max((len(p) for p in probs_list), default=0)
+            labels = list(range(max_len))
+        else:
+            labels = list(self.labels)
+
+        naive_list = _naive_probability_predictions_for_df(
+            df, self.outcome_column, labels, self.naive_granularity
+        )
+        naive_score = self._score_with_probabilities(df, naive_list)
+        return float(naive_score - score)

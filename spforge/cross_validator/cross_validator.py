@@ -100,7 +100,10 @@ class MatchKFoldCrossValidator:
                 keep = [c for c in feat_df.columns if c != pred_col]
 
                 if keep:
+                    existing_cols = set(out.columns)
                     for c in keep:
+                        if c in existing_cols:
+                            continue
                         out = out.with_columns(
                             nw.new_series(
                                 name=c,
@@ -108,6 +111,7 @@ class MatchKFoldCrossValidator:
                                 backend=nw.get_native_namespace(out),
                             )
                         )
+                        existing_cols.add(c)
 
         return out
 
