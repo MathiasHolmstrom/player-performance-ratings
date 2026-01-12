@@ -66,9 +66,10 @@ Key gotchas:
 - Naming: `test_<unit>__<behavior>` (use `__` to separate context from behavior).
   Examples:
   - `test_PlayerRatingGenerator_future_transform__does_not_mutate_state`
-  - `test_confidence_decay__reduces_multiplier_over_time`
 - Tests must run for both pandas and polars inputs where supported.
 - Prefer .parameterize for testing different inputs (e.g. pandas vs polars)
+- Test behaviours through public methods. Only in rare cases must you test the protected methods.
+- Prefer simple tests with specific input and expected output values.
 
 ## Canonical end-to-end example
 See `tests/e2e/test_nba_player_points.py::test_nba_player_points` (or equivalent path).
