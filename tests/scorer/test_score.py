@@ -518,6 +518,26 @@ def test_mean_bias_scorer_probabilities_use_expected_value(df_type):
 
 
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_mean_bias_scorer_probabilities_with_custom_labels(df_type):
+    """MeanBiasScorer should use custom labels for probability predictions (e.g., negative values)."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [[0.1, 0.2, 0.4, 0.3], [0.3, 0.4, 0.2, 0.1]],
+            "target": [-2.0, 0.0],
+        },
+    )
+    scorer = MeanBiasScorer(pred_column="pred", target="target", labels=[-2, -1, 0, 1])
+    score = scorer.score(df)
+    # Expected values: [-2, -1, 0, 1]
+    # First pred: 0.1*(-2) + 0.2*(-1) + 0.4*(0) + 0.3*(1) = -0.2 - 0.2 + 0.3 = -0.1
+    # Second pred: 0.3*(-2) + 0.4*(-1) + 0.2*(0) + 0.1*(1) = -0.6 - 0.4 + 0.1 = -0.9
+    expected_preds = [-0.1, -0.9]
+    expected = ((-0.1 - (-2.0)) + (-0.9 - 0.0)) / 2  # (1.9 - 0.9) / 2 = 0.5
+    assert abs(score - expected) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
 def test_sklearn_scorer_compare_to_naive_point_estimates(df_type):
     """SklearnScorer compares against naive baseline for point estimates."""
     df = create_dataframe(df_type, {"pred": [0, 1, 0, 1], "target": [0, 1, 0, 1]})
