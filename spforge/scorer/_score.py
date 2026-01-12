@@ -103,6 +103,16 @@ def _naive_probability_predictions_for_df(
     return [probs_by_group[key] for key in group_keys]
 
 
+def _expected_from_probabilities(preds: list[list[float]]) -> list[float]:
+    expected = []
+    for row in preds:
+        total = 0.0
+        for idx, prob in enumerate(row):
+            total += float(prob) * idx
+        expected.append(total)
+    return expected
+
+
 class Operator(Enum):
     EQUALS = "=="
     NOT_EQUALS = "!="
@@ -502,7 +512,13 @@ class MeanBiasScorer(BaseScorer):
                 gran_df = df.filter(mask)
 
                 # Calculate score for this group
-                score = self._mean_bias_score(gran_df)
+                preds = gran_df[self.pred_column].to_list()
+                if preds and isinstance(preds[0], list):
+                    targets = gran_df[self.target].to_list()
+                    expected_preds = _expected_from_probabilities(preds)
+                    score = self._mean_bias_from_lists(expected_preds, targets)
+                else:
+                    score = self._mean_bias_score(gran_df)
                 if self.compare_to_naive:
                     targets = gran_df[self.target].to_list()
                     naive_preds = _naive_point_predictions_for_df(
@@ -515,7 +531,13 @@ class MeanBiasScorer(BaseScorer):
             return results
 
         # Single score calculation
-        score = self._mean_bias_score(df)
+        preds = df[self.pred_column].to_list()
+        if preds and isinstance(preds[0], list):
+            targets = df[self.target].to_list()
+            expected_preds = _expected_from_probabilities(preds)
+            score = self._mean_bias_from_lists(expected_preds, targets)
+        else:
+            score = self._mean_bias_score(df)
         if self.compare_to_naive:
             targets = df[self.target].to_list()
             naive_preds = _naive_point_predictions_for_df(df, self.target, self.naive_granularity)
