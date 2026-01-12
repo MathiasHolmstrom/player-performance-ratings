@@ -54,14 +54,46 @@ def _drop_columns_transformer(X, drop_cols):
     return X[[c for c in X.columns if c not in drop_cols]]
 
 
-class _ColumnSelectorExcluding:
+class _ColumnSelectorExcluding(BaseEstimator):
     """Class-based callable for ColumnTransformer selection to ensure picklability."""
 
-    def __init__(self, drop_cols):
+    def __init__(self, drop_cols=frozenset()):
         self.drop_cols = drop_cols
 
     def __call__(self, X):
         return [c for c in X.columns if c not in self.drop_cols]
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X):
+        return X
+
+
+class PreprocessorToDataFrame(BaseEstimator, TransformerMixin):
+    def __init__(self, preprocessor: Any):
+        self.preprocessor = preprocessor
+        self._feature_names_out: np.ndarray | None = None
+
+    @nw.narwhalify
+    def fit(self, X: IntoFrameT, y: Any = None):
+        y = y.to_numpy() if not isinstance(y, np.ndarray) else y
+        self.preprocessor.fit(X.to_pandas(), y)
+        if hasattr(self.preprocessor, "get_feature_names_out"):
+            self._feature_names_out = self.preprocessor.get_feature_names_out()
+        else:
+            self._feature_names_out = None
+        return self
+
+    @nw.narwhalify
+    def transform(self, X: IntoFrameT) -> IntoFrameT:
+        out = self.preprocessor.transform(X.to_pandas())
+        return nw.from_native(out)
+
+    def get_feature_names_out(self, input_features: Any = None):
+        if self._feature_names_out is not None:
+            return self._feature_names_out
+        return np.array([], dtype=object)
 
 
 class _OnlyOutputColumns(BaseEstimator, TransformerMixin):
@@ -354,12 +386,13 @@ class AutoPipeline(BaseEstimator):
         if ctx_cols:
             transformers.append(("ctx", "passthrough", ctx_cols))
 
-        pre = ColumnTransformer(
+        pre_raw = ColumnTransformer(
             transformers=transformers,
             remainder=self.remainder,
             verbose_feature_names_out=False,
         )
-        pre.set_output(transform="pandas")
+        pre_raw.set_output(transform="pandas")
+        pre = PreprocessorToDataFrame(pre_raw)
 
         est = (
             GroupByEstimator(self.estimator, granularity=[f"{c}" for c in self.granularity])
@@ -367,10 +400,7 @@ class AutoPipeline(BaseEstimator):
             else self.estimator
         )
 
-        steps: list[tuple[str, Any]] = [
-            ("to_pd", FunctionTransformer(_to_pandas, validate=False)),
-            ("pre", pre),
-        ]
+        steps: list[tuple[str, Any]] = [("pre", pre)]
 
         prev_transformer_feats_out = []
 
@@ -397,14 +427,15 @@ class AutoPipeline(BaseEstimator):
                     f"Duplicate names in feats_out for transformer {transformer}: {feats_out}"
                 )
 
-            # Replaced internal function with picklable class
-            column_selector = _ColumnSelectorExcluding(frozenset(feats_out))
+            # Compute columns to keep statically (all except feats_out)
+            feats_out_set = set(feats_out)
+            keep_cols = [c for c in input_cols if c not in feats_out_set]
 
             wrapped = _OnlyOutputColumns(transformer, feats_out)
 
             t_ct = ColumnTransformer(
                 transformers=[
-                    ("keep", "passthrough", column_selector),
+                    ("keep", "passthrough", keep_cols),
                     ("features", wrapped, input_cols),
                 ],
                 remainder="drop",
@@ -415,7 +446,7 @@ class AutoPipeline(BaseEstimator):
 
             prev_transformer_feats_out.extend(feats_out)
 
-        # Replaced lambda and internal function with global function + kw_args
+        # Use FunctionTransformer with global function for serializability
         final = FunctionTransformer(
             _drop_columns_transformer, validate=False, kw_args={"drop_cols": drop_ctx_set}
         )
