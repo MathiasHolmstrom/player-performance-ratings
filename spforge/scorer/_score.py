@@ -1225,6 +1225,8 @@ class ThresholdEventScorer(BaseScorer):
         else:
             p_event = self._p_event_ragged(probs_list, thr)
 
+        p_event = np.clip(p_event, 1e-15, 1.0 - 1e-15)
+
         backend = nw.get_native_namespace(df)
         df = df.with_columns(
             [
