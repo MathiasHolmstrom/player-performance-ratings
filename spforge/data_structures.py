@@ -37,6 +37,46 @@ class ColumnNames:
 
 
 @dataclass
+class GameColumnNames:
+    """Column names for game-level data format (1 row per match).
+
+    This is an alternative to ColumnNames for data where each row represents
+    a complete match with separate columns for each team's data.
+
+    Example data format:
+        match_id | start_date  | team1  | team2  | team1_score | team2_score
+        1        | 2024-01-01  | team_a | team_b | 100         | 95
+
+    After conversion to game+team format:
+        match_id | start_date  | team_id | score
+        1        | 2024-01-01  | team_a  | 100
+        1        | 2024-01-01  | team_b  | 95
+    """
+
+    match_id: str
+    start_date: str
+    team1_name: str
+    team2_name: str
+    performance_column_pairs: dict[str, tuple[str, str]]
+    league: str | None = None
+    update_match_id: str | None = None
+
+    def __post_init__(self):
+        if self.update_match_id is None:
+            self.update_match_id = self.match_id
+
+        if not self.performance_column_pairs:
+            raise ValueError("performance_column_pairs must contain at least one column pair")
+
+        for output_col, (team1_col, team2_col) in self.performance_column_pairs.items():
+            if not output_col or not team1_col or not team2_col:
+                raise ValueError(
+                    f"All column names in performance_column_pairs must be non-empty strings. "
+                    f"Got: {output_col} -> ({team1_col}, {team2_col})"
+                )
+
+
+@dataclass
 class MatchPerformance:
     performance_value: float | None
     participation_weight: float | None

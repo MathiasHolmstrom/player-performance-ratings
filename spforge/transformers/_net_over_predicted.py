@@ -1,6 +1,7 @@
 from typing import Any
 
 import narwhals.stable.v2 as nw
+import numpy as np
 from narwhals.typing import IntoFrameT
 from sklearn.base import BaseEstimator, is_regressor
 
@@ -42,6 +43,7 @@ class NetOverPredictedTransformer(PredictorTransformer):
         X: IntoFrameT,
         y,
     ):
+        y = y.to_numpy() if not isinstance(y, np.ndarray) else y
         self.estimator.fit(X.to_pandas(), y)
         return self
 

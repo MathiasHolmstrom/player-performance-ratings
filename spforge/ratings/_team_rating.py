@@ -7,7 +7,8 @@ from typing import Literal
 
 import polars as pl
 
-from spforge.data_structures import ColumnNames, TeamRatingsResult
+from spforge.data_structures import ColumnNames, GameColumnNames, TeamRatingsResult
+from spforge.feature_generator._utils import _to_polars_eager
 from spforge.performance_transformers._performance_manager import ColumnWeight, PerformanceManager
 from spforge.ratings._base import RatingGenerator, RatingState
 from spforge.ratings.enums import RatingKnownFeatures, RatingUnknownFeatures
@@ -43,19 +44,34 @@ class TeamRatingGenerator(RatingGenerator):
         min_rating_change_multiplier_ratio: float = 0.1,
         league_rating_change_update_threshold: float = 100,
         league_rating_adjustor_multiplier: float = 0.05,
-        column_names: ColumnNames | None = None,
+        column_names: ColumnNames | GameColumnNames | None = None,
         output_suffix: str | None = None,
-        start_harcoded_start_rating: float = 1000.0,
+        start_harcoded_start_rating: float | None = None,
         start_league_ratings: dict[str, float] | None = None,
         start_league_quantile: float = 0.2,
         start_min_count_for_percentiles: int = 50,
         **kwargs,
     ):
+        # Handle GameColumnNames vs ColumnNames
+        if isinstance(column_names, GameColumnNames):
+            self._game_column_names: GameColumnNames | None = column_names
+            # Create ColumnNames for internal use after conversion
+            _column_names = ColumnNames(
+                match_id=column_names.match_id,
+                start_date=column_names.start_date,
+                team_id="team_id",  # Standard name after conversion
+                league=column_names.league,
+                update_match_id=column_names.update_match_id,
+            )
+        else:
+            self._game_column_names = None
+            _column_names = column_names
+
         super().__init__(
             output_suffix=output_suffix,
             performance_column=performance_column,
             performance_weights=performance_weights,
-            column_names=column_names,
+            column_names=_column_names,
             features_out=features_out,
             performance_manager=performance_manager,
             auto_scale_performance=auto_scale_performance,
@@ -126,6 +142,33 @@ class TeamRatingGenerator(RatingGenerator):
             **performance_predictor_params
         )
 
+    def fit_transform(self, df: pl.DataFrame, column_names: ColumnNames | None = None):
+        """Override to handle game-level data conversion before base class processing."""
+        # Convert game-level data to game+team format if needed
+        if self._game_column_names is not None:
+            df = self._convert_game_to_game_team(df, self._game_column_names)
+
+        # Call parent fit_transform
+        return super().fit_transform(df, column_names)
+
+    def transform(self, df: pl.DataFrame):
+        """Override to handle game-level data conversion before base class processing."""
+        # Convert game-level data to game+team format if needed
+        if self._game_column_names is not None:
+            df = self._convert_game_to_game_team(df, self._game_column_names)
+
+        # Call parent transform
+        return super().transform(df)
+
+    def future_transform(self, df: pl.DataFrame):
+        """Override to handle game-level data conversion before base class processing."""
+        # Convert game-level data to game+team format if needed
+        if self._game_column_names is not None:
+            df = self._convert_game_to_game_team(df, self._game_column_names)
+
+        # Call parent future_transform
+        return super().future_transform(df)
+
     def _ensure_team_off(self, team_id: str, day_number: int, league: str) -> RatingState:
         if team_id not in self._team_off_ratings:
             rating = self.start_rating_generator.generate_rating_value(
@@ -147,6 +190,67 @@ class TeamRatingGenerator(RatingGenerator):
             state=state, day_number=day_number, participation_weight=1.0
         )
 
+    def _convert_game_to_game_team(
+        self, df: pl.DataFrame, game_column_names: "GameColumnNames"
+    ) -> pl.DataFrame:
+        """Convert game-level data (1 row per match) to game+team format (2 rows per match).
+
+        Args:
+            df: DataFrame with 1 row per match (pandas or polars)
+            game_column_names: Configuration specifying column mappings
+
+        Returns:
+            DataFrame with 2 rows per match (one per team)
+        """
+        from spforge.data_structures import GameColumnNames
+
+        # Convert to polars for internal processing
+        df = _to_polars_eager(df)
+
+        gcn = game_column_names
+
+        # Collect all columns that should be preserved (not part of team-specific data)
+        base_cols = [gcn.match_id, gcn.start_date]
+        if gcn.league and gcn.league in df.columns:
+            base_cols.append(gcn.league)
+        if gcn.update_match_id and gcn.update_match_id != gcn.match_id:
+            base_cols.append(gcn.update_match_id)
+
+        # Create team1 rows
+        team1_select = base_cols + [gcn.team1_name]
+        team1_rename = {gcn.team1_name: "team_id"}
+
+        # Add performance columns for team1
+        for output_col, (team1_col, _) in gcn.performance_column_pairs.items():
+            if team1_col in df.columns:
+                team1_select.append(team1_col)
+                team1_rename[team1_col] = output_col
+
+        team1_df = df.select([c for c in team1_select if c in df.columns]).rename(team1_rename)
+
+        # Create team2 rows
+        team2_select = base_cols + [gcn.team2_name]
+        team2_rename = {gcn.team2_name: "team_id"}
+
+        # Add performance columns for team2
+        for output_col, (_, team2_col) in gcn.performance_column_pairs.items():
+            if team2_col in df.columns:
+                team2_select.append(team2_col)
+                team2_rename[team2_col] = output_col
+
+        team2_df = df.select([c for c in team2_select if c in df.columns]).rename(team2_rename)
+
+        # Union team1 and team2 rows
+        result_df = pl.concat([team1_df, team2_df], how="vertical")
+
+        # Sort chronologically
+        sort_cols = [gcn.start_date, gcn.match_id]
+        if gcn.update_match_id and gcn.update_match_id != gcn.match_id:
+            sort_cols.append(gcn.update_match_id)
+        result_df = result_df.sort(sort_cols)
+
+        return result_df
+
     def _create_match_df(self, df: pl.DataFrame) -> pl.DataFrame:
         cn = self.column_names
 
@@ -155,6 +259,8 @@ class TeamRatingGenerator(RatingGenerator):
         )
         if self.performance_column in df.columns:
             base_cols.append(self.performance_column)
+        if self.column_names.league:
+            base_cols.append(self.column_names.league)
 
         team_rows = df.select([c for c in base_cols if c in df.columns]).unique(
             [cn.match_id, cn.team_id]

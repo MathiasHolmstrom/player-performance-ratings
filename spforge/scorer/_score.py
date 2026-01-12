@@ -103,6 +103,28 @@ def _naive_probability_predictions_for_df(
     return [probs_by_group[key] for key in group_keys]
 
 
+def _expected_from_probabilities(preds: list[list[float]], labels: list[Any] | None = None) -> list[float]:
+    arr = np.asarray(preds, dtype=np.float64)
+    if arr.size == 0:
+        return []
+
+    if labels is not None:
+        labels_arr = np.asarray(labels, dtype=np.float64)
+    else:
+        labels_arr = None
+
+    if arr.ndim == 1:
+        if labels_arr is not None:
+            return [float(np.dot(arr, labels_arr))]
+        return [float(np.dot(arr, np.arange(arr.shape[0], dtype=np.float64)))]
+    if arr.ndim != 2:
+        raise ValueError("Probability predictions must be a 1D or 2D array.")
+
+    if labels_arr is not None:
+        return (arr @ labels_arr).tolist()
+    return (arr @ np.arange(arr.shape[1], dtype=np.float64)).tolist()
+
+
 class Operator(Enum):
     EQUALS = "=="
     NOT_EQUALS = "!="
@@ -421,6 +443,7 @@ class MeanBiasScorer(BaseScorer):
         aggregation_level: list[str] | None = None,
         granularity: list[str] | None = None,
         filters: list[Filter] | None = None,
+        labels: list[int] | None = None,
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
     ):
@@ -432,9 +455,11 @@ class MeanBiasScorer(BaseScorer):
         :param aggregation_level: The columns to group by before calculating the score (e.g., group from game-player to game-team)
         :param granularity: The columns to calculate separate scores for each unique combination (e.g., different scores for each team)
         :param filters: The filters to apply before calculating
+        :param labels: The labels corresponding to each index in probability distributions (e.g., [-5, -4, ..., 35] for rush yards)
         """
 
         self.pred_column_name = pred_column
+        self.labels = labels
         super().__init__(
             target=target,
             pred_column=pred_column,
@@ -502,7 +527,13 @@ class MeanBiasScorer(BaseScorer):
                 gran_df = df.filter(mask)
 
                 # Calculate score for this group
-                score = self._mean_bias_score(gran_df)
+                preds = gran_df[self.pred_column].to_list()
+                if preds and isinstance(preds[0], list):
+                    targets = gran_df[self.target].to_list()
+                    expected_preds = _expected_from_probabilities(preds, self.labels)
+                    score = self._mean_bias_from_lists(expected_preds, targets)
+                else:
+                    score = self._mean_bias_score(gran_df)
                 if self.compare_to_naive:
                     targets = gran_df[self.target].to_list()
                     naive_preds = _naive_point_predictions_for_df(
@@ -515,7 +546,13 @@ class MeanBiasScorer(BaseScorer):
             return results
 
         # Single score calculation
-        score = self._mean_bias_score(df)
+        preds = df[self.pred_column].to_list()
+        if preds and isinstance(preds[0], list):
+            targets = df[self.target].to_list()
+            expected_preds = _expected_from_probabilities(preds, self.labels)
+            score = self._mean_bias_from_lists(expected_preds, targets)
+        else:
+            score = self._mean_bias_score(df)
         if self.compare_to_naive:
             targets = df[self.target].to_list()
             naive_preds = _naive_point_predictions_for_df(df, self.target, self.naive_granularity)
@@ -1224,6 +1261,8 @@ class ThresholdEventScorer(BaseScorer):
             p_event = self._p_event_vectorized(probs_arr, thr)
         else:
             p_event = self._p_event_ragged(probs_list, thr)
+
+        p_event = np.clip(p_event, 1e-15, 1.0 - 1e-15)
 
         backend = nw.get_native_namespace(df)
         df = df.with_columns(
