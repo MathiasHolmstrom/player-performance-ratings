@@ -501,6 +501,23 @@ def test_mean_bias_scorer_compare_to_naive_granularity(df_type):
 
 
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_mean_bias_scorer_probabilities_use_expected_value(df_type):
+    """MeanBiasScorer should use expected value for probability predictions."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [[0.2, 0.8], [0.9, 0.1]],
+            "target": [1.0, 0.0],
+        },
+    )
+    scorer = MeanBiasScorer(pred_column="pred", target="target")
+    score = scorer.score(df)
+    expected_preds = [0.8, 0.1]
+    expected = ((0.8 - 1.0) + (0.1 - 0.0)) / 2
+    assert abs(score - expected) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
 def test_sklearn_scorer_compare_to_naive_point_estimates(df_type):
     """SklearnScorer compares against naive baseline for point estimates."""
     df = create_dataframe(df_type, {"pred": [0, 1, 0, 1], "target": [0, 1, 0, 1]})
