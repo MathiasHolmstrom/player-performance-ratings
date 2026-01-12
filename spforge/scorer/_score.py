@@ -104,13 +104,14 @@ def _naive_probability_predictions_for_df(
 
 
 def _expected_from_probabilities(preds: list[list[float]]) -> list[float]:
-    expected = []
-    for row in preds:
-        total = 0.0
-        for idx, prob in enumerate(row):
-            total += float(prob) * idx
-        expected.append(total)
-    return expected
+    arr = np.asarray(preds, dtype=np.float64)
+    if arr.size == 0:
+        return []
+    if arr.ndim == 1:
+        return [float(np.dot(arr, np.arange(arr.shape[0], dtype=np.float64)))]
+    if arr.ndim != 2:
+        raise ValueError("Probability predictions must be a 1D or 2D array.")
+    return (arr @ np.arange(arr.shape[1], dtype=np.float64)).tolist()
 
 
 class Operator(Enum):
