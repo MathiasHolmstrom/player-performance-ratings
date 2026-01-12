@@ -8,6 +8,7 @@ from typing import Literal
 import polars as pl
 
 from spforge.data_structures import ColumnNames, GameColumnNames, TeamRatingsResult
+from spforge.feature_generator._utils import _to_polars_eager
 from spforge.performance_transformers._performance_manager import ColumnWeight, PerformanceManager
 from spforge.ratings._base import RatingGenerator, RatingState
 from spforge.ratings.enums import RatingKnownFeatures, RatingUnknownFeatures
@@ -195,13 +196,16 @@ class TeamRatingGenerator(RatingGenerator):
         """Convert game-level data (1 row per match) to game+team format (2 rows per match).
 
         Args:
-            df: DataFrame with 1 row per match
+            df: DataFrame with 1 row per match (pandas or polars)
             game_column_names: Configuration specifying column mappings
 
         Returns:
             DataFrame with 2 rows per match (one per team)
         """
         from spforge.data_structures import GameColumnNames
+
+        # Convert to polars for internal processing
+        df = _to_polars_eager(df)
 
         gcn = game_column_names
 
