@@ -163,7 +163,7 @@ def _inner_estimator(model: AutoPipeline):
 def test_fit_predict_returns_ndarray(df_reg):
     model = AutoPipeline(
         estimator=LinearRegression(),
-        feature_names=["num1", "num2", "cat1"],
+        estimator_features=["num1", "num2", "cat1"],
         impute_missing_values=True,
         scale_features=True,
     )
@@ -182,7 +182,7 @@ def test_drop_rows_where_target_is_nan(df_reg_pd, frame):
 
     model = AutoPipeline(
         estimator=LinearRegression(),
-        feature_names=["num1", "num2", "cat1"],
+        estimator_features=["num1", "num2", "cat1"],
         impute_missing_values=True,
         drop_rows_where_target_is_nan=True,
     )
@@ -199,7 +199,7 @@ def test_drop_rows_where_target_is_nan(df_reg_pd, frame):
 def test_min_max_target_clipping(df_reg):
     model = AutoPipeline(
         estimator=LinearRegression(),
-        feature_names=["num1", "num2", "cat1"],
+        estimator_features=["num1", "num2", "cat1"],
         impute_missing_values=True,
         min_target=2.0,
         max_target=5.0,
@@ -217,7 +217,7 @@ def test_min_max_target_clipping(df_reg):
 def test_predict_proba(df_clf):
     model = AutoPipeline(
         estimator=LogisticRegression(max_iter=1000),
-        feature_names=["num1", "num2", "cat1"],
+        estimator_features=["num1", "num2", "cat1"],
         impute_missing_values=True,
         scale_features=True,
     )
@@ -234,7 +234,7 @@ def test_predict_proba(df_clf):
 def test_predict_proba_raises_if_not_supported(df_reg):
     model = AutoPipeline(
         estimator=LinearRegression(),
-        feature_names=["num1", "num2", "cat1"],
+        estimator_features=["num1", "num2", "cat1"],
         impute_missing_values=True,
         scale_features=True,
     )
@@ -248,7 +248,7 @@ def test_predict_proba_raises_if_not_supported(df_reg):
         cap = CaptureEstimator()
         model = AutoPipeline(
             estimator=cap,
-            feature_names=["num1", "num2", "cat1"],
+            estimator_features=["num1", "num2", "cat1"],
             impute_missing_values=True,
             scale_features=True,
         )
@@ -272,7 +272,7 @@ def test_infer_numeric_from_feature_names_when_only_cat_features_given(df_reg):
     cap = CaptureEstimator()
     model = AutoPipeline(
         estimator=cap,
-        feature_names=["num1", "num2", "cat1"],
+        estimator_features=["num1", "num2", "cat1"],
         categorical_features=["cat1"],
         impute_missing_values=True,
         scale_features=True,
@@ -291,7 +291,7 @@ def test_infer_categorical_from_feature_names_when_only_numeric_features_given(d
     cap = CaptureEstimator()
     model = AutoPipeline(
         estimator=cap,
-        feature_names=["num1", "num2", "cat1"],
+        estimator_features=["num1", "num2", "cat1"],
         numeric_features=["num1", "num2"],
         impute_missing_values=True,
         scale_features=True,
@@ -309,7 +309,7 @@ def test_infer_categorical_from_feature_names_when_only_numeric_features_given(d
 def test_granularity_groups_rows_before_estimator_fit_and_predict(df_reg):
     model = AutoPipeline(
         estimator=CaptureEstimator(),
-        feature_names=["gameid", "num1", "num2", "cat1"],
+        estimator_features=["gameid", "num1", "num2", "cat1"],
         categorical_features=["cat1", "gameid"],
         granularity=["gameid"],
         impute_missing_values=True,
@@ -339,7 +339,7 @@ def test_pipeline_uses_feature_names_subset_even_if_extra_columns_present(df_reg
     cap = CaptureEstimator()
     model = AutoPipeline(
         estimator=cap,
-        feature_names=["num1", "cat1"],
+        estimator_features=["num1", "cat1"],
         categorical_features=["cat1"],
         impute_missing_values=True,
         scale_features=True,
@@ -373,7 +373,7 @@ def test_categorical_handling_auto_uses_native_when_lightgbm_in_predictor_transf
     cap = CaptureDtypesEstimator()
     model = AutoPipeline(
         estimator=cap,
-        feature_names=["num1", "num2", "cat1"],
+        estimator_features=["num1", "num2", "cat1"],
         predictor_transformers=[EstimatorHoldingTransformer(estimator=FakeLGBMRegressor())],
         categorical_handling="auto",
         impute_missing_values=True,
@@ -497,13 +497,7 @@ def test_final_sklearn_enhancer_estimator_gets_expected_feature_columns(frame):
 
     model = AutoPipeline(
         estimator=CaptureFitEstimator(),
-        feature_names=["num1", "num2", "location"],
-        context_predictor_transformer_feature_names=[
-            "player_id",
-            "team_id",
-            "match_id",
-            "start_date",
-        ],
+        estimator_features=["num1", "num2", "location"],
         predictor_transformers=[dummy_prev, final_transformer],
         categorical_handling="auto",
         impute_missing_values=True,
@@ -550,7 +544,7 @@ def test_autopipeline_is_picklable_after_fit():
 
     model = AutoPipeline(
         estimator=DummyRegressor(),
-        feature_names=["x"],
+        estimator_features=["x"],
         categorical_handling="ordinal",
     )
 

@@ -96,7 +96,7 @@ def test_nba_player_points(dataframe_type):
     game_winner_pipeline = AutoPipeline(
         granularity=["game_id", "team_id"],
         estimator=LogisticRegression(),
-        feature_names=player_plus_minus_rating_generator.features_out + ["location"],
+        estimator_features=player_plus_minus_rating_generator.features_out + ["location"],
     )
     cross_validator_game_winnner = MatchKFoldCrossValidator(
         date_column_name=column_names.start_date,
@@ -155,8 +155,7 @@ def test_nba_player_points(dataframe_type):
     )
     pipeline = AutoPipeline(
         estimator=negative_binomial,
-        feature_names=features_generator.features_out
-        + ["location", "game_winner_probability", column_names.player_id],
+        estimator_features=features_generator.features_out + ["location", "game_winner_probability"],
         predictor_transformers=[
             estimator_transformer_raw,
             team_ratio_transformer,

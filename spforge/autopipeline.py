@@ -166,8 +166,8 @@ class AutoPipeline(BaseEstimator):
     def __init__(
         self,
         estimator: Any,
-        feature_names: list[str],
-        predictor_transformers: list[Any] | None = None,
+        estimator_features: list[str],
+        predictor_transformers: list[str] | None = None,
         granularity: list[str] | None = None,
         filters: list[Filter] | None = None,
         scale_features: bool = False,
@@ -180,7 +180,8 @@ class AutoPipeline(BaseEstimator):
         numeric_features: list[str] | None = None,
         remainder: str = "drop",
     ):
-        self.feature_names = feature_names
+        self.estimator_features = estimator_features
+        self.feature_names = estimator_features  # Internal compat
         self.granularity = granularity or []
         self.predictor_transformers = predictor_transformers
         self.estimator = estimator
@@ -197,84 +198,74 @@ class AutoPipeline(BaseEstimator):
         self.remainder = remainder
         self._cat_feats = []
 
-        # Compute context from transformers
+        # Auto-compute context features
         self.context_feature_names = self._compute_context_features()
+        # _predictor_transformer_context is set by _compute_context_features()
+        self.context_predictor_transformer_feature_names = self._predictor_transformer_context
 
-        assert len([c for c in self.context_feature_names if c in self.feature_names]) == 0
         self.sklearn_pipeline: SkPipeline | None = None
         self._fitted_features: list[str] = []
         self._target_name: str | None = None
         self._resolved_categorical_handling: CategoricalHandling | None = None
 
     def _compute_context_features(self) -> list[str]:
-        """Auto-compute context features from predictor_transformers, granularity, and filters."""
+        """Auto-compute context features from estimator, granularity, and filters.
+
+        Note: Context from predictor_transformers is tracked separately in
+        context_predictor_transformer_feature_names and is dropped before
+        the final estimator.
+        """
         from spforge.transformers._base import PredictorTransformer
 
         context = []
 
-        # Collect from predictor transformers
+        # Collect from predictor transformers (to be dropped before final estimator)
+        self._predictor_transformer_context = []
         for transformer in (self.predictor_transformers or []):
             if isinstance(transformer, PredictorTransformer):
-                context.extend(transformer.context_features)
+                for feat in transformer.context_features:
+                    if feat not in self._predictor_transformer_context:
+                        self._predictor_transformer_context.append(feat)
+
+        # Collect from final estimator (passed to final estimator)
+        # Check for date_column (SkLearnEnhancerEstimator, etc.)
+        if hasattr(self.estimator, 'date_column') and self.estimator.date_column:
+            context.append(self.estimator.date_column)
+
+        # Check for r_specific_granularity (NegativeBinomialEstimator, etc.)
+        if hasattr(self.estimator, 'r_specific_granularity') and self.estimator.r_specific_granularity:
+            context.extend(self.estimator.r_specific_granularity)
+
+        # Check for column_names (many estimators use this)
+        if hasattr(self.estimator, 'column_names') and self.estimator.column_names:
+            cn = self.estimator.column_names
+            # Add commonly used columns
+            if hasattr(cn, 'match_id') and cn.match_id:
+                context.append(cn.match_id)
+            if hasattr(cn, 'start_date') and cn.start_date:
+                context.append(cn.start_date)
+            if hasattr(cn, 'team_id') and cn.team_id:
+                context.append(cn.team_id)
+            if hasattr(cn, 'player_id') and cn.player_id:
+                context.append(cn.player_id)
 
         # Add granularity columns
-        for c in self.granularity:
-            if c not in context and c not in self.feature_names:
-                context.append(c)
+        context.extend(self.granularity)
 
         # Add filter columns
         for f in self.filters:
-            if f.column_name not in context and f.column_name not in self.feature_names:
-                context.append(f.column_name)
+            context.append(f.column_name)
 
-        # Dedupe while preserving order
+        # Dedupe while preserving order, excluding estimator_features
         seen = set()
         deduped = []
+        estimator_features_set = set(self.estimator_features)
         for c in context:
-            if c not in seen and c not in self.feature_names:
+            if c not in seen and c not in estimator_features_set:
                 seen.add(c)
                 deduped.append(c)
 
         return deduped
-
-    @property
-    def required_features(self) -> list[str]:
-        """All features required by this pipeline for fit/predict.
-
-        This includes:
-        - feature_names: features for the final estimator
-        - Context features from predictor_transformers
-        - granularity columns (if using GroupByEstimator)
-        - filter columns
-
-        Use this property when passing features to cross-validator:
-            cross_validator = MatchKFoldCrossValidator(
-                estimator=pipeline,
-                features=pipeline.required_features,  # Clean!
-                ...
-            )
-
-        Returns:
-            Complete list of all columns needed by the pipeline.
-        """
-        all_features = list(self.feature_names)
-
-        # Add context from transformers
-        for ctx in self.context_feature_names:
-            if ctx not in all_features:
-                all_features.append(ctx)
-
-        # Add granularity columns
-        for g in self.granularity:
-            if g not in all_features:
-                all_features.append(g)
-
-        # Add filter columns
-        for f in self.filters:
-            if f.column_name not in all_features:
-                all_features.append(f.column_name)
-
-        return all_features
 
     def _infer_feature_types(self, df: IntoFrameT) -> tuple[list[str], list[str]]:
         feats = list(self.feature_names)
@@ -401,7 +392,10 @@ class AutoPipeline(BaseEstimator):
             cat_pipe = SkPipeline(steps=cat_steps) if cat_steps else "passthrough"
             transformers.append(("cat", cat_pipe, cat_feats))
 
-        ctx_cols = _dedupe_preserve_order(self.context_feature_names or [])
+        ctx_cols = _dedupe_preserve_order(
+            (self.context_feature_names or [])
+            + (self.context_predictor_transformer_feature_names or [])
+        )
 
         if do_groupby:
             key_cols = list(self.granularity or [])
@@ -435,10 +429,15 @@ class AutoPipeline(BaseEstimator):
         feature_names_set = set(self.feature_names)
         context_feature_names_set = set(self.context_feature_names)
 
-        # No context features to drop - they're needed by the estimator too
-        drop_ctx_set = set()
+        context_pred_feats = list(self.context_predictor_transformer_feature_names or [])
+        drop_ctx = [
+            c
+            for c in context_pred_feats
+            if (c not in feature_names_set) and (c not in context_feature_names_set)
+        ]
+        drop_ctx_set = set(drop_ctx)
 
-        context_feature_names = list(self.context_feature_names)
+        context_feature_names = list(set(self.context_feature_names + context_pred_feats))
 
         for idx, transformer in enumerate(self.predictor_transformers or []):
             input_cols = _dedupe_preserve_order(
@@ -500,6 +499,7 @@ class AutoPipeline(BaseEstimator):
             set(
                 self.feature_names
                 + self.context_feature_names
+                + self.context_predictor_transformer_feature_names
                 + self.granularity
             )
         )
@@ -552,3 +552,41 @@ class AutoPipeline(BaseEstimator):
             raise RuntimeError("Pipeline not fitted. Call fit() first.")
         X_pred = X[self._fitted_features]
         return self.sklearn_pipeline.predict_proba(X_pred)
+
+    @property
+    def required_features(self) -> list[str]:
+        """All features required by this pipeline for fit/predict.
+
+        This includes:
+        - estimator_features: features for the final estimator
+        - Features from each predictor_transformer
+        - Context features auto-detected from transformers and estimator
+        - Granularity and filter columns
+
+        Use this property when passing features to cross-validator:
+            cross_validator = MatchKFoldCrossValidator(
+                estimator=pipeline,
+                features=pipeline.required_features,
+                ...
+            )
+
+        Returns:
+            Complete list of all columns needed by the pipeline.
+        """
+        from spforge.transformers._base import PredictorTransformer
+
+        all_features = list(self.estimator_features)
+
+        # Add features from each predictor transformer
+        for transformer in (self.predictor_transformers or []):
+            if hasattr(transformer, 'features') and transformer.features:
+                for feat in transformer.features:
+                    if feat not in all_features:
+                        all_features.append(feat)
+
+        # Add context features
+        for ctx in self.context_feature_names:
+            if ctx not in all_features:
+                all_features.append(ctx)
+
+        return all_features
