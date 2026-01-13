@@ -8,11 +8,10 @@ See: cross_validator.CLAUDE.md, estimator.CLAUDE.md, feature_generator.CLAUDE.md
 ## Non-negotiable invariants
 - Support pandas+polars via narwhals (`@nw.narwhalify`)
 - sklearn API compatibility: `fit(X, y)`, `transform(X)`, `predict(X)`, `predict_proba(X)`
-- Feature generators MUST NOT change row count in transform/future_transform
-- No mutations - always return new frame via `with_columns` / assignment copy
 - Public classes/Enums must be importable from `__init__.py`
 - Update version in toml when pushing changes
 - Always create a new branch for new tasks
+- Always run all tests before commiting
 
 ## Git hygiene
 Never commit IDE files (.idea/, .vscode/), temporary files (tmpclaude-*, tmp*), or Python cache (__pycache__/, *.pyc).

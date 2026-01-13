@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest:*)",
+      "Bash(py -m pytest tests/scorer/test_score.py::test_mean_bias_scorer_probabilities_use_expected_value -v)",
+      "Bash(py -m pip show:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(git reset:*)",
+      "Bash(git restore:*)",
+      "Bash(git stash:*)",
+      "Bash(git checkout:*)",
+      "Bash(git pull:*)",
+      "Bash(git push:*)",
+      "Bash(uv run:*)",
+      "Bash(dir:*)",
+      "Bash(gh pr create:*)",
+      "Bash(git cherry-pick:*)",
+      "Bash(where gh:*)",
+      "Bash(grep:*)",
+      "Bash(python examples/nba/feature_engineering_example.py:*)",
+      "Bash(py examples/nba/feature_engineering_example.py)",
+      "Bash(py -m examples.nba.feature_engineering_example:*)",
+      "Bash(uv pip install:*)",
+      "Bash(py -c:*)",
+      "Bash(.venvScriptspython.exe -m examples.nba.feature_engineering_example)",
+      "Bash(\".venv/Scripts/python.exe\" -m examples.nba.feature_engineering_example)",
+      "Bash(\".venv/Scripts/python.exe\" -m examples.nba.predictor_transformers_example)",
+      "Bash(gh pr view:*)",
+      "Bash(gh api:*)",
+      "Bash(python -m examples.nba.cross_validation_example:*)",
+      "Bash(gh pr close:*)"
+    ]
+  }
+}

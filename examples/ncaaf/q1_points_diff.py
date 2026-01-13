@@ -1,0 +1,34 @@
+import pandas as pd
+from lightgbm import LGBMRegressor
+from sklearn.metrics import log_loss, mean_absolute_error
+
+from spforge.cross_validator import MatchKFoldCrossValidator
+from spforge.predictor import SklearnPredictor
+from spforge.scorer import SklearnScorer
+
+df = pd.read_csv(r"C:\Users\m.holmstrom\Downloads\New_Query_2025_11_11_2_19pm (2).csv")
+df['q1_points_difference'] = df['home_q1_points'] - df['away_q1_points']
+df['feed_q1_winner_probability'] = 1 / df['feed_q1_ml_price_home_win']
+features = ['feed_q1_hcp_line', 'feed_q1_hcp_price_home_win']
+predictor = SklearnPredictor(
+    target='q1_points_difference',
+    features=features,
+    estimator=LGBMRegressor(max_depth=2, verbose=-100),
+    pred_column='q1_adjusted_spread'
+)
+cross_validator = MatchKFoldCrossValidator(
+    match_id_column_name='master_event_id',
+    date_column_name='game_date',
+    predictor=predictor,
+    scorer=SklearnScorer(
+        scorer_function=mean_absolute_error,
+       pred_column=predictor.pred_column,
+        target=predictor.target
+    )
+)
+df = cross_validator.generate_validation_df(df, add_train_prediction=True)
+score = cross_validator.cross_validation_score(df)
+
+print(score)
+print(len(df))
+df.to_parquet('q1_data')

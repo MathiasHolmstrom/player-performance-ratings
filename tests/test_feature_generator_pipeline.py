@@ -30,11 +30,9 @@ def test_feature_generator_pipeline__fit_transform_preserves_row_count(df_type, 
     )
 
     lag_gen = LagTransformer(
-        features_to_lag=["points"],
+        features=["points"],
         lag_length=1,
-        grouping_features=[column_names.player_id],
-        unique_constraint=[column_names.match_id],
-        column_names=column_names,
+        granularity=[column_names.player_id],
     )
 
     pipeline = FeatureGeneratorPipeline(
@@ -62,11 +60,9 @@ def test_feature_generator_pipeline__transform_preserves_row_count(df_type, colu
     )
 
     lag_gen = LagTransformer(
-        features_to_lag=["points"],
+        features=["points"],
         lag_length=1,
-        grouping_features=[column_names.player_id],
-        unique_constraint=[column_names.match_id],
-        column_names=column_names,
+        granularity=[column_names.player_id],
     )
 
     pipeline = FeatureGeneratorPipeline(
@@ -108,11 +104,9 @@ def test_feature_generator_pipeline__future_transform_preserves_row_count(df_typ
     )
 
     lag_gen = LagTransformer(
-        features_to_lag=["points"],
+        features=["points"],
         lag_length=1,
-        grouping_features=[column_names.player_id],
-        unique_constraint=[column_names.match_id],
-        column_names=column_names,
+        granularity=[column_names.player_id],
     )
 
     pipeline = FeatureGeneratorPipeline(
@@ -194,19 +188,15 @@ def test_feature_generator_pipeline__maintains_feature_order(df_type, column_nam
     )
 
     lag_points = LagTransformer(
-        features_to_lag=["points"],
+        features=["points"],
         lag_length=1,
-        grouping_features=[column_names.player_id],
-        unique_constraint=[column_names.match_id],
-        column_names=column_names,
+        granularity=[column_names.player_id],
     )
 
     lag_rebounds = LagTransformer(
-        features_to_lag=["rebounds"],
+        features=["rebounds"],
         lag_length=1,
-        grouping_features=[column_names.player_id],
-        unique_constraint=[column_names.match_id],
-        column_names=column_names,
+        granularity=[column_names.player_id],
     )
 
     pipeline = FeatureGeneratorPipeline(
@@ -261,21 +251,17 @@ def test_feature_generator_pipeline__chains_generators_correctly(df_type, column
 
     # Generator 1: Lag points
     lag_gen = LagTransformer(
-        features_to_lag=["points"],
+        features=["points"],
         lag_length=1,
-        grouping_features=[column_names.player_id],
-        unique_constraint=[column_names.match_id],
-        column_names=column_names,
+        granularity=[column_names.player_id],
     )
 
     # Generator 2: Rolling window on points (will use original points column)
     rolling_gen = RollingWindowTransformer(
-        features_to_aggregate=["points"],
-        window_length=2,
-        grouping_features=[column_names.player_id],
-        unique_constraint=[column_names.match_id],
-        column_names=column_names,
-        aggregation_type="mean",
+        features=["points"],
+        window=2,
+        granularity=[column_names.player_id],
+        aggregation="mean",
     )
 
     pipeline = FeatureGeneratorPipeline(
@@ -304,11 +290,9 @@ def test_feature_generator_pipeline__future_transform_no_state_mutation(df_type,
     )
 
     lag_gen = LagTransformer(
-        features_to_lag=["points"],
+        features=["points"],
         lag_length=1,
-        grouping_features=[column_names.player_id],
-        unique_constraint=[column_names.match_id],
-        column_names=column_names,
+        granularity=[column_names.player_id],
     )
 
     pipeline = FeatureGeneratorPipeline(
