@@ -47,7 +47,6 @@ Repository = "https://github.com/Hiderdk/player-performance-ratings"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["spforge*"]
 
 # -----------------------------
 # Formatting (Black)
