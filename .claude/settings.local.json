@@ -22,7 +22,8 @@
       "Bash(PYTHONPATH=. python:*)",
       "Bash(git reset:*)",
       "Bash(git commit:*)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nRemove git merge permission from Claude settings\n\nThis ensures Claude cannot execute git merge commands under any\ncircumstances, enforcing manual control over merge operations.\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nRemove git merge permission from Claude settings\n\nThis ensures Claude cannot execute git merge commands under any\ncircumstances, enforcing manual control over merge operations.\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git merge:*)"
     ]
   }
 }
