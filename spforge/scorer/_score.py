@@ -103,7 +103,9 @@ def _naive_probability_predictions_for_df(
     return [probs_by_group[key] for key in group_keys]
 
 
-def _expected_from_probabilities(preds: list[list[float]], labels: list[Any] | None = None) -> list[float]:
+def _expected_from_probabilities(
+    preds: list[list[float]], labels: list[Any] | None = None
+) -> list[float]:
     arr = np.asarray(preds, dtype=np.float64)
     if arr.size == 0:
         return []
@@ -1021,9 +1023,7 @@ class OrdinalLossScorer(BaseScorer):
                     naive_probs = _naive_probability_predictions_for_df(
                         gran_df, self.target, class_labels, self.naive_granularity
                     )
-                    naive_df = gran_df.with_columns(
-                        pl.Series(self.pred_column, naive_probs)
-                    )
+                    naive_df = gran_df.with_columns(pl.Series(self.pred_column, naive_probs))
                     naive_score = self._calculate_score_for_group(naive_df)
                     score = naive_score - score
                 results[gran_tuple] = score
@@ -1037,9 +1037,7 @@ class OrdinalLossScorer(BaseScorer):
             naive_probs = _naive_probability_predictions_for_df(
                 df_pl, self.target, class_labels, self.naive_granularity
             )
-            naive_df = df_pl.with_columns(
-                pl.Series(self.pred_column, naive_probs)
-            )
+            naive_df = df_pl.with_columns(pl.Series(self.pred_column, naive_probs))
             naive_score = self._calculate_score_for_group(naive_df)
             return float(naive_score - score)
         return score

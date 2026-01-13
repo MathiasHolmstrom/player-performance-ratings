@@ -361,7 +361,9 @@ class ConditionalEstimator(BaseEstimator, ClassifierMixin):
         self, X: IntoFrameT, y: list[int] | np.ndarray, sample_weight: np.ndarray | None = None
     ):
         self.fitted_feats = (
-            X.columns if self.gate_distance_col_is_feature else X.drop(self.gate_distance_col)
+            X.columns
+            if self.gate_distance_col_is_feature
+            else X.drop(self.gate_distance_col).columns
         )
 
         df = X.with_columns(
@@ -452,4 +454,4 @@ class ConditionalEstimator(BaseEstimator, ClassifierMixin):
         """Predict most likely global expert label."""
         proba = self.predict_proba(X)
         idx = np.argmax(proba, axis=1)
-        return self.classes_[idx]
+        return np.array(self.classes_)[idx]

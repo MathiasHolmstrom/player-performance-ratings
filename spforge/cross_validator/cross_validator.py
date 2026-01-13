@@ -32,7 +32,7 @@ class MatchKFoldCrossValidator:
             return self.features
 
         # Auto-detect if estimator is AutoPipeline with required_features
-        if hasattr(self.estimator, 'required_features'):
+        if hasattr(self.estimator, "required_features"):
             return self.estimator.required_features
 
         # Fallback to current inference logic
