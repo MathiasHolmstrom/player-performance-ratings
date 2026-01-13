@@ -383,19 +383,14 @@ def test_sklearn_wrapper_predict_proba():
 def test_sklearn_enhancer_context_features__with_date_column():
     """SkLearnEnhancerEstimator.context_features returns [date_column] when set."""
     estimator = SkLearnEnhancerEstimator(
-        estimator=LinearRegression(),
-        date_column="game_date",
-        day_weight_epsilon=0.01
+        estimator=LinearRegression(), date_column="game_date", day_weight_epsilon=0.01
     )
     assert estimator.context_features == ["game_date"]
 
 
 def test_sklearn_enhancer_context_features__without_date_column():
     """SkLearnEnhancerEstimator.context_features returns [] when date_column is None."""
-    estimator = SkLearnEnhancerEstimator(
-        estimator=LinearRegression(),
-        date_column=None
-    )
+    estimator = SkLearnEnhancerEstimator(estimator=LinearRegression(), date_column=None)
     assert estimator.context_features == []
 
 

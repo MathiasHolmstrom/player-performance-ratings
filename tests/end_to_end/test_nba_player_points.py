@@ -155,7 +155,8 @@ def test_nba_player_points(dataframe_type):
     )
     pipeline = AutoPipeline(
         estimator=negative_binomial,
-        estimator_features=features_generator.features_out + ["location", "game_winner_probability"],
+        estimator_features=features_generator.features_out
+        + ["location", "game_winner_probability"],
         predictor_transformers=[
             estimator_transformer_raw,
             team_ratio_transformer,

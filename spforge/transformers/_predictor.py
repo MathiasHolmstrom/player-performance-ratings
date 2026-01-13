@@ -67,7 +67,7 @@ class EstimatorTransformer(PredictorTransformer):
         est = self.estimator
         while est is not None:
             # Check for context_features property first (modern protocol)
-            if hasattr(est, 'context_features'):
+            if hasattr(est, "context_features"):
                 ctx = est.context_features
                 if ctx:
                     context.extend(ctx)
@@ -80,11 +80,11 @@ class EstimatorTransformer(PredictorTransformer):
                     return deduped
 
             # Legacy fallback for estimators without context_features property
-            if hasattr(est, 'date_column') and est.date_column:
+            if hasattr(est, "date_column") and est.date_column:
                 if est.date_column not in context:
                     context.append(est.date_column)
                 return context
 
-            est = getattr(est, 'estimator', None)
+            est = getattr(est, "estimator", None)
 
         return context

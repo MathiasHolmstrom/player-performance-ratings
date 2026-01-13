@@ -361,7 +361,9 @@ class ConditionalEstimator(BaseEstimator, ClassifierMixin):
         self, X: IntoFrameT, y: list[int] | np.ndarray, sample_weight: np.ndarray | None = None
     ):
         self.fitted_feats = (
-            X.columns if self.gate_distance_col_is_feature else X.drop(self.gate_distance_col).columns
+            X.columns
+            if self.gate_distance_col_is_feature
+            else X.drop(self.gate_distance_col).columns
         )
 
         df = X.with_columns(

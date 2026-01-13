@@ -191,7 +191,7 @@ class TeamRatingGenerator(RatingGenerator):
         )
 
     def _convert_game_to_game_team(
-        self, df: pl.DataFrame, game_column_names: "GameColumnNames"
+        self, df: pl.DataFrame, game_column_names: GameColumnNames
     ) -> pl.DataFrame:
         """Convert game-level data (1 row per match) to game+team format (2 rows per match).
 
@@ -202,7 +202,6 @@ class TeamRatingGenerator(RatingGenerator):
         Returns:
             DataFrame with 2 rows per match (one per team)
         """
-        from spforge.data_structures import GameColumnNames
 
         # Convert to polars for internal processing
         df = _to_polars_eager(df)

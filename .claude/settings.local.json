@@ -14,7 +14,6 @@
       "Bash(git pull:*)",
       "Bash(git stash:*)",
       "Bash(git add:*)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd CLAUDE.md documentation for ratings module\n\nDocuments the rating system architecture including:\n- Dual offense/defense rating system\n- RatingState and result dataclasses\n- Transform methods \\(fit_transform, transform, future_transform\\)\n- Feature outputs and performance predictors\n- Key parameters and file structure\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git push:*)",
       "Bash(python examples/lol/pipeline_transformer_example.py)",
       "Bash(python:*)",
@@ -22,16 +21,11 @@
       "Bash(PYTHONPATH=. python:*)",
       "Bash(git reset:*)",
       "Bash(git commit:*)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nRemove git merge permission from Claude settings\n\nThis ensures Claude cannot execute git merge commands under any\ncircumstances, enforcing manual control over merge operations.\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git fetch:*)",
-      "Bash(git merge:*)",
       "Bash(gh pr view:*)",
-      "Bash(pytest:*)",
       "Bash(gh pr create:*)",
-      "Bash(.venv/Scripts/python.exe -m pytest tests/test_feature_generator_pipeline.py -v)",
-      "Bash(.venv/Scripts/python.exe -m pytest tests/estimator/test_sklearn_estimator.py::test_conditional_estimator__gate_estimator_routes_correctly -v)",
-      "Bash(.venv/Scripts/python.exe -m pytest tests/estimator/test_sklearn_estimator.py::test_conditional_estimator__gate_estimator_routes_correctly tests/transformers/test_predictor_transformer.py -v)",
-      "Bash(.venv/Scripts/python.exe -m pytest:*)"
+      "Bash(gh api:*)",
+      "Bash(git rm:*)"
     ]
   }
 }

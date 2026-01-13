@@ -2645,7 +2645,7 @@ def test_TeamRatingGenerator__with_GameColumnNames_verifies_weighted_performance
             "home": ["team_a"],
             "away": ["team_b"],
             "home_points": [100],  # Team A: strong on points
-            "away_points": [60],   # Team B: weak on points
+            "away_points": [60],  # Team B: weak on points
             "home_assists": [10],  # Team A: weak on assists
             "away_assists": [30],  # Team B: strong on assists
         }
