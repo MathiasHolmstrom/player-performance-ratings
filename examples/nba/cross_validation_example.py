@@ -7,10 +7,7 @@ from spforge import FeatureGeneratorPipeline
 from spforge.autopipeline import AutoPipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
 from spforge.data_structures import ColumnNames
-from spforge.estimator import (
-    NegativeBinomialEstimator,
-    SkLearnEnhancerEstimator,
-)
+from spforge.estimator import NegativeBinomialEstimator
 from spforge.feature_generator import (
     LagTransformer,
     RollingWindowTransformer,
@@ -44,6 +41,43 @@ features_generator = FeatureGeneratorPipeline(
     ],
 )
 df = features_generator.fit_transform(df)
+
+print("\n" + "=" * 60)
+print("Comparison: LGBMRegressor vs NegativeBinomialEstimator")
+print("=" * 60)
+
+# Approach 1: Simple LGBMRegressor (point estimate only)
+print("\nApproach 1: LGBMRegressor (point estimate)")
+print("-" * 60)
+pipeline_simple = AutoPipeline(
+    estimator=LGBMRegressor(verbose=-100, random_state=42),
+    feature_names=features_generator.features_out,
+)
+
+cross_validator_simple = MatchKFoldCrossValidator(
+    date_column_name=column_names.start_date,
+    match_id_column_name=column_names.match_id,
+    estimator=pipeline_simple,
+    prediction_column_name="points_pred_simple",
+    target_column="points",
+    features=pipeline_simple.feature_names,
+)
+validation_df_simple = cross_validator_simple.generate_validation_df(df=df)
+
+scorer_simple = SklearnScorer(
+    pred_column="points_pred_simple",
+    target="points",
+    scorer_function=mean_absolute_error,
+    validation_column="is_validation",
+    filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
+)
+
+mae_simple = scorer_simple.score(validation_df_simple)
+print(f"Validation MAE: {mae_simple:.4f}")
+
+# Approach 2: NegativeBinomialEstimator (full probability distribution)
+print("\nApproach 2: NegativeBinomialEstimator (probability distribution)")
+print("-" * 60)
 predictor = NegativeBinomialEstimator(
     max_value=40,
     point_estimate_pred_column="points_estimate",
@@ -52,7 +86,7 @@ predictor = NegativeBinomialEstimator(
     column_names=column_names,
 )
 
-pipeline = AutoPipeline(
+pipeline_dist = AutoPipeline(
     estimator=predictor,
     feature_names=features_generator.features_out,
     context_feature_names=[
@@ -64,43 +98,50 @@ pipeline = AutoPipeline(
     predictor_transformers=[
         EstimatorTransformer(
             prediction_column_name="points_estimate",
-            estimator=SkLearnEnhancerEstimator(
-                estimator=LGBMRegressor(verbose=-100, random_state=42),
-                date_column=column_names.start_date,
-                day_weight_epsilon=0.1,
-            ),
+            estimator=LGBMRegressor(verbose=-100, random_state=42),
+            features=features_generator.features_out,
         )
     ],
 )
 
-cross_validator = MatchKFoldCrossValidator(
+cross_validator_dist = MatchKFoldCrossValidator(
     date_column_name=column_names.start_date,
     match_id_column_name=column_names.match_id,
-    estimator=pipeline,
+    estimator=pipeline_dist,
     prediction_column_name="points_probabilities",
     target_column="points",
-    features=pipeline.context_feature_names + pipeline.feature_names,
+    features=pipeline_dist.context_feature_names + pipeline_dist.feature_names,
 )
-validation_df = cross_validator.generate_validation_df(df=df)
+validation_df_dist = cross_validator_dist.generate_validation_df(df=df)
 
 mean_absolute_scorer = SklearnScorer(
-    pred_column=pipeline.predictor_transformers[0].prediction_column_name,
-    target=cross_validator.target_column,
+    pred_column=pipeline_dist.predictor_transformers[0].prediction_column_name,
+    target=cross_validator_dist.target_column,
     scorer_function=mean_absolute_error,
     validation_column="is_validation",
     filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
 )
 
-mae_score = mean_absolute_scorer.score(validation_df)
-print(f"MAE {mae_score}")
+mae_dist = mean_absolute_scorer.score(validation_df_dist)
+print(f"Point Estimate MAE: {mae_dist:.4f}")
 
 ordinal_scorer = OrdinalLossScorer(
-    pred_column=cross_validator.prediction_column_name,
-    target=cross_validator.target_column,
+    pred_column=cross_validator_dist.prediction_column_name,
+    target=cross_validator_dist.target_column,
     validation_column="is_validation",
     filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
     classes=range(0, predictor.max_value + 1),
 )
-ordinal_loss_score = ordinal_scorer.score(validation_df)
+ordinal_loss_score = ordinal_scorer.score(validation_df_dist)
 
-print(f"Ordinal Loss {ordinal_loss_score}")
+print(f"Ordinal Loss: {ordinal_loss_score:.4f}")
+
+print("\n" + "=" * 60)
+print("Summary")
+print("=" * 60)
+print(f"LGBMRegressor MAE:              {mae_simple:.4f}")
+print(f"NegativeBinomial Point Est MAE: {mae_dist:.4f}")
+print(f"NegativeBinomial Ordinal Loss:  {ordinal_loss_score:.4f}")
+print("\nNote: NegativeBinomialEstimator provides full probability")
+print("distributions, enabling uncertainty quantification and")
+print("expected value calculations, not just point estimates.")
