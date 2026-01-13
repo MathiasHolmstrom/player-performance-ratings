@@ -24,7 +24,9 @@ def test_feature_generator_pipeline__fit_transform_preserves_row_count(df_type, 
             "game_id": [1, 1, 2, 2, 3, 3],
             "team_id": ["A", "B", "A", "B", "A", "B"],
             "player_id": ["p1", "p2", "p1", "p2", "p1", "p2"],
-            "date": pd.to_datetime(["2023-01-01", "2023-01-01", "2023-01-02", "2023-01-02", "2023-01-03", "2023-01-03"]),
+            "date": pd.to_datetime(
+                ["2023-01-01", "2023-01-01", "2023-01-02", "2023-01-02", "2023-01-03", "2023-01-03"]
+            ),
             "points": [10, 15, 12, 18, 14, 20],
         }
     )
@@ -148,18 +150,16 @@ def test_feature_generator_pipeline__detects_duplicate_features(df_type, column_
 
     # Create two lag generators that output the same feature name
     lag_gen_1 = LagTransformer(
-        features_to_lag=["points"],
+        features=["points"],
         lag_length=1,
-        grouping_features=[column_names.player_id],
-        unique_constraint=[column_names.match_id],
+        granularity=[column_names.player_id],
         column_names=column_names,
     )
 
     lag_gen_2 = LagTransformer(
-        features_to_lag=["points"],
+        features=["points"],
         lag_length=1,
-        grouping_features=[column_names.player_id],
-        unique_constraint=[column_names.match_id],
+        granularity=[column_names.player_id],
         column_names=column_names,
     )
 
@@ -181,7 +181,9 @@ def test_feature_generator_pipeline__maintains_feature_order(df_type, column_nam
             "game_id": [1, 1, 2, 2, 3, 3],
             "team_id": ["A", "B", "A", "B", "A", "B"],
             "player_id": ["p1", "p2", "p1", "p2", "p1", "p2"],
-            "date": pd.to_datetime(["2023-01-01", "2023-01-01", "2023-01-02", "2023-01-02", "2023-01-03", "2023-01-03"]),
+            "date": pd.to_datetime(
+                ["2023-01-01", "2023-01-01", "2023-01-02", "2023-01-02", "2023-01-03", "2023-01-03"]
+            ),
             "points": [10, 15, 12, 18, 14, 20],
             "rebounds": [5, 6, 7, 8, 6, 9],
         }
@@ -207,8 +209,8 @@ def test_feature_generator_pipeline__maintains_feature_order(df_type, column_nam
     result = pipeline.fit_transform(data, column_names=column_names)
 
     # Verify that lag features were added
-    assert "points_lag_1" in result.columns
-    assert "rebounds_lag_1" in result.columns
+    assert "lag_points1" in result.columns
+    assert "lag_rebounds1" in result.columns
 
 
 @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
@@ -244,7 +246,9 @@ def test_feature_generator_pipeline__chains_generators_correctly(df_type, column
             "game_id": [1, 1, 2, 2, 3, 3],
             "team_id": ["A", "B", "A", "B", "A", "B"],
             "player_id": ["p1", "p2", "p1", "p2", "p1", "p2"],
-            "date": pd.to_datetime(["2023-01-01", "2023-01-01", "2023-01-02", "2023-01-02", "2023-01-03", "2023-01-03"]),
+            "date": pd.to_datetime(
+                ["2023-01-01", "2023-01-01", "2023-01-02", "2023-01-02", "2023-01-03", "2023-01-03"]
+            ),
             "points": [10, 15, 12, 18, 14, 20],
         }
     )
@@ -272,8 +276,8 @@ def test_feature_generator_pipeline__chains_generators_correctly(df_type, column
     result = pipeline.fit_transform(data, column_names=column_names)
 
     # Both generators should have added their features
-    assert "points_lag_1" in result.columns
-    assert "points_rolling_mean_2" in result.columns
+    assert "lag_points1" in result.columns
+    assert "rolling_mean_points2" in result.columns
 
 
 @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
@@ -331,5 +335,5 @@ def test_feature_generator_pipeline__future_transform_no_state_mutation(df_type,
 
     # Both future_transform and transform should produce results
     # The key is that future_transform didn't break the state
-    assert "points_lag_1" in result_future.columns
-    assert "points_lag_1" in result_transform.columns
+    assert "lag_points1" in result_future.columns
+    assert "lag_points1" in result_transform.columns

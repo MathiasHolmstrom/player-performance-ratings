@@ -447,6 +447,9 @@ class LagGenerator(FeatureGenerator):
 
         return df.sort("__row_index")
 
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
+        return self.future_transform(df)
+
     def reset(self) -> "LagGenerator":
         self._df = None
         return self
