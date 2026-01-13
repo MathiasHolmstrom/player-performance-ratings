@@ -23,8 +23,8 @@
       "Bash(git commit:*)",
       "Bash(git fetch:*)",
       "Bash(gh pr view:*)",
+      "Bash(gh pr status:*)",
       "Bash(gh pr create:*)",
-      "Bash(gh api:*)",
       "Bash(git rm:*)"
     ]
   }
