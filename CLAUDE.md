@@ -29,5 +29,5 @@ NEVER hardcode specific attribute names in consumer code. Use duck-typed protoco
 ## Tests
 - pytest, function-level only. Naming: `test_<unit>__<behavior>`
 - Test pandas and polars inputs via `.parameterize`
-- Reference: `tests/e2e/test_nba_player_points.py`
+- Test public methods only, not private or protected methods
 
