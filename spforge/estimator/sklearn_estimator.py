@@ -371,7 +371,7 @@ class ConditionalEstimator(BaseEstimator, ClassifierMixin):
         )
 
         df = df.with_columns(
-            nw.when(nw.col(self.gate_distance_col) >= nw.col("__target"))
+            nw.when(nw.col(self.gate_distance_col) > nw.col("__target"))
             .then(nw.lit(1))
             .otherwise(nw.lit(0))
             .alias("__gate_target")
@@ -379,9 +379,12 @@ class ConditionalEstimator(BaseEstimator, ClassifierMixin):
 
         y_gate = df["__gate_target"].to_numpy()
         self.gate_estimator.fit(df.select(self.fitted_feats).to_pandas(), y_gate)
-        self.classes_ = np.unique(y).tolist() if isinstance(y, list) else list(dict.fromkeys(y))
-        self.classes_.sort()
 
+        # Classes are only the unique training targets (sklearn contract)
+        y_array = y if isinstance(y, np.ndarray) else np.array(y)
+        self.classes_ = sorted(list(set(y_array)))
+
+        # Compute diffs for outcome estimators
         df = df.with_columns(
             (nw.col("__target") - nw.col(self.gate_distance_col)).alias("__diff_gate")
         )
@@ -392,6 +395,7 @@ class ConditionalEstimator(BaseEstimator, ClassifierMixin):
         X0 = df0_rows.select(self.fitted_feats).to_pandas()
         X1 = df1_rows.select(self.fitted_feats).to_pandas()
 
+        # Train outcome estimators on DIFFS (target - gate_distance)
         y0 = df0_rows["__diff_gate"].to_numpy()
         y1 = df1_rows["__diff_gate"].to_numpy()
 
@@ -400,6 +404,7 @@ class ConditionalEstimator(BaseEstimator, ClassifierMixin):
 
         self.outcome_0_classes_ = np.asarray(self.outcome_0_estimator.classes_, dtype=int)
         self.outcome_1_classes_ = np.asarray(self.outcome_1_estimator.classes_, dtype=int)
+
         return self
 
     @nw.narwhalify
@@ -411,41 +416,56 @@ class ConditionalEstimator(BaseEstimator, ClassifierMixin):
         classes = np.asarray(self.classes_, dtype=int)
         C = len(classes)
 
+        # Get gate probabilities
         gate_proba = self.gate_estimator.predict_proba(X_feats_pd)
         gate_class_to_idx = {int(c): i for i, c in enumerate(self.gate_estimator.classes_)}
 
         p0 = gate_proba[:, gate_class_to_idx[int(self.outcome_0_value)]]
         p1 = gate_proba[:, gate_class_to_idx[int(self.outcome_1_value)]]
 
+        # Get diff predictions from outcome estimators
         proba_diff0 = self.outcome_0_estimator.predict_proba(X_feats_pd)
-        diff_classes0 = np.asarray(self.outcome_0_estimator.classes_, dtype=int)
-        diff0_to_idx = {int(d): j for j, d in enumerate(diff_classes0)}
-
         proba_diff1 = self.outcome_1_estimator.predict_proba(X_feats_pd)
-        diff_classes1 = np.asarray(self.outcome_1_estimator.classes_, dtype=int)
-        diff1_to_idx = {int(d): j for j, d in enumerate(diff_classes1)}
 
+        diff0_to_idx = {int(d): j for j, d in enumerate(self.outcome_0_classes_)}
+        diff1_to_idx = {int(d): j for j, d in enumerate(self.outcome_1_classes_)}
+
+        # Map diffs to target classes: target = gate_distance + diff
+        # Assign out-of-bounds probability to nearest boundary to preserve gate probabilities
         def map_diff_to_y(proba_diff: np.ndarray, diff_to_idx: dict[int, int]) -> np.ndarray:
             out = np.zeros((n, C), dtype=float)
+            class_to_idx = {int(c): j for j, c in enumerate(classes)}
+            min_class = int(classes[0])
+            max_class = int(classes[-1])
+
             for i in range(n):
                 gd = int(gate_distance[i])
-                for j, y_cls in enumerate(classes):
-                    k = diff_to_idx.get(int(y_cls) - gd)
-                    if k is not None:
-                        out[i, j] = proba_diff[i, k]
-            s = out.sum(axis=1, keepdims=True)
-            nz = s[:, 0] != 0.0
-            out[nz] /= s[nz]
+                for diff, k in diff_to_idx.items():
+                    target = gd + diff
+                    prob = proba_diff[i, k]
+
+                    if target in class_to_idx:
+                        # Target is in training classes
+                        j = class_to_idx[target]
+                        out[i, j] += prob
+                    elif target < min_class:
+                        # Below range: assign to minimum class
+                        out[i, 0] += prob
+                    else:
+                        # Above range: assign to maximum class
+                        out[i, C - 1] += prob
+
             return out
 
         y_proba0 = map_diff_to_y(proba_diff0, diff0_to_idx)
         y_proba1 = map_diff_to_y(proba_diff1, diff1_to_idx)
 
+        # Mixture: P(y) = p0 * P(y|outcome_0) + p1 * P(y|outcome_1)
         out = (p0[:, None] * y_proba0) + (p1[:, None] * y_proba1)
 
+        # Normalize the final mixture to sum to 1 (required by sklearn)
         row_sums = out.sum(axis=1, keepdims=True)
-        nz = row_sums[:, 0] != 0.0
-        out[nz] /= row_sums[nz]
+        out = np.where(row_sums > 0, out / row_sums, out)
 
         return out
 
