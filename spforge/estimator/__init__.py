@@ -4,6 +4,7 @@ from ._distribution import (
 )
 from .sklearn_estimator import (
     ConditionalEstimator as ConditionalEstimator,
+    FrequencyBucketingClassifier as FrequencyBucketingClassifier,
     GranularityEstimator as GranularityEstimator,
     OrdinalClassifier as OrdinalClassifier,
     SkLearnEnhancerEstimator as SkLearnEnhancerEstimator,
