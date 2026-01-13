@@ -278,15 +278,16 @@ cross_validator = MatchKFoldCrossValidator(
     features=pipeline.feature_names + pipeline.context_feature_names,
 )
 
-# Generate validation predictions with is_validation column
-validation_df = cross_validator.generate_validation_df(df=df)
+# Generate validation predictions
+# add_training_predictions=True also returns predictions on training data
+validation_df = cross_validator.generate_validation_df(df=df, add_training_predictions=True)
 
 # Score only validation rows, filtering to players who actually played
 scorer = SklearnScorer(
     pred_column="points_pred",
     target="points",
     scorer_function=mean_absolute_error,
-    validation_column="is_validation",  # Only score is_validation == 1
+    validation_column="is_validation",  # Only score where is_validation == 1
     filters=[
         Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)
     ],
@@ -297,7 +298,9 @@ print(f"Validation MAE: {mae:.2f}")
 ```
 
 **Key points:**
-- `is_validation=1` marks validation rows, `is_validation=0` marks training rows
+- `add_training_predictions=True` returns both training and validation predictions
+  - `is_validation=1` marks validation rows, `is_validation=0` marks training rows
+  - Use `validation_column` in scorer to score only validation rows
 - Training data always comes BEFORE validation data chronologically
 - Must pass both `feature_names` + `context_feature_names` to `features` parameter
 - Scorers can filter rows (e.g., only score players who played minutes > 0)
