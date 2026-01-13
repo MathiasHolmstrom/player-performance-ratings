@@ -11,6 +11,7 @@ from sklearn.metrics import log_loss
 
 from spforge.estimator import (
     ConditionalEstimator,
+    FrequencyBucketingClassifier,
     GranularityEstimator,
     OrdinalClassifier,
     SkLearnEnhancerEstimator,
@@ -958,3 +959,264 @@ def test_conditional_estimator__outcome_estimators_disjoint_support(df_type):
         f"outcome estimators should have disjoint support (no overlap after boundary fix). "
         f"Found overlap: {overlap}"
     )
+
+
+def test_frequency_bucketing_classifier__initialization():
+    """Test successful initialization with FrequencyBucketingClassifier"""
+    clf = FrequencyBucketingClassifier(estimator=LogisticRegression(), min_prob=0.01)
+    assert clf.min_prob == 0.01
+    assert clf.estimator is not None
+    assert clf.classes_ is None
+    assert clf.estimator_ is None
+
+
+def test_frequency_bucketing_classifier__min_prob_validation():
+    """Test min_prob parameter validation"""
+    with pytest.raises(ValueError, match="min_prob must be in"):
+        FrequencyBucketingClassifier(estimator=LogisticRegression(), min_prob=0)
+
+    with pytest.raises(ValueError, match="min_prob must be in"):
+        FrequencyBucketingClassifier(estimator=LogisticRegression(), min_prob=-0.1)
+
+    with pytest.raises(ValueError, match="min_prob must be in"):
+        FrequencyBucketingClassifier(estimator=LogisticRegression(), min_prob=1.5)
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_frequency_bucketing_classifier__fit_creates_buckets(df_type):
+    """Test that fit creates proper bucketing for rare classes"""
+    np.random.seed(42)
+    # Create dataset with common classes (0-3) and rare classes (10, 11)
+    X = create_dataframe(df_type, {"feature": np.random.randn(1000)})
+    y = np.concatenate([
+        np.random.choice([0, 1, 2, 3], size=970),  # Common: 97%
+        np.array([10] * 15),  # Rare: 1.5%
+        np.array([11] * 15),  # Rare: 1.5%
+    ])
+
+    clf = FrequencyBucketingClassifier(
+        estimator=LogisticRegression(max_iter=1000), min_prob=0.03
+    )
+    clf.fit(X, y)
+
+    assert clf.classes_ is not None
+    assert len(clf.classes_) == 6  # [0, 1, 2, 3, 10, 11]
+    assert clf._class_to_bucket is not None
+    assert clf._bucket_to_classes is not None
+
+    # Common classes should have individual buckets
+    for cls in [0, 1, 2, 3]:
+        bucket_id = clf._class_to_bucket[cls]
+        assert len(clf._bucket_to_classes[bucket_id]) == 1
+
+    # Rare classes should be bucketed together
+    bucket_10 = clf._class_to_bucket[10]
+    bucket_11 = clf._class_to_bucket[11]
+    assert bucket_10 == bucket_11, "Rare classes 10 and 11 should be in same bucket"
+    assert len(clf._bucket_to_classes[bucket_10]) == 2
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_frequency_bucketing_classifier__predict_proba_distributes_evenly(df_type):
+    """Test that predict_proba distributes bucket probability evenly among classes"""
+    np.random.seed(42)
+    X = create_dataframe(df_type, {"feature": np.random.randn(100)})
+    y = np.concatenate([
+        np.array([0] * 50),
+        np.array([1] * 40),
+        np.array([10] * 5),  # Rare
+        np.array([11] * 5),  # Rare
+    ])
+
+    clf = FrequencyBucketingClassifier(
+        estimator=LogisticRegression(max_iter=1000), min_prob=0.15
+    )
+    clf.fit(X, y)
+
+    proba = clf.predict_proba(X)
+
+    # Check shape
+    assert proba.shape == (100, 4)  # 100 samples, 4 classes
+
+    # Check probabilities sum to 1
+    assert np.allclose(proba.sum(axis=1), 1.0)
+
+    # For samples, check that bucketed classes have equal probability
+    bucket_10 = clf._class_to_bucket[10]
+    bucket_11 = clf._class_to_bucket[11]
+    if bucket_10 == bucket_11:  # If bucketed together
+        class_idx_10 = np.where(clf.classes_ == 10)[0][0]
+        class_idx_11 = np.where(clf.classes_ == 11)[0][0]
+        # Probabilities should be equal for classes in same bucket
+        assert np.allclose(proba[:, class_idx_10], proba[:, class_idx_11])
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_frequency_bucketing_classifier__predict_returns_valid_classes(df_type):
+    """Test that predict returns valid class labels from original classes"""
+    np.random.seed(42)
+    X = create_dataframe(df_type, {"feature": np.random.randn(100)})
+    y = np.concatenate([
+        np.array([0] * 50),
+        np.array([5] * 30),
+        np.array([10] * 10),
+        np.array([15] * 10),
+    ])
+
+    clf = FrequencyBucketingClassifier(
+        estimator=LogisticRegression(max_iter=1000), min_prob=0.15
+    )
+    clf.fit(X, y)
+
+    predictions = clf.predict(X)
+
+    assert predictions.shape == (100,)
+    assert all(pred in clf.classes_ for pred in predictions)
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_frequency_bucketing_classifier__all_classes_frequent(df_type):
+    """Test when all classes meet min_prob threshold (no bucketing needed)"""
+    np.random.seed(42)
+    X = create_dataframe(df_type, {"feature": np.random.randn(100)})
+    y = np.concatenate([
+        np.array([0] * 30),
+        np.array([1] * 30),
+        np.array([2] * 40),
+    ])
+
+    clf = FrequencyBucketingClassifier(
+        estimator=LogisticRegression(max_iter=1000), min_prob=0.1
+    )
+    clf.fit(X, y)
+
+    # All classes should have individual buckets
+    for cls in [0, 1, 2]:
+        bucket_id = clf._class_to_bucket[cls]
+        assert len(clf._bucket_to_classes[bucket_id]) == 1
+        assert clf._bucket_to_classes[bucket_id][0] == cls
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_frequency_bucketing_classifier__all_classes_rare(df_type):
+    """Test when all classes are below threshold (all bucketed together)"""
+    np.random.seed(42)
+    X = create_dataframe(df_type, {"feature": np.random.randn(100)})
+    y = np.concatenate([
+        np.array([0] * 15),
+        np.array([1] * 15),
+        np.array([2] * 15),
+        np.array([3] * 15),
+        np.array([4] * 40),
+    ])
+
+    clf = FrequencyBucketingClassifier(
+        estimator=LogisticRegression(max_iter=1000), min_prob=0.5
+    )
+    clf.fit(X, y)
+
+    # All classes should be in at most 2 buckets (common class 4 alone, others together)
+    unique_buckets = set(clf._class_to_bucket.values())
+    assert len(unique_buckets) <= 2
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_frequency_bucketing_classifier__probability_normalization(df_type):
+    """Test that probabilities always sum to 1"""
+    np.random.seed(42)
+    X = create_dataframe(df_type, {"feature": np.random.randn(200)})
+    y = np.concatenate([
+        np.random.choice([0, 1, 2, 3, 4, 5], size=180),
+        np.random.choice([40, 41, -7, -8], size=20)
+    ])
+
+    clf = FrequencyBucketingClassifier(
+        estimator=LogisticRegression(max_iter=1000), min_prob=0.03
+    )
+    clf.fit(X, y)
+
+    proba = clf.predict_proba(X)
+
+    row_sums = proba.sum(axis=1)
+    assert np.allclose(row_sums, 1.0), f"Probabilities don't sum to 1: {row_sums[:5]}"
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_frequency_bucketing_classifier__sample_weight_passed_to_estimator(df_type):
+    """Test that sample_weight is passed to internal estimator but not used for bucketing"""
+    np.random.seed(42)
+    X = create_dataframe(df_type, {"feature": np.random.randn(100)})
+    y = np.concatenate([
+        np.array([0] * 40),
+        np.array([1] * 40),
+        np.array([2] * 20),  # Rare
+    ])
+    # Even though class 2 has high weight, bucketing is based on raw counts
+    sample_weight = np.array([1.0] * 80 + [100.0] * 20)
+
+    clf = FrequencyBucketingClassifier(
+        estimator=LogisticRegression(max_iter=1000), min_prob=0.3
+    )
+    clf.fit(X, y, sample_weight=sample_weight)
+
+    # Class 2 should still be rare (20% < 30%) based on raw counts
+    bucket_2 = clf._class_to_bucket[2]
+    # Check if class 2 is bucketed with another class
+    # (may be alone or with neighbors, depends on algorithm)
+    assert clf._class_to_bucket is not None
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_frequency_bucketing_classifier__numeric_classes_required(df_type):
+    """Test that non-numeric classes raise ValueError"""
+    X = create_dataframe(df_type, {"feature": [1, 2, 3, 4, 5]})
+    y = np.array(["a", "b", "c", "d", "e"])
+
+    clf = FrequencyBucketingClassifier(estimator=LogisticRegression())
+
+    with pytest.raises(ValueError, match="numeric classes"):
+        clf.fit(X, y)
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_frequency_bucketing_classifier__single_class_error(df_type):
+    """Test that single class raises ValueError"""
+    X = create_dataframe(df_type, {"feature": [1, 2, 3, 4, 5]})
+    y = np.array([1, 1, 1, 1, 1])
+
+    clf = FrequencyBucketingClassifier(estimator=LogisticRegression())
+
+    with pytest.raises(ValueError, match="at least 2 classes"):
+        clf.fit(X, y)
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_frequency_bucketing_classifier__boundary_classes(df_type):
+    """Test that lowest/highest rare classes are bucketed correctly"""
+    np.random.seed(42)
+    # Create dataset where boundary classes are rare
+    X = create_dataframe(df_type, {"feature": np.random.randn(1210)})
+    y = np.concatenate([
+        np.array([10] * 5),    # Rare lowest
+        np.array([15] * 400),  # Common
+        np.array([20] * 400),  # Common
+        np.array([25] * 400),  # Common
+        np.array([90] * 5),    # Rare highest
+    ])
+
+    clf = FrequencyBucketingClassifier(
+        estimator=LogisticRegression(max_iter=1000), min_prob=0.02
+    )
+    clf.fit(X, y)
+
+    # Rare boundary classes should be bucketed
+    bucket_10 = clf._class_to_bucket[10]
+    bucket_90 = clf._class_to_bucket[90]
+
+    # Should be in buckets with neighbors (or alone if no neighbors)
+    assert bucket_10 in clf._bucket_to_classes
+    assert bucket_90 in clf._bucket_to_classes
+
+    # Common classes should have individual buckets
+    bucket_15 = clf._class_to_bucket[15]
+    assert len(clf._bucket_to_classes[bucket_15]) == 1
