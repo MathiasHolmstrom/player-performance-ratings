@@ -407,14 +407,18 @@ def test_sklearn_enhancer_context_features__without_date_column():
 @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
 def test_conditional_estimator__gate_estimator_routes_correctly(df_type):
     """ConditionalEstimator should use gate_estimator to determine routing."""
-    # Create data where gate_distance clearly separates outcomes
+    # Create data with samples in both gate classes
+    # gate_target = 1 when gate_distance >= target
+    # gate_target = 0 when gate_distance < target
     data = df_type(
         {
             "feature1": [1, 2, 3, 4, 5, 6],
-            "gate_distance": [5, 5, 5, 10, 10, 10],  # Clear separation
+            "gate_distance": [5, 5, 5, 10, 10, 10],
         }
     )
-    y = np.array([3, 4, 5, 8, 9, 10])  # Target values
+    # For gate_distance=5: targets 3,4,5 → gate_target=1 (5>=3, 5>=4, 5>=5)
+    # For gate_distance=10: targets 12,13,14 → gate_target=0 (10<12, 10<13, 10<14)
+    y = np.array([3, 4, 5, 12, 13, 14])
 
     estimator = ConditionalEstimator(
         gate_estimator=LogisticRegression(random_state=42),
@@ -439,11 +443,11 @@ def test_conditional_estimator__outcome_0_estimator_called(df_type):
     # Create simple dataset
     data = df_type(
         {
-            "feature1": [1, 2, 3, 4],
-            "gate_distance": [5, 5, 10, 10],
+            "feature1": [1, 2, 3, 4, 5, 6],
+            "gate_distance": [5, 5, 5, 10, 10, 10],
         }
     )
-    y = np.array([8, 9, 8, 9])  # gate_distance < target for first two rows
+    y = np.array([3, 4, 5, 12, 13, 14])  # gate_distance >= target for first 3, < for last 3
 
     estimator = ConditionalEstimator(
         gate_estimator=LogisticRegression(random_state=42),
@@ -468,11 +472,11 @@ def test_conditional_estimator__outcome_1_estimator_called(df_type):
     # Create simple dataset
     data = df_type(
         {
-            "feature1": [1, 2, 3, 4],
-            "gate_distance": [5, 5, 10, 10],
+            "feature1": [1, 2, 3, 4, 5, 6],
+            "gate_distance": [5, 5, 5, 10, 10, 10],
         }
     )
-    y = np.array([3, 4, 9, 8])  # gate_distance >= target for rows 0, 2
+    y = np.array([3, 4, 5, 12, 13, 14])  # gate_distance >= target for first 3, < for last 3
 
     estimator = ConditionalEstimator(
         gate_estimator=LogisticRegression(random_state=42),
@@ -501,7 +505,7 @@ def test_conditional_estimator__predict_proba_weighting(df_type):
             "gate_distance": [5, 5, 5, 10, 10, 10],
         }
     )
-    y = np.array([3, 4, 5, 8, 9, 10])
+    y = np.array([3, 4, 5, 12, 13, 14])
 
     estimator = ConditionalEstimator(
         gate_estimator=LogisticRegression(random_state=42),
@@ -541,7 +545,7 @@ def test_conditional_estimator__gate_distance_col_is_feature_true(df_type):
             "gate_distance": [5, 5, 10, 10],
         }
     )
-    y = np.array([3, 4, 8, 9])
+    y = np.array([3, 4, 12, 13])  # gate_distance >= target for first 2, < for last 2
 
     estimator = ConditionalEstimator(
         gate_estimator=LogisticRegression(random_state=42),
@@ -568,7 +572,7 @@ def test_conditional_estimator__gate_distance_col_is_feature_false(df_type):
             "gate_distance": [5, 5, 10, 10],
         }
     )
-    y = np.array([3, 4, 8, 9])
+    y = np.array([3, 4, 12, 13])  # gate_distance >= target for first 2, < for last 2
 
     estimator = ConditionalEstimator(
         gate_estimator=LogisticRegression(random_state=42),
@@ -596,7 +600,7 @@ def test_conditional_estimator__predict_returns_classes(df_type):
             "gate_distance": [5, 5, 5, 10, 10, 10],
         }
     )
-    y = np.array([3, 4, 5, 8, 9, 10])
+    y = np.array([3, 4, 5, 12, 13, 14])
 
     estimator = ConditionalEstimator(
         gate_estimator=LogisticRegression(random_state=42),

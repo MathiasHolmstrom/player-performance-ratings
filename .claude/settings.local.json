@@ -30,7 +30,8 @@
       "Bash(gh pr create:*)",
       "Bash(.venv/Scripts/python.exe -m pytest tests/test_feature_generator_pipeline.py -v)",
       "Bash(.venv/Scripts/python.exe -m pytest tests/estimator/test_sklearn_estimator.py::test_conditional_estimator__gate_estimator_routes_correctly -v)",
-      "Bash(.venv/Scripts/python.exe -m pytest tests/estimator/test_sklearn_estimator.py::test_conditional_estimator__gate_estimator_routes_correctly tests/transformers/test_predictor_transformer.py -v)"
+      "Bash(.venv/Scripts/python.exe -m pytest tests/estimator/test_sklearn_estimator.py::test_conditional_estimator__gate_estimator_routes_correctly tests/transformers/test_predictor_transformer.py -v)",
+      "Bash(.venv/Scripts/python.exe -m pytest:*)"
     ]
   }
 }
