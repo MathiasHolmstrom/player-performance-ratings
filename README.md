@@ -318,54 +318,75 @@ Instead of predicting a single point estimate, you can predict full probability 
 - For expected value calculations in betting or DFS
 - When the outcome has inherent randomness
 
-### Example: Negative binomial distribution for player points
+### What NegativeBinomialEstimator does during fit
+
+During training, `NegativeBinomialEstimator`:
+
+1. Takes the point estimates (from `point_estimate_pred_column`) and actual target values
+2. Optimizes a dispersion parameter `r` using maximum likelihood estimation on the negative binomial distribution
+3. If `r_specific_granularity` is set (e.g., per player), calculates entity-specific `r` values by:
+   - Computing rolling means and variances of point estimates over recent matches
+   - Binning entities by quantiles of mean and variance
+   - Fitting separate `r` values for each bin to capture different uncertainty patterns
+
+During prediction, it uses the learned `r` parameter(s) and the point estimates to generate a full probability distribution over all possible values (0 to max_value).
+
+### Example: Comparing classifiers vs distribution estimators
+
+A key advantage is comparing different approaches for generating probability distributions. Both LGBMClassifier and LGBMRegressor+NegativeBinomial output probabilities in the same format, making them directly comparable.
 
 ```python
-from spforge.estimator import NegativeBinomialEstimator, SkLearnEnhancerEstimator
+from spforge.estimator import NegativeBinomialEstimator
 from spforge.transformers import EstimatorTransformer
-from lightgbm import LGBMRegressor
-import numpy as np
+from lightgbm import LGBMClassifier, LGBMRegressor
 
-# Stage 1: Train a point estimator
-point_estimator_transformer = EstimatorTransformer(
-    prediction_column_name="points_estimate",
-    estimator=SkLearnEnhancerEstimator(
-        estimator=LGBMRegressor(verbose=-100),
-        date_column=column_names.start_date,
-        day_weight_epsilon=0.1,  # Recent games weighted more
-    ),
+# Approach 1: LGBMClassifier (direct probability prediction)
+pipeline_classifier = AutoPipeline(
+    estimator=LGBMClassifier(verbose=-100, random_state=42),
+    feature_names=features_pipeline.features_out,
 )
 
-# Stage 2: Wrap with distribution estimator
+# Approach 2: LGBMRegressor + NegativeBinomialEstimator
 distribution_estimator = NegativeBinomialEstimator(
     max_value=40,  # Predict 0-40 points
-    point_estimate_pred_column="points_estimate",  # Uses Stage 1 output
+    point_estimate_pred_column="points_estimate",  # Uses regressor output
     r_specific_granularity=["player_id"],  # Player-specific dispersion
     predicted_r_weight=1,
+    column_names=column_names,
 )
 
-# Combine in pipeline
-pipeline = AutoPipeline(
+pipeline_negbin = AutoPipeline(
     estimator=distribution_estimator,
     feature_names=features_pipeline.features_out,
-    predictor_transformers=[point_estimator_transformer],
+    context_feature_names=[
+        column_names.player_id,
+        column_names.start_date,
+        column_names.team_id,
+        column_names.match_id,
+    ],
+    predictor_transformers=[
+        EstimatorTransformer(
+            prediction_column_name="points_estimate",
+            estimator=LGBMRegressor(verbose=-100, random_state=42),
+            features=features_pipeline.features_out,
+        )
+    ],
 )
 
-pipeline.fit(X=train_df, y=train_df["points"])
-probabilities = pipeline.predict_proba(test_df)  # Shape: (n_samples, 41)
-
-# Calculate expected value from distribution
-possible_values = np.arange(0, 41)
-expected_points = (probabilities * possible_values).sum(axis=1)
+# Compare using cross-validation (see examples for full setup)
+# Results on NBA player points prediction:
+# LGBMClassifier Ordinal Loss:              1.0372
+# LGBMRegressor + NegativeBinomial Ordinal Loss: 0.3786
+# LGBMRegressor + NegativeBinomial Point Est MAE: 4.5305
 ```
 
 **Key points:**
-- `NegativeBinomialEstimator` requires a `point_estimate_pred_column` in the data
-- Output is a full probability distribution: `probabilities.sum(axis=1) == 1.0`
-- Expected value = weighted average of probabilities
+- Both approaches output probability distributions over the same range
+- `NegativeBinomialEstimator` performs significantly better (lower ordinal loss)
+- Distribution approach provides both probability distributions and point estimates
 - Can model player-specific variance with `r_specific_granularity`
 
-See [examples/nba/cross_validation_example.py](examples/nba/cross_validation_example.py) for a complete example with cross-validation.
+See [examples/nba/cross_validation_example.py](examples/nba/cross_validation_example.py) for a complete runnable example with both approaches.
 
 ## Predictions as features for downstream models (Advanced)
 

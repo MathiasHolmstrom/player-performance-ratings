@@ -1,5 +1,5 @@
 import polars as pl
-from lightgbm import LGBMRegressor
+from lightgbm import LGBMClassifier, LGBMRegressor
 from sklearn.metrics import mean_absolute_error
 
 from examples import get_sub_sample_nba_data
@@ -7,10 +7,7 @@ from spforge import FeatureGeneratorPipeline
 from spforge.autopipeline import AutoPipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
 from spforge.data_structures import ColumnNames
-from spforge.estimator import (
-    NegativeBinomialEstimator,
-    SkLearnEnhancerEstimator,
-)
+from spforge.estimator import NegativeBinomialEstimator
 from spforge.feature_generator import (
     LagTransformer,
     RollingWindowTransformer,
@@ -44,7 +41,43 @@ features_generator = FeatureGeneratorPipeline(
     ],
 )
 df = features_generator.fit_transform(df)
-predictor = NegativeBinomialEstimator(
+
+print("\n" + "=" * 70)
+print("Comparison: LGBMClassifier vs LGBMRegressor + NegativeBinomial")
+print("=" * 70)
+
+# Approach 1: LGBMClassifier (directly outputs probability distribution)
+print("\nApproach 1: LGBMClassifier (direct probability prediction)")
+print("-" * 70)
+pipeline_classifier = AutoPipeline(
+    estimator=LGBMClassifier(verbose=-100, random_state=42),
+    feature_names=features_generator.features_out,
+)
+
+cross_validator_classifier = MatchKFoldCrossValidator(
+    date_column_name=column_names.start_date,
+    match_id_column_name=column_names.match_id,
+    estimator=pipeline_classifier,
+    prediction_column_name="points_probabilities_classifier",
+    target_column="points",
+    features=pipeline_classifier.feature_names,
+)
+validation_df_classifier = cross_validator_classifier.generate_validation_df(df=df)
+
+ordinal_scorer_classifier = OrdinalLossScorer(
+    pred_column="points_probabilities_classifier",
+    target="points",
+    validation_column="is_validation",
+    filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
+    classes=range(0, 41),
+)
+ordinal_loss_classifier = ordinal_scorer_classifier.score(validation_df_classifier)
+print(f"Ordinal Loss: {ordinal_loss_classifier:.4f}")
+
+# Approach 2: LGBMRegressor + NegativeBinomialEstimator
+print("\nApproach 2: LGBMRegressor + NegativeBinomialEstimator")
+print("-" * 70)
+predictor_negbin = NegativeBinomialEstimator(
     max_value=40,
     point_estimate_pred_column="points_estimate",
     r_specific_granularity=["player_id"],
@@ -52,8 +85,8 @@ predictor = NegativeBinomialEstimator(
     column_names=column_names,
 )
 
-pipeline = AutoPipeline(
-    estimator=predictor,
+pipeline_negbin = AutoPipeline(
+    estimator=predictor_negbin,
     feature_names=features_generator.features_out,
     context_feature_names=[
         column_names.player_id,
@@ -64,43 +97,48 @@ pipeline = AutoPipeline(
     predictor_transformers=[
         EstimatorTransformer(
             prediction_column_name="points_estimate",
-            estimator=SkLearnEnhancerEstimator(
-                estimator=LGBMRegressor(verbose=-100, random_state=42),
-                date_column=column_names.start_date,
-                day_weight_epsilon=0.1,
-            ),
+            estimator=LGBMRegressor(verbose=-100, random_state=42),
+            features=features_generator.features_out,
         )
     ],
 )
 
-cross_validator = MatchKFoldCrossValidator(
+cross_validator_negbin = MatchKFoldCrossValidator(
     date_column_name=column_names.start_date,
     match_id_column_name=column_names.match_id,
-    estimator=pipeline,
-    prediction_column_name="points_probabilities",
+    estimator=pipeline_negbin,
+    prediction_column_name="points_probabilities_negbin",
     target_column="points",
-    features=pipeline.context_feature_names + pipeline.feature_names,
+    features=pipeline_negbin.context_feature_names + pipeline_negbin.feature_names,
 )
-validation_df = cross_validator.generate_validation_df(df=df)
+validation_df_negbin = cross_validator_negbin.generate_validation_df(df=df)
 
+ordinal_scorer_negbin = OrdinalLossScorer(
+    pred_column="points_probabilities_negbin",
+    target="points",
+    validation_column="is_validation",
+    filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
+    classes=range(0, predictor_negbin.max_value + 1),
+)
+ordinal_loss_negbin = ordinal_scorer_negbin.score(validation_df_negbin)
+print(f"Ordinal Loss: {ordinal_loss_negbin:.4f}")
+
+# Also show MAE from point estimate
 mean_absolute_scorer = SklearnScorer(
-    pred_column=pipeline.predictor_transformers[0].prediction_column_name,
-    target=cross_validator.target_column,
+    pred_column=pipeline_negbin.predictor_transformers[0].prediction_column_name,
+    target="points",
     scorer_function=mean_absolute_error,
     validation_column="is_validation",
     filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
 )
+mae_score = mean_absolute_scorer.score(validation_df_negbin)
+print(f"Point Estimate MAE: {mae_score:.4f}")
 
-mae_score = mean_absolute_scorer.score(validation_df)
-print(f"MAE {mae_score}")
-
-ordinal_scorer = OrdinalLossScorer(
-    pred_column=cross_validator.prediction_column_name,
-    target=cross_validator.target_column,
-    validation_column="is_validation",
-    filters=[Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)],
-    classes=range(0, predictor.max_value + 1),
-)
-ordinal_loss_score = ordinal_scorer.score(validation_df)
-
-print(f"Ordinal Loss {ordinal_loss_score}")
+print("\n" + "=" * 70)
+print("Summary")
+print("=" * 70)
+print(f"LGBMClassifier Ordinal Loss:              {ordinal_loss_classifier:.4f}")
+print(f"LGBMRegressor + NegativeBinomial Ordinal Loss: {ordinal_loss_negbin:.4f}")
+print(f"LGBMRegressor + NegativeBinomial Point Est MAE: {mae_score:.4f}")
+print("\nBoth approaches output probability distributions over 0-40 points.")
+print("NegativeBinomial also provides point estimates from the underlying regressor.")
