@@ -56,19 +56,35 @@ class EstimatorTransformer(PredictorTransformer):
 
     @property
     def context_features(self) -> list[str]:
-        """Returns date_column if estimator is SkLearnEnhancerEstimator."""
+        """Returns context features from wrapped estimator.
+
+        Checks wrapped estimator (and nested estimators) for context_features
+        property first. Falls back to legacy date_column attribute check for
+        backwards compatibility.
+        """
         context = []
 
-        # Check wrapped estimator (may be nested)
         est = self.estimator
-        while hasattr(est, 'estimator'):
-            if hasattr(est, 'date_column') and est.date_column:
-                context.append(est.date_column)
-                return context
-            est = est.estimator
+        while est is not None:
+            # Check for context_features property first (modern protocol)
+            if hasattr(est, 'context_features'):
+                ctx = est.context_features
+                if ctx:
+                    context.extend(ctx)
+                    seen = set()
+                    deduped = []
+                    for c in context:
+                        if c not in seen:
+                            seen.add(c)
+                            deduped.append(c)
+                    return deduped
 
-        # Check top-level
-        if hasattr(self.estimator, 'date_column') and self.estimator.date_column:
-            context.append(self.estimator.date_column)
+            # Legacy fallback for estimators without context_features property
+            if hasattr(est, 'date_column') and est.date_column:
+                if est.date_column not in context:
+                    context.append(est.date_column)
+                return context
+
+            est = getattr(est, 'estimator', None)
 
         return context

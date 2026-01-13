@@ -59,6 +59,41 @@ Sklearn-compatible estimators with sports-specific enhancements: granularity-awa
 - Heteroskedastic: learns sigma per conditioning bin.
 - `support_cap_column`: can cap max outcome per row.
 
+## Context features protocol
+
+**CRITICAL: Estimators that need context features should implement a `context_features` property.**
+
+Context features are columns required for fitting but not passed to the underlying model (e.g., date columns for weighting, granularity columns for grouping).
+
+### Implementing context_features
+
+Estimators should implement a `context_features` property that returns a list of column names:
+
+```python
+@property
+def context_features(self) -> list[str]:
+    """Returns columns needed for fitting but not for the wrapped estimator."""
+    return [self.date_column] if self.date_column else []
+```
+
+**Rules:**
+- Return empty list `[]` if no context needed
+- Return columns dynamically based on configuration (e.g., only if `date_column` is set)
+- Deduplicate if multiple sources might provide the same column
+- Duck-typed: no base class required, just add the property
+
+**Why this matters:**
+- Consumer code (AutoPipeline, EstimatorTransformer, etc.) auto-detects context via this property
+- NEVER hardcode attribute checks (like `hasattr(obj, 'date_column')`) ANYWHERE in consumer code
+- NEVER assume any estimator has specific attributes like `date_column`, `r_specific_granularity`, etc.
+- Extensible: new estimators just add the property, zero changes needed in consumer code
+
+### Examples
+
+- `SkLearnEnhancerEstimator`: Returns `[date_column]` if configured for temporal weighting
+- `NegativeBinomialEstimator`: Returns `r_specific_granularity` + `column_names` fields if configured
+- Plain sklearn estimators: Don't have the property (consumers check with `hasattr`)
+
 ## Key patterns
 
 ### DataFrame requirement

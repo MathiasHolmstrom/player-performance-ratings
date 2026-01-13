@@ -22,11 +22,18 @@ Sklearn-compatible transformers that wrap estimators, perform column operations,
 All predictor transformers (EstimatorTransformer, RatioEstimatorTransformer, NetOverPredictedTransformer) inherit from `PredictorTransformer`.
 
 **Key property:**
-- `context_features`: Returns list of columns needed by the transformer but NOT used in the estimator's fit()
-  - EstimatorTransformer: Returns date_column if estimator is SkLearnEnhancerEstimator
+- `context_features`: Returns list of columns needed by the transformer but NOT used in the final estimator's fit()
+  - EstimatorTransformer: Forwards `context_features` from wrapped estimator (checks for property, walks nested estimators)
   - RatioEstimatorTransformer: Returns granularity columns
   - NetOverPredictedTransformer: Returns target_name
   - OperatorTransformer: Not a predictor transformer (doesn't inherit from base)
+
+**CRITICAL - Extensibility rule:**
+- NEVER hardcode specific attribute names anywhere in transformer code
+- NEVER assume objects have specific attributes (`date_column`, `r_specific_granularity`, `column_names`, etc.)
+- Use protocol-based approach: check for protocol properties (like `context_features`)
+- For wrapped/nested objects, walk through them generically: `while hasattr(obj, 'estimator')`
+- Legacy fallback is OK during migration but should be clearly marked and eventually removed
 
 AutoPipeline auto-introspects `context_features` from predictor_transformers to determine which columns to pass through.
 

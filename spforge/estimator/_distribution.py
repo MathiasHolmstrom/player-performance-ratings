@@ -107,6 +107,38 @@ class NegativeBinomialEstimator(BaseEstimator):
 
         super().__init__()
 
+    @property
+    def context_features(self) -> list[str]:
+        """Returns columns needed for distribution fitting.
+
+        Includes r_specific_granularity columns and column_names fields
+        (match_id, start_date, team_id, player_id) if configured.
+        """
+        context = []
+
+        if self.r_specific_granularity:
+            context.extend(self.r_specific_granularity)
+
+        if self.column_names:
+            if self.column_names.match_id:
+                context.append(self.column_names.match_id)
+            if self.column_names.start_date:
+                context.append(self.column_names.start_date)
+            if self.column_names.team_id:
+                context.append(self.column_names.team_id)
+            if self.column_names.player_id:
+                context.append(self.column_names.player_id)
+
+        # Dedupe while preserving order
+        seen = set()
+        deduped = []
+        for c in context:
+            if c not in seen:
+                seen.add(c)
+                deduped.append(c)
+
+        return deduped
+
     @nw.narwhalify
     def fit(self, X: IntoFrameT, y, sample_weight: np.ndarray | None = None):
         """

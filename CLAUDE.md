@@ -75,7 +75,8 @@ cross_validator = MatchKFoldCrossValidator(
 ```
 
 Key gotchas:
-- Context features are auto-computed from predictor_transformers' `context_features` property.
+- Context features are auto-computed from predictor_transformers' `context_features` property + estimator's `context_features` property.
+- AutoPipeline uses protocol-based detection: checks `hasattr(obj, 'context_features')` first, falls back to legacy attribute checks.
 - `categorical_handling="auto"` must be deterministic and covered by tests.
 - `native` categorical handling is for LightGBM (category dtype).
 
@@ -95,6 +96,60 @@ Key gotchas:
 - Any non-strict behavior must be explicit (e.g. `strict=False`) and documented; otherwise raise a clear error.
 - Write the methods of the classes in a chronological order based on when they are called.
   - Public methods should generally be the at the top
+
+## Extensibility principles
+
+**CRITICAL: NEVER hardcode specific attribute names in consumer code.**
+
+This applies EVERYWHERE - AutoPipeline, transformers, cross-validators, scorers, any code consuming objects from other modules.
+
+**Rules:**
+- ✅ DO: Use duck-typed protocol properties that objects can implement
+- ✅ DO: Check for the protocol property (`hasattr(obj, 'protocol_property')`)
+- ❌ DON'T: Hardcode specific attribute names (`date_column`, `r_specific_granularity`, `column_names`, etc.)
+- ❌ DON'T: Assume any object has a specific attribute
+- ❌ DON'T: Maintain lists of known types/attributes in consumer code
+- ❌ DON'T: Add if/elif chains checking for different attribute names
+
+**Why this matters:**
+- New types shouldn't require updating consumer code
+- Reduces coupling between modules
+- Makes the codebase extensible by users
+- Duck typing is more Pythonic and maintainable
+
+**Example (context features):**
+```python
+# GOOD: Protocol-based, extensible
+# Objects that need context implement the context_features property
+if hasattr(estimator, 'context_features'):
+    context.extend(estimator.context_features)
+
+# BAD: Hardcoded attribute names, not extensible
+# Every new estimator type requires updating this code
+if hasattr(estimator, 'date_column') and estimator.date_column:
+    context.append(estimator.date_column)
+if hasattr(estimator, 'r_specific_granularity') and estimator.r_specific_granularity:
+    context.extend(estimator.r_specific_granularity)
+if hasattr(estimator, 'column_names') and estimator.column_names:
+    # Extract individual fields...
+# ... needs updating every time a new estimator is added
+```
+
+**How to design extensible code:**
+1. Define a protocol property that objects can implement (e.g., `context_features`)
+2. Make objects compute their needs in that property (dynamic, based on configuration)
+3. Consumer code just checks for the protocol property
+4. Legacy fallback is OK during migration, but should be clearly marked for removal
+
+**When you need to add new capabilities:**
+- If you find yourself checking for a specific attribute name → STOP
+- Ask: "Could other objects need this capability in the future?"
+- If yes: Design a protocol property instead
+- Document it in the relevant CLAUDE.md file
+- Update existing objects to implement the protocol
+- Consumer code checks for the protocol, not specific attributes
+
+See `estimator.CLAUDE.md` and `transformers.CLAUDE.md` for the context_features protocol example.
 
 
 

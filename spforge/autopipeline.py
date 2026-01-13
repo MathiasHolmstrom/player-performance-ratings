@@ -260,26 +260,28 @@ class AutoPipeline(BaseEstimator):
                         self._predictor_transformer_context.append(feat)
 
         # Collect from final estimator (passed to final estimator)
-        # Check for date_column (SkLearnEnhancerEstimator, etc.)
-        if hasattr(self.estimator, 'date_column') and self.estimator.date_column:
-            context.append(self.estimator.date_column)
+        if hasattr(self.estimator, 'context_features'):
+            ctx = self.estimator.context_features
+            if ctx:
+                context.extend(ctx)
+        else:
+            # Legacy fallback for estimators without context_features property
+            if hasattr(self.estimator, 'date_column') and self.estimator.date_column:
+                context.append(self.estimator.date_column)
 
-        # Check for r_specific_granularity (NegativeBinomialEstimator, etc.)
-        if hasattr(self.estimator, 'r_specific_granularity') and self.estimator.r_specific_granularity:
-            context.extend(self.estimator.r_specific_granularity)
+            if hasattr(self.estimator, 'r_specific_granularity') and self.estimator.r_specific_granularity:
+                context.extend(self.estimator.r_specific_granularity)
 
-        # Check for column_names (many estimators use this)
-        if hasattr(self.estimator, 'column_names') and self.estimator.column_names:
-            cn = self.estimator.column_names
-            # Add commonly used columns
-            if hasattr(cn, 'match_id') and cn.match_id:
-                context.append(cn.match_id)
-            if hasattr(cn, 'start_date') and cn.start_date:
-                context.append(cn.start_date)
-            if hasattr(cn, 'team_id') and cn.team_id:
-                context.append(cn.team_id)
-            if hasattr(cn, 'player_id') and cn.player_id:
-                context.append(cn.player_id)
+            if hasattr(self.estimator, 'column_names') and self.estimator.column_names:
+                cn = self.estimator.column_names
+                if hasattr(cn, 'match_id') and cn.match_id:
+                    context.append(cn.match_id)
+                if hasattr(cn, 'start_date') and cn.start_date:
+                    context.append(cn.start_date)
+                if hasattr(cn, 'team_id') and cn.team_id:
+                    context.append(cn.team_id)
+                if hasattr(cn, 'player_id') and cn.player_id:
+                    context.append(cn.player_id)
 
         # Add granularity columns
         context.extend(self.granularity)

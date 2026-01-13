@@ -91,6 +91,14 @@ class SkLearnEnhancerEstimator(BaseEstimator):
         self.classes_ = []
         self.estimator_ = None  # fitted clone
 
+    @property
+    def context_features(self) -> list[str]:
+        """Returns columns needed for fitting but not for the wrapped estimator.
+
+        Returns date_column if configured for temporal weighting.
+        """
+        return [self.date_column] if self.date_column else []
+
     def _resolve_date_column(self, cols: list[str]) -> str | None:
         if not self.date_column:
             return None

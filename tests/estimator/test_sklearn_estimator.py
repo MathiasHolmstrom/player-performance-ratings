@@ -372,3 +372,27 @@ def test_sklearn_wrapper_predict_proba():
     probabilities = wrapper.predict_proba(X_pred)
     assert probabilities.shape == (2, 2)  # 2 samples, 2 classes
     assert np.allclose(probabilities.sum(axis=1), 1.0, atol=1e-6)
+
+
+# ============================================================================
+# SkLearnEnhancerEstimator context_features Tests
+# ============================================================================
+
+
+def test_sklearn_enhancer_context_features__with_date_column():
+    """SkLearnEnhancerEstimator.context_features returns [date_column] when set."""
+    estimator = SkLearnEnhancerEstimator(
+        estimator=LinearRegression(),
+        date_column="game_date",
+        day_weight_epsilon=0.01
+    )
+    assert estimator.context_features == ["game_date"]
+
+
+def test_sklearn_enhancer_context_features__without_date_column():
+    """SkLearnEnhancerEstimator.context_features returns [] when date_column is None."""
+    estimator = SkLearnEnhancerEstimator(
+        estimator=LinearRegression(),
+        date_column=None
+    )
+    assert estimator.context_features == []
