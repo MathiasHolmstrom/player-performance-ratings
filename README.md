@@ -181,6 +181,8 @@ spforge provides stateful feature generators that create rich features from hist
 ### Feature types available
 
 - **Ratings**: Elo-style player/team ratings that evolve based on performance (separate offense/defense ratings)
+  - Can combine multiple stats into a composite performance metric using `performance_weights` (e.g., 60% kills + 40% assists)
+  - Auto-normalizes raw stats to 0-1 range with `auto_scale_performance=True`
 - **Lags**: Previous match statistics, automatically shifted to prevent leakage
 - **Rolling windows**: Averages/sums over the last N matches
 - **FeatureGeneratorPipeline**: Chain multiple generators together sequentially
@@ -191,14 +193,26 @@ spforge provides stateful feature generators that create rich features from hist
 from spforge import FeatureGeneratorPipeline
 from spforge.feature_generator import LagTransformer, RollingWindowTransformer
 from spforge.ratings import PlayerRatingGenerator, RatingKnownFeatures
+from spforge.performance_transformers import ColumnWeight
 
 # Create individual feature generators
 player_rating_generator = PlayerRatingGenerator(
     performance_column="points",
-    auto_scale_performance=True,
+    auto_scale_performance=True,  # Normalizes points to 0-1 range
     column_names=column_names,
     features_out=[RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED],
 )
+
+# Alternative: Combine multiple stats into a composite performance metric
+# player_rating_generator = PlayerRatingGenerator(
+#     performance_column="weighted_performance",  # Name for the composite metric
+#     performance_weights=[
+#         ColumnWeight(name="kills", weight=0.6),
+#         ColumnWeight(name="assists", weight=0.4),
+#     ],
+#     column_names=column_names,
+#     features_out=[RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED],
+# )
 
 lag_transformer = LagTransformer(
     features=["points"],
