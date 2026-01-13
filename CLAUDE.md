@@ -80,22 +80,12 @@ Key gotchas:
 - `categorical_handling="auto"` must be deterministic and covered by tests.
 - `native` categorical handling is for LightGBM (category dtype).
 
-## When you change something, also update…
-- FeatureGeneratorPipeline behavior => update generator integration tests (pandas + polars).
-- AutoPipeline categorical handling => update `_resolve_categorical_handling()` + tests for each mode.
-- Anything affecting feature names => update downstream consumers + tests.
-- Anything stateful => add tests that assert “future_transform does not mutate state”.
-
 ## Code style guide
 - Public methods/classes: docstring explaining intended usage + key parameters.
-- Avoid extra comments; only comment where logic is genuinely unintuitive.
+- Avoid extra comments within the code; only comment where logic is genuinely unintuitive.
 - Prefer minimal diffs; do not add new abstractions unless they remove more complexity than they add.
-- Raise errors as early as possible (init if static; otherwise in `fit`/`transform`); never silently continue.
-- Fail fast on unexpected or invalid input.
-- Do NOT infer intent, auto-correct input, or silently fall back.
-- Any non-strict behavior must be explicit (e.g. `strict=False`) and documented; otherwise raise a clear error.
-- Write the methods of the classes in a chronological order based on when they are called.
-  - Public methods should generally be the at the top
+- Fail fast: raise errors as early as possible (init if static; otherwise in `fit`/`transform`). Never infer intent, auto-correct input, or silently fall back. Any non-strict behavior must be explicit (e.g. `strict=False`) and documented.
+- Write methods in chronological order based on when they are called (public methods at the top)
 
 ## Extensibility principles
 

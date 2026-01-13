@@ -1,70 +1,14 @@
-# Transformers module (Claude notes)
+# Transformers module
 
-## Purpose
-Sklearn-compatible transformers that wrap estimators, perform column operations, and compute derived features. All use narwhals for pandas/polars compatibility.
+Sklearn-compatible transformers that wrap estimators and perform column operations.
 
-## Non-negotiable invariants
-- All transformers implement sklearn `TransformerMixin` interface (`fit`, `transform`).
-- Must handle both pandas and polars DataFrames (via `@nw.narwhalify` decorator).
-- `get_feature_names_out()` returns output column names for sklearn ColumnTransformer integration.
-- Transformers MUST be cloneable via sklearn `clone()` (no required constructor args set during fit).
-- Transformers convert to pandas internally for estimator fitting (`.to_pandas()`).
+## Critical Invariants
+- All implement sklearn `TransformerMixin` interface (`fit`, `transform`)
+- Must handle both pandas and polars DataFrames (via `@nw.narwhalify`)
+- `get_feature_names_out()` returns output column names for sklearn integration
+- Transformers must be cloneable via sklearn `clone()`
 
-## Where things live
-- `_base.py`: `PredictorTransformer` - base class for predictor transformers used in AutoPipeline.
-- `_predictor.py`: `EstimatorTransformer` - fits estimator, outputs predictions.
-- `_operator.py`: `OperatorTransformer` - arithmetic between columns.
-- `_net_over_predicted.py`: `NetOverPredictedTransformer` - residual computation.
-- `_team_ratio_predictor.py`: `RatioEstimatorTransformer` - row vs granularity ratio.
-
-## Base PredictorTransformer class
-
-All predictor transformers (EstimatorTransformer, RatioEstimatorTransformer, NetOverPredictedTransformer) inherit from `PredictorTransformer`.
-
-**Key property:**
-- `context_features`: Returns list of columns needed by the transformer but NOT used in the final estimator's fit()
-  - EstimatorTransformer: Forwards `context_features` from wrapped estimator (checks for property, walks nested estimators)
-  - RatioEstimatorTransformer: Returns granularity columns
-  - NetOverPredictedTransformer: Returns target_name
-  - OperatorTransformer: Not a predictor transformer (doesn't inherit from base)
-
-**CRITICAL - Extensibility rule:**
-- NEVER hardcode specific attribute names anywhere in transformer code
-- NEVER assume objects have specific attributes (`date_column`, `r_specific_granularity`, `column_names`, etc.)
-- Use protocol-based approach: check for protocol properties (like `context_features`)
-- For wrapped/nested objects, walk through them generically: `while hasattr(obj, 'estimator')`
-- Legacy fallback is OK during migration but should be clearly marked and eventually removed
-
-AutoPipeline auto-introspects `context_features` from predictor_transformers to determine which columns to pass through.
-
-## Transformer types
-
-**`EstimatorTransformer`**: Wraps any sklearn estimator.
-- `features`: columns to use for prediction (if None, uses all columns).
-- `prediction_column_name`: output column name.
-- Outputs only the prediction column (drops input columns).
-
-**`OperatorTransformer`**: Column arithmetic.
-- `Operation.SUBTRACT`, `MULTIPLY`, `DIVIDE`.
-- Auto-generates column name if not provided (e.g., `feature1_minus_feature2`).
-- Returns silently if input columns missing.
-
-**`NetOverPredictedTransformer`**: Computes `target - predicted`.
-- Requires regressor estimator.
-- Outputs `net_over_predicted_col` (and optionally the raw prediction).
-
-**`RatioEstimatorTransformer`**: Row prediction / group prediction ratio.
-- `granularity`: columns defining groups (e.g., `["game_id", "team_id"]`).
-- Can use existing prediction columns (`predict_row=False`, `predict_granularity=False`).
-- Trains on group-aggregated data, predicts at both row and group level.
-
-## Common pitfalls
-- `EstimatorTransformer` outputs ONLY prediction column—upstream columns are dropped.
-- `OperatorTransformer` silently returns unchanged df if columns missing (no error).
-- `RatioEstimatorTransformer` requires `prediction_column_name` when `predict_row=False`.
-
-
-## When you change something, also update…
-- `get_feature_names_out()` => affects sklearn pipeline column tracking
-- narwhals usage => must maintain pandas/polars compatibility
-- Output column names => downstream transformers/scorers may depend on them
+## Common Pitfalls
+- `EstimatorTransformer` outputs ONLY prediction column—upstream columns are dropped
+- `OperatorTransformer` silently returns unchanged df if columns missing (no error)
+- `RatioEstimatorTransformer` requires `prediction_column_name` when `predict_row=False`
