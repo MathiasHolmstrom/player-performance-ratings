@@ -145,7 +145,7 @@ def test_match_kfold_cv_auto_infers_features(df_pd_cv_binary):
     "estimator",
     [
         LinearRegression(),
-        AutoPipeline(estimator=LinearRegression(), feature_names=["x"]),
+        AutoPipeline(estimator=LinearRegression(), estimator_features=["x"]),
     ],
 )
 def test_match_kfold_cv_auto_infers_features_regression(df_pd_cv_reg, estimator):
@@ -541,8 +541,7 @@ def test_generate_validation_df_preserves_timezone():
 
     pipeline = AutoPipeline(
         estimator=base_estimator,
-        feature_names=["x"],
-        context_feature_names=["game_date"],
+        estimator_features=["x"],
     )
 
     cv = MatchKFoldCrossValidator(
@@ -551,7 +550,7 @@ def test_generate_validation_df_preserves_timezone():
         date_column_name="game_date",
         match_id_column_name="game_id",
         estimator=pipeline,
-        features=pipeline.feature_names + pipeline.context_feature_names,
+        features=pipeline.required_features,
         n_splits=2,
     )
 

@@ -83,7 +83,7 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
         estimator=LogisticRegression(max_iter=1000),
         impute_missing_values=True,
         scale_features=False,
-        feature_names=rating_generator_result.features_out,
+        estimator_features=rating_generator_result.features_out,
     )
 
     cv_game_winner = MatchKFoldCrossValidator(
@@ -111,7 +111,7 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
         estimator=LGBMRegressor(verbose=-100),
         impute_missing_values=True,
         scale_features=False,
-        feature_names=player_kills_features,
+        estimator_features=player_kills_features,
     )
 
     cv_player_kills = MatchKFoldCrossValidator(

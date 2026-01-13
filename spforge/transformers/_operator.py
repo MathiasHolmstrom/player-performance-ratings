@@ -3,7 +3,8 @@ from enum import Enum
 
 import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
-from sklearn.base import TransformerMixin
+
+from spforge.transformers._base import PredictorTransformer
 
 
 class Operation(Enum):
@@ -12,7 +13,7 @@ class Operation(Enum):
     DIVIDE = "divide"
 
 
-class OperatorTransformer(TransformerMixin):
+class OperatorTransformer(PredictorTransformer):
     """
     Performs operations on two columns and stores the result in a new column.
     An operation can be subtraction, addition, multiplication, or division.

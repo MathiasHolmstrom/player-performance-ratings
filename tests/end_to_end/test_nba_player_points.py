@@ -96,7 +96,7 @@ def test_nba_player_points(dataframe_type):
     game_winner_pipeline = AutoPipeline(
         granularity=["game_id", "team_id"],
         estimator=LogisticRegression(),
-        feature_names=player_plus_minus_rating_generator.features_out + ["location"],
+        estimator_features=player_plus_minus_rating_generator.features_out + ["location"],
     )
     cross_validator_game_winnner = MatchKFoldCrossValidator(
         date_column_name=column_names.start_date,
@@ -104,7 +104,7 @@ def test_nba_player_points(dataframe_type):
         estimator=game_winner_pipeline,
         prediction_column_name="game_winner_probability",
         target_column="won",
-        features=game_winner_pipeline.feature_names + game_winner_pipeline.context_feature_names,
+        features=game_winner_pipeline.required_features,
     )
     pre_row_count = len(df)
     df = cross_validator_game_winnner.generate_validation_df(df=df, add_training_predictions=True)
@@ -155,13 +155,7 @@ def test_nba_player_points(dataframe_type):
     )
     pipeline = AutoPipeline(
         estimator=negative_binomial,
-        feature_names=features_generator.features_out + ["location", "game_winner_probability"],
-        context_feature_names=[
-            column_names.player_id,
-            column_names.start_date,
-            column_names.team_id,
-            column_names.match_id,
-        ],
+        estimator_features=features_generator.features_out + ["location", "game_winner_probability"],
         predictor_transformers=[
             estimator_transformer_raw,
             team_ratio_transformer,
@@ -175,7 +169,7 @@ def test_nba_player_points(dataframe_type):
         estimator=pipeline,
         prediction_column_name="points_probabilities",
         target_column="points",
-        features=pipeline.context_feature_names + pipeline.feature_names,
+        features=pipeline.required_features,
     )
     validation_df = cross_validator.generate_validation_df(df=df, add_training_predictions=True)
     if isinstance(validation_df, pl.DataFrame):

@@ -5,10 +5,12 @@ from typing import Any
 import narwhals.stable.v2 as nw
 import pandas as pd
 from narwhals.typing import IntoFrameT
-from sklearn.base import BaseEstimator, TransformerMixin, is_regressor
+from sklearn.base import is_regressor
+
+from spforge.transformers._base import PredictorTransformer
 
 
-class RatioEstimatorTransformer(BaseEstimator, TransformerMixin):
+class RatioEstimatorTransformer(PredictorTransformer):
     def __init__(
         self,
         features: list[str],
@@ -165,9 +167,19 @@ class RatioEstimatorTransformer(BaseEstimator, TransformerMixin):
     def set_output(self, *, transform=None):
         return self
 
+    @property
+    def context_features(self) -> list[str]:
+        """Returns granularity columns needed for grouping."""
+        return list(self.granularity)
+
     def get_feature_names_out(self, input_features=None) -> list[str]:
         out = []
         for c in self._extra_output_cols():
             if c not in set(out):
                 out.append(c)
         return list(set(out))
+
+    @property
+    def context_features(self) -> list[str]:
+        """Returns granularity columns needed for grouping."""
+        return list(self.granularity)

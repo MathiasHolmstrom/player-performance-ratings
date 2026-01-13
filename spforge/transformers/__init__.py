@@ -1,3 +1,4 @@
+from ._base import PredictorTransformer as PredictorTransformer
 from ._net_over_predicted import (
     NetOverPredictedTransformer as NetOverPredictedTransformer,
 )

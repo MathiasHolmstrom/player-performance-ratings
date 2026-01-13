@@ -30,6 +30,12 @@ class MatchKFoldCrossValidator:
     def _get_features(self, df):
         if self.features is not None:
             return self.features
+
+        # Auto-detect if estimator is AutoPipeline with required_features
+        if hasattr(self.estimator, 'required_features'):
+            return self.estimator.required_features
+
+        # Fallback to current inference logic
         exclude_cols = {
             self.target_column,
             "__match_num",

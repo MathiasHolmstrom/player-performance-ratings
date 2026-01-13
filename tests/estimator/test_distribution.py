@@ -227,5 +227,73 @@ def test_normal_distribution_predictor_predict_proba_not_fitted():
 
 
 # ============================================================================
+# NegativeBinomialEstimator context_features Tests
+# ============================================================================
+
+
+def test_negative_binomial_context_features__with_r_specific_granularity():
+    """NegativeBinomialEstimator.context_features returns r_specific_granularity columns."""
+    from spforge.data_structures import ColumnNames
+
+    column_names = ColumnNames(
+        match_id="game_id",
+        start_date="game_date",
+        team_id="team_id",
+        player_id="player_id",
+        update_match_id="update_game_id"
+    )
+    estimator = NegativeBinomialEstimator(
+        point_estimate_pred_column="pred_points",
+        max_value=50,
+        r_specific_granularity=["player_id"],
+        column_names=column_names
+    )
+
+    # Should include r_specific_granularity + column_names fields (deduped)
+    context = estimator.context_features
+    assert "player_id" in context  # From both r_specific_granularity and column_names
+    assert "game_id" in context     # From column_names.match_id
+    assert "game_date" in context   # From column_names.start_date
+    assert "team_id" in context     # From column_names.team_id
+    # Deduplication should ensure player_id appears only once
+    assert context.count("player_id") == 1
+
+
+def test_negative_binomial_context_features__without_r_specific():
+    """NegativeBinomialEstimator.context_features with only column_names (no r_specific)."""
+    from spforge.data_structures import ColumnNames
+
+    column_names = ColumnNames(
+        match_id="game_id",
+        start_date="game_date",
+        team_id="team_id",
+        update_match_id="update_game_id"
+    )
+    estimator = NegativeBinomialEstimator(
+        point_estimate_pred_column="pred_points",
+        max_value=50,
+        r_specific_granularity=None,
+        column_names=column_names
+    )
+
+    context = estimator.context_features
+    assert "game_id" in context
+    assert "game_date" in context
+    assert "team_id" in context
+    assert len(context) == 3  # match_id, start_date, and team_id
+
+
+def test_negative_binomial_context_features__minimal():
+    """NegativeBinomialEstimator.context_features with no r_specific or column_names."""
+    estimator = NegativeBinomialEstimator(
+        point_estimate_pred_column="pred_points",
+        max_value=50,
+        r_specific_granularity=None,
+        column_names=None
+    )
+    assert estimator.context_features == []
+
+
+# ============================================================================
 # DistributionManagerPredictor Tests
 # ============================================================================
