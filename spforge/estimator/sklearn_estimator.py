@@ -148,9 +148,8 @@ class SkLearnEnhancerEstimator(BaseEstimator):
 
         X_features = X.drop([resolved_date_col]) if resolved_date_col else X
 
-        cat_cols = [name for name, dtype in X_features.schema.items() if dtype == nw.Categorical]
-        if cat_cols:
-            X_features = X_features.to_pandas()
+        # Always convert to pandas to preserve feature names for sklearn models
+        X_features = X_features.to_pandas()
 
         self.estimator_ = clone(self.estimator)
         if combined_weights is not None:
@@ -170,9 +169,8 @@ class SkLearnEnhancerEstimator(BaseEstimator):
         resolved_date_col = self._resolve_date_column(list(X.columns))
         X_features = X.drop([resolved_date_col]) if resolved_date_col else X
 
-        cat_cols = [name for name, dtype in X_features.schema.items() if dtype == nw.Categorical]
-        if cat_cols:
-            X_features = X_features.to_pandas()
+        # Always convert to pandas to preserve feature names for sklearn models
+        X_features = X_features.to_pandas()
 
         return self.estimator_.predict(X_features)
 
@@ -184,9 +182,8 @@ class SkLearnEnhancerEstimator(BaseEstimator):
         resolved_date_col = self._resolve_date_column(list(X.columns))
         X_features = X.drop([resolved_date_col]) if resolved_date_col else X
 
-        cat_cols = [name for name, dtype in X_features.schema.items() if dtype == nw.Categorical]
-        if cat_cols:
-            X_features = X_features.to_pandas()
+        # Always convert to pandas to preserve feature names for sklearn models
+        X_features = X_features.to_pandas()
 
         return self.estimator_.predict_proba(X_features)
 
