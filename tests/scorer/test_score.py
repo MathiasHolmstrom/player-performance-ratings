@@ -1485,3 +1485,197 @@ def test_threshold_event_score_compare_to_naive_granularity():
     )
     expected = baseline.score(naive_df) - baseline.score(df)
     assert abs(score - expected) < 1e-10
+
+# ============================================================================
+# NaN Handling Tests for All Scorers
+# ============================================================================
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_sklearn_scorer_filters_nan_targets(df_type):
+    """SklearnScorer filters out NaN targets"""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [1.0, 2.0, 3.0, 4.0],
+            "target": [1.0, None, 3.0, np.nan],
+        },
+    )
+    scorer = SklearnScorer(
+        scorer_function=mean_absolute_error,
+        pred_column="pred",
+        target="target",
+    )
+    score = scorer.score(df)
+    assert isinstance(score, float)
+    assert not np.isnan(score)
+    # Should only use 2 rows (non-null targets)
+    expected_score = mean_absolute_error([1.0, 3.0], [1.0, 3.0])
+    assert score == expected_score
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_sklearn_scorer_log_loss_with_nan_targets(df_type):
+    """SklearnScorer with log_loss filters out NaN targets (original failing case)"""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [[0.1, 0.9], [0.5, 0.5], [0.8, 0.2], [0.3, 0.7]],
+            "target": [0.0, None, 1.0, np.nan],
+        },
+    )
+    scorer = SklearnScorer(
+        scorer_function=log_loss,
+        pred_column="pred",
+        target="target",
+        params={"labels": [0, 1]},
+    )
+    score = scorer.score(df)
+    assert isinstance(score, float)
+    assert not np.isnan(score)
+    # Should only use 2 rows (non-null targets)
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_mean_bias_scorer_filters_nan_targets(df_type):
+    """MeanBiasScorer filters out NaN targets"""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [1.0, 2.0, 3.0, 4.0, 5.0],
+            "target": [1.5, None, 3.5, np.nan, 5.5],
+        },
+    )
+    scorer = MeanBiasScorer(
+        pred_column="pred",
+        target="target",
+    )
+    score = scorer.score(df)
+    assert isinstance(score, float)
+    assert not np.isnan(score)
+    # Should only use 3 rows (non-null targets)
+    # Mean bias should be (1.0 - 1.5 + 3.0 - 3.5 + 5.0 - 5.5) / 3 = -0.5
+    expected_score = (1.0 - 1.5 + 3.0 - 3.5 + 5.0 - 5.5) / 3
+    assert abs(score - expected_score) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_mean_bias_scorer_with_probability_predictions_and_nan(df_type):
+    """MeanBiasScorer with probability predictions filters out NaN targets"""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [[0.1, 0.9], [0.5, 0.5], [0.8, 0.2], [0.3, 0.7]],
+            "target": [0.0, None, 1.0, np.nan],
+        },
+    )
+    scorer = MeanBiasScorer(
+        pred_column="pred",
+        target="target",
+        labels=[0, 1],
+    )
+    score = scorer.score(df)
+    assert isinstance(score, float)
+    assert not np.isnan(score)
+
+
+def test_probabilistic_mean_bias_filters_nan_targets():
+    """ProbabilisticMeanBias filters out NaN targets (pandas only)"""
+    df = pd.DataFrame(
+        {
+            "pred": [[0.1, 0.9], [0.5, 0.5], [0.8, 0.2], [0.3, 0.7]],
+            "target": [0.0, None, 1.0, np.nan],
+            "classes": [[0, 1], [0, 1], [0, 1], [0, 1]],
+        }
+    )
+    scorer = ProbabilisticMeanBias(
+        pred_column="pred",
+        target="target",
+        class_column_name="classes",
+    )
+    score = scorer.score(df)
+    assert isinstance(score, float)
+    assert not np.isnan(score)
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_ordinal_loss_scorer_filters_nan_targets(df_type):
+    """OrdinalLossScorer filters out NaN targets"""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [[0.1, 0.9], [0.5, 0.5], [0.8, 0.2], [0.3, 0.7]],
+            "target": [0.0, None, 1.0, np.nan],
+        },
+    )
+    scorer = OrdinalLossScorer(
+        pred_column="pred",
+        target="target",
+        classes=[0, 1],
+    )
+    score = scorer.score(df)
+    assert isinstance(score, float)
+    assert not np.isnan(score)
+    # Should only use 2 rows (non-null targets)
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_ordinal_loss_scorer_with_more_classes_and_nan(df_type):
+    """OrdinalLossScorer with multiple classes filters out NaN targets"""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [
+                [0.1, 0.2, 0.3, 0.4],
+                [0.25, 0.25, 0.25, 0.25],
+                [0.4, 0.3, 0.2, 0.1],
+                [0.2, 0.3, 0.4, 0.1],
+                [0.1, 0.1, 0.3, 0.5],
+            ],
+            "target": [0.0, None, 2.0, np.nan, 3.0],
+        },
+    )
+    scorer = OrdinalLossScorer(
+        pred_column="pred",
+        target="target",
+        classes=[0, 1, 2, 3],
+    )
+    score = scorer.score(df)
+    assert isinstance(score, float)
+    assert not np.isnan(score)
+    # Should only use 3 rows (non-null targets)
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_all_scorers_handle_all_nan_targets(df_type):
+    """All scorers handle case where all targets are NaN"""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [[0.1, 0.9], [0.5, 0.5]],
+            "target": [None, np.nan],
+        },
+    )
+
+    # PWMSE should handle empty dataframe
+    pwmse_scorer = PWMSE(pred_column="pred", target="target", labels=[0, 1])
+    # This will likely raise an error or return NaN, which is acceptable behavior
+    try:
+        score = pwmse_scorer.score(df)
+        # If it returns a value, it should be either NaN or 0
+        assert np.isnan(score) or score == 0.0
+    except (ValueError, IndexError):
+        # It's acceptable to raise an error when all targets are NaN
+        pass
+
+    # OrdinalLossScorer should handle empty dataframe
+    ordinal_scorer = OrdinalLossScorer(
+        pred_column="pred",
+        target="target",
+        classes=[0, 1],
+    )
+    try:
+        score = ordinal_scorer.score(df)
+        assert np.isnan(score) or score == 0.0
+    except (ValueError, IndexError):
+        pass

@@ -367,14 +367,17 @@ class PWMSE(BaseScorer):
         before = len(df)
         if not hasattr(df, "to_native"):
             df = nw.from_native(df)
-        df = df.filter(~nw.col(self.target).is_null())
+        # Filter out both null and NaN values
+        target_col = nw.col(self.target)
+        df = df.filter(~target_col.is_null() & ~target_col.is_nan())
         after = len(df)
-        _logger.info(
-            "Dropped %d rows with NaN target (%d → %d)",
-            before - after,
-            before,
-            after,
-        )
+        if before != after:
+            _logger.info(
+                "PWMSE: Dropped %d rows with NaN target (%d → %d)",
+                before - after,
+                before,
+                after,
+            )
 
         if self.aggregation_level:
             first_pred = df[self.pred_column].to_list()[0] if len(df) > 0 else None
@@ -430,7 +433,7 @@ class PWMSE(BaseScorer):
                 list(self.labels) if self.labels else None,
                 self.naive_granularity,
             )
-            naive_preds = np.asarray(naive_probs_list, dtype=np.float64)
+            naive_preds = np.vstack(df[self.pred_column].to_numpy())
             naive_score = self._pwmse_score(targets, naive_preds)
             return float(naive_score - score)
         return float(score)
@@ -493,6 +496,19 @@ class MeanBiasScorer(BaseScorer):
         # Ensure df is a Narwhals DataFrame
         if not hasattr(df, "to_native"):
             df = nw.from_native(df)
+
+        # Filter out null and NaN targets
+        before = len(df)
+        target_col = nw.col(self.target)
+        df = df.filter(~target_col.is_null() & ~target_col.is_nan())
+        after = len(df)
+        if before != after:
+            _logger.info(
+                "MeanBiasScorer: Dropped %d rows with NaN target (%d → %d)",
+                before - after,
+                before,
+                after,
+            )
 
         # Apply aggregation_level if set
         if self.aggregation_level:
@@ -655,6 +671,20 @@ class SklearnScorer(BaseScorer):
     @narwhals.narwhalify
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
         df = nw.from_native(apply_filters(df=df, filters=self.filters))
+        before = len(df)
+        if not hasattr(df, "to_native"):
+            df = nw.from_native(df)
+        # Filter out both null and NaN values
+        target_col = nw.col(self.target)
+        df = df.filter(~target_col.is_null() & ~target_col.is_nan())
+        after = len(df)
+        if before != after:
+            _logger.info(
+                "SklearnScorer: Dropped %d rows with NaN target (%d → %d)",
+                before - after,
+                before,
+                after,
+            )
 
         if self.aggregation_level:
             df = df.group_by(self.aggregation_level).agg(
@@ -835,6 +865,18 @@ class ProbabilisticMeanBias(BaseScorer):
         df = df.copy()
         df = apply_filters(df, self.filters)
 
+        # Filter out null and NaN targets (notna() handles both None and np.nan in pandas)
+        before = len(df)
+        df = df[df[self.target].notna()]
+        after = len(df)
+        if before != after:
+            _logger.info(
+                "ProbabilisticMeanBias: Dropped %d rows with NaN target (%d → %d)",
+                before - after,
+                before,
+                after,
+            )
+
         # Apply aggregation_level if set
         if self.aggregation_level:
             df = (
@@ -993,6 +1035,19 @@ class OrdinalLossScorer(BaseScorer):
 
         df_native = df.to_native()
         df_pl = pl.DataFrame(df_native) if isinstance(df_native, pd.DataFrame) else df_native
+
+        # Filter out null and NaN targets
+        before = len(df_pl)
+        target_col = pl.col(self.target)
+        df_pl = df_pl.filter(target_col.is_not_null() & target_col.is_not_nan())
+        after = len(df_pl)
+        if before != after:
+            _logger.info(
+                "OrdinalLossScorer: Dropped %d rows with NaN target (%d → %d)",
+                before - after,
+                before,
+                after,
+            )
 
         if self.aggregation_level:
             df_pl = df_pl.group_by(self.aggregation_level).agg(
