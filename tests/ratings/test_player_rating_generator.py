@@ -520,6 +520,94 @@ def test_fit_transform_zero_participation_weight(base_cn):
     assert gen._player_off_ratings["P1"].rating_value == 0.0
 
 
+def test_fit_transform_scales_participation_weight_by_fit_quantile(base_cn):
+    """Participation weight ratio should reflect scaling by the fit 99th percentile."""
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "O1", "O2"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.9, 0.9, 0.1, 0.1],
+            "pw": [10.0, 20.0, 10.0, 10.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        start_harcoded_start_rating=1000.0,
+        scale_participation_weights=True,
+    )
+    gen.fit_transform(df)
+
+    start_rating = 1000.0
+    p1_change = gen._player_off_ratings["P1"].rating_value - start_rating
+    p2_change = gen._player_off_ratings["P2"].rating_value - start_rating
+
+    q = df["pw"].quantile(0.99, "linear")
+    expected_ratio = min(1.0, 10.0 / q) / min(1.0, 20.0 / q)
+
+    assert p1_change / p2_change == pytest.approx(expected_ratio, rel=1e-6)
+
+
+def test_future_transform_scales_projected_participation_weight_by_fit_quantile():
+    """Future projected participation weights should scale with fit quantile and be clipped."""
+    cn = ColumnNames(
+        player_id="pid",
+        team_id="tid",
+        match_id="mid",
+        start_date="dt",
+        update_match_id="mid",
+        participation_weight="pw",
+        projected_participation_weight="ppw",
+    )
+    fit_df = pl.DataFrame(
+        {
+            "pid": ["A", "B", "C", "D"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.9, 0.1, 0.9, 0.1],
+            "pw": [10.0, 10.0, 10.0, 10.0],
+            "ppw": [10.0, 10.0, 10.0, 10.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=cn,
+        auto_scale_performance=True,
+        scale_participation_weights=True,
+        features_out=[RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
+    )
+    gen.fit_transform(fit_df)
+
+    future_df = pl.DataFrame(
+        {
+            "pid": ["A", "B", "C", "D"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M2", "M2", "M2", "M2"],
+            "dt": ["2024-01-02"] * 4,
+            "pw": [10.0, 10.0, 10.0, 10.0],
+            "ppw": [20.0, 5.0, 10.0, 10.0],
+        }
+    )
+    res = gen.future_transform(future_df)
+
+    a_rating = gen._player_off_ratings["A"].rating_value
+    b_rating = gen._player_off_ratings["B"].rating_value
+    w_a = min(1.0, max(0.0, 20.0 / 10.0))
+    w_b = min(1.0, max(0.0, 5.0 / 10.0))
+    expected_team_off = (a_rating * w_a + b_rating * w_b) / (w_a + w_b)
+
+    team_off_col = "team_off_rating_projected_perf"
+    actual_team_off = (
+        res.filter(pl.col("tid") == "T1").select(team_off_col).unique().item()
+    )
+
+    assert actual_team_off == pytest.approx(expected_team_off, rel=1e-6)
+
+
 def test_fit_transform_sequential_rating_evolution(base_cn, sequential_df):
     """Ratings should change monotonically if a player performs consistently above average."""
     gen = PlayerRatingGenerator(

@@ -5,7 +5,10 @@ import copy
 import math
 from typing import Any, Literal
 
+import narwhals.stable.v2 as nw
 import polars as pl
+from narwhals.stable.v2 import DataFrame
+from narwhals.stable.v2.typing import IntoFrameT
 
 from spforge.data_structures import (
     ColumnNames,
@@ -27,6 +30,7 @@ from spforge.ratings.utils import (
     add_team_rating,
     add_team_rating_projected,
 )
+from spforge.feature_generator._utils import to_polars
 
 PLAYER_STATS = "__PLAYER_STATS"
 
@@ -76,6 +80,7 @@ class PlayerRatingGenerator(RatingGenerator):
         start_harcoded_start_rating: float | None = None,
         column_names: ColumnNames | None = None,
         output_suffix: str | None = None,
+        scale_participation_weights: bool = False,
         **kwargs: Any,
     ):
         super().__init__(
@@ -155,6 +160,9 @@ class PlayerRatingGenerator(RatingGenerator):
         self.column_names = column_names
 
         self.use_off_def_split = bool(use_off_def_split)
+        self.scale_participation_weights = bool(scale_participation_weights)
+        self._participation_weight_max: float | None = None
+        self._projected_participation_weight_max: float | None = None
 
         self._player_off_ratings: dict[str, PlayerRating] = {}
         self._player_def_ratings: dict[str, PlayerRating] = {}
@@ -169,6 +177,17 @@ class PlayerRatingGenerator(RatingGenerator):
             min_count_for_percentiles=self.start_min_count_for_percentiles,
             harcoded_start_rating=self.start_hardcoded_start_rating,
         )
+
+    @to_polars
+    @nw.narwhalify
+    def fit_transform(
+        self,
+        df: IntoFrameT,
+        column_names: ColumnNames | None = None,
+    ) -> DataFrame | IntoFrameT:
+        self.column_names = column_names if column_names else self.column_names
+        self._set_participation_weight_max(df)
+        return super().fit_transform(df, column_names)
 
     def _ensure_player_off(self, player_id: str) -> PlayerRating:
         if player_id not in self._player_off_ratings:
@@ -196,7 +215,62 @@ class PlayerRatingGenerator(RatingGenerator):
             participation_weight=particpation_weight,
         )
 
+    def _set_participation_weight_max(self, df: DataFrame) -> None:
+        if not self.scale_participation_weights:
+            return
+        cn = self.column_names
+        if not cn:
+            return
+
+        pl_df = df.to_native() if df.implementation.is_polars() else df.to_polars().to_native()
+
+        if cn.participation_weight and cn.participation_weight in df.columns:
+            q_val = pl_df[cn.participation_weight].quantile(0.99, "linear")
+            if q_val is not None:
+                self._participation_weight_max = float(q_val)
+
+        if cn.projected_participation_weight and cn.projected_participation_weight in df.columns:
+            q_val = pl_df[cn.projected_participation_weight].quantile(0.99, "linear")
+            if q_val is not None:
+                self._projected_participation_weight_max = float(q_val)
+        elif self._participation_weight_max is not None:
+            self._projected_participation_weight_max = self._participation_weight_max
+
+    def _scale_participation_weight_columns(self, df: pl.DataFrame) -> pl.DataFrame:
+        if not self.scale_participation_weights:
+            return df
+        if self._participation_weight_max is None or self._participation_weight_max <= 0:
+            return df
+
+        cn = self.column_names
+        if not cn:
+            return df
+
+        if cn.participation_weight and cn.participation_weight in df.columns:
+            denom = float(self._participation_weight_max)
+            df = df.with_columns(
+                (pl.col(cn.participation_weight) / denom)
+                .clip(0.0, 1.0)
+                .alias(cn.participation_weight)
+            )
+
+        if (
+            cn.projected_participation_weight
+            and cn.projected_participation_weight in df.columns
+            and self._projected_participation_weight_max is not None
+            and self._projected_participation_weight_max > 0
+        ):
+            denom = float(self._projected_participation_weight_max)
+            df = df.with_columns(
+                (pl.col(cn.projected_participation_weight) / denom)
+                .clip(0.0, 1.0)
+                .alias(cn.projected_participation_weight)
+            )
+
+        return df
+
     def _historical_transform(self, df: pl.DataFrame) -> pl.DataFrame:
+        df = self._scale_participation_weight_columns(df)
         match_df = self._create_match_df(df)
         ratings = self._calculate_ratings(match_df)
 
@@ -222,6 +296,7 @@ class PlayerRatingGenerator(RatingGenerator):
         return self._add_rating_features(df)
 
     def _future_transform(self, df: pl.DataFrame) -> pl.DataFrame:
+        df = self._scale_participation_weight_columns(df)
         match_df = self._create_match_df(df)
         ratings = self._calculate_future_ratings(match_df)
 
@@ -968,7 +1043,9 @@ class PlayerRatingGenerator(RatingGenerator):
                     position = tp.get(cn.position)
                     league = tp.get(cn.league, None)
 
-                    pw = tp.get(cn.participation_weight, 1.0) if cn.participation_weight else 1.0
+                    pw = (
+                        tp.get(cn.participation_weight, 1.0) if cn.participation_weight else 1.0
+                    )
                     ppw = (
                         tp.get(cn.projected_participation_weight, pw)
                         if cn.projected_participation_weight
