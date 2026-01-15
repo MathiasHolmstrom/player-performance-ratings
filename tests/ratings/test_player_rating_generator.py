@@ -233,6 +233,112 @@ def test_fit_transform_offense_defense_independence(base_cn):
     assert def_rating < off_rating or def_rating <= 0.0
 
 
+def test_plus_minus_does_not_split_off_def(base_cn):
+    """
+    plus_minus represents overall impact. For a single game where team totals
+    are equal/opposite, offense and defense ratings should not diverge.
+    """
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "plus_minus": [8.0, 2.0, -5.0, -5.0],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="plus_minus",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        use_off_def_split=False,
+    )
+    gen.fit_transform(df)
+
+    off_rating = gen._player_off_ratings["P1"].rating_value
+    def_rating = gen._player_def_ratings["P1"].rating_value
+
+    assert abs(off_rating - def_rating) < 1e-9
+
+
+def test_plus_minus_team_diff_positive_next_match(base_cn):
+    """
+    For a zero-sum plus_minus game, the team with the higher total plus_minus
+    should have a positive team rating difference in the next match.
+    """
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4", "P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2", "T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1", "M2", "M2", "M2", "M2"],
+            "dt": ["2024-01-01"] * 4 + ["2024-01-02"] * 4,
+            "plus_minus": [8.0, 7.0, -6.0, -9.0, 0.0, 0.0, 0.0, 0.0],
+            "pw": [1.0] * 8,
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="plus_minus",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        use_off_def_split=False,
+    )
+    res = gen.fit_transform(df)
+
+    diff_col = "team_rating_difference_projected_plus_minus"
+    m2_team = res.filter(pl.col("mid") == "M2").group_by("tid").agg(
+        pl.col(diff_col).mean().alias("diff")
+    )
+    t1_diff = m2_team.filter(pl.col("tid") == "T1").select("diff").item()
+    t2_diff = m2_team.filter(pl.col("tid") == "T2").select("diff").item()
+
+    assert t1_diff > 0
+    assert t2_diff < 0
+
+
+def test_plus_minus_future_transform_team_diff(base_cn):
+    """
+    future_transform should carry forward plus_minus ratings and produce
+    the same team diff direction for the next match.
+    """
+    fit_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "plus_minus": [8.0, 7.0, -6.0, -9.0],
+            "pw": [1.0] * 4,
+        }
+    )
+    future_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M2", "M2", "M2", "M2"],
+            "dt": ["2024-01-02"] * 4,
+            "pw": [1.0] * 4,
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="plus_minus",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        use_off_def_split=False,
+        features_out=[RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED],
+    )
+    gen.fit_transform(fit_df)
+    res = gen.future_transform(future_df)
+
+    diff_col = "team_rating_difference_projected_plus_minus"
+    m2_team = res.group_by("tid").agg(pl.col(diff_col).mean().alias("diff"))
+    t1_diff = m2_team.filter(pl.col("tid") == "T1").select("diff").item()
+    t2_diff = m2_team.filter(pl.col("tid") == "T2").select("diff").item()
+
+    assert t1_diff > 0
+    assert t2_diff < 0
+
+
 def _create_date_column_player(date_format: str, dates: list) -> pl.Series:
     """Helper to create date column with specified format for player tests."""
     if date_format == "string_iso_date":
@@ -412,6 +518,94 @@ def test_fit_transform_zero_participation_weight(base_cn):
     # Rating should remain at the start value (0.0) since participation weight is 0
     # (no rating change occurs when participation weight is 0)
     assert gen._player_off_ratings["P1"].rating_value == 0.0
+
+
+def test_fit_transform_scales_participation_weight_by_fit_quantile(base_cn):
+    """Participation weight ratio should reflect scaling by the fit 99th percentile."""
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "O1", "O2"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.9, 0.9, 0.1, 0.1],
+            "pw": [10.0, 20.0, 10.0, 10.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        start_harcoded_start_rating=1000.0,
+        scale_participation_weights=True,
+    )
+    gen.fit_transform(df)
+
+    start_rating = 1000.0
+    p1_change = gen._player_off_ratings["P1"].rating_value - start_rating
+    p2_change = gen._player_off_ratings["P2"].rating_value - start_rating
+
+    q = df["pw"].quantile(0.99, "linear")
+    expected_ratio = min(1.0, 10.0 / q) / min(1.0, 20.0 / q)
+
+    assert p1_change / p2_change == pytest.approx(expected_ratio, rel=1e-6)
+
+
+def test_future_transform_scales_projected_participation_weight_by_fit_quantile():
+    """Future projected participation weights should scale with fit quantile and be clipped."""
+    cn = ColumnNames(
+        player_id="pid",
+        team_id="tid",
+        match_id="mid",
+        start_date="dt",
+        update_match_id="mid",
+        participation_weight="pw",
+        projected_participation_weight="ppw",
+    )
+    fit_df = pl.DataFrame(
+        {
+            "pid": ["A", "B", "C", "D"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.9, 0.1, 0.9, 0.1],
+            "pw": [10.0, 10.0, 10.0, 10.0],
+            "ppw": [10.0, 10.0, 10.0, 10.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=cn,
+        auto_scale_performance=True,
+        scale_participation_weights=True,
+        features_out=[RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
+    )
+    gen.fit_transform(fit_df)
+
+    future_df = pl.DataFrame(
+        {
+            "pid": ["A", "B", "C", "D"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M2", "M2", "M2", "M2"],
+            "dt": ["2024-01-02"] * 4,
+            "pw": [10.0, 10.0, 10.0, 10.0],
+            "ppw": [20.0, 5.0, 10.0, 10.0],
+        }
+    )
+    res = gen.future_transform(future_df)
+
+    a_rating = gen._player_off_ratings["A"].rating_value
+    b_rating = gen._player_off_ratings["B"].rating_value
+    w_a = min(1.0, max(0.0, 20.0 / 10.0))
+    w_b = min(1.0, max(0.0, 5.0 / 10.0))
+    expected_team_off = (a_rating * w_a + b_rating * w_b) / (w_a + w_b)
+
+    team_off_col = "team_off_rating_projected_perf"
+    actual_team_off = (
+        res.filter(pl.col("tid") == "T1").select(team_off_col).unique().item()
+    )
+
+    assert actual_team_off == pytest.approx(expected_team_off, rel=1e-6)
 
 
 def test_fit_transform_sequential_rating_evolution(base_cn, sequential_df):

@@ -2724,3 +2724,84 @@ def test_TeamRatingGenerator__with_GameColumnNames_verifies_weighted_performance
         f"Team B's rating should change significantly based on weights. "
         f"Difference: {team_b_rating_difference:.2f}"
     )
+
+
+def test_plus_minus_team_diff_positive_next_match(column_names):
+    """
+    For a zero-sum plus_minus game, the team with the higher total plus_minus
+    should have a positive team rating difference in the next match.
+    """
+    df = pl.DataFrame(
+        {
+            "match_id": ["M1", "M1", "M2", "M2"],
+            "team_id": ["team_a", "team_b", "team_a", "team_b"],
+            "start_date": [
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 2),
+                datetime(2024, 1, 2),
+            ],
+            "plus_minus": [10.0, -10.0, 0.0, 0.0],
+        }
+    )
+
+    generator = TeamRatingGenerator(
+        performance_column="plus_minus",
+        column_names=column_names,
+        auto_scale_performance=True,
+        use_off_def_split=False,
+        features_out=[RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED],
+    )
+    res = generator.fit_transform(df)
+
+    diff_col = "team_rating_difference_projected_plus_minus"
+    m2_team = (
+        res.filter(pl.col("match_id") == "M2")
+        .group_by("team_id")
+        .agg(pl.col(diff_col).mean().alias("diff"))
+    )
+    a_diff = m2_team.filter(pl.col("team_id") == "team_a").select("diff").item()
+    b_diff = m2_team.filter(pl.col("team_id") == "team_b").select("diff").item()
+
+    assert a_diff > 0
+    assert b_diff < 0
+
+
+def test_plus_minus_future_transform_team_diff(column_names):
+    """
+    future_transform should carry forward plus_minus ratings and produce
+    the same team diff direction for the next match.
+    """
+    fit_df = pl.DataFrame(
+        {
+            "match_id": ["M1", "M1"],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "plus_minus": [10.0, -10.0],
+        }
+    )
+    future_df = pl.DataFrame(
+        {
+            "match_id": ["M2", "M2"],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
+        }
+    )
+
+    generator = TeamRatingGenerator(
+        performance_column="plus_minus",
+        column_names=column_names,
+        auto_scale_performance=True,
+        use_off_def_split=False,
+        features_out=[RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED],
+    )
+    generator.fit_transform(fit_df)
+    res = generator.future_transform(future_df)
+
+    diff_col = "team_rating_difference_projected_plus_minus"
+    m2_team = res.group_by("team_id").agg(pl.col(diff_col).mean().alias("diff"))
+    a_diff = m2_team.filter(pl.col("team_id") == "team_a").select("diff").item()
+    b_diff = m2_team.filter(pl.col("team_id") == "team_b").select("diff").item()
+
+    assert a_diff > 0
+    assert b_diff < 0
