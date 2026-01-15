@@ -521,15 +521,15 @@ def test_fit_transform_zero_participation_weight(base_cn):
 
 
 def test_fit_transform_scales_participation_weight_by_fit_quantile(base_cn):
-    """Participation weight should be scaled by the fit 99th percentile when enabled."""
+    """Participation weight ratio should reflect scaling by the fit 99th percentile."""
     df = pl.DataFrame(
         {
-            "pid": ["P1", "P2"],
-            "tid": ["T1", "T2"],
-            "mid": ["M1", "M1"],
-            "dt": ["2024-01-01", "2024-01-01"],
-            "perf": [0.9, 0.1],
-            "pw": [10.0, 20.0],
+            "pid": ["P1", "P2", "O1", "O2"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.9, 0.9, 0.1, 0.1],
+            "pw": [10.0, 20.0, 10.0, 10.0],
         }
     )
     gen = PlayerRatingGenerator(
@@ -541,19 +541,18 @@ def test_fit_transform_scales_participation_weight_by_fit_quantile(base_cn):
     )
     gen.fit_transform(df)
 
-    # With fit 99th percentile=19.9, P1 weight scales to ~0.5025.
-    base_mult = 50.0
-    conf_mult = base_mult * ((30.0 / 140.0) + 1.0)
-    applied_mult = conf_mult * 0.9 + base_mult * 0.1
-    denom = 19.9
-    expected_change = (0.9 - 0.5) * applied_mult * (10.0 / denom)
-    expected_rating = 1000.0 + expected_change
+    start_rating = 1000.0
+    p1_change = gen._player_off_ratings["P1"].rating_value - start_rating
+    p2_change = gen._player_off_ratings["P2"].rating_value - start_rating
 
-    assert gen._player_off_ratings["P1"].rating_value == pytest.approx(expected_rating, rel=1e-6)
+    q = df["pw"].quantile(0.99, "linear")
+    expected_ratio = min(1.0, 10.0 / q) / min(1.0, 20.0 / q)
+
+    assert p1_change / p2_change == pytest.approx(expected_ratio, rel=1e-6)
 
 
-def test_future_transform_scales_projected_participation_weight_by_fit_max():
-    """Future projected participation weights should scale with fit max and be clipped."""
+def test_future_transform_scales_projected_participation_weight_by_fit_quantile():
+    """Future projected participation weights should scale with fit quantile and be clipped."""
     cn = ColumnNames(
         player_id="pid",
         team_id="tid",
@@ -603,7 +602,7 @@ def test_future_transform_scales_projected_participation_weight_by_fit_max():
 
     team_off_col = "team_off_rating_projected_perf"
     actual_team_off = (
-        res.filter(pl.col("tid") == "T1").select(team_off_col).item()
+        res.filter(pl.col("tid") == "T1").select(team_off_col).unique().item()
     )
 
     assert actual_team_off == pytest.approx(expected_team_off, rel=1e-6)

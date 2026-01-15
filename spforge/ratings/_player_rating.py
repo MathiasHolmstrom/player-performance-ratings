@@ -33,7 +33,6 @@ from spforge.ratings.utils import (
 from spforge.feature_generator._utils import to_polars
 
 PLAYER_STATS = "__PLAYER_STATS"
-_PARTICIPATION_WEIGHT_DENOM = 48.25
 
 
 class PlayerRatingGenerator(RatingGenerator):
@@ -237,13 +236,41 @@ class PlayerRatingGenerator(RatingGenerator):
         elif self._participation_weight_max is not None:
             self._projected_participation_weight_max = self._participation_weight_max
 
-    def _scale_participation_weight(self, value: float, max_value: float | None) -> float:
-        denom = _PARTICIPATION_WEIGHT_DENOM
-        if self.scale_participation_weights and max_value is not None and max_value > 0:
-            denom = float(max_value)
-        return min(1.0, max(0.0, float(value) / float(denom)))
+    def _scale_participation_weight_columns(self, df: pl.DataFrame) -> pl.DataFrame:
+        if not self.scale_participation_weights:
+            return df
+        if self._participation_weight_max is None or self._participation_weight_max <= 0:
+            return df
+
+        cn = self.column_names
+        if not cn:
+            return df
+
+        if cn.participation_weight and cn.participation_weight in df.columns:
+            denom = float(self._participation_weight_max)
+            df = df.with_columns(
+                (pl.col(cn.participation_weight) / denom)
+                .clip(0.0, 1.0)
+                .alias(cn.participation_weight)
+            )
+
+        if (
+            cn.projected_participation_weight
+            and cn.projected_participation_weight in df.columns
+            and self._projected_participation_weight_max is not None
+            and self._projected_participation_weight_max > 0
+        ):
+            denom = float(self._projected_participation_weight_max)
+            df = df.with_columns(
+                (pl.col(cn.projected_participation_weight) / denom)
+                .clip(0.0, 1.0)
+                .alias(cn.projected_participation_weight)
+            )
+
+        return df
 
     def _historical_transform(self, df: pl.DataFrame) -> pl.DataFrame:
+        df = self._scale_participation_weight_columns(df)
         match_df = self._create_match_df(df)
         ratings = self._calculate_ratings(match_df)
 
@@ -269,6 +296,7 @@ class PlayerRatingGenerator(RatingGenerator):
         return self._add_rating_features(df)
 
     def _future_transform(self, df: pl.DataFrame) -> pl.DataFrame:
+        df = self._scale_participation_weight_columns(df)
         match_df = self._create_match_df(df)
         ratings = self._calculate_future_ratings(match_df)
 
@@ -785,16 +813,10 @@ class PlayerRatingGenerator(RatingGenerator):
             participation_weight = (
                 team_player.get(cn.participation_weight, 1.0) if cn.participation_weight else 1.0
             )
-            participation_weight = self._scale_participation_weight(
-                float(participation_weight), self._participation_weight_max
-            )
             projected_participation_weight = (
                 team_player.get(cn.projected_participation_weight, participation_weight)
                 if cn.projected_participation_weight
                 else participation_weight
-            )
-            projected_participation_weight = self._scale_participation_weight(
-                float(projected_participation_weight), self._projected_participation_weight_max
             )
             projected_participation_weights.append(projected_participation_weight)
 
@@ -1024,14 +1046,10 @@ class PlayerRatingGenerator(RatingGenerator):
                     pw = (
                         tp.get(cn.participation_weight, 1.0) if cn.participation_weight else 1.0
                     )
-                    pw = self._scale_participation_weight(float(pw), self._participation_weight_max)
                     ppw = (
                         tp.get(cn.projected_participation_weight, pw)
                         if cn.projected_participation_weight
                         else pw
-                    )
-                    ppw = self._scale_participation_weight(
-                        float(ppw), self._projected_participation_weight_max
                     )
                     proj_w.append(float(ppw))
 
