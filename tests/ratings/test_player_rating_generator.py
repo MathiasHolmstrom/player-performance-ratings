@@ -520,8 +520,8 @@ def test_fit_transform_zero_participation_weight(base_cn):
     assert gen._player_off_ratings["P1"].rating_value == 0.0
 
 
-def test_fit_transform_scales_participation_weight_by_fit_max(base_cn):
-    """Participation weight should be scaled by the fit max when enabled."""
+def test_fit_transform_scales_participation_weight_by_fit_quantile(base_cn):
+    """Participation weight should be scaled by the fit 99th percentile when enabled."""
     df = pl.DataFrame(
         {
             "pid": ["P1", "P2"],
@@ -541,11 +541,12 @@ def test_fit_transform_scales_participation_weight_by_fit_max(base_cn):
     )
     gen.fit_transform(df)
 
-    # With fit max=20, P1 weight scales to 0.5.
+    # With fit 99th percentile=19.9, P1 weight scales to ~0.5025.
     base_mult = 50.0
     conf_mult = base_mult * ((30.0 / 140.0) + 1.0)
     applied_mult = conf_mult * 0.9 + base_mult * 0.1
-    expected_change = (0.9 - 0.5) * applied_mult * 0.5
+    denom = 19.9
+    expected_change = (0.9 - 0.5) * applied_mult * (10.0 / denom)
     expected_rating = 1000.0 + expected_change
 
     assert gen._player_off_ratings["P1"].rating_value == pytest.approx(expected_rating, rel=1e-6)

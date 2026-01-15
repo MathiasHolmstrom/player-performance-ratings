@@ -223,15 +223,17 @@ class PlayerRatingGenerator(RatingGenerator):
         if not cn:
             return
 
+        pl_df = df.to_native() if df.implementation.is_polars() else df.to_polars().to_native()
+
         if cn.participation_weight and cn.participation_weight in df.columns:
-            max_val = df[cn.participation_weight].max()
-            if max_val is not None:
-                self._participation_weight_max = float(max_val)
+            q_val = pl_df[cn.participation_weight].quantile(0.99, "linear")
+            if q_val is not None:
+                self._participation_weight_max = float(q_val)
 
         if cn.projected_participation_weight and cn.projected_participation_weight in df.columns:
-            max_val = df[cn.projected_participation_weight].max()
-            if max_val is not None:
-                self._projected_participation_weight_max = float(max_val)
+            q_val = pl_df[cn.projected_participation_weight].quantile(0.99, "linear")
+            if q_val is not None:
+                self._projected_participation_weight_max = float(q_val)
         elif self._participation_weight_max is not None:
             self._projected_participation_weight_max = self._participation_weight_max
 
