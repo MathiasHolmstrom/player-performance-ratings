@@ -32,6 +32,7 @@ class TeamRatingGenerator(RatingGenerator):
         performance_manager: PerformanceManager | None = None,
         auto_scale_performance: bool = False,
         performance_predictor: Literal["difference", "mean", "ignore_opponent"] = "difference",
+        use_off_def_split: bool = True,
         rating_change_multiplier_offense: float = 50,
         rating_change_multiplier_defense: float = 50,
         confidence_days_ago_multiplier: float = 0.06,
@@ -135,6 +136,7 @@ class TeamRatingGenerator(RatingGenerator):
             raise ValueError(f"performance_predictor {performance_predictor} is not supported")
 
         self.performance_predictor = performance_predictor
+        self.use_off_def_split = bool(use_off_def_split)
         sig = inspect.signature(_performance_predictor_class.__init__)
         init_params = [name for name, _param in sig.parameters.items() if name != "self"]
         performance_predictor_params = {k: v for k, v in kwargs.items() if k in init_params}
@@ -306,6 +308,12 @@ class TeamRatingGenerator(RatingGenerator):
             team_id = r[cn.team_id]
             opp_id = r[f"{cn.team_id}_opponent"]
             update_id = r[cn.update_match_id]
+
+            if last_update_id is not None and update_id != last_update_id:
+                if pending_updates:
+                    self._apply_team_updates(pending_updates)
+                    pending_updates = []
+                last_update_id = update_id
             day_number = int(r["__day_number"])
             league = r[self.column_names.league] if self.column_names.league else None
 
@@ -325,7 +333,10 @@ class TeamRatingGenerator(RatingGenerator):
                 else 0.0
             )
             opp_off_perf = float(r[perf_opp_col]) if r.get(perf_opp_col) is not None else 0.0
-            def_perf = 1.0 - opp_off_perf
+            if self.use_off_def_split:
+                def_perf = 1.0 - opp_off_perf
+            else:
+                def_perf = off_perf
 
             pred_off = self._performance_predictor.predict_performance(
                 rating_value=s_off.rating_value, opponent_team_rating_value=o_def.rating_value
@@ -333,6 +344,8 @@ class TeamRatingGenerator(RatingGenerator):
             pred_def = self._performance_predictor.predict_performance(
                 rating_value=s_def.rating_value, opponent_team_rating_value=o_off.rating_value
             )
+            if not self.use_off_def_split:
+                pred_def = pred_off
 
             mult_off = self._applied_multiplier(s_off, self.rating_change_multiplier_offense)
             mult_def = self._applied_multiplier(s_def, self.rating_change_multiplier_defense)
@@ -363,11 +376,6 @@ class TeamRatingGenerator(RatingGenerator):
             pending_updates.append(("def", team_id, def_change, day_number))
 
             if last_update_id is None:
-                last_update_id = update_id
-
-            if update_id != last_update_id:
-                self._apply_team_updates(pending_updates[:-2])
-                pending_updates = pending_updates[-2:]
                 last_update_id = update_id
 
         if pending_updates:
@@ -510,6 +518,8 @@ class TeamRatingGenerator(RatingGenerator):
             pred_def = self._performance_predictor.predict_performance(
                 rating_value=s_def.rating_value, opponent_team_rating_value=o_off.rating_value
             )
+            if not self.use_off_def_split:
+                pred_def = pred_off
 
             rows.append(
                 {
