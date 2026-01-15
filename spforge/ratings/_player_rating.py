@@ -52,6 +52,7 @@ class PlayerRatingGenerator(RatingGenerator):
         performance_manager: PerformanceManager | None = None,
         auto_scale_performance: bool = False,
         performance_predictor: Literal["difference", "mean", "ignore_opponent"] = "difference",
+        use_off_def_split: bool | None = None,
         rating_change_multiplier_offense: float = 50,
         rating_change_multiplier_defense: float = 50,
         confidence_days_ago_multiplier: float = 0.06,
@@ -152,6 +153,11 @@ class PlayerRatingGenerator(RatingGenerator):
 
         self.team_id_change_confidence_sum_decrease = team_id_change_confidence_sum_decrease
         self.column_names = column_names
+
+        if use_off_def_split is None:
+            self.use_off_def_split = performance_column != "plus_minus"
+        else:
+            self.use_off_def_split = bool(use_off_def_split)
 
         self._player_off_ratings: dict[str, PlayerRating] = {}
         self._player_def_ratings: dict[str, PlayerRating] = {}
@@ -269,6 +275,12 @@ class PlayerRatingGenerator(RatingGenerator):
 
         for r in match_df.iter_rows(named=True):
             update_id = r[cn.update_match_id]
+
+            if last_update_id is not None and update_id != last_update_id:
+                if pending_team_updates:
+                    self._apply_player_updates(pending_team_updates)
+                    pending_team_updates = []
+                last_update_id = update_id
             day_number = int(r["__day_number"])
 
             team1 = r[cn.team_id]
@@ -284,8 +296,12 @@ class PlayerRatingGenerator(RatingGenerator):
             team1_off_perf = self._team_off_perf_from_collection(c1)
             team2_off_perf = self._team_off_perf_from_collection(c2)
 
-            team1_def_perf = 1.0 - team2_off_perf
-            team2_def_perf = 1.0 - team1_off_perf
+            if self.use_off_def_split:
+                team1_def_perf = 1.0 - team2_off_perf
+                team2_def_perf = 1.0 - team1_off_perf
+            else:
+                team1_def_perf = team1_off_perf
+                team2_def_perf = team2_off_perf
 
             team1_off_rating, team1_def_rating = self._team_off_def_rating_from_collection(c1)
             team2_off_rating, team2_def_rating = self._team_off_def_rating_from_collection(c2)
@@ -333,6 +349,10 @@ class PlayerRatingGenerator(RatingGenerator):
 
                 off_perf = float(pre_player.match_performance.performance_value)
                 def_perf = float(team1_def_perf)  # same for all players on team1 (derived)
+
+                if not self.use_off_def_split:
+                    pred_def = pred_off
+                    def_perf = off_perf
 
                 mult_off = self._applied_multiplier_off(off_state)
                 mult_def = self._applied_multiplier_def(def_state)
@@ -407,6 +427,10 @@ class PlayerRatingGenerator(RatingGenerator):
                 off_perf = float(pre_player.match_performance.performance_value)
                 def_perf = float(team2_def_perf)
 
+                if not self.use_off_def_split:
+                    pred_def = pred_off
+                    def_perf = off_perf
+
                 mult_off = self._applied_multiplier_off(off_state)
                 mult_def = self._applied_multiplier_def(def_state)
 
@@ -478,13 +502,6 @@ class PlayerRatingGenerator(RatingGenerator):
                 pending_team_updates.append((pid, team_id, off_change, def_change, dn))
 
             if last_update_id is None:
-                last_update_id = update_id
-
-            if update_id != last_update_id:
-                cutoff = len(pending_team_updates) - len(player_updates)
-                if cutoff > 0:
-                    self._apply_player_updates(pending_team_updates[:cutoff])
-                    pending_team_updates = pending_team_updates[cutoff:]
                 last_update_id = update_id
 
         if pending_team_updates:
@@ -854,7 +871,7 @@ class PlayerRatingGenerator(RatingGenerator):
             for pid in c.player_ids
             if pid in self._player_off_ratings
         ]
-        def_vals = [
+        def_vals = off_vals if not self.use_off_def_split else [
             float(self._player_def_ratings[pid].rating_value)
             for pid in c.player_ids
             if pid in self._player_def_ratings
@@ -1012,7 +1029,7 @@ class PlayerRatingGenerator(RatingGenerator):
             for pre in t1_pre:
                 pid = pre.id
                 off_pre = float(local_off[pid].rating_value)
-                def_pre = float(local_def[pid].rating_value)
+                def_pre = off_pre if not self.use_off_def_split else float(local_def[pid].rating_value)
 
                 pred_off = self._performance_predictor.predict_performance(
                     player_rating=pre,
@@ -1040,6 +1057,9 @@ class PlayerRatingGenerator(RatingGenerator):
                         id=team1, players=[], rating_value=t1_def_rating
                     ),
                 )
+
+                if not self.use_off_def_split:
+                    pred_def = pred_off
 
                 out[cn.player_id].append(pid)
                 out[cn.match_id].append(match_id)
@@ -1054,7 +1074,7 @@ class PlayerRatingGenerator(RatingGenerator):
             for pre in t2_pre:
                 pid = pre.id
                 off_pre = float(local_off[pid].rating_value)
-                def_pre = float(local_def[pid].rating_value)
+                def_pre = off_pre if not self.use_off_def_split else float(local_def[pid].rating_value)
 
                 pred_off = self._performance_predictor.predict_performance(
                     player_rating=pre,
@@ -1082,6 +1102,9 @@ class PlayerRatingGenerator(RatingGenerator):
                         id=team2, players=[], rating_value=t2_def_rating
                     ),
                 )
+
+                if not self.use_off_def_split:
+                    pred_def = pred_off
 
                 out[cn.player_id].append(pid)
                 out[cn.match_id].append(match_id)
