@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(prompt:view git status and history)",
+      "Bash(prompt:view git diffs and changes)",
+      "Bash(prompt:create git branches)",
+      "Bash(prompt:commit changes to git)",
+      "Bash(prompt:push to git remote)",
+      "Bash(prompt:run tests)",
+      "Bash(prompt:run pytest)",
+      "Bash(prompt:install dependencies)",
+      "Bash(prompt:install python packages)",
+      "Bash(prompt:build the package)",
+      "Bash(prompt:run python scripts in examples)",
+      "Bash(prompt:run linting and formatting tools)",
+      "Bash(prompt:check code quality)",
+      "Bash(prompt:list files and directories)",
+      "Bash(prompt:view python package info)"
+    ]
+  },
+  "classifierPermissionsEnabled": true
+}

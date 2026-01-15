@@ -521,6 +521,7 @@ def test_generate_validation_df_add_training_predictions_pl_roundtrip_type(
     assert out.height == len(df_pd_cv_reg)
     assert set(out["is_validation"].to_list()) == {0, 1}
 
+
 def test_generate_validation_df_preserves_timezone():
     n = 12
     dates = pd.date_range("2024-01-01", periods=n, freq="D", tz="UTC")
@@ -560,4 +561,3 @@ def test_generate_validation_df_preserves_timezone():
 
     assert out["game_date"].dt.tz is not None
     assert str(out["game_date"].dt.tz) == "UTC"
-

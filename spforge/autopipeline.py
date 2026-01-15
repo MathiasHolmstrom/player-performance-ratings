@@ -253,34 +253,37 @@ class AutoPipeline(BaseEstimator):
 
         # Collect from predictor transformers (to be dropped before final estimator)
         self._predictor_transformer_context = []
-        for transformer in (self.predictor_transformers or []):
+        for transformer in self.predictor_transformers or []:
             if isinstance(transformer, PredictorTransformer):
                 for feat in transformer.context_features:
                     if feat not in self._predictor_transformer_context:
                         self._predictor_transformer_context.append(feat)
 
         # Collect from final estimator (passed to final estimator)
-        if hasattr(self.estimator, 'context_features'):
+        if hasattr(self.estimator, "context_features"):
             ctx = self.estimator.context_features
             if ctx:
                 context.extend(ctx)
         else:
             # Legacy fallback for estimators without context_features property
-            if hasattr(self.estimator, 'date_column') and self.estimator.date_column:
+            if hasattr(self.estimator, "date_column") and self.estimator.date_column:
                 context.append(self.estimator.date_column)
 
-            if hasattr(self.estimator, 'r_specific_granularity') and self.estimator.r_specific_granularity:
+            if (
+                hasattr(self.estimator, "r_specific_granularity")
+                and self.estimator.r_specific_granularity
+            ):
                 context.extend(self.estimator.r_specific_granularity)
 
-            if hasattr(self.estimator, 'column_names') and self.estimator.column_names:
+            if hasattr(self.estimator, "column_names") and self.estimator.column_names:
                 cn = self.estimator.column_names
-                if hasattr(cn, 'match_id') and cn.match_id:
+                if hasattr(cn, "match_id") and cn.match_id:
                     context.append(cn.match_id)
-                if hasattr(cn, 'start_date') and cn.start_date:
+                if hasattr(cn, "start_date") and cn.start_date:
                     context.append(cn.start_date)
-                if hasattr(cn, 'team_id') and cn.team_id:
+                if hasattr(cn, "team_id") and cn.team_id:
                     context.append(cn.team_id)
-                if hasattr(cn, 'player_id') and cn.player_id:
+                if hasattr(cn, "player_id") and cn.player_id:
                     context.append(cn.player_id)
 
         # Add granularity columns
@@ -606,13 +609,12 @@ class AutoPipeline(BaseEstimator):
         Returns:
             Complete list of all columns needed by the pipeline.
         """
-        from spforge.transformers._base import PredictorTransformer
 
         all_features = list(self.estimator_features)
 
         # Add features from each predictor transformer
-        for transformer in (self.predictor_transformers or []):
-            if hasattr(transformer, 'features') and transformer.features:
+        for transformer in self.predictor_transformers or []:
+            if hasattr(transformer, "features") and transformer.features:
                 for feat in transformer.features:
                     if feat not in all_features:
                         all_features.append(feat)

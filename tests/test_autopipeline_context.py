@@ -1,22 +1,19 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+
 from spforge.autopipeline import AutoPipeline
 from spforge.estimator import SkLearnEnhancerEstimator
-from sklearn.linear_model import LinearRegression
 
 
 def test_autopipeline_context__sklearn_enhancer_with_property():
     """AutoPipeline detects context_features from SkLearnEnhancerEstimator."""
     estimator = SkLearnEnhancerEstimator(
-        estimator=LinearRegression(),
-        date_column="game_date",
-        day_weight_epsilon=0.01
+        estimator=LinearRegression(), date_column="game_date", day_weight_epsilon=0.01
     )
 
     pipeline = AutoPipeline(
-        estimator=estimator,
-        estimator_features=["feature1", "feature2"],
-        granularity=[]
+        estimator=estimator, estimator_features=["feature1", "feature2"], granularity=[]
     )
 
     # Should detect game_date from estimator.context_features
@@ -27,9 +24,7 @@ def test_autopipeline_context__sklearn_enhancer_with_property():
 def test_autopipeline_context__plain_sklearn_no_context():
     """AutoPipeline with plain sklearn estimator has no estimator context."""
     pipeline = AutoPipeline(
-        estimator=LinearRegression(),
-        estimator_features=["feature1", "feature2"],
-        granularity=[]
+        estimator=LinearRegression(), estimator_features=["feature1", "feature2"], granularity=[]
     )
 
     # Plain sklearn estimator has no context_features
