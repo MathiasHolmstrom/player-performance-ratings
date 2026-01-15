@@ -29,6 +29,7 @@ from spforge.ratings.utils import (
 )
 
 PLAYER_STATS = "__PLAYER_STATS"
+_PARTICIPATION_WEIGHT_DENOM = 48.25
 
 
 class PlayerRatingGenerator(RatingGenerator):
@@ -738,10 +739,16 @@ class PlayerRatingGenerator(RatingGenerator):
             participation_weight = (
                 team_player.get(cn.participation_weight, 1.0) if cn.participation_weight else 1.0
             )
+            participation_weight = min(
+                1.0, max(0.0, float(participation_weight) / _PARTICIPATION_WEIGHT_DENOM)
+            )
             projected_participation_weight = (
                 team_player.get(cn.projected_participation_weight, participation_weight)
                 if cn.projected_participation_weight
                 else participation_weight
+            )
+            projected_participation_weight = min(
+                1.0, max(0.0, float(projected_participation_weight) / _PARTICIPATION_WEIGHT_DENOM)
             )
             projected_participation_weights.append(projected_participation_weight)
 
@@ -952,9 +959,9 @@ class PlayerRatingGenerator(RatingGenerator):
             team1 = r[cn.team_id]
             team2 = r[f"{cn.team_id}_opponent"]
 
-            def build_local_team(
-                stats_col: str,
-            ) -> tuple[list[PreMatchPlayerRating], list[str], list[float], list[float], float]:
+        def build_local_team(
+            stats_col: str,
+        ) -> tuple[list[PreMatchPlayerRating], list[str], list[float], list[float], float]:
                 pre_list: list[PreMatchPlayerRating] = []
                 player_ids: list[str] = []
                 proj_w: list[float] = []
@@ -968,12 +975,16 @@ class PlayerRatingGenerator(RatingGenerator):
                     position = tp.get(cn.position)
                     league = tp.get(cn.league, None)
 
-                    pw = tp.get(cn.participation_weight, 1.0) if cn.participation_weight else 1.0
+                    pw = (
+                        tp.get(cn.participation_weight, 1.0) if cn.participation_weight else 1.0
+                    )
+                    pw = min(1.0, max(0.0, float(pw) / _PARTICIPATION_WEIGHT_DENOM))
                     ppw = (
                         tp.get(cn.projected_participation_weight, pw)
                         if cn.projected_participation_weight
                         else pw
                     )
+                    ppw = min(1.0, max(0.0, float(ppw) / _PARTICIPATION_WEIGHT_DENOM))
                     proj_w.append(float(ppw))
 
                     mp = MatchPerformance(
