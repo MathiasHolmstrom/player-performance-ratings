@@ -249,7 +249,10 @@ def test_plus_minus_does_not_split_off_def(base_cn):
         }
     )
     gen = PlayerRatingGenerator(
-        performance_column="plus_minus", column_names=base_cn, auto_scale_performance=True
+        performance_column="plus_minus",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        use_off_def_split=False,
     )
     gen.fit_transform(df)
 
@@ -275,7 +278,10 @@ def test_plus_minus_team_diff_positive_next_match(base_cn):
         }
     )
     gen = PlayerRatingGenerator(
-        performance_column="plus_minus", column_names=base_cn, auto_scale_performance=True
+        performance_column="plus_minus",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        use_off_def_split=False,
     )
     res = gen.fit_transform(df)
 
@@ -283,6 +289,49 @@ def test_plus_minus_team_diff_positive_next_match(base_cn):
     m2_team = res.filter(pl.col("mid") == "M2").group_by("tid").agg(
         pl.col(diff_col).mean().alias("diff")
     )
+    t1_diff = m2_team.filter(pl.col("tid") == "T1").select("diff").item()
+    t2_diff = m2_team.filter(pl.col("tid") == "T2").select("diff").item()
+
+    assert t1_diff > 0
+    assert t2_diff < 0
+
+
+def test_plus_minus_future_transform_team_diff(base_cn):
+    """
+    future_transform should carry forward plus_minus ratings and produce
+    the same team diff direction for the next match.
+    """
+    fit_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "plus_minus": [8.0, 7.0, -6.0, -9.0],
+            "pw": [1.0] * 4,
+        }
+    )
+    future_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M2", "M2", "M2", "M2"],
+            "dt": ["2024-01-02"] * 4,
+            "pw": [1.0] * 4,
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="plus_minus",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        use_off_def_split=False,
+        features_out=[RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED],
+    )
+    gen.fit_transform(fit_df)
+    res = gen.future_transform(future_df)
+
+    diff_col = "team_rating_difference_projected_plus_minus"
+    m2_team = res.group_by("tid").agg(pl.col(diff_col).mean().alias("diff"))
     t1_diff = m2_team.filter(pl.col("tid") == "T1").select("diff").item()
     t2_diff = m2_team.filter(pl.col("tid") == "T2").select("diff").item()
 

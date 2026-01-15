@@ -52,7 +52,7 @@ class PlayerRatingGenerator(RatingGenerator):
         performance_manager: PerformanceManager | None = None,
         auto_scale_performance: bool = False,
         performance_predictor: Literal["difference", "mean", "ignore_opponent"] = "difference",
-        use_off_def_split: bool | None = None,
+        use_off_def_split: bool = True,
         rating_change_multiplier_offense: float = 50,
         rating_change_multiplier_defense: float = 50,
         confidence_days_ago_multiplier: float = 0.06,
@@ -154,10 +154,7 @@ class PlayerRatingGenerator(RatingGenerator):
         self.team_id_change_confidence_sum_decrease = team_id_change_confidence_sum_decrease
         self.column_names = column_names
 
-        if use_off_def_split is None:
-            self.use_off_def_split = performance_column != "plus_minus"
-        else:
-            self.use_off_def_split = bool(use_off_def_split)
+        self.use_off_def_split = bool(use_off_def_split)
 
         self._player_off_ratings: dict[str, PlayerRating] = {}
         self._player_def_ratings: dict[str, PlayerRating] = {}
