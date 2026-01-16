@@ -78,7 +78,8 @@ def test_lgbm_wrapper_predict_clips_regression_predictions():
     """SkLearnEnhancerEstimator clips regression predictions when configured."""
     wrapper = SkLearnEnhancerEstimator(
         estimator=ConstantRegressor(value=10.0),
-        clip_predictions=(0.0, 5.0),
+        min_prediction=0.0,
+        max_prediction=5.0,
     )
     X_train = pd.DataFrame({"feature1": [1, 2, 3]})
     y_train = pd.Series([1, 2, 3])

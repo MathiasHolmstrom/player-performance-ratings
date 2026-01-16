@@ -84,12 +84,14 @@ class SkLearnEnhancerEstimator(BaseEstimator):
         estimator: Any,
         date_column: str | None = None,
         day_weight_epsilon: float | None = None,
-        clip_predictions: tuple[float | None, float | None] | None = None,
+        min_prediction: float | None = None,
+        max_prediction: float | None = None,
     ):
         self.estimator = estimator
         self.date_column = date_column
         self.day_weight_epsilon = day_weight_epsilon
-        self.clip_predictions = clip_predictions
+        self.min_prediction = min_prediction
+        self.max_prediction = max_prediction
         self.classes_ = []
         self.estimator_ = None  # fitted clone
 
@@ -178,16 +180,15 @@ class SkLearnEnhancerEstimator(BaseEstimator):
         return self._clip_predictions(preds)
 
     def _clip_predictions(self, preds: np.ndarray) -> np.ndarray:
-        if self.clip_predictions is None or self.estimator_ is None:
+        if self.estimator_ is None:
             return preds
         if not is_regressor(self.estimator_):
             return preds
 
-        min_val, max_val = self.clip_predictions
-        if min_val is None and max_val is None:
+        if self.min_prediction is None and self.max_prediction is None:
             return preds
-        lower = -np.inf if min_val is None else min_val
-        upper = np.inf if max_val is None else max_val
+        lower = -np.inf if self.min_prediction is None else self.min_prediction
+        upper = np.inf if self.max_prediction is None else self.max_prediction
         return np.clip(preds, lower, upper)
 
     @nw.narwhalify
