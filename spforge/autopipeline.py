@@ -14,6 +14,7 @@ from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, OrdinalEnc
 
 from spforge.estimator.sklearn_estimator import GroupByEstimator
 from spforge.scorer import Filter, apply_filters
+from spforge.transformers import PredictorTransformer
 from spforge.transformers._other_transformer import ConvertDataFrameToCategoricalTransformer
 
 _logger = logging.getLogger(__name__)
@@ -199,7 +200,7 @@ class AutoPipeline(BaseEstimator):
         self,
         estimator: Any,
         estimator_features: list[str],
-        predictor_transformers: list[str] | None = None,
+        predictor_transformers: list[PredictorTransformer] | None = None,
         granularity: list[str] | None = None,
         filters: list[Filter] | None = None,
         scale_features: bool = False,
@@ -385,7 +386,8 @@ class AutoPipeline(BaseEstimator):
         num_steps = []
         cat_steps = []
 
-        if self.impute_missing_values:
+        # Auto-enable imputation for linear estimators (they don't handle NaN)
+        if self.impute_missing_values or self._contains_linear_anywhere():
             if num_feats:
                 num_steps.append(("impute", SimpleImputer()))
             if cat_feats:
