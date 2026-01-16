@@ -28,7 +28,7 @@ def create_dataframe(df_type, data: dict):
         return df_type(data)
 
 
-class ConstantRegressor(BaseEstimator, RegressorMixin):
+class ConstantRegressor(RegressorMixin, BaseEstimator):
     def __init__(self, value: float = 0.0):
         self.value = value
 

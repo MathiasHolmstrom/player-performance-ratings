@@ -25,7 +25,13 @@
       "Bash(gh pr view:*)",
       "Bash(gh pr status:*)",
       "Bash(gh pr create:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(git cherry-pick:*)",
+      "Bash(gh pr close:*)",
+      "Bash(.venv/Scripts/python.exe -m pytest:*)",
+      "Bash(pytest:*)",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(.venv/Scripts/python:*)"
     ]
   }
 }
