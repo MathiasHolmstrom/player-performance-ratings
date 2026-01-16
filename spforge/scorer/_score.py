@@ -246,6 +246,14 @@ def apply_filters(df: IntoFrameT, filters: list[Filter]) -> IntoFrameT:
     return df
 
 
+def _filter_nulls_and_nans(df: IntoFrameT, target: str) -> IntoFrameT:
+    target_col = nw.col(target)
+    dtype = df[target].dtype
+    if hasattr(dtype, "is_numeric") and dtype.is_numeric():
+        return df.filter(~target_col.is_null() & ~target_col.is_nan())
+    return df.filter(~target_col.is_null())
+
+
 class BaseScorer(ABC):
 
     def __init__(
@@ -368,8 +376,7 @@ class PWMSE(BaseScorer):
         if not hasattr(df, "to_native"):
             df = nw.from_native(df)
         # Filter out both null and NaN values
-        target_col = nw.col(self.target)
-        df = df.filter(~target_col.is_null() & ~target_col.is_nan())
+        df = _filter_nulls_and_nans(df, self.target)
         after = len(df)
         if before != after:
             _logger.info(
@@ -433,7 +440,7 @@ class PWMSE(BaseScorer):
                 list(self.labels) if self.labels else None,
                 self.naive_granularity,
             )
-            naive_preds = np.vstack(df[self.pred_column].to_numpy())
+            naive_preds = np.asarray(naive_probs_list, dtype=np.float64)
             naive_score = self._pwmse_score(targets, naive_preds)
             return float(naive_score - score)
         return float(score)
@@ -499,8 +506,7 @@ class MeanBiasScorer(BaseScorer):
 
         # Filter out null and NaN targets
         before = len(df)
-        target_col = nw.col(self.target)
-        df = df.filter(~target_col.is_null() & ~target_col.is_nan())
+        df = _filter_nulls_and_nans(df, self.target)
         after = len(df)
         if before != after:
             _logger.info(
@@ -675,8 +681,7 @@ class SklearnScorer(BaseScorer):
         if not hasattr(df, "to_native"):
             df = nw.from_native(df)
         # Filter out both null and NaN values
-        target_col = nw.col(self.target)
-        df = df.filter(~target_col.is_null() & ~target_col.is_nan())
+        df = _filter_nulls_and_nans(df, self.target)
         after = len(df)
         if before != after:
             _logger.info(
