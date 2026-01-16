@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import pytest
+from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import log_loss
 
@@ -25,6 +26,17 @@ def create_dataframe(df_type, data: dict):
         return pl.DataFrame(data).lazy()
     else:
         return df_type(data)
+
+
+class ConstantRegressor(BaseEstimator, RegressorMixin):
+    def __init__(self, value: float = 0.0):
+        self.value = value
+
+    def fit(self, X, y=None):
+        return self
+
+    def predict(self, X):
+        return np.full(len(X), self.value, dtype=np.float64)
 
 
 def test_lgbm_wrapper_initialization():
@@ -60,6 +72,21 @@ def test_lgbm_wrapper_predict():
     )
     predictions = wrapper.predict(X_pred)
     assert len(predictions) == 2
+
+
+def test_lgbm_wrapper_predict_clips_regression_predictions():
+    """SkLearnEnhancerEstimator clips regression predictions when configured."""
+    wrapper = SkLearnEnhancerEstimator(
+        estimator=ConstantRegressor(value=10.0),
+        clip_predictions=(0.0, 5.0),
+    )
+    X_train = pd.DataFrame({"feature1": [1, 2, 3]})
+    y_train = pd.Series([1, 2, 3])
+    wrapper.fit(X_train, y_train)
+
+    X_pred = pd.DataFrame({"feature1": [4, 5]})
+    predictions = wrapper.predict(X_pred)
+    assert np.allclose(predictions, np.array([5.0, 5.0]))
 
 
 def test_lgbm_wrapper_predict_proba():
