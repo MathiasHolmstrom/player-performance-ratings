@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from narwhals.typing import IntoFrameT
 from sklearn import clone
-from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, is_regressor
 from sklearn.linear_model import LogisticRegression
 
 from spforge.transformers._other_transformer import GroupByReducer
@@ -84,10 +84,14 @@ class SkLearnEnhancerEstimator(BaseEstimator):
         estimator: Any,
         date_column: str | None = None,
         day_weight_epsilon: float | None = None,
+        min_prediction: float | None = None,
+        max_prediction: float | None = None,
     ):
         self.estimator = estimator
         self.date_column = date_column
         self.day_weight_epsilon = day_weight_epsilon
+        self.min_prediction = min_prediction
+        self.max_prediction = max_prediction
         self.classes_ = []
         self.estimator_ = None  # fitted clone
 
@@ -172,7 +176,20 @@ class SkLearnEnhancerEstimator(BaseEstimator):
         # Always convert to pandas to preserve feature names for sklearn models
         X_features = X_features.to_pandas()
 
-        return self.estimator_.predict(X_features)
+        preds = self.estimator_.predict(X_features)
+        return self._clip_predictions(preds)
+
+    def _clip_predictions(self, preds: np.ndarray) -> np.ndarray:
+        if self.estimator_ is None:
+            return preds
+        if not is_regressor(self.estimator_):
+            return preds
+
+        if self.min_prediction is None and self.max_prediction is None:
+            return preds
+        lower = -np.inf if self.min_prediction is None else self.min_prediction
+        upper = np.inf if self.max_prediction is None else self.max_prediction
+        return np.clip(preds, lower, upper)
 
     @nw.narwhalify
     def predict_proba(self, X: Any) -> np.ndarray:
