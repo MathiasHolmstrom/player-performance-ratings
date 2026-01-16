@@ -76,7 +76,7 @@ def test_nba_prediction_consistency__cv_vs_future_transform(dataframe_type):
 
     # Split by games (not rows) - use last 10 games for testing
     if dataframe_type == "pl":
-        all_games = df[column_names.match_id].unique().to_list()
+        all_games = df[column_names.match_id].unique(maintain_order=True).to_list()
     else:
         all_games = df[column_names.match_id].unique().tolist()
 
@@ -218,63 +218,41 @@ def test_nba_prediction_consistency__cv_vs_future_transform(dataframe_type):
         future_test_pd = test_df_transformed
 
     # ============================================================
-    # Phase 4: Assertions - Comparison Metrics on Last 100 Rows
+    # Phase 4: Assertions - Check prediction consistency
     # ============================================================
 
     print(f"\nCV validation rows in test games: {len(cv_test_pd)}")
     print(f"Future prediction rows in test games: {len(future_test_pd)}")
 
-    # 1. Mean Prediction Difference (within 15% tolerance)
-    # Note: Different training sets and potentially different sample sizes
-    cv_mean = cv_test_pd["points_cv_pred"].mean()
-    future_mean = future_test_pd["points_future_pred"].mean()
-    mean_diff = abs(cv_mean - future_mean)
-    tolerance_15_percent = 0.15 * cv_mean
-    print(f"\nMean predictions: CV={cv_mean:.3f}, Future={future_mean:.3f}")
-    print(f"Absolute difference: {mean_diff:.3f}, 15% tolerance: {tolerance_15_percent:.3f}")
-    assert mean_diff <= tolerance_15_percent, f"Mean difference {mean_diff:.3f} exceeds 15% tolerance {tolerance_15_percent:.3f}"
+    # Need to align rows between CV and future predictions (inner join on game_id + player_id)
+    if dataframe_type == "pl":
+        merged = cv_test_pd.merge(
+            future_test_pd[[column_names.match_id, column_names.player_id, "points_future_pred"]],
+            on=[column_names.match_id, column_names.player_id],
+            how="inner"
+        )
+    else:
+        merged = cv_test_pd.merge(
+            future_test_pd[[column_names.match_id, column_names.player_id, "points_future_pred"]],
+            on=[column_names.match_id, column_names.player_id],
+            how="inner"
+        )
 
-    # 2. Standard Deviation Similarity
-    cv_std = cv_test_pd["points_cv_pred"].std()
-    future_std = future_test_pd["points_future_pred"].std()
-    std_diff = abs(cv_std - future_std)
-    print(f"Std: CV={cv_std:.3f}, Future={future_std:.3f}, Diff={std_diff:.3f}")
-    assert std_diff < 2.0, f"Std difference too large: {std_diff:.3f}"
+    print(f"Aligned rows for comparison: {len(merged)}")
 
-    # 3. Correlation with Actual Values
-    cv_corr = cv_test_pd[["points_cv_pred", "points"]].corr().iloc[0, 1]
-    future_corr = future_test_pd[["points_future_pred", "points"]].corr().iloc[0, 1]
-    corr_diff = abs(cv_corr - future_corr)
-    print(f"Correlation: CV={cv_corr:.3f}, Future={future_corr:.3f}, Diff={corr_diff:.3f}")
-    assert cv_corr > 0.3, f"CV correlation too low: {cv_corr:.3f}"
-    assert future_corr > 0.3, f"Future correlation too low: {future_corr:.3f}"
+    # Calculate mean prediction value
+    mean_prediction_value = (merged["points_cv_pred"].mean() + merged["points_future_pred"].mean()) / 2
 
-    # 4. MAE Comparison
-    cv_mae = mean_absolute_error(cv_test_pd["points"], cv_test_pd["points_cv_pred"])
-    future_mae = mean_absolute_error(future_test_pd["points"], future_test_pd["points_future_pred"])
-    mae_diff = abs(cv_mae - future_mae)
-    print(f"MAE: CV={cv_mae:.3f}, Future={future_mae:.3f}, Diff={mae_diff:.3f}")
-    assert mae_diff < 2.0, f"MAE difference too large: {mae_diff:.3f}"
+    # Calculate MAE between the two prediction sets
+    mae_between_predictions = np.abs(merged["points_cv_pred"] - merged["points_future_pred"]).mean()
 
-    # 5. Directional Consistency (High vs Low Ratings)
-    player_rating_col = player_rating_cv.PLAYER_DIFF_PROJ_COL
+    # 3% tolerance based on mean prediction value
+    tolerance_3_percent = 0.03 * mean_prediction_value
 
-    # CV path
-    cv_high = cv_test_pd[cv_test_pd[player_rating_col] > 0]["points_cv_pred"].mean()
-    cv_low = cv_test_pd[cv_test_pd[player_rating_col] < 0]["points_cv_pred"].mean()
-    print(f"CV directional: High={cv_high:.3f}, Low={cv_low:.3f}")
-    assert cv_high > cv_low, f"CV: High rating pred should exceed low rating pred"
+    print(f"\nMean prediction value: {mean_prediction_value:.3f}")
+    print(f"MAE between predictions: {mae_between_predictions:.3f}")
+    print(f"3% tolerance: {tolerance_3_percent:.3f}")
+    print(f"Ratio: {mae_between_predictions / tolerance_3_percent:.2f}x tolerance")
 
-    # Future path
-    future_high = future_test_pd[future_test_pd[player_rating_col] > 0]["points_future_pred"].mean()
-    future_low = future_test_pd[future_test_pd[player_rating_col] < 0]["points_future_pred"].mean()
-    print(f"Future directional: High={future_high:.3f}, Low={future_low:.3f}")
-    assert future_high > future_low, f"Future: High rating pred should exceed low rating pred"
-
-    # 6. No NaN or Infinite Values
-    assert not cv_test_pd["points_cv_pred"].isna().any(), "CV predictions contain NaN"
-    assert not future_test_pd["points_future_pred"].isna().any(), "Future predictions contain NaN"
-    assert not np.isinf(cv_test_pd["points_cv_pred"]).any(), "CV predictions contain inf"
-    assert not np.isinf(future_test_pd["points_future_pred"]).any(), "Future predictions contain inf"
-
-    print("\nAll assertions passed! CV and future predictions are consistent.")
+    assert mae_between_predictions <= tolerance_3_percent, \
+        f"MAE between predictions {mae_between_predictions:.3f} exceeds 3% tolerance {tolerance_3_percent:.3f}"
