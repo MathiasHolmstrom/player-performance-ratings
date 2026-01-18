@@ -136,6 +136,216 @@ def test_feature_generator_pipeline__future_transform_preserves_row_count(df_typ
 
 
 @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_feature_generator_pipeline__auto_aggregate_fit_transform_weighted_mean(df_type):
+    column_names = ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="date",
+        participation_weight="participation_weight",
+        projected_participation_weight="projected_participation_weight",
+    )
+
+    data = df_type(
+        {
+            "game_id": [1, 1, 1, 1, 2, 2, 2, 2],
+            "team_id": ["A", "A", "B", "B", "A", "A", "B", "B"],
+            "player_id": ["p1", "p2", "p3", "p4", "p1", "p2", "p3", "p4"],
+            "date": pd.to_datetime(
+                [
+                    "2023-01-01",
+                    "2023-01-01",
+                    "2023-01-01",
+                    "2023-01-01",
+                    "2023-01-02",
+                    "2023-01-02",
+                    "2023-01-02",
+                    "2023-01-02",
+                ]
+            ),
+            "points": [10, 20, 30, 40, 12, 22, 32, 42],
+            "participation_weight": [1, 3, 2, 1, 2, 2, 1, 3],
+            "projected_participation_weight": [1, 3, 2, 1, 1, 3, 2, 1],
+        }
+    )
+
+    lag_gen = LagTransformer(
+        features=["points"],
+        lag_length=1,
+        granularity=[column_names.player_id],
+    )
+
+    pipeline = FeatureGeneratorPipeline(
+        feature_generators=[lag_gen],
+        column_names=column_names,
+        auto_aggregate_to_team=True,
+    )
+
+    result = pipeline.fit_transform(data, column_names=column_names)
+    result_df = result.to_pandas() if isinstance(result, pl.DataFrame) else result
+
+    assert "player_id" not in result_df.columns
+    assert len(result_df) == 4
+
+    team_a_match2 = result_df.loc[
+        (result_df["game_id"] == 2) & (result_df["team_id"] == "A"), "lag_points1"
+    ].item()
+    assert team_a_match2 == pytest.approx(15.0)
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_feature_generator_pipeline__auto_aggregate_future_transform_weighted_mean(df_type):
+    column_names = ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="date",
+        participation_weight="participation_weight",
+        projected_participation_weight="projected_participation_weight",
+    )
+
+    data = df_type(
+        {
+            "game_id": [1, 1, 1, 1, 2, 2, 2, 2],
+            "team_id": ["A", "A", "B", "B", "A", "A", "B", "B"],
+            "player_id": ["p1", "p2", "p3", "p4", "p1", "p2", "p3", "p4"],
+            "date": pd.to_datetime(
+                [
+                    "2023-01-01",
+                    "2023-01-01",
+                    "2023-01-01",
+                    "2023-01-01",
+                    "2023-01-02",
+                    "2023-01-02",
+                    "2023-01-02",
+                    "2023-01-02",
+                ]
+            ),
+            "points": [10, 20, 30, 40, 12, 22, 32, 42],
+            "participation_weight": [1, 3, 2, 1, 2, 2, 1, 3],
+            "projected_participation_weight": [1, 3, 2, 1, 1, 3, 2, 1],
+        }
+    )
+
+    future_data = df_type(
+        {
+            "game_id": [3, 3, 3, 3],
+            "team_id": ["A", "A", "B", "B"],
+            "player_id": ["p1", "p2", "p3", "p4"],
+            "date": pd.to_datetime(["2023-01-03"] * 4),
+            "points": [14, 24, 34, 44],
+            "participation_weight": [1, 1, 1, 1],
+            "projected_participation_weight": [1, 3, 2, 2],
+        }
+    )
+
+    lag_gen = LagTransformer(
+        features=["points"],
+        lag_length=1,
+        granularity=[column_names.player_id],
+    )
+
+    pipeline = FeatureGeneratorPipeline(
+        feature_generators=[lag_gen],
+        column_names=column_names,
+        auto_aggregate_to_team=True,
+    )
+
+    pipeline.fit_transform(data, column_names=column_names)
+    result = pipeline.future_transform(future_data)
+    result_df = result.to_pandas() if isinstance(result, pl.DataFrame) else result
+
+    team_a_match3 = result_df.loc[
+        (result_df["game_id"] == 3) & (result_df["team_id"] == "A"), "lag_points1"
+    ].item()
+    assert team_a_match3 == pytest.approx(19.5)
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_feature_generator_pipeline__auto_aggregate_projected_null_fallbacks(df_type):
+    column_names = ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="date",
+        participation_weight="participation_weight",
+        projected_participation_weight="projected_participation_weight",
+    )
+
+    data = df_type(
+        {
+            "game_id": [1, 1, 1, 1],
+            "team_id": ["A", "A", "B", "B"],
+            "player_id": ["p1", "p2", "p3", "p4"],
+            "date": pd.to_datetime(["2023-01-01"] * 4),
+            "points": [10, 20, 30, 40],
+            "participation_weight": [1, 3, 2, 1],
+            "projected_participation_weight": [None, None, None, None],
+        }
+    )
+
+    lag_gen = LagTransformer(
+        features=["points"],
+        lag_length=1,
+        granularity=[column_names.player_id],
+    )
+
+    pipeline = FeatureGeneratorPipeline(
+        feature_generators=[lag_gen],
+        column_names=column_names,
+        auto_aggregate_to_team=True,
+    )
+
+    result = pipeline.fit_transform(data, column_names=column_names)
+    result_df = result.to_pandas() if isinstance(result, pl.DataFrame) else result
+
+    team_a_match1 = result_df.loc[
+        (result_df["game_id"] == 1) & (result_df["team_id"] == "A"), "lag_points1"
+    ].item()
+    assert team_a_match1 == pytest.approx(17.5)
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+def test_feature_generator_pipeline__auto_aggregate_no_weights_means(df_type):
+    column_names = ColumnNames(
+        match_id="game_id",
+        team_id="team_id",
+        player_id="player_id",
+        start_date="date",
+    )
+
+    data = df_type(
+        {
+            "game_id": [1, 1, 1, 1],
+            "team_id": ["A", "A", "B", "B"],
+            "player_id": ["p1", "p2", "p3", "p4"],
+            "date": pd.to_datetime(["2023-01-01"] * 4),
+            "points": [10, 20, 30, 40],
+        }
+    )
+
+    lag_gen = LagTransformer(
+        features=["points"],
+        lag_length=1,
+        granularity=[column_names.player_id],
+    )
+
+    pipeline = FeatureGeneratorPipeline(
+        feature_generators=[lag_gen],
+        column_names=column_names,
+        auto_aggregate_to_team=True,
+    )
+
+    result = pipeline.fit_transform(data, column_names=column_names)
+    result_df = result.to_pandas() if isinstance(result, pl.DataFrame) else result
+
+    team_a_match1 = result_df.loc[
+        (result_df["game_id"] == 1) & (result_df["team_id"] == "A"), "lag_points1"
+    ].item()
+    assert team_a_match1 == pytest.approx(15.0)
+
+
+@pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
 def test_feature_generator_pipeline__detects_duplicate_features(df_type, column_names):
     """FeatureGeneratorPipeline should raise error for duplicate features across generators."""
     data = df_type(
