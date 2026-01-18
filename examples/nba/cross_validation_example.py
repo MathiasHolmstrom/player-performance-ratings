@@ -7,7 +7,7 @@ from spforge import FeatureGeneratorPipeline
 from spforge.autopipeline import AutoPipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
 from spforge.data_structures import ColumnNames
-from spforge.estimator import NegativeBinomialEstimator
+from spforge.distributions import NegativeBinomialEstimator
 from spforge.feature_generator import (
     LagTransformer,
     RollingWindowTransformer,

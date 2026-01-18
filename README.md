@@ -336,7 +336,7 @@ During prediction, it uses the learned `r` parameter(s) and the point estimates 
 A key advantage is comparing different approaches for generating probability distributions. Both LGBMClassifier and LGBMRegressor+NegativeBinomial output probabilities in the same format, making them directly comparable.
 
 ```python
-from spforge.estimator import NegativeBinomialEstimator
+from spforge.distributions import NegativeBinomialEstimator
 from spforge.transformers import EstimatorTransformer
 from lightgbm import LGBMClassifier, LGBMRegressor
 

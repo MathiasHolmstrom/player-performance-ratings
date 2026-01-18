@@ -9,7 +9,7 @@ from sklearn.linear_model import LinearRegression
 
 from spforge import ColumnNames
 from spforge.autopipeline import AutoPipeline
-from spforge.estimator import (
+from spforge.distributions import (
     NegativeBinomialEstimator,
     NormalDistributionPredictor,
 )
