@@ -139,6 +139,8 @@ class MatchKFoldCrossValidator:
         ].min()
 
         step = (max_m - min_m) // self.n_splits
+        if step <= 0:
+            step = 1
 
         results = []
         curr_cut = min_m

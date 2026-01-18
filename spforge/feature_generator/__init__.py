@@ -1,4 +1,5 @@
 from ._lag import LagTransformer as LagTransformer
+from ._regressor_feature_generator import RegressorFeatureGenerator as RegressorFeatureGenerator
 from ._rolling_against_opponent import (
     RollingAgainstOpponentTransformer as RollingAgainstOpponentTransformer,
 )

@@ -12,7 +12,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline as SkPipeline
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, OrdinalEncoder, StandardScaler
 
-from spforge.estimator.sklearn_estimator import GroupByEstimator
+from spforge.estimator import GroupByEstimator
 from spforge.scorer import Filter, apply_filters
 from spforge.transformers import PredictorTransformer
 from spforge.transformers._other_transformer import ConvertDataFrameToCategoricalTransformer

@@ -5,7 +5,7 @@ from sklearn.linear_model import LogisticRegression
 from examples import get_sub_sample_lol_data
 from spforge import AutoPipeline, ColumnNames, FeatureGeneratorPipeline
 from spforge.cross_validator import MatchKFoldCrossValidator
-from spforge.estimator import NegativeBinomialEstimator
+from spforge.distributions import NegativeBinomialEstimator
 from spforge.feature_generator import LagTransformer, RollingWindowTransformer
 from spforge.performance_transformers._performance_manager import ColumnWeight
 from spforge.ratings import PlayerRatingGenerator, RatingKnownFeatures
