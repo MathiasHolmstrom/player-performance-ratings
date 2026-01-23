@@ -372,6 +372,136 @@ def test_pwmse_compare_to_naive_granularity(df_type):
     assert abs(score - expected) < 1e-10
 
 
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_pwmse__evaluation_labels_slices_predictions(df_type):
+    """PWMSE with evaluation_labels should only score on specified labels."""
+    # Predictions have 5 labels: [-2, -1, 0, 1, 2]
+    # But we only want to evaluate on inner labels: [-1, 0, 1]
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [
+                [0.1, 0.2, 0.4, 0.2, 0.1],  # Full distribution over 5 labels
+                [0.05, 0.15, 0.5, 0.2, 0.1],
+            ],
+            "target": [0, 1],
+        },
+    )
+
+    # Score with all labels
+    scorer_full = PWMSE(pred_column="pred", target="target", labels=[-2, -1, 0, 1, 2])
+    score_full = scorer_full.score(df)
+
+    # Score with evaluation_labels excluding boundaries
+    scorer_eval = PWMSE(
+        pred_column="pred",
+        target="target",
+        labels=[-2, -1, 0, 1, 2],
+        evaluation_labels=[-1, 0, 1],
+    )
+    score_eval = scorer_eval.score(df)
+
+    # Scores should be different because evaluation_labels excludes boundary penalties
+    assert score_full != score_eval
+
+    # Manual calculation for evaluation_labels case:
+    # Slice predictions to indices 1, 2, 3 (corresponding to labels -1, 0, 1)
+    # Then renormalize
+    preds_full = np.array([[0.1, 0.2, 0.4, 0.2, 0.1], [0.05, 0.15, 0.5, 0.2, 0.1]])
+    preds_sliced = preds_full[:, 1:4]  # [-1, 0, 1]
+    preds_renorm = preds_sliced / preds_sliced.sum(axis=1, keepdims=True)
+
+    eval_labels = np.array([-1, 0, 1], dtype=np.float64)
+    targets = np.array([0, 1], dtype=np.float64)
+    diffs_sqd = (eval_labels[None, :] - targets[:, None]) ** 2
+    expected = float((diffs_sqd * preds_renorm).sum(axis=1).mean())
+
+    assert abs(score_eval - expected) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_pwmse__evaluation_labels_with_compare_to_naive(df_type):
+    """PWMSE evaluation_labels should also affect naive baseline calculation."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [
+                [0.1, 0.2, 0.4, 0.2, 0.1],
+                [0.1, 0.2, 0.4, 0.2, 0.1],
+                [0.1, 0.2, 0.4, 0.2, 0.1],
+                [0.1, 0.2, 0.4, 0.2, 0.1],
+            ],
+            "target": [-1, 0, 0, 1],  # Targets within evaluation range
+        },
+    )
+
+    scorer = PWMSE(
+        pred_column="pred",
+        target="target",
+        labels=[-2, -1, 0, 1, 2],
+        evaluation_labels=[-1, 0, 1],
+        compare_to_naive=True,
+    )
+    score = scorer.score(df)
+
+    # Naive should be computed using only evaluation_labels
+    # With targets [-1, 0, 0, 1], naive probs are [1/4, 2/4, 1/4] for labels [-1, 0, 1]
+    eval_labels = np.array([-1, 0, 1], dtype=np.float64)
+    targets = np.array([-1, 0, 0, 1], dtype=np.float64)
+
+    # Model predictions sliced and renormalized
+    preds_full = np.array([[0.1, 0.2, 0.4, 0.2, 0.1]] * 4)
+    preds_sliced = preds_full[:, 1:4]
+    preds_renorm = preds_sliced / preds_sliced.sum(axis=1, keepdims=True)
+
+    diffs_sqd = (eval_labels[None, :] - targets[:, None]) ** 2
+    model_score = float((diffs_sqd * preds_renorm).sum(axis=1).mean())
+
+    # Naive predictions for evaluation_labels only
+    naive_probs = np.array([0.25, 0.5, 0.25])  # Based on target distribution
+    naive_preds = np.tile(naive_probs, (4, 1))
+    naive_score = float((diffs_sqd * naive_preds).sum(axis=1).mean())
+
+    expected = naive_score - model_score
+    assert abs(score - expected) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_pwmse__evaluation_labels_filters_targets_outside_range(df_type):
+    """PWMSE should filter out targets outside evaluation_labels range."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [
+                [0.1, 0.2, 0.4, 0.2, 0.1],
+                [0.1, 0.2, 0.4, 0.2, 0.1],
+                [0.1, 0.2, 0.4, 0.2, 0.1],
+            ],
+            "target": [-2, 0, 2],  # -2 and 2 are outside evaluation range [-1, 0, 1]
+        },
+    )
+
+    scorer = PWMSE(
+        pred_column="pred",
+        target="target",
+        labels=[-2, -1, 0, 1, 2],
+        evaluation_labels=[-1, 0, 1],
+    )
+    score = scorer.score(df)
+
+    # Should only use the row with target=0
+    preds_full = np.array([[0.1, 0.2, 0.4, 0.2, 0.1]])
+    preds_sliced = preds_full[:, 1:4]
+    preds_renorm = preds_sliced / preds_sliced.sum(axis=1, keepdims=True)
+
+    eval_labels = np.array([-1, 0, 1], dtype=np.float64)
+    targets = np.array([0], dtype=np.float64)
+    diffs_sqd = (eval_labels[None, :] - targets[:, None]) ** 2
+    expected = float((diffs_sqd * preds_renorm).sum(axis=1).mean())
+
+    assert abs(score - expected) < 1e-10
+
+
 # ============================================================================
 # D. MeanBiasScorer Tests
 # ============================================================================
