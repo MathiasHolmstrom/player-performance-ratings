@@ -1391,4 +1391,6 @@ class ThresholdEventScorer(BaseScorer):
             df, self.outcome_column, labels, self.naive_granularity
         )
         naive_score = self._score_with_probabilities(df, naive_list)
+        if isinstance(score, dict) and isinstance(naive_score, dict):
+            return {k: naive_score[k] - score[k] for k in score.keys()}
         return float(naive_score - score)

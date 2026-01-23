@@ -1892,6 +1892,129 @@ def test_pwmse__accepts_ndarray_predictions(df_type):
     assert score >= 0
 
 
+# ============================================================================
+# ThresholdEventScorer with granularity and compare_to_naive Tests
+# ============================================================================
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_threshold_event_scorer__granularity_with_compare_to_naive(df_type):
+    """ThresholdEventScorer fails when combining compare_to_naive with granularity.
+
+    Bug: When granularity is set, binary_scorer.score() returns a dict, but
+    the naive comparison tries to do dict - dict which fails with:
+    'unsupported operand type(s) for -: 'dict' and 'dict''
+    """
+    df = create_dataframe(
+        df_type,
+        {
+            "qtr": [1, 1, 1, 2, 2, 2],
+            "dist": [
+                [0.1, 0.2, 0.3, 0.4],
+                [0.2, 0.3, 0.3, 0.2],
+                [0.3, 0.4, 0.2, 0.1],
+                [0.4, 0.3, 0.2, 0.1],
+                [0.1, 0.1, 0.4, 0.4],
+                [0.2, 0.2, 0.3, 0.3],
+            ],
+            "ydstogo": [2.0, 3.0, 1.0, 2.0, 1.0, 3.0],
+            "rush_yards": [3, 2, 0, 1, 2, 4],
+        },
+    )
+
+    scorer = ThresholdEventScorer(
+        dist_column="dist",
+        threshold_column="ydstogo",
+        outcome_column="rush_yards",
+        labels=[0, 1, 2, 3],
+        compare_to_naive=True,
+        granularity=["qtr"],
+    )
+
+    result = scorer.score(df)
+
+    assert isinstance(result, dict)
+    assert len(result) == 2
+    assert (1,) in result
+    assert (2,) in result
+    assert all(isinstance(v, float) for v in result.values())
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_threshold_event_scorer__granularity_with_compare_to_naive_and_naive_granularity(df_type):
+    """ThresholdEventScorer with both granularity and naive_granularity."""
+    df = create_dataframe(
+        df_type,
+        {
+            "qtr": [1, 1, 1, 2, 2, 2],
+            "team": ["A", "A", "B", "A", "B", "B"],
+            "dist": [
+                [0.1, 0.2, 0.3, 0.4],
+                [0.2, 0.3, 0.3, 0.2],
+                [0.3, 0.4, 0.2, 0.1],
+                [0.4, 0.3, 0.2, 0.1],
+                [0.1, 0.1, 0.4, 0.4],
+                [0.2, 0.2, 0.3, 0.3],
+            ],
+            "ydstogo": [2.0, 3.0, 1.0, 2.0, 1.0, 3.0],
+            "rush_yards": [3, 2, 0, 1, 2, 4],
+        },
+    )
+
+    scorer = ThresholdEventScorer(
+        dist_column="dist",
+        threshold_column="ydstogo",
+        outcome_column="rush_yards",
+        labels=[0, 1, 2, 3],
+        compare_to_naive=True,
+        naive_granularity=["team"],
+        granularity=["qtr"],
+    )
+
+    result = scorer.score(df)
+
+    assert isinstance(result, dict)
+    assert len(result) == 2
+    assert (1,) in result
+    assert (2,) in result
+    assert all(isinstance(v, float) for v in result.values())
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_threshold_event_scorer__multi_column_granularity_with_compare_to_naive(df_type):
+    """ThresholdEventScorer with multi-column granularity and compare_to_naive."""
+    df = create_dataframe(
+        df_type,
+        {
+            "qtr": [1, 1, 2, 2],
+            "half": [1, 1, 2, 2],
+            "dist": [
+                [0.1, 0.2, 0.3, 0.4],
+                [0.2, 0.3, 0.3, 0.2],
+                [0.4, 0.3, 0.2, 0.1],
+                [0.1, 0.1, 0.4, 0.4],
+            ],
+            "ydstogo": [2.0, 3.0, 2.0, 1.0],
+            "rush_yards": [3, 2, 1, 2],
+        },
+    )
+
+    scorer = ThresholdEventScorer(
+        dist_column="dist",
+        threshold_column="ydstogo",
+        outcome_column="rush_yards",
+        labels=[0, 1, 2, 3],
+        compare_to_naive=True,
+        granularity=["qtr", "half"],
+    )
+
+    result = scorer.score(df)
+
+    assert isinstance(result, dict)
+    assert len(result) == 2
+    assert all(isinstance(v, float) for v in result.values())
+
+
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
 def test_all_scorers_handle_all_nan_targets(df_type):
     """All scorers handle case where all targets are NaN"""
