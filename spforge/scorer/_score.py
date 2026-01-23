@@ -388,7 +388,7 @@ class PWMSE(BaseScorer):
 
         if self.aggregation_level:
             first_pred = df[self.pred_column].to_list()[0] if len(df) > 0 else None
-            if isinstance(first_pred, list):
+            if isinstance(first_pred, (list, np.ndarray)):
 
                 pass
             else:
@@ -552,7 +552,7 @@ class MeanBiasScorer(BaseScorer):
 
                 # Calculate score for this group
                 preds = gran_df[self.pred_column].to_list()
-                if preds and isinstance(preds[0], list):
+                if preds and isinstance(preds[0], (list, np.ndarray)):
                     targets = gran_df[self.target].to_list()
                     expected_preds = _expected_from_probabilities(preds, self.labels)
                     score = self._mean_bias_from_lists(expected_preds, targets)
@@ -571,7 +571,7 @@ class MeanBiasScorer(BaseScorer):
 
         # Single score calculation
         preds = df[self.pred_column].to_list()
-        if preds and isinstance(preds[0], list):
+        if preds and isinstance(preds[0], (list, np.ndarray)):
             targets = df[self.target].to_list()
             expected_preds = _expected_from_probabilities(preds, self.labels)
             score = self._mean_bias_from_lists(expected_preds, targets)
@@ -715,13 +715,13 @@ class SklearnScorer(BaseScorer):
                 gran_df = df.filter(mask)
 
                 preds = gran_df[self.pred_column_name].to_list()
-                is_probabilistic = len(preds) > 0 and isinstance(preds[0], list)
+                is_probabilistic = len(preds) > 0 and isinstance(preds[0], (list, np.ndarray))
                 results[gran_tuple] = self._score_group(gran_df, preds, is_probabilistic)
 
             return results
 
         preds = df[self.pred_column_name].to_list()
-        is_probabilistic = len(preds) > 0 and isinstance(preds[0], list)
+        is_probabilistic = len(preds) > 0 and isinstance(preds[0], (list, np.ndarray))
         return self._score_group(df, preds, is_probabilistic)
 
 

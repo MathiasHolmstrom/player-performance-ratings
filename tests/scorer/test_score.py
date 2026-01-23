@@ -1646,6 +1646,122 @@ def test_ordinal_loss_scorer_with_more_classes_and_nan(df_type):
     # Should only use 3 rows (non-null targets)
 
 
+# ============================================================================
+# ndarray vs list predictions Tests
+# ============================================================================
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_mean_bias_scorer__accepts_ndarray_predictions(df_type):
+    """MeanBiasScorer should accept np.ndarray predictions"""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [np.array([0.2, 0.8]), np.array([0.9, 0.1])],
+            "target": [1.0, 0.0],
+        },
+    )
+    scorer = MeanBiasScorer(pred_column="pred", target="target")
+    score = scorer.score(df)
+    expected_preds = [0.8, 0.1]
+    expected = ((0.8 - 1.0) + (0.1 - 0.0)) / 2
+    assert abs(score - expected) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_mean_bias_scorer__accepts_ndarray_predictions_with_labels(df_type):
+    """MeanBiasScorer should accept np.ndarray predictions with custom labels"""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [np.array([0.1, 0.2, 0.4, 0.3]), np.array([0.3, 0.4, 0.2, 0.1])],
+            "target": [-2.0, 0.0],
+        },
+    )
+    scorer = MeanBiasScorer(pred_column="pred", target="target", labels=[-2, -1, 0, 1])
+    score = scorer.score(df)
+    expected = ((-0.1 - (-2.0)) + (-0.9 - 0.0)) / 2
+    assert abs(score - expected) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_mean_bias_scorer__accepts_ndarray_predictions_with_granularity(df_type):
+    """MeanBiasScorer should accept np.ndarray predictions with granularity"""
+    df = create_dataframe(
+        df_type,
+        {
+            "group": [1, 1, 2, 2],
+            "pred": [
+                np.array([0.2, 0.8]),
+                np.array([0.6, 0.4]),
+                np.array([0.9, 0.1]),
+                np.array([0.3, 0.7]),
+            ],
+            "target": [1.0, 0.0, 0.0, 1.0],
+        },
+    )
+    scorer = MeanBiasScorer(pred_column="pred", target="target", granularity=["group"])
+    result = scorer.score(df)
+    assert isinstance(result, dict)
+    assert len(result) == 2
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_sklearn_scorer__accepts_ndarray_predictions(df_type):
+    """SklearnScorer should accept np.ndarray predictions"""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [np.array([0.1, 0.6, 0.3]), np.array([0.5, 0.3, 0.2]), np.array([0.2, 0.3, 0.5])],
+            "target": [1, 0, 2],
+        },
+    )
+    scorer = SklearnScorer(pred_column="pred", scorer_function=log_loss, target="target")
+    score = scorer.score(df)
+    assert isinstance(score, float)
+    assert score > 0
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_sklearn_scorer__accepts_ndarray_predictions_with_granularity(df_type):
+    """SklearnScorer should accept np.ndarray predictions with granularity"""
+    df = create_dataframe(
+        df_type,
+        {
+            "group": [1, 1, 2, 2],
+            "pred": [
+                np.array([0.1, 0.9]),
+                np.array([0.6, 0.4]),
+                np.array([0.8, 0.2]),
+                np.array([0.3, 0.7]),
+            ],
+            "target": [1, 0, 0, 1],
+        },
+    )
+    scorer = SklearnScorer(
+        pred_column="pred", scorer_function=log_loss, target="target", granularity=["group"]
+    )
+    result = scorer.score(df)
+    assert isinstance(result, dict)
+    assert len(result) == 2
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_pwmse__accepts_ndarray_predictions(df_type):
+    """PWMSE should accept np.ndarray predictions"""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [np.array([0.1, 0.9]), np.array([0.5, 0.5]), np.array([0.8, 0.2])],
+            "target": [0, 1, 0],
+        },
+    )
+    scorer = PWMSE(pred_column="pred", target="target", labels=[0, 1])
+    score = scorer.score(df)
+    assert isinstance(score, float)
+    assert score >= 0
+
+
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
 def test_all_scorers_handle_all_nan_targets(df_type):
     """All scorers handle case where all targets are NaN"""
