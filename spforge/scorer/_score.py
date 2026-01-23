@@ -350,6 +350,7 @@ class PWMSE(BaseScorer):
         labels: list[int] | None = None,
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
+        evaluation_labels: list[int] | None = None,
     ):
         self.pred_column_name = pred_column
         super().__init__(
@@ -363,11 +364,38 @@ class PWMSE(BaseScorer):
             naive_granularity=naive_granularity,
         )
         self.labels = labels
+        self.evaluation_labels = evaluation_labels
+
+        self._eval_indices: list[int] | None = None
+        if self.evaluation_labels is not None and self.labels is not None:
+            label_to_idx = {lbl: i for i, lbl in enumerate(self.labels)}
+            self._eval_indices = [label_to_idx[lbl] for lbl in self.evaluation_labels]
+
+    def _slice_and_renormalize(self, preds: np.ndarray) -> np.ndarray:
+        if self._eval_indices is None:
+            return preds
+        sliced = preds[:, self._eval_indices]
+        row_sums = sliced.sum(axis=1, keepdims=True)
+        row_sums = np.where(row_sums == 0, 1.0, row_sums)
+        return sliced / row_sums
+
+    def _get_scoring_labels(self) -> list[int]:
+        if self.evaluation_labels is not None:
+            return self.evaluation_labels
+        return self.labels
 
     def _pwmse_score(self, targets: np.ndarray, preds: np.ndarray) -> float:
-        labels = np.asarray(self.labels, dtype=np.float64)
+        labels = np.asarray(self._get_scoring_labels(), dtype=np.float64)
         diffs_sqd = (labels[None, :] - targets[:, None]) ** 2
         return float((diffs_sqd * preds).sum(axis=1).mean())
+
+    def _filter_targets_for_evaluation(self, df: IntoFrameT) -> IntoFrameT:
+        if self.evaluation_labels is None:
+            return df
+        eval_set = set(self.evaluation_labels)
+        min_eval, max_eval = min(eval_set), max(eval_set)
+        target_col = nw.col(self.target)
+        return df.filter((target_col >= min_eval) & (target_col <= max_eval))
 
     @narwhals.narwhalify
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
@@ -385,6 +413,9 @@ class PWMSE(BaseScorer):
                 before,
                 after,
             )
+
+        # Filter targets outside evaluation_labels range
+        df = self._filter_targets_for_evaluation(df)
 
         if self.aggregation_level:
             first_pred = df[self.pred_column].to_list()[0] if len(df) > 0 else None
@@ -415,12 +446,13 @@ class PWMSE(BaseScorer):
 
                 targets = gran_df[self.target].to_numpy().astype(np.float64)
                 preds = np.asarray(gran_df[self.pred_column].to_list(), dtype=np.float64)
+                preds = self._slice_and_renormalize(preds)
                 score = self._pwmse_score(targets, preds)
                 if self.compare_to_naive:
                     naive_probs_list = _naive_probability_predictions_for_df(
                         gran_df,
                         self.target,
-                        list(self.labels) if self.labels else None,
+                        list(self._get_scoring_labels()) if self._get_scoring_labels() else None,
                         self.naive_granularity,
                     )
                     naive_preds = np.asarray(naive_probs_list, dtype=np.float64)
@@ -432,12 +464,13 @@ class PWMSE(BaseScorer):
 
         targets = df[self.target].to_numpy().astype(np.float64)
         preds = np.asarray(df[self.pred_column].to_list(), dtype=np.float64)
+        preds = self._slice_and_renormalize(preds)
         score = self._pwmse_score(targets, preds)
         if self.compare_to_naive:
             naive_probs_list = _naive_probability_predictions_for_df(
                 df,
                 self.target,
-                list(self.labels) if self.labels else None,
+                list(self._get_scoring_labels()) if self._get_scoring_labels() else None,
                 self.naive_granularity,
             )
             naive_preds = np.asarray(naive_probs_list, dtype=np.float64)
