@@ -9,7 +9,7 @@ See: cross_validator.CLAUDE.md, estimator.CLAUDE.md, feature_generator.CLAUDE.md
 - Support pandas+polars via narwhals (`@nw.narwhalify`)
 - sklearn API compatibility: `fit(X, y)`, `transform(X)`, `predict(X)`, `predict_proba(X)`
 - Public classes/Enums must be importable from `__init__.py`
-- Update version in toml when pushing changes
+- Bump minor version (0.X.0) manually only for significant features or breaking changes
 - Always create a new branch for new tasks
 - Always run all tests before commiting
 

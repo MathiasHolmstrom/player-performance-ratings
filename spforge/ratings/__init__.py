@@ -6,3 +6,7 @@ from .enums import (
     RatingUnknownFeatures as RatingUnknownFeatures,
 )
 from .league_identifier import LeagueIdentifier as LeagueIdentifier
+from .league_start_rating_optimizer import (
+    LeagueStartRatingOptimizationResult as LeagueStartRatingOptimizationResult,
+    LeagueStartRatingOptimizer as LeagueStartRatingOptimizer,
+)
