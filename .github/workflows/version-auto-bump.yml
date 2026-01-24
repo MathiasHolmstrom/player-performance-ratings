@@ -1,0 +1,106 @@
+name: Auto Version Bump
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  auto-bump-version:
+    name: Auto Bump Version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Get current versions
+        id: versions
+        run: |
+          # Get main branch version
+          git fetch origin main
+          MAIN_VERSION=$(git show origin/main:pyproject.toml | grep -E "^version\s*=" | sed -E 's/version\s*=\s*"([^"]+)"/\1/')
+          echo "main_version=$MAIN_VERSION" >> $GITHUB_OUTPUT
+          echo "Main version: $MAIN_VERSION"
+
+          # Get PR branch version
+          PR_VERSION=$(grep -E "^version\s*=" pyproject.toml | sed -E 's/version\s*=\s*"([^"]+)"/\1/')
+          echo "pr_version=$PR_VERSION" >> $GITHUB_OUTPUT
+          echo "PR version: $PR_VERSION"
+
+      - name: Calculate next version
+        id: next-version
+        run: |
+          MAIN_VERSION="${{ steps.versions.outputs.main_version }}"
+
+          # Parse version (assumes semantic versioning: major.minor.patch)
+          IFS='.' read -r major minor patch <<< "$MAIN_VERSION"
+
+          # Increment patch version
+          NEW_PATCH=$((patch + 1))
+          NEXT_VERSION="${major}.${minor}.${NEW_PATCH}"
+
+          echo "next_version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "Next version should be: $NEXT_VERSION"
+
+      - name: Check if version needs updating
+        id: check
+        run: |
+          PR_VERSION="${{ steps.versions.outputs.pr_version }}"
+          NEXT_VERSION="${{ steps.next-version.outputs.next_version }}"
+
+          if [ "$PR_VERSION" != "$NEXT_VERSION" ]; then
+            echo "needs_update=true" >> $GITHUB_OUTPUT
+            echo "Version needs updating: $PR_VERSION → $NEXT_VERSION"
+          else
+            echo "needs_update=false" >> $GITHUB_OUTPUT
+            echo "Version is already correct: $NEXT_VERSION"
+          fi
+
+      - name: Update version in pyproject.toml
+        if: steps.check.outputs.needs_update == 'true'
+        run: |
+          PR_VERSION="${{ steps.versions.outputs.pr_version }}"
+          NEXT_VERSION="${{ steps.next-version.outputs.next_version }}"
+
+          # Update version in pyproject.toml
+          sed -i "s/version = \"$PR_VERSION\"/version = \"$NEXT_VERSION\"/" pyproject.toml
+
+          echo "Updated pyproject.toml version to $NEXT_VERSION"
+
+      - name: Commit and push version bump
+        if: steps.check.outputs.needs_update == 'true'
+        run: |
+          NEXT_VERSION="${{ steps.next-version.outputs.next_version }}"
+
+          git add pyproject.toml
+          git commit -m "Auto-bump version to $NEXT_VERSION [skip ci]"
+          git push
+
+      - name: Comment on PR
+        if: steps.check.outputs.needs_update == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const nextVersion = '${{ steps.next-version.outputs.next_version }}';
+            const prVersion = '${{ steps.versions.outputs.pr_version }}';
+            const mainVersion = '${{ steps.versions.outputs.main_version }}';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🤖 **Auto Version Bump**\n\nVersion automatically bumped:\n- Main: \`${mainVersion}\`\n- Your PR had: \`${prVersion}\`\n- Updated to: \`${nextVersion}\``
+            })
