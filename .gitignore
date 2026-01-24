@@ -164,5 +164,6 @@ tmpclaude-*
 
 # Claude config
 CLAUDE.md
+AGENTS.md
 .claude/settings.json
 .claude/settings.local.json
