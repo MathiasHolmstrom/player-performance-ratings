@@ -927,7 +927,7 @@ wheels = [
 
 [[package]]
 name = "spforge"
-version = "0.8.9"
+version = "0.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "lightgbm" },
@@ -956,7 +956,7 @@ requires-dist = [
     { name = "narwhals", specifier = ">2.0.0" },
     { name = "numpy", specifier = ">=1.23.4" },
     { name = "optuna", specifier = ">=3.4.0" },
-    { name = "pandas", specifier = ">=2.0.0,<3.0.0" },
+    { name = "pandas", specifier = ">=2.0.0" },
     { name = "pendulum", specifier = ">=1.0.0" },
     { name = "polars", specifier = ">=1.17.0" },
     { name = "pyarrow", specifier = ">=19.0.0" },
