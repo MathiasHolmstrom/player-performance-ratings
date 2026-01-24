@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spforge"
-version = "0.8.4"
+version = "0.8.9"
 description = "A flexible framework for generating features, ratings, and building machine learning or other models for training and inference on sports data."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,7 +23,7 @@ classifiers = [
 dependencies = [
   "numpy>=1.23.4",
   "optuna>=3.4.0",
-  "pandas>=2.0.0",
+  "pandas>=2.0.0,<3.0.0",
   "pendulum>=1.0.0",
   "scikit-learn >=1.4.0",
   "lightgbm>=4.0.0",

@@ -13,7 +13,7 @@ Key concepts covered:
 - State management: fit_transform vs future_transform
 """
 
-import pandas as pd
+import polars as pl
 
 from examples import get_sub_sample_nba_data
 from spforge import FeatureGeneratorPipeline
@@ -22,7 +22,7 @@ from spforge.feature_generator import LagTransformer, RollingWindowTransformer
 from spforge.ratings import PlayerRatingGenerator, RatingKnownFeatures
 
 # Load sample NBA data
-df = get_sub_sample_nba_data(as_pandas=True, as_polars=False)
+df = get_sub_sample_nba_data(as_pandas=False, as_polars=True)
 
 # Define column mappings for your dataset
 # This tells spforge which columns contain team IDs, player IDs, dates, etc.
@@ -35,7 +35,7 @@ column_names = ColumnNames(
 
 # CRITICAL: Always sort data chronologically before generating features
 # This ensures temporal ordering and prevents future leakage (using future data to predict the past)
-df = df.sort_values(
+df = df.sort(
     [
         column_names.start_date,  # First by date
         column_names.match_id,  # Then by match
@@ -46,13 +46,21 @@ df = df.sort_values(
 
 # Keep only games with exactly 2 teams (filter out invalid data)
 df = (
-    df.assign(team_count=df.groupby(column_names.match_id)[column_names.team_id].transform("nunique"))
-    .loc[lambda x: x.team_count == 2]
-    .drop(columns=["team_count"])
+    df.with_columns(
+        pl.col(column_names.team_id)
+        .n_unique()
+        .over(column_names.match_id)
+        .alias("team_count")
+    )
+    .filter(pl.col("team_count") == 2)
+    .drop("team_count")
 )
 
-print(f"Dataset: {len(df)} rows, {df[column_names.match_id].nunique()} games")
-print(f"Date range: {df[column_names.start_date].min()} to {df[column_names.start_date].max()}")
+match_count = df.select(pl.col(column_names.match_id).n_unique()).to_series().item()
+start_date = df.select(pl.col(column_names.start_date).min()).to_series().item()
+end_date = df.select(pl.col(column_names.start_date).max()).to_series().item()
+print(f"Dataset: {len(df)} rows, {match_count} games")
+print(f"Date range: {start_date} to {end_date}")
 print()
 
 # ====================================================================
@@ -125,12 +133,22 @@ print()
 # ====================================================================
 
 # Split data into historical (for training) and future (for prediction)
-most_recent_5_games = df[column_names.match_id].unique()[-5:]
-historical_df = df[~df[column_names.match_id].isin(most_recent_5_games)].copy()
-future_df = df[df[column_names.match_id].isin(most_recent_5_games)].copy()
+most_recent_5_games = (
+    df.select(pl.col(column_names.match_id))
+    .unique(maintain_order=True)
+    .tail(5)
+    .get_column(column_names.match_id)
+    .to_list()
+)
+historical_df = df.filter(~pl.col(column_names.match_id).is_in(most_recent_5_games))
+future_df = df.filter(pl.col(column_names.match_id).is_in(most_recent_5_games))
 
-print(f"Historical data: {len(historical_df)} rows, {historical_df[column_names.match_id].nunique()} games")
-print(f"Future data: {len(future_df)} rows, {future_df[column_names.match_id].nunique()} games")
+historical_games = (
+    historical_df.select(pl.col(column_names.match_id).n_unique()).to_series().item()
+)
+future_games = future_df.select(pl.col(column_names.match_id).n_unique()).to_series().item()
+print(f"Historical data: {len(historical_df)} rows, {historical_games} games")
+print(f"Future data: {len(future_df)} rows, {future_games} games")
 print()
 
 # FIT_TRANSFORM: Learn from historical data
@@ -138,7 +156,7 @@ print()
 # - Lags/rolling windows build up from initial games
 # - Internal state (ratings, windows) is MUTATED
 print("Applying fit_transform to historical data...")
-historical_df = features_pipeline.fit_transform(historical_df)
+historical_df = features_pipeline.fit_transform(historical_df).to_pandas()
 print(f"  Generated {len(features_pipeline.features_out)} features:")
 for feature in features_pipeline.features_out:
     print(f"    - {feature}")
@@ -149,7 +167,7 @@ print()
 # - Appends current game to lag/rolling windows but doesn't persist the update
 # - This is what you use in production: generate features without affecting your model's state
 print("Applying future_transform to future data (read-only)...")
-future_df_transformed = features_pipeline.future_transform(future_df)
+future_df_transformed = features_pipeline.future_transform(future_df).to_pandas()
 print(f"  Future data now has {len(future_df_transformed.columns)} columns")
 print()
 

@@ -57,12 +57,12 @@ This example demonstrates predicting NBA game winners using player-level ratings
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
+from examples import get_sub_sample_nba_data
 from spforge.autopipeline import AutoPipeline
 from spforge.data_structures import ColumnNames
-from spforge.ratings import RatingKnownFeatures
-from spforge.ratings._player_rating import PlayerRatingGenerator
+from spforge.ratings import PlayerRatingGenerator, RatingKnownFeatures
 
-df = pd.read_parquet("data/game_player_subsample.parquet")
+df = get_sub_sample_nba_data(as_pandas=True, as_polars=False)
 
 # Step 1: Define column mappings for your dataset
 column_names = ColumnNames(
@@ -116,7 +116,7 @@ historical_df = rating_generator.fit_transform(historical_df)
 pipeline = AutoPipeline(
     estimator=LogisticRegression(),
     granularity=["game_id", "team_id"],  # Aggregate players → teams
-    feature_names=rating_generator.features_out + ["location"],  # Rating + home/away
+    estimator_features=rating_generator.features_out + ["location"],  # Rating + home/away
 )
 
 # Train on historical data
@@ -274,8 +274,8 @@ cross_validator = MatchKFoldCrossValidator(
     prediction_column_name="points_pred",
     target_column="points",
     n_splits=3,  # Number of temporal folds
-    # Must include both feature_names AND context_feature_names
-    features=pipeline.feature_names + pipeline.context_feature_names,
+    # Must include both estimator features and context features
+    features=pipeline.required_features,
 )
 
 # Generate validation predictions
@@ -302,7 +302,7 @@ print(f"Validation MAE: {mae:.2f}")
   - `is_validation=1` marks validation rows, `is_validation=0` marks training rows
   - Use `validation_column` in scorer to score only validation rows
 - Training data always comes BEFORE validation data chronologically
-- Must pass both `feature_names` + `context_feature_names` to `features` parameter
+- Must pass all required features (use `pipeline.required_features`)
 - Scorers can filter rows (e.g., only score players who played minutes > 0)
 
 See [examples/nba/cross_validation_example.py](examples/nba/cross_validation_example.py) for a complete example.
@@ -343,7 +343,7 @@ from lightgbm import LGBMClassifier, LGBMRegressor
 # Approach 1: LGBMClassifier (direct probability prediction)
 pipeline_classifier = AutoPipeline(
     estimator=LGBMClassifier(verbose=-100, random_state=42),
-    feature_names=features_pipeline.features_out,
+    estimator_features=features_pipeline.features_out,
 )
 
 # Approach 2: LGBMRegressor + NegativeBinomialEstimator
@@ -357,13 +357,7 @@ distribution_estimator = NegativeBinomialEstimator(
 
 pipeline_negbin = AutoPipeline(
     estimator=distribution_estimator,
-    feature_names=features_pipeline.features_out,
-    context_feature_names=[
-        column_names.player_id,
-        column_names.start_date,
-        column_names.team_id,
-        column_names.match_id,
-    ],
+    estimator_features=features_pipeline.features_out,
     predictor_transformers=[
         EstimatorTransformer(
             prediction_column_name="points_estimate",
@@ -411,7 +405,7 @@ points_estimate_transformer = EstimatorTransformer(
 # Stage 2: Refine estimate using Stage 1 output
 player_points_pipeline = AutoPipeline(
     estimator=LGBMRegressor(verbose=-100, n_estimators=50),
-    feature_names=features_pipeline.features_out,  # Original features
+    estimator_features=features_pipeline.features_out,  # Original features
     # predictor_transformers execute first, adding their predictions
     predictor_transformers=[points_estimate_transformer],
 )
@@ -446,4 +440,3 @@ For complete, runnable examples with detailed explanations:
 - **[examples/nba/cross_validation_example.py](examples/nba/cross_validation_example.py)** - Time-series CV, distributions, and scoring
 - **[examples/nba/predictor_transformers_example.py](examples/nba/predictor_transformers_example.py)** - Multi-stage hierarchical modeling
 - **[examples/nba/game_winner_example.py](examples/nba/game_winner_example.py)** - Basic workflow for game winner prediction
-

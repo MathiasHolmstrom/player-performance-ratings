@@ -51,7 +51,7 @@ print("\nApproach 1: LGBMClassifier (direct probability prediction)")
 print("-" * 70)
 pipeline_classifier = AutoPipeline(
     estimator=LGBMClassifier(verbose=-100, random_state=42),
-    feature_names=features_generator.features_out,
+    estimator_features=features_generator.features_out,
 )
 
 cross_validator_classifier = MatchKFoldCrossValidator(
@@ -60,7 +60,7 @@ cross_validator_classifier = MatchKFoldCrossValidator(
     estimator=pipeline_classifier,
     prediction_column_name="points_probabilities_classifier",
     target_column="points",
-    features=pipeline_classifier.feature_names,
+    features=pipeline_classifier.required_features,
 )
 validation_df_classifier = cross_validator_classifier.generate_validation_df(df=df)
 
@@ -80,20 +80,13 @@ print("-" * 70)
 predictor_negbin = NegativeBinomialEstimator(
     max_value=40,
     point_estimate_pred_column="points_estimate",
-    r_specific_granularity=["player_id"],
     predicted_r_weight=1,
     column_names=column_names,
 )
 
 pipeline_negbin = AutoPipeline(
     estimator=predictor_negbin,
-    feature_names=features_generator.features_out,
-    context_feature_names=[
-        column_names.player_id,
-        column_names.start_date,
-        column_names.team_id,
-        column_names.match_id,
-    ],
+    estimator_features=features_generator.features_out,
     predictor_transformers=[
         EstimatorTransformer(
             prediction_column_name="points_estimate",
@@ -109,7 +102,7 @@ cross_validator_negbin = MatchKFoldCrossValidator(
     estimator=pipeline_negbin,
     prediction_column_name="points_probabilities_negbin",
     target_column="points",
-    features=pipeline_negbin.context_feature_names + pipeline_negbin.feature_names,
+    features=pipeline_negbin.required_features,
 )
 validation_df_negbin = cross_validator_negbin.generate_validation_df(df=df)
 
