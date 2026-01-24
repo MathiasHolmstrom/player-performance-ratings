@@ -16,6 +16,49 @@ def column_names():
     )
 
 
+class PolarsOnlyGenerator:
+    def __init__(self):
+        self._features_out = ["polars_only_feature"]
+
+    @property
+    def features_out(self):
+        return self._features_out
+
+    def fit_transform(self, df, column_names=None):
+        if not isinstance(df, pl.DataFrame):
+            raise TypeError("Expected polars DataFrame")
+        return df.with_columns((pl.col("points") * 2).alias("polars_only_feature"))
+
+    def transform(self, df):
+        if not isinstance(df, pl.DataFrame):
+            raise TypeError("Expected polars DataFrame")
+        return df.with_columns((pl.col("points") * 2).alias("polars_only_feature"))
+
+    def future_transform(self, df):
+        return self.transform(df)
+
+
+def test_feature_generator_pipeline__passes_native_polars_to_custom_generator(column_names):
+    data = pl.DataFrame(
+        {
+            "game_id": [1, 1],
+            "team_id": ["A", "B"],
+            "player_id": ["p1", "p2"],
+            "date": pd.to_datetime(["2023-01-01", "2023-01-01"]),
+            "points": [10, 15],
+        }
+    )
+
+    pipeline = FeatureGeneratorPipeline(
+        feature_generators=[PolarsOnlyGenerator()],
+        column_names=column_names,
+    )
+
+    result = pipeline.fit_transform(data, column_names=column_names)
+
+    assert "polars_only_feature" in result.columns
+
+
 @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
 def test_feature_generator_pipeline__fit_transform_preserves_row_count(df_type, column_names):
     """FeatureGeneratorPipeline.fit_transform should preserve row count."""
