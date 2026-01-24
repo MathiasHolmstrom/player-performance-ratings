@@ -1,0 +1,88 @@
+name: Version Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'pyproject.toml'
+
+jobs:
+  check-version:
+    name: Check Version Bump
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR branch version
+        id: pr-version
+        run: |
+          VERSION=$(grep -E "^version\s*=" pyproject.toml | sed -E 's/version\s*=\s*"([^"]+)"/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "PR branch version: $VERSION"
+
+      - name: Get main branch version
+        id: main-version
+        run: |
+          git fetch origin main
+          VERSION=$(git show origin/main:pyproject.toml | grep -E "^version\s*=" | sed -E 's/version\s*=\s*"([^"]+)"/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Main branch version: $VERSION"
+
+      - name: Compare versions
+        run: |
+          PR_VERSION="${{ steps.pr-version.outputs.version }}"
+          MAIN_VERSION="${{ steps.main-version.outputs.version }}"
+
+          echo "Comparing versions:"
+          echo "  Main: $MAIN_VERSION"
+          echo "  PR:   $PR_VERSION"
+
+          # Function to compare semantic versions
+          compare_versions() {
+              if [ "$1" = "$2" ]; then
+                  return 1  # Equal
+              fi
+
+              local IFS=.
+              local i ver1=($1) ver2=($2)
+
+              # Fill empty positions with zeros
+              for ((i=${#ver1[@]}; i<${#ver2[@]}; i++)); do
+                  ver1[i]=0
+              done
+
+              for ((i=0; i<${#ver1[@]}; i++)); do
+                  if [[ -z ${ver2[i]} ]]; then
+                      ver2[i]=0
+                  fi
+                  if ((10#${ver1[i]} > 10#${ver2[i]})); then
+                      return 0  # ver1 > ver2
+                  fi
+                  if ((10#${ver1[i]} < 10#${ver2[i]})); then
+                      return 2  # ver1 < ver2
+                  fi
+              done
+              return 1  # Equal
+          }
+
+          compare_versions "$PR_VERSION" "$MAIN_VERSION"
+          result=$?
+
+          if [ $result -eq 0 ]; then
+              echo "✅ Version has been bumped correctly ($MAIN_VERSION → $PR_VERSION)"
+              exit 0
+          elif [ $result -eq 1 ]; then
+              echo "❌ Version has not been changed (both are $MAIN_VERSION)"
+              echo ""
+              echo "Please bump the version in pyproject.toml to be higher than $MAIN_VERSION"
+              exit 1
+          else
+              echo "❌ Version has been decreased ($MAIN_VERSION → $PR_VERSION)"
+              echo ""
+              echo "Please ensure the version in pyproject.toml is higher than $MAIN_VERSION"
+              exit 1
+          fi
