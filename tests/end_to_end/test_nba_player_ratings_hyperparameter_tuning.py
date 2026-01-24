@@ -97,6 +97,11 @@ def test_nba_player_ratings_hyperparameter_tuning__workflow_completes(
         "confidence_max_sum",
         "use_off_def_split",
         "performance_predictor",
+        "start_team_weight",
+        "start_league_quantile",
+        "start_min_count_for_percentiles",
+        "start_min_match_count_team_rating",
+        "start_team_rating_subtract",
     }
     assert set(result.best_params.keys()) == expected_params
 
