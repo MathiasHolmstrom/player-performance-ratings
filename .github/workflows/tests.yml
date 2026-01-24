@@ -5,6 +5,12 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      pr_ref:
+        description: 'PR branch ref to test'
+        required: false
+        type: string
 
 jobs:
   test:
@@ -18,6 +24,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.pr_ref || github.ref }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
