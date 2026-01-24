@@ -293,24 +293,6 @@ class BaseScorer(ABC):
         self.compare_to_naive = compare_to_naive
         self.naive_granularity = naive_granularity
 
-    def _filters_for_df(self, df: IntoFrameT) -> list[Filter]:
-        filters = list(self.filters)
-        if self.validation_column is None:
-            columns = getattr(df, "columns", None)
-            if columns is None and hasattr(df, "to_native"):
-                columns = nw.from_native(df).columns
-            if columns is not None and "is_validation" in columns and not any(
-                f.column_name == "is_validation" for f in filters
-            ):
-                filters.append(
-                    Filter(
-                        column_name="is_validation",
-                        value=1,
-                        operator=Operator.EQUALS,
-                    )
-                )
-        return filters
-
     def _apply_aggregation_level(self, df: IntoFrameT) -> IntoFrameT:
         """Apply aggregation_level grouping if set"""
         if self.aggregation_level:
@@ -417,7 +399,7 @@ class PWMSE(BaseScorer):
 
     @narwhals.narwhalify
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
-        df = apply_filters(df, self._filters_for_df(df))
+        df = apply_filters(df, self.filters)
         before = len(df)
         if not hasattr(df, "to_native"):
             df = nw.from_native(df)
@@ -550,7 +532,7 @@ class MeanBiasScorer(BaseScorer):
 
     @narwhals.narwhalify
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
-        df = apply_filters(df, self._filters_for_df(df))
+        df = apply_filters(df, self.filters)
         # Ensure df is a Narwhals DataFrame
         if not hasattr(df, "to_native"):
             df = nw.from_native(df)
@@ -919,7 +901,7 @@ class ProbabilisticMeanBias(BaseScorer):
 
     def score(self, df: pd.DataFrame) -> float | dict[tuple, float]:
         df = df.copy()
-        df = apply_filters(df, self._filters_for_df(df))
+        df = apply_filters(df, self.filters)
 
         # Filter out null and NaN targets (notna() handles both None and np.nan in pandas)
         before = len(df)
@@ -1084,7 +1066,7 @@ class OrdinalLossScorer(BaseScorer):
 
     @narwhals.narwhalify
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
-        df = apply_filters(df, self._filters_for_df(df))
+        df = apply_filters(df, self.filters)
         # Ensure df is a Narwhals DataFrame
         if not hasattr(df, "to_native"):
             df = nw.from_native(df)
@@ -1385,7 +1367,7 @@ class ThresholdEventScorer(BaseScorer):
 
     @narwhals.narwhalify
     def score(self, df: "IntoFrameT") -> float | dict[tuple, float]:
-        df = nw.from_native(apply_filters(df, self._filters_for_df(df)))
+        df = nw.from_native(apply_filters(df, self.filters))
 
         required = [self.dist_column, self.threshold_column, self.outcome_column]
         mask = None
