@@ -1,12 +1,13 @@
-import pandas as pd
+import polars as pl
 from sklearn.linear_model import LogisticRegression
 
+from examples import get_sub_sample_nba_data
 from spforge.autopipeline import AutoPipeline
 from spforge.data_structures import ColumnNames
 from spforge.ratings import RatingKnownFeatures
 from spforge.ratings._player_rating import PlayerRatingGenerator
 
-df = pd.read_parquet("data/game_player_subsample.parquet")
+df = get_sub_sample_nba_data(as_pandas=False, as_polars=True)
 
 # Defines the column names as they appear in the dataframe
 column_names = ColumnNames(
@@ -16,8 +17,8 @@ column_names = ColumnNames(
     player_id="player_name",
 )
 # Sorts the dataframe. The dataframe must always be sorted as below
-df = df.sort_values(
-    by=[
+df = df.sort(
+    [
         column_names.start_date,
         column_names.match_id,
         column_names.team_id,
@@ -27,17 +28,26 @@ df = df.sort_values(
 
 # Drops games with less or more than 2 teams
 df = (
-    df.assign(
-        team_count=df.groupby(column_names.match_id)[column_names.team_id].transform("nunique")
+    df.with_columns(
+        pl.col(column_names.team_id)
+        .n_unique()
+        .over(column_names.match_id)
+        .alias("team_count")
     )
-    .loc[lambda x: x.team_count == 2]
-    .drop(columns=["team_count"])
+    .filter(pl.col("team_count") == 2)
+    .drop("team_count")
 )
 
 # Pretends the last 10 games are future games. The most will be trained on everything before that.
-most_recent_10_games = df[column_names.match_id].unique()[-10:]
-historical_df = df[~df[column_names.match_id].isin(most_recent_10_games)]
-future_df = df[df[column_names.match_id].isin(most_recent_10_games)].drop(columns=["won"])
+most_recent_10_games = (
+    df.select(pl.col(column_names.match_id))
+    .unique(maintain_order=True)
+    .tail(10)
+    .get_column(column_names.match_id)
+    .to_list()
+)
+historical_df = df.filter(~pl.col(column_names.match_id).is_in(most_recent_10_games))
+future_df = df.filter(pl.col(column_names.match_id).is_in(most_recent_10_games)).drop("won")
 
 # Defining a simple rating-generator. It will use the "won" column to update the ratings.
 # In contrast to a typical Elo, ratings will follow players.
@@ -49,7 +59,7 @@ rating_generator = PlayerRatingGenerator(
     column_names=column_names,
     non_predictor_features_out=[RatingKnownFeatures.PLAYER_RATING],
 )
-historical_df = rating_generator.fit_transform(historical_df)
+historical_df = rating_generator.fit_transform(historical_df).to_pandas()
 
 # Defines the predictor. A machine-learning model will be used to predict game winner on a game-team-level.
 # Mean team-ratings will be calculated (from player-level) and rating-difference between the 2 teams calculated.
@@ -61,13 +71,13 @@ historical_df = rating_generator.fit_transform(historical_df)
 pipeline = AutoPipeline(
     estimator=LogisticRegression(),
     granularity=["game_id", "team_id"],
-    feature_names=rating_generator.features_out + ["location"],
+    estimator_features=rating_generator.features_out + ["location"],
 )
 
 pipeline.fit(X=historical_df, y=historical_df["won"])
 
 # Future predictions on future results
-future_df = rating_generator.future_transform(future_df)
+future_df = rating_generator.future_transform(future_df).to_pandas()
 future_predictions = pipeline.predict_proba(future_df)[:, 1]
 future_df["game_winner_probability"] = future_predictions
 # Grouping predictions from game-player level to game-level.

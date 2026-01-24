@@ -12,7 +12,7 @@ Key concepts covered:
 - Hierarchical modeling: Team strength → Player performance
 """
 
-import pandas as pd
+import polars as pl
 from lightgbm import LGBMRegressor
 from sklearn.linear_model import LogisticRegression
 
@@ -24,7 +24,7 @@ from spforge.ratings import PlayerRatingGenerator, RatingKnownFeatures
 from spforge.transformers import EstimatorTransformer
 
 # Load sample NBA data
-df = get_sub_sample_nba_data(as_pandas=True, as_polars=False)
+df = get_sub_sample_nba_data(as_pandas=False, as_polars=True)
 
 # Define column mappings
 column_names = ColumnNames(
@@ -35,7 +35,7 @@ column_names = ColumnNames(
 )
 
 # Sort data chronologically (critical for temporal correctness)
-df = df.sort_values(
+df = df.sort(
     [
         column_names.start_date,
         column_names.match_id,
@@ -46,18 +46,31 @@ df = df.sort_values(
 
 # Filter to valid games
 df = (
-    df.assign(team_count=df.groupby(column_names.match_id)[column_names.team_id].transform("nunique"))
-    .loc[lambda x: x.team_count == 2]
-    .drop(columns=["team_count"])
+    df.with_columns(
+        pl.col(column_names.team_id)
+        .n_unique()
+        .over(column_names.match_id)
+        .alias("team_count")
+    )
+    .filter(pl.col("team_count") == 2)
+    .drop("team_count")
 )
 
 # Train/test split (using temporal ordering)
-most_recent_10_games = df[column_names.match_id].unique()[-10:]
-train_df = df[~df[column_names.match_id].isin(most_recent_10_games)].copy()
-test_df = df[df[column_names.match_id].isin(most_recent_10_games)].copy()
+most_recent_10_games = (
+    df.select(pl.col(column_names.match_id))
+    .unique(maintain_order=True)
+    .tail(10)
+    .get_column(column_names.match_id)
+    .to_list()
+)
+train_df = df.filter(~pl.col(column_names.match_id).is_in(most_recent_10_games))
+test_df = df.filter(pl.col(column_names.match_id).is_in(most_recent_10_games))
 
-print(f"Training: {len(train_df)} rows, {train_df[column_names.match_id].nunique()} games")
-print(f"Testing: {len(test_df)} rows, {test_df[column_names.match_id].nunique()} games")
+train_games = train_df.select(pl.col(column_names.match_id).n_unique()).to_series().item()
+test_games = test_df.select(pl.col(column_names.match_id).n_unique()).to_series().item()
+print(f"Training: {len(train_df)} rows, {train_games} games")
+print(f"Testing: {len(test_df)} rows, {test_games} games")
 print()
 
 # ====================================================================
@@ -86,8 +99,8 @@ features_pipeline = FeatureGeneratorPipeline(
 )
 
 # Generate features
-train_df = features_pipeline.fit_transform(train_df)
-test_df = features_pipeline.future_transform(test_df)
+train_df = features_pipeline.fit_transform(train_df).to_pandas()
+test_df = features_pipeline.future_transform(test_df).to_pandas()
 
 print(f"Generated {len(features_pipeline.features_out)} baseline features")
 print()
@@ -121,7 +134,7 @@ player_points_pipeline = AutoPipeline(
     estimator=LGBMRegressor(verbose=-100, n_estimators=50),
     # Features for the final estimator (only pre-game information)
     # Note: points_estimate_raw will be added by the transformer
-    feature_names=features_pipeline.features_out,
+    estimator_features=features_pipeline.features_out,
     # The predictor_transformers parameter chains the estimators
     predictor_transformers=[points_estimate_transformer],  # Stage 1 executes first
 )
@@ -150,7 +163,7 @@ print()
 
 # Fit the pipeline
 # The y target here is for the FINAL estimator (player points)
-# Each predictor_transformer has its own target_column specified
+# Predictor_transformers are trained on the same target during fit()
 player_points_pipeline.fit(X=train_df, y=train_df["points"])
 
 print("Training complete!")
@@ -188,7 +201,7 @@ print()
 
 single_stage_pipeline = AutoPipeline(
     estimator=LGBMRegressor(verbose=-100, n_estimators=50),
-    feature_names=features_pipeline.features_out,
+    estimator_features=features_pipeline.features_out,
 )
 
 print("Training single-stage baseline for comparison...")
