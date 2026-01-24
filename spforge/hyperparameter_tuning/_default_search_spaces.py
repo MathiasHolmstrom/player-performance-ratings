@@ -127,7 +127,7 @@ def get_default_player_rating_search_space() -> dict[str, ParamSpec]:
     """
     Default search space for PlayerRatingGenerator.
 
-    Focuses on 5-8 core parameters that have the most impact on performance.
+    Focuses on core parameters that have the most impact on performance.
 
     Returns:
         Dictionary mapping parameter names to ParamSpec objects
@@ -166,6 +166,36 @@ def get_default_player_rating_search_space() -> dict[str, ParamSpec]:
         "performance_predictor": ParamSpec(
             param_type="categorical",
             choices=["difference", "mean", "ignore_opponent"],
+        ),
+        "start_league_quantile": ParamSpec(
+            param_type="float",
+            low=0.05,
+            high=0.5,
+        ),
+        "start_min_count_for_percentiles": ParamSpec(
+            param_type="int",
+            low=10,
+            high=200,
+        ),
+        "start_team_rating_subtract": ParamSpec(
+            param_type="float",
+            low=0.0,
+            high=200.0,
+        ),
+        "start_team_weight": ParamSpec(
+            param_type="float",
+            low=0.0,
+            high=1.0,
+        ),
+        "start_max_days_ago_league_entities": ParamSpec(
+            param_type="int",
+            low=30,
+            high=365,
+        ),
+        "start_min_match_count_team_rating": ParamSpec(
+            param_type="int",
+            low=1,
+            high=10,
         ),
     }
 
