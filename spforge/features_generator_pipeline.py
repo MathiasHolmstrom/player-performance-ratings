@@ -120,7 +120,8 @@ class FeatureGeneratorPipeline(FeatureGenerator):
 
         for transformer in self.feature_generators:
             pre_row_count = len(df)
-            df = nw.from_native(transformer.fit_transform(df, column_names=column_names))
+            native_df = df.to_native()
+            df = nw.from_native(transformer.fit_transform(native_df, column_names=column_names))
             assert len(df) == pre_row_count
             for f in transformer.features_out:
                 if f in expected_feats_added:
@@ -151,7 +152,8 @@ class FeatureGeneratorPipeline(FeatureGenerator):
 
         for transformer in self.feature_generators:
             pre_row_count = len(df)
-            df = nw.from_native(transformer.transform(df))
+            native_df = df.to_native()
+            df = nw.from_native(transformer.transform(native_df))
             assert len(df) == pre_row_count
             for f in transformer.features_out:
                 if f in expected_feats_added:
@@ -181,9 +183,11 @@ class FeatureGeneratorPipeline(FeatureGenerator):
         for transformer in self.feature_generators:
             pre_row_count = len(df)
             if hasattr(transformer, "future_transform") and callable(transformer.future_transform):
-                df = nw.from_native(transformer.future_transform(df))
+                native_df = df.to_native()
+                df = nw.from_native(transformer.future_transform(native_df))
             else:
-                df = nw.from_native(transformer.transform(df))
+                native_df = df.to_native()
+                df = nw.from_native(transformer.transform(native_df))
             assert len(df) == pre_row_count
             for f in transformer.features_out:
                 if f in expected_feats_added:
