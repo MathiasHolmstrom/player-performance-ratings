@@ -12,6 +12,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: write
 
     steps:
       - name: Checkout PR branch
@@ -26,7 +27,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Check if last commit was auto-bump
+        id: skip-check
+        run: |
+          LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
+          if [[ "$LAST_COMMIT_MSG" == Auto-bump\ version\ to* ]]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Skipping: last commit was auto-bump"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Get current versions
+        if: steps.skip-check.outputs.skip != 'true'
         id: versions
         run: |
           # Get main branch version
@@ -41,6 +54,7 @@ jobs:
           echo "PR version: $PR_VERSION"
 
       - name: Calculate next version
+        if: steps.skip-check.outputs.skip != 'true'
         id: next-version
         run: |
           MAIN_VERSION="${{ steps.versions.outputs.main_version }}"
@@ -56,6 +70,7 @@ jobs:
           echo "Next version should be: $NEXT_VERSION"
 
       - name: Check if version needs updating
+        if: steps.skip-check.outputs.skip != 'true'
         id: check
         run: |
           PR_VERSION="${{ steps.versions.outputs.pr_version }}"
@@ -70,7 +85,7 @@ jobs:
           fi
 
       - name: Update version in pyproject.toml
-        if: steps.check.outputs.needs_update == 'true'
+        if: steps.skip-check.outputs.skip != 'true' && steps.check.outputs.needs_update == 'true'
         run: |
           PR_VERSION="${{ steps.versions.outputs.pr_version }}"
           NEXT_VERSION="${{ steps.next-version.outputs.next_version }}"
@@ -81,16 +96,28 @@ jobs:
           echo "Updated pyproject.toml version to $NEXT_VERSION"
 
       - name: Commit and push version bump
-        if: steps.check.outputs.needs_update == 'true'
+        if: steps.skip-check.outputs.skip != 'true' && steps.check.outputs.needs_update == 'true'
         run: |
           NEXT_VERSION="${{ steps.next-version.outputs.next_version }}"
 
           git add pyproject.toml
-          git commit -m "Auto-bump version to $NEXT_VERSION [skip ci]"
+          git commit -m "Auto-bump version to $NEXT_VERSION"
           git push
 
+      - name: Trigger tests workflow
+        if: steps.skip-check.outputs.skip != 'true' && steps.check.outputs.needs_update == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'tests.yml',
+              ref: '${{ github.head_ref }}'
+            });
+
       - name: Comment on PR
-        if: steps.check.outputs.needs_update == 'true'
+        if: steps.skip-check.outputs.skip != 'true' && steps.check.outputs.needs_update == 'true'
         uses: actions/github-script@v7
         with:
           script: |
