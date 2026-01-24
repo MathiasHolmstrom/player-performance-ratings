@@ -49,15 +49,18 @@ class LeagueStartRatingOptimizer:
                 break
 
             error_summary = (
-                error_df.group_by("league")
+                error_df.group_by(self._league_column_name(gen))
                 .agg(
                     pl.col("error").mean().alias("mean_error"),
                     pl.len().alias("row_count"),
                 )
                 .to_dicts()
             )
-            iteration_errors.append({r["league"]: r["mean_error"] for r in error_summary})
-            league_ratings = self._apply_error_updates(gen, league_ratings, error_summary)
+            league_key = self._league_column_name(gen)
+            iteration_errors.append({r[league_key]: r["mean_error"] for r in error_summary})
+            league_ratings = self._apply_error_updates(
+                gen, league_ratings, error_summary, league_key
+            )
 
         self._set_league_ratings(self.rating_generator, league_ratings)
         return LeagueStartRatingOptimizationResult(
@@ -94,11 +97,10 @@ class LeagueStartRatingOptimizer:
         )
         opp_league = self._opponent_mode_league(joined, match_id, team_id, league_col)
         enriched = joined.join(opp_league, on=[match_id, team_id], how="left").with_columns(
-            (pl.col(perf_col) - pl.col(pred_col)).alias("error"),
-            pl.col(league_col).alias("league"),
+            (pl.col(perf_col) - pl.col(pred_col)).alias("error")
         )
         return enriched.filter(pl.col("opp_mode_league").is_not_null()).filter(
-            pl.col("league") != pl.col("opp_mode_league")
+            pl.col(league_col) != pl.col("opp_mode_league")
         )
 
     def _opponent_mode_league(
@@ -161,6 +163,7 @@ class LeagueStartRatingOptimizer:
         rating_generator: object,
         league_ratings: dict[str, float],
         error_summary: list[dict[str, float]],
+        league_key: str,
     ) -> dict[str, float]:
         scale = self.rating_scale
         if scale is None:
@@ -170,11 +173,18 @@ class LeagueStartRatingOptimizer:
         for row in error_summary:
             if row["row_count"] < self.min_cross_region_rows:
                 continue
-            league = row["league"]
+            league = row[league_key]
             mean_error = row["mean_error"]
             base_rating = updated.get(league, DEFAULT_START_RATING)
             updated[league] = base_rating + self.learning_rate * mean_error * scale
         return updated
+
+    def _league_column_name(self, rating_generator: object) -> str:
+        column_names = getattr(rating_generator, "column_names", None)
+        league_col = getattr(column_names, "league", None)
+        if not league_col:
+            raise ValueError("column_names must include league for league adjustments")
+        return league_col
 
     def _get_league_ratings(self, rating_generator: object) -> dict[str, float]:
         start_gen = getattr(rating_generator, "start_rating_generator", None)

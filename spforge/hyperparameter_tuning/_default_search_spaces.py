@@ -174,8 +174,8 @@ def get_default_player_rating_search_space() -> dict[str, ParamSpec]:
         ),
         "start_min_count_for_percentiles": ParamSpec(
             param_type="int",
-            low=10,
-            high=200,
+            low=40,
+            high=500,
         ),
         "start_team_rating_subtract": ParamSpec(
             param_type="float",
@@ -186,11 +186,6 @@ def get_default_player_rating_search_space() -> dict[str, ParamSpec]:
             param_type="float",
             low=0.0,
             high=1.0,
-        ),
-        "start_max_days_ago_league_entities": ParamSpec(
-            param_type="int",
-            low=30,
-            high=365,
         ),
         "start_min_match_count_team_rating": ParamSpec(
             param_type="int",
