@@ -129,6 +129,9 @@ class PlayerRatingGenerator(RatingGenerator):
             str(RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_PROJECTED)
         )
         self.MEAN_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_MEAN_PROJECTED))
+        self.PLAYER_DIFF_FROM_TEAM_PROJ_COL = self._suffix(
+            str(RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED)
+        )
 
         self.TEAM_OFF_RATING_PROJ_COL = self._suffix(
             str(RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED)
@@ -618,6 +621,7 @@ class PlayerRatingGenerator(RatingGenerator):
             or self.OPP_RATING_PROJ_COL in cols_to_add
             or self.DIFF_PROJ_COL in cols_to_add
             or self.MEAN_PROJ_COL in cols_to_add
+            or self.PLAYER_DIFF_FROM_TEAM_PROJ_COL in cols_to_add
         ):
             df = add_team_rating_projected(
                 df=df,
@@ -670,6 +674,13 @@ class PlayerRatingGenerator(RatingGenerator):
             df = df.with_columns(
                 (pl.col(self.PLAYER_RATING_COL) - pl.col(self.OPP_DEF_RATING_PROJ_COL)).alias(
                     self.PLAYER_DIFF_PROJ_COL
+                )
+            )
+
+        if self.PLAYER_DIFF_FROM_TEAM_PROJ_COL in cols_to_add:
+            df = df.with_columns(
+                (pl.col(self.PLAYER_OFF_RATING_COL) - pl.col(self.TEAM_OFF_RATING_PROJ_COL)).alias(
+                    self.PLAYER_DIFF_FROM_TEAM_PROJ_COL
                 )
             )
 

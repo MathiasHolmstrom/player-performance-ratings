@@ -1662,3 +1662,30 @@ def test_player_rating_team_with_strong_offense_and_weak_defense_gets_expected_r
 
     assert a_off > start_rating
     assert a_def < start_rating
+
+
+def test_fit_transform__player_rating_difference_from_team_projected_feature(base_cn, sample_df):
+    """PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED computes player_off_rating - team_off_rating_projected."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        features_out=[
+            RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED,
+            RatingKnownFeatures.PLAYER_OFF_RATING,
+            RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
+        ],
+    )
+    result = gen.fit_transform(sample_df)
+
+    diff_col = "player_rating_difference_from_team_projected_perf"
+    player_col = "player_off_rating_perf"
+    team_col = "team_off_rating_projected_perf"
+
+    assert diff_col in result.columns
+    assert player_col in result.columns
+    assert team_col in result.columns
+
+    for row in result.iter_rows(named=True):
+        expected = row[player_col] - row[team_col]
+        assert row[diff_col] == pytest.approx(expected, rel=1e-9)
