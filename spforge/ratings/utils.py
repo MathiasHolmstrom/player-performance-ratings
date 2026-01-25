@@ -2,6 +2,10 @@ import polars as pl
 
 from spforge.data_structures import ColumnNames
 
+# Internal column names for scaled participation weights
+_SCALED_PW = "__scaled_participation_weight__"
+_SCALED_PPW = "__scaled_projected_participation_weight__"
+
 
 def add_team_rating(
     df: pl.DataFrame,
@@ -46,11 +50,14 @@ def add_team_rating_projected(
     tid = column_names.team_id
     ppw = column_names.projected_participation_weight
 
-    if ppw:
+    # Use scaled column if available (clipped to [0, 1]), otherwise raw column
+    weight_col = _SCALED_PPW if _SCALED_PPW in df.columns else ppw
+
+    if weight_col and weight_col in df.columns:
         return df.with_columns(
             (
-                (pl.col(ppw) * pl.col(player_rating_col)).sum().over([mid, tid])
-                / pl.col(ppw).sum().over([mid, tid])
+                (pl.col(weight_col) * pl.col(player_rating_col)).sum().over([mid, tid])
+                / pl.col(weight_col).sum().over([mid, tid])
             ).alias(team_rating_out)
         )
 
@@ -118,11 +125,14 @@ def add_rating_mean_projected(
     mid = column_names.match_id
     ppw = column_names.projected_participation_weight
 
-    if ppw:
+    # Use scaled column if available (clipped to [0, 1]), otherwise raw column
+    weight_col = _SCALED_PPW if _SCALED_PPW in df.columns else ppw
+
+    if weight_col and weight_col in df.columns:
         return df.with_columns(
             (
-                (pl.col(ppw) * pl.col(player_rating_col)).sum().over(mid)
-                / pl.col(ppw).sum().over(mid)
+                (pl.col(weight_col) * pl.col(player_rating_col)).sum().over(mid)
+                / pl.col(weight_col).sum().over(mid)
             ).alias(rating_mean_out)
         )
 

@@ -34,6 +34,8 @@ from spforge.ratings.utils import (
 from spforge.feature_generator._utils import to_polars
 
 PLAYER_STATS = "__PLAYER_STATS"
+_SCALED_PW = "__scaled_participation_weight__"
+_SCALED_PPW = "__scaled_projected_participation_weight__"
 
 
 class PlayerRatingGenerator(RatingGenerator):
@@ -273,6 +275,7 @@ class PlayerRatingGenerator(RatingGenerator):
             self._projected_participation_weight_max = self._participation_weight_max
 
     def _scale_participation_weight_columns(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Create internal scaled participation weight columns without mutating originals."""
         if not self.scale_participation_weights:
             return df
         if self._participation_weight_max is None or self._participation_weight_max <= 0:
@@ -287,7 +290,7 @@ class PlayerRatingGenerator(RatingGenerator):
             df = df.with_columns(
                 (pl.col(cn.participation_weight) / denom)
                 .clip(0.0, 1.0)
-                .alias(cn.participation_weight)
+                .alias(_SCALED_PW)
             )
 
         if (
@@ -300,9 +303,30 @@ class PlayerRatingGenerator(RatingGenerator):
             df = df.with_columns(
                 (pl.col(cn.projected_participation_weight) / denom)
                 .clip(0.0, 1.0)
-                .alias(cn.projected_participation_weight)
+                .alias(_SCALED_PPW)
             )
 
+        return df
+
+    def _get_participation_weight_col(self) -> str:
+        """Get the column name to use for participation weight (scaled if available)."""
+        cn = self.column_names
+        if self.scale_participation_weights and cn and cn.participation_weight:
+            return _SCALED_PW
+        return cn.participation_weight if cn else ""
+
+    def _get_projected_participation_weight_col(self) -> str:
+        """Get the column name to use for projected participation weight (scaled if available)."""
+        cn = self.column_names
+        if self.scale_participation_weights and cn and cn.projected_participation_weight:
+            return _SCALED_PPW
+        return cn.projected_participation_weight if cn else ""
+
+    def _remove_internal_scaled_columns(self, df: pl.DataFrame) -> pl.DataFrame:
+        """Remove internal scaled columns before returning."""
+        cols_to_drop = [c for c in [_SCALED_PW, _SCALED_PPW] if c in df.columns]
+        if cols_to_drop:
+            df = df.drop(cols_to_drop)
         return df
 
     def _historical_transform(self, df: pl.DataFrame) -> pl.DataFrame:
@@ -310,6 +334,7 @@ class PlayerRatingGenerator(RatingGenerator):
         match_df = self._create_match_df(df)
         ratings = self._calculate_ratings(match_df)
 
+        # Keep scaled columns for now - they're needed by _add_rating_features
         cols = [
             c
             for c in df.columns
@@ -329,13 +354,15 @@ class PlayerRatingGenerator(RatingGenerator):
             on=[self.column_names.player_id, self.column_names.match_id, self.column_names.team_id],
         )
 
-        return self._add_rating_features(df)
+        result = self._add_rating_features(df)
+        return self._remove_internal_scaled_columns(result)
 
     def _future_transform(self, df: pl.DataFrame) -> pl.DataFrame:
         df = self._scale_participation_weight_columns(df)
         match_df = self._create_match_df(df)
         ratings = self._calculate_future_ratings(match_df)
 
+        # Keep scaled columns for now - they're needed by _add_rating_features
         cols = [
             c
             for c in df.columns
@@ -360,7 +387,8 @@ class PlayerRatingGenerator(RatingGenerator):
             how="left",
         )
 
-        return self._add_rating_features(df_with_ratings)
+        result = self._add_rating_features(df_with_ratings)
+        return self._remove_internal_scaled_columns(result)
 
     def _calculate_ratings(self, match_df: pl.DataFrame) -> pl.DataFrame:
         cn = self.column_names
@@ -796,9 +824,13 @@ class PlayerRatingGenerator(RatingGenerator):
 
         if cn.participation_weight and cn.participation_weight in df.columns:
             player_stat_cols.append(cn.participation_weight)
+        if _SCALED_PW in df.columns:
+            player_stat_cols.append(_SCALED_PW)
 
         if cn.projected_participation_weight and cn.projected_participation_weight in df.columns:
             player_stat_cols.append(cn.projected_participation_weight)
+        if _SCALED_PPW in df.columns:
+            player_stat_cols.append(_SCALED_PPW)
 
         if cn.position and cn.position in df.columns:
             player_stat_cols.append(cn.position)
@@ -854,14 +886,23 @@ class PlayerRatingGenerator(RatingGenerator):
             position = team_player.get(cn.position)
             player_league = team_player.get(cn.league, None)
 
-            participation_weight = (
-                team_player.get(cn.participation_weight, 1.0) if cn.participation_weight else 1.0
-            )
-            projected_participation_weight = (
-                team_player.get(cn.projected_participation_weight, participation_weight)
-                if cn.projected_participation_weight
-                else participation_weight
-            )
+            # Use scaled participation weight if available, otherwise use original
+            if _SCALED_PW in team_player:
+                participation_weight = team_player.get(_SCALED_PW, 1.0)
+            elif cn.participation_weight:
+                participation_weight = team_player.get(cn.participation_weight, 1.0)
+            else:
+                participation_weight = 1.0
+
+            # Use scaled projected participation weight if available, otherwise use original
+            if _SCALED_PPW in team_player:
+                projected_participation_weight = team_player.get(_SCALED_PPW, participation_weight)
+            elif cn.projected_participation_weight:
+                projected_participation_weight = team_player.get(
+                    cn.projected_participation_weight, participation_weight
+                )
+            else:
+                projected_participation_weight = participation_weight
             projected_participation_weights.append(projected_participation_weight)
 
             perf_val = (
@@ -1087,14 +1128,21 @@ class PlayerRatingGenerator(RatingGenerator):
                     position = tp.get(cn.position)
                     league = tp.get(cn.league, None)
 
-                    pw = (
-                        tp.get(cn.participation_weight, 1.0) if cn.participation_weight else 1.0
-                    )
-                    ppw = (
-                        tp.get(cn.projected_participation_weight, pw)
-                        if cn.projected_participation_weight
-                        else pw
-                    )
+                    # Use scaled participation weight if available, otherwise use original
+                    if _SCALED_PW in tp:
+                        pw = tp.get(_SCALED_PW, 1.0)
+                    elif cn.participation_weight:
+                        pw = tp.get(cn.participation_weight, 1.0)
+                    else:
+                        pw = 1.0
+
+                    # Use scaled projected participation weight if available, otherwise use original
+                    if _SCALED_PPW in tp:
+                        ppw = tp.get(_SCALED_PPW, pw)
+                    elif cn.projected_participation_weight:
+                        ppw = tp.get(cn.projected_participation_weight, pw)
+                    else:
+                        ppw = pw
                     proj_w.append(float(ppw))
 
                     mp = MatchPerformance(
