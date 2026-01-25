@@ -56,6 +56,21 @@ def test_performance_weights_manager_basic_flow(sample_data):
     assert output_df["weighted_performance"].iloc[0] == pytest.approx(0.6)
 
 
+def test_performance_weights_manager_keeps_mean_when_weights_not_normalized():
+    df = pd.DataFrame(
+        {
+            "feat_a": [0.0, 1.0, 2.0, 3.0],
+            "feat_b": [3.0, 2.0, 1.0, 0.0],
+        }
+    )
+    weights = [ColumnWeight(name="feat_a", weight=0.9), ColumnWeight(name="feat_b", weight=0.5)]
+
+    manager = PerformanceWeightsManager(weights=weights, transformer_names=["min_max"], prefix="")
+    output_df = nw.from_native(manager.fit_transform(df)).to_pandas()
+
+    assert output_df["weighted_performance"].mean() == pytest.approx(0.5, abs=1e-6)
+
+
 def test_lower_is_better_logic():
     df = pd.DataFrame({"feat_a": [1.0, 0.0]})
     weights = [ColumnWeight(name="feat_a", weight=1.0, lower_is_better=True)]

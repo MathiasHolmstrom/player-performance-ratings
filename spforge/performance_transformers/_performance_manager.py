@@ -250,8 +250,6 @@ class PerformanceWeightsManager(PerformanceManager):
                 )
             )
 
-        sum_weight = sum([w.weight for w in self.weights])
-
         for column_weight in self.weights:
             weight_col = f"weight__{column_weight.name}"
             feature_col = column_weight.name
@@ -261,14 +259,14 @@ class PerformanceWeightsManager(PerformanceManager):
                 df = df.with_columns(
                     (
                         nw.col(tmp_out_performance_colum_name)
-                        + (nw.col(weight_col) / sum_weight * (1 - nw.col(feature_name)))
+                        + (nw.col(weight_col) * (1 - nw.col(feature_name)))
                     ).alias(tmp_out_performance_colum_name)
                 )
             else:
                 df = df.with_columns(
                     (
                         nw.col(tmp_out_performance_colum_name)
-                        + (nw.col(weight_col) / sum_weight * nw.col(feature_name))
+                        + (nw.col(weight_col) * nw.col(feature_name))
                     ).alias(tmp_out_performance_colum_name)
                 )
 
