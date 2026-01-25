@@ -551,6 +551,63 @@ def test_fit_transform_scales_participation_weight_by_fit_quantile(base_cn):
     assert p1_change / p2_change == pytest.approx(expected_ratio, rel=1e-6)
 
 
+def test_fit_transform_auto_scales_participation_weight_when_out_of_bounds(base_cn):
+    """Automatically enable scaling when participation weights exceed [0, 1]."""
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "O1", "O2"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.9, 0.9, 0.1, 0.1],
+            "pw": [10.0, 20.0, 10.0, 10.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        start_harcoded_start_rating=1000.0,
+    )
+    gen.fit_transform(df)
+
+    start_rating = 1000.0
+    p1_change = gen._player_off_ratings["P1"].rating_value - start_rating
+    p2_change = gen._player_off_ratings["P2"].rating_value - start_rating
+
+    q = df["pw"].quantile(0.99, "linear")
+    expected_ratio = min(1.0, 10.0 / q) / min(1.0, 20.0 / q)
+
+    assert gen.scale_participation_weights is True
+    assert p1_change / p2_change == pytest.approx(expected_ratio, rel=1e-6)
+
+
+def test_fit_transform_auto_scale_logs_warning_when_out_of_bounds(base_cn, caplog):
+    """Auto-scaling should emit a warning when participation weights exceed [0, 1]."""
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "O1", "O2"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.9, 0.9, 0.1, 0.1],
+            "pw": [10.0, 20.0, 10.0, 10.0],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        start_harcoded_start_rating=1000.0,
+    )
+    with caplog.at_level("WARNING"):
+        gen.fit_transform(df)
+
+    assert any(
+        "Auto-scaling participation weights" in record.message for record in caplog.records
+    )
+
+
 def test_future_transform_scales_projected_participation_weight_by_fit_quantile():
     """Future projected participation weights should scale with fit quantile and be clipped."""
     cn = ColumnNames(
