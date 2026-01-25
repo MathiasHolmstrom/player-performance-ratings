@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import math
+import logging
 from typing import Any, Literal
 
 import narwhals.stable.v2 as nw
@@ -81,6 +82,7 @@ class PlayerRatingGenerator(RatingGenerator):
         column_names: ColumnNames | None = None,
         output_suffix: str | None = None,
         scale_participation_weights: bool = False,
+        auto_scale_participation_weights: bool = True,
         **kwargs: Any,
     ):
         super().__init__(
@@ -164,6 +166,7 @@ class PlayerRatingGenerator(RatingGenerator):
 
         self.use_off_def_split = bool(use_off_def_split)
         self.scale_participation_weights = bool(scale_participation_weights)
+        self.auto_scale_participation_weights = bool(auto_scale_participation_weights)
         self._participation_weight_max: float | None = None
         self._projected_participation_weight_max: float | None = None
 
@@ -189,8 +192,38 @@ class PlayerRatingGenerator(RatingGenerator):
         column_names: ColumnNames | None = None,
     ) -> DataFrame | IntoFrameT:
         self.column_names = column_names if column_names else self.column_names
+        self._maybe_enable_participation_weight_scaling(df)
         self._set_participation_weight_max(df)
         return super().fit_transform(df, column_names)
+
+    def _maybe_enable_participation_weight_scaling(self, df: DataFrame) -> None:
+        if self.scale_participation_weights or not self.auto_scale_participation_weights:
+            return
+        cn = self.column_names
+        if not cn:
+            return
+
+        pl_df = df.to_native() if df.implementation.is_polars() else df.to_polars().to_native()
+
+        def _out_of_bounds(col_name: str | None) -> bool:
+            if not col_name or col_name not in df.columns:
+                return False
+            col = pl_df[col_name]
+            min_val = col.min()
+            max_val = col.max()
+            if min_val is None or max_val is None:
+                return False
+            eps = 1e-6
+            return min_val < -eps or max_val > (1.0 + eps)
+
+        if _out_of_bounds(cn.participation_weight) or _out_of_bounds(
+            cn.projected_participation_weight
+        ):
+            self.scale_participation_weights = True
+            logging.warning(
+                "Auto-scaling participation weights because values exceed [0, 1]. "
+                "Set scale_participation_weights=True explicitly to silence this warning."
+            )
 
     def _ensure_player_off(self, player_id: str) -> PlayerRating:
         if player_id not in self._player_off_ratings:
