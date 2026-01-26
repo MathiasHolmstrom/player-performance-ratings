@@ -551,3 +551,144 @@ def test_autopipeline_is_picklable_after_fit():
     model.fit(df, y)
 
     pickle.dumps(model)
+
+
+# --- Feature Importances Tests ---
+
+
+def test_feature_importances__tree_model():
+    from sklearn.ensemble import RandomForestRegressor
+
+    df = pd.DataFrame(
+        {
+            "num1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            "num2": [10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
+            "cat1": ["a", "b", "a", "b", "a", "b"],
+        }
+    )
+    y = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], name="y")
+
+    model = AutoPipeline(
+        estimator=RandomForestRegressor(n_estimators=5, random_state=42),
+        estimator_features=["num1", "num2", "cat1"],
+        categorical_handling="ordinal",
+    )
+    model.fit(df, y)
+
+    importances = model.feature_importances_
+
+    assert isinstance(importances, pd.DataFrame)
+    assert list(importances.columns) == ["feature", "importance"]
+    assert len(importances) == 3
+    assert set(importances["feature"].tolist()) == {"num1", "num2", "cat1"}
+    assert all(importances["importance"] >= 0)
+
+
+def test_feature_importances__linear_model():
+    df = pd.DataFrame(
+        {
+            "num1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+            "num2": [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0],
+        }
+    )
+    y = pd.Series([0, 1, 0, 1, 0, 1, 0, 1], name="y")
+
+    model = AutoPipeline(
+        estimator=LogisticRegression(max_iter=1000),
+        estimator_features=["num1", "num2"],
+        scale_features=True,
+    )
+    model.fit(df, y)
+
+    importances = model.feature_importances_
+
+    assert isinstance(importances, pd.DataFrame)
+    assert list(importances.columns) == ["feature", "importance"]
+    assert len(importances) == 2
+    assert set(importances["feature"].tolist()) == {"num1", "num2"}
+    assert all(importances["importance"] >= 0)
+
+
+def test_feature_importances__not_fitted_raises():
+    model = AutoPipeline(
+        estimator=LinearRegression(),
+        estimator_features=["x"],
+    )
+
+    with pytest.raises(RuntimeError, match="Pipeline not fitted"):
+        _ = model.feature_importances_
+
+
+def test_feature_importances__unsupported_estimator_raises():
+    df = pd.DataFrame({"x": [1.0, 2.0, 3.0, 4.0]})
+    y = pd.Series([1.0, 2.0, 3.0, 4.0], name="y")
+
+    model = AutoPipeline(
+        estimator=DummyRegressor(),
+        estimator_features=["x"],
+    )
+    model.fit(df, y)
+
+    with pytest.raises(RuntimeError, match="does not support feature importances"):
+        _ = model.feature_importances_
+
+
+def test_feature_importances__with_sklearn_enhancer():
+    from sklearn.ensemble import RandomForestRegressor
+
+    df = pd.DataFrame(
+        {
+            "num1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            "num2": [10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
+            "start_date": ["2022-01-01", "2022-01-02", "2022-01-03", "2022-01-04", "2022-01-05", "2022-01-06"],
+        }
+    )
+    y = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], name="y")
+
+    inner = RandomForestRegressor(n_estimators=5, random_state=42)
+    enhancer = SkLearnEnhancerEstimator(
+        estimator=inner,
+        date_column="start_date",
+        day_weight_epsilon=0.1,
+    )
+
+    model = AutoPipeline(
+        estimator=enhancer,
+        estimator_features=["num1", "num2"],
+    )
+    model.fit(df, y)
+
+    importances = model.feature_importances_
+
+    assert isinstance(importances, pd.DataFrame)
+    assert list(importances.columns) == ["feature", "importance"]
+    assert len(importances) == 2
+    assert set(importances["feature"].tolist()) == {"num1", "num2"}
+
+
+def test_feature_importances__onehot_features():
+    from sklearn.ensemble import RandomForestRegressor
+
+    df = pd.DataFrame(
+        {
+            "num1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            "cat1": ["a", "b", "c", "a", "b", "c"],
+        }
+    )
+    y = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], name="y")
+
+    model = AutoPipeline(
+        estimator=RandomForestRegressor(n_estimators=5, random_state=42),
+        estimator_features=["num1", "cat1"],
+        categorical_handling="onehot",
+    )
+    model.fit(df, y)
+
+    importances = model.feature_importances_
+
+    assert isinstance(importances, pd.DataFrame)
+    assert list(importances.columns) == ["feature", "importance"]
+    # Should have expanded features: num1 + cat1_a, cat1_b, cat1_c
+    assert len(importances) == 4
+    assert "num1" in importances["feature"].tolist()
+    assert any("cat1_" in f for f in importances["feature"].tolist())

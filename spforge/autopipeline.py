@@ -195,6 +195,40 @@ def lgbm_in_root(root) -> bool:
     return any(_is_lightgbm_estimator(obj) for obj in _walk_objects(root))
 
 
+def _get_importance_estimator(estimator) -> tuple[Any, str] | None:
+    """Recursively find innermost estimator with feature_importances_ or coef_."""
+    if hasattr(estimator, "feature_importances_"):
+        inner = _get_importance_estimator_inner(estimator)
+        if inner is not None:
+            return inner
+        return (estimator, "feature_importances_")
+
+    if hasattr(estimator, "coef_"):
+        inner = _get_importance_estimator_inner(estimator)
+        if inner is not None:
+            return inner
+        return (estimator, "coef_")
+
+    return _get_importance_estimator_inner(estimator)
+
+
+def _get_importance_estimator_inner(estimator) -> tuple[Any, str] | None:
+    """Check wrapped estimators for importance attributes."""
+    # Check estimator_ (sklearn fitted wrapper convention)
+    if hasattr(estimator, "estimator_") and estimator.estimator_ is not None:
+        result = _get_importance_estimator(estimator.estimator_)
+        if result is not None:
+            return result
+
+    # Check _est (GroupByEstimator convention)
+    if hasattr(estimator, "_est") and estimator._est is not None:
+        result = _get_importance_estimator(estimator._est)
+        if result is not None:
+            return result
+
+    return None
+
+
 class AutoPipeline(BaseEstimator):
     def __init__(
         self,
@@ -627,3 +661,61 @@ class AutoPipeline(BaseEstimator):
                 all_features.append(ctx)
 
         return all_features
+
+    def _get_estimator_feature_names(self) -> list[str]:
+        """Get feature names as seen by the final estimator after all transformations."""
+        pre_out = list(self.sklearn_pipeline.named_steps["pre"].get_feature_names_out())
+
+        # Remove context columns dropped by "final" step
+        final_step = self.sklearn_pipeline.named_steps["final"]
+        drop_cols = final_step.kw_args.get("drop_cols", set()) if final_step.kw_args else set()
+        features = [f for f in pre_out if f not in drop_cols]
+
+        # Remove granularity columns (dropped by GroupByEstimator)
+        granularity_set = set(self.granularity)
+        features = [f for f in features if f not in granularity_set]
+
+        # Remove context features (used by wrapper estimators, not inner model)
+        context_set = set(self.context_feature_names)
+        features = [f for f in features if f not in context_set]
+
+        return features
+
+    @property
+    def feature_importances_(self) -> pd.DataFrame:
+        """Get feature importances from the fitted estimator.
+
+        Returns a DataFrame with columns ["feature", "importance"] sorted by
+        absolute importance descending. Works with tree-based models
+        (feature_importances_) and linear models (coef_).
+        """
+        if self.sklearn_pipeline is None:
+            raise RuntimeError("Pipeline not fitted. Call fit() first.")
+
+        est = self.sklearn_pipeline.named_steps["est"]
+        result = _get_importance_estimator(est)
+
+        if result is None:
+            raise RuntimeError(
+                "Estimator does not support feature importances. "
+                "Requires feature_importances_ or coef_ attribute."
+            )
+
+        inner_est, attr_name = result
+        raw = getattr(inner_est, attr_name)
+
+        if attr_name == "coef_":
+            # Linear models: use absolute value of coefficients
+            if raw.ndim == 2:
+                # Multi-class: average absolute values across classes
+                importances = np.abs(raw).mean(axis=0)
+            else:
+                importances = np.abs(raw)
+        else:
+            importances = raw
+
+        feature_names = self._get_estimator_feature_names()
+
+        df = pd.DataFrame({"feature": feature_names, "importance": importances})
+        df = df.sort_values("importance", ascending=False, key=abs).reset_index(drop=True)
+        return df
