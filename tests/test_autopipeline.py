@@ -12,6 +12,7 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from spforge import AutoPipeline
 from spforge.estimator import SkLearnEnhancerEstimator
+from spforge.scorer import Filter, Operator
 from spforge.transformers import EstimatorTransformer
 
 
@@ -229,6 +230,27 @@ def test_predict_proba(df_clf):
     assert proba.shape == (_height(df_clf), 2)
     assert np.all((proba >= 0) & (proba <= 1))
     assert np.allclose(proba.sum(axis=1), 1.0, atol=1e-6)
+
+
+def test_filter_columns_not_passed_to_estimator(frame):
+    df_pd = pd.DataFrame(
+        {"x": [1.0, 2.0, 3.0, 4.0], "keep": [1, 0, 1, 0], "y": [1.0, 2.0, 3.0, 4.0]}
+    )
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
+
+    model = AutoPipeline(
+        estimator=CaptureEstimator(),
+        estimator_features=["x"],
+        filters=[Filter(column_name="keep", value=1, operator=Operator.EQUALS)],
+    )
+
+    X = _select(df, ["x", "keep"])
+    y = _col(df, "y")
+    model.fit(X, y=y)
+
+    est = _inner_estimator(model)
+    assert "keep" in model.required_features
+    assert "keep" not in est.fit_columns
 
 
 def test_predict_proba_raises_if_not_supported(df_reg):

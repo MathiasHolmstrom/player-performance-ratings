@@ -927,7 +927,7 @@ wheels = [
 
 [[package]]
 name = "spforge"
-version = "0.8.8"
+version = "0.8.14"
 source = { editable = "." }
 dependencies = [
     { name = "lightgbm" },

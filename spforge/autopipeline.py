@@ -264,6 +264,7 @@ class AutoPipeline(BaseEstimator):
         self.numeric_features = numeric_features
         self.remainder = remainder
         self._cat_feats = []
+        self._filter_feature_names: list[str] = []
 
         # Auto-compute context features
         self.context_feature_names = self._compute_context_features()
@@ -276,11 +277,12 @@ class AutoPipeline(BaseEstimator):
         self._resolved_categorical_handling: CategoricalHandling | None = None
 
     def _compute_context_features(self) -> list[str]:
-        """Auto-compute context features from estimator, granularity, and filters.
+        """Auto-compute context features from estimator and granularity.
 
         Note: Context from predictor_transformers is tracked separately in
         context_predictor_transformer_feature_names and is dropped before
-        the final estimator.
+        the final estimator. Filter columns are tracked separately and are
+        dropped before the final estimator.
         """
         from spforge.transformers._base import PredictorTransformer
 
@@ -325,8 +327,10 @@ class AutoPipeline(BaseEstimator):
         context.extend(self.granularity)
 
         # Add filter columns
+        self._filter_feature_names = []
         for f in self.filters:
-            context.append(f.column_name)
+            if f.column_name not in self._filter_feature_names:
+                self._filter_feature_names.append(f.column_name)
 
         # Dedupe while preserving order, excluding estimator_features
         seen = set()
@@ -540,8 +544,10 @@ class AutoPipeline(BaseEstimator):
             prev_transformer_feats_out.extend(feats_out)
 
         # Use FunctionTransformer with global function for serializability
+        drop_filter_cols = set(self._filter_feature_names)
+        drop_cols = drop_ctx_set | drop_filter_cols
         final = FunctionTransformer(
-            _drop_columns_transformer, validate=False, kw_args={"drop_cols": drop_ctx_set}
+            _drop_columns_transformer, validate=False, kw_args={"drop_cols": drop_cols}
         )
         steps.append(("final", final))
 
@@ -572,6 +578,7 @@ class AutoPipeline(BaseEstimator):
                 self.feature_names
                 + self.context_feature_names
                 + self.context_predictor_transformer_feature_names
+                + self._filter_feature_names
                 + self.granularity
             )
         )
@@ -660,6 +667,11 @@ class AutoPipeline(BaseEstimator):
             if ctx not in all_features:
                 all_features.append(ctx)
 
+        # Add filter columns (needed for fit-time filtering)
+        for col in self._filter_feature_names:
+            if col not in all_features:
+                all_features.append(col)
+
         return all_features
 
     def _get_estimator_feature_names(self) -> list[str]:
@@ -678,6 +690,10 @@ class AutoPipeline(BaseEstimator):
         # Remove context features (used by wrapper estimators, not inner model)
         context_set = set(self.context_feature_names)
         features = [f for f in features if f not in context_set]
+
+        # Remove filter columns (used only for fit-time filtering)
+        filter_set = set(self._filter_feature_names)
+        features = [f for f in features if f not in filter_set]
 
         return features
 
