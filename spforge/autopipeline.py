@@ -681,6 +681,22 @@ class AutoPipeline(BaseEstimator):
 
         return features
 
+    def _resolve_importance_feature_names(self, estimator, n_features: int) -> list[str]:
+        names = None
+        if hasattr(estimator, "feature_names_in_") and estimator.feature_names_in_ is not None:
+            names = list(estimator.feature_names_in_)
+        elif hasattr(estimator, "feature_name_") and estimator.feature_name_ is not None:
+            names = list(estimator.feature_name_)
+        elif hasattr(estimator, "feature_names_") and estimator.feature_names_ is not None:
+            names = list(estimator.feature_names_)
+        if names is None:
+            names = self._get_estimator_feature_names()
+        if len(names) != n_features:
+            raise ValueError(
+                f"Feature names length ({len(names)}) does not match importances length ({n_features})."
+            )
+        return names
+
     @property
     def feature_importances_(self) -> pd.DataFrame:
         """Get feature importances from the fitted estimator.
@@ -714,7 +730,8 @@ class AutoPipeline(BaseEstimator):
         else:
             importances = raw
 
-        feature_names = self._get_estimator_feature_names()
+        importances = np.asarray(importances)
+        feature_names = self._resolve_importance_feature_names(inner_est, len(importances))
 
         df = pd.DataFrame({"feature": feature_names, "importance": importances})
         df = df.sort_values("importance", ascending=False, key=abs).reset_index(drop=True)

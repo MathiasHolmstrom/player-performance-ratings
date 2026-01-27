@@ -692,3 +692,34 @@ def test_feature_importances__onehot_features():
     assert len(importances) == 4
     assert "num1" in importances["feature"].tolist()
     assert any("cat1_" in f for f in importances["feature"].tolist())
+
+
+def test_feature_importances__granularity_uses_deep_feature_names():
+    from sklearn.ensemble import RandomForestRegressor
+
+    df = pd.DataFrame(
+        {
+            "gameid": ["g1", "g1", "g2", "g2"],
+            "num1": [1.0, 2.0, 3.0, 4.0],
+            "num2": [10.0, 20.0, 30.0, 40.0],
+        }
+    )
+    y = pd.Series([1.0, 2.0, 3.0, 4.0], name="y")
+
+    model = AutoPipeline(
+        estimator=RandomForestRegressor(n_estimators=5, random_state=42),
+        estimator_features=["gameid", "num1", "num2"],
+        predictor_transformers=[AddConstantPredictionTransformer(col_name="const_pred")],
+        granularity=["gameid"],
+        categorical_features=["gameid"],
+        categorical_handling="ordinal",
+        remainder="drop",
+    )
+    model.fit(df, y)
+
+    importances = model.feature_importances_
+
+    inner = _inner_estimator(model)
+    assert list(importances["feature"]) == list(inner.feature_names_in_)
+    assert "gameid" not in importances["feature"].tolist()
+    assert "const_pred" in importances["feature"].tolist()
