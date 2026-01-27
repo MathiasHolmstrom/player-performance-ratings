@@ -681,6 +681,22 @@ class AutoPipeline(BaseEstimator):
 
         return features
 
+    def _resolve_importance_feature_names(self, estimator, n_features: int) -> list[str]:
+        names = None
+        if hasattr(estimator, "feature_names_in_") and estimator.feature_names_in_ is not None:
+            names = list(estimator.feature_names_in_)
+        elif hasattr(estimator, "feature_name_") and estimator.feature_name_ is not None:
+            names = list(estimator.feature_name_)
+        elif hasattr(estimator, "feature_names_") and estimator.feature_names_ is not None:
+            names = list(estimator.feature_names_)
+        if names is None:
+            names = self._get_estimator_feature_names()
+        if len(names) != n_features:
+            raise ValueError(
+                f"Feature names length ({len(names)}) does not match importances length ({n_features})."
+            )
+        return names
+
     @property
     def feature_importances_(self) -> pd.DataFrame:
         """Get feature importances from the fitted estimator.
@@ -719,3 +735,33 @@ class AutoPipeline(BaseEstimator):
         df = pd.DataFrame({"feature": feature_names, "importance": importances})
         df = df.sort_values("importance", ascending=False, key=abs).reset_index(drop=True)
         return df
+
+    @property
+    def feature_importance_names(self) -> dict[str, float]:
+        """Map deepest estimator feature names to importances."""
+        if self.sklearn_pipeline is None:
+            raise RuntimeError("Pipeline not fitted. Call fit() first.")
+
+        est = self.sklearn_pipeline.named_steps["est"]
+        result = _get_importance_estimator(est)
+
+        if result is None:
+            raise RuntimeError(
+                "Estimator does not support feature importances. "
+                "Requires feature_importances_ or coef_ attribute."
+            )
+
+        inner_est, attr_name = result
+        raw = getattr(inner_est, attr_name)
+
+        if attr_name == "coef_":
+            if raw.ndim == 2:
+                importances = np.abs(raw).mean(axis=0)
+            else:
+                importances = np.abs(raw)
+        else:
+            importances = raw
+
+        importances = np.asarray(importances)
+        feature_names = self._resolve_importance_feature_names(inner_est, len(importances))
+        return dict(zip(feature_names, importances.tolist()))
