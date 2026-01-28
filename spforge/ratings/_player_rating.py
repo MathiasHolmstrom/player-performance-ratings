@@ -16,6 +16,7 @@ from spforge.data_structures import (
     MatchPerformance,
     MatchPlayer,
     PlayerRating,
+    PlayerRatingChange,
     PlayerRatingsResult,
     PreMatchPlayerRating,
     PreMatchPlayersCollection,
@@ -78,7 +79,7 @@ class PlayerRatingGenerator(RatingGenerator):
         start_min_count_for_percentiles: int = 50,
         start_team_rating_subtract: float = 80,
         start_team_weight: float = 0,
-        start_max_days_ago_league_entities: int = 120,
+        start_max_days_ago_league_entities: int = 600,
         start_min_match_count_team_rating: int = 2,
         start_harcoded_start_rating: float | None = None,
         column_names: ColumnNames | None = None,
@@ -442,9 +443,9 @@ class PlayerRatingGenerator(RatingGenerator):
             team1_off_rating, team1_def_rating = self._team_off_def_rating_from_collection(c1)
             team2_off_rating, team2_def_rating = self._team_off_def_rating_from_collection(c2)
 
-            player_updates: list[tuple[str, str, float, float, float, float, float, float, int]] = (
-                []
-            )
+            player_updates: list[
+                tuple[str, str, float, float, float, float, float, float, int, str | None]
+            ] = []
 
             for pre_player in c1.pre_match_player_ratings:
                 pid = pre_player.id
@@ -520,6 +521,7 @@ class PlayerRatingGenerator(RatingGenerator):
                         float(off_change),
                         float(def_change),
                         day_number,
+                        pre_player.league,
                     )
                 )
 
@@ -597,6 +599,7 @@ class PlayerRatingGenerator(RatingGenerator):
                         float(off_change),
                         float(def_change),
                         day_number,
+                        pre_player.league,
                     )
                 )
 
@@ -611,6 +614,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 _off_change,
                 _def_change,
                 _dn,
+                _league,
             ) in player_updates:
                 out[cn.player_id].append(pid)
                 out[cn.match_id].append(match_id)
@@ -627,15 +631,18 @@ class PlayerRatingGenerator(RatingGenerator):
             for (
                 pid,
                 team_id,
-                _off_pre,
+                off_pre,
                 _def_pre,
                 _pred_off,
                 _pred_def,
                 off_change,
                 def_change,
                 dn,
+                league,
             ) in player_updates:
-                pending_team_updates.append((pid, team_id, off_change, def_change, dn))
+                pending_team_updates.append(
+                    (pid, team_id, off_pre, off_change, def_change, dn, league)
+                )
 
             if last_update_id is None:
                 last_update_id = update_id
@@ -645,9 +652,11 @@ class PlayerRatingGenerator(RatingGenerator):
 
         return pl.DataFrame(out, strict=False)
 
-    def _apply_player_updates(self, updates: list[tuple[str, str, float, float, int]]) -> None:
+    def _apply_player_updates(
+        self, updates: list[tuple[str, str, float, float, float, int, str | None]]
+    ) -> None:
 
-        for player_id, team_id, off_change, def_change, day_number in updates:
+        for player_id, team_id, pre_rating, off_change, def_change, day_number, league in updates:
             off_state = self._player_off_ratings[player_id]
             off_state.confidence_sum = self._calculate_post_match_confidence_sum(
                 entity_rating=off_state,
@@ -669,6 +678,19 @@ class PlayerRatingGenerator(RatingGenerator):
             def_state.games_played += 1.0
             def_state.last_match_day_number = int(day_number)
             def_state.most_recent_team_id = team_id
+
+            self.start_rating_generator.update_players_to_leagues(
+                PlayerRatingChange(
+                    id=player_id,
+                    day_number=day_number,
+                    league=league,
+                    participation_weight=1.0,
+                    predicted_performance=0.0,
+                    performance=0.0,
+                    pre_match_rating_value=pre_rating,
+                    rating_change_value=off_change,
+                )
+            )
 
     def _add_rating_features(self, df: pl.DataFrame) -> pl.DataFrame:
         cols_to_add = set((self._features_out or []) + (self.non_predictor_features_out or []))

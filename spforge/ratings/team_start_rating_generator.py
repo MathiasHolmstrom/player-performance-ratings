@@ -24,7 +24,7 @@ class TeamStartRatingGenerator:
         league_ratings: dict[str, float] | None = None,
         league_quantile: float = 0.2,
         min_count_for_percentiles: int = 50,
-        max_days_ago_league_entities: int = 120,
+        max_days_ago_league_entities: int = 600,
         min_match_count_team_rating: int = 2,
         harcoded_start_rating: float | None = None,
     ):

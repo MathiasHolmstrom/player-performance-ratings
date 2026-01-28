@@ -1746,3 +1746,73 @@ def test_fit_transform__player_rating_difference_from_team_projected_feature(bas
     for row in result.iter_rows(named=True):
         expected = row[player_col] - row[team_col]
         assert row[diff_col] == pytest.approx(expected, rel=1e-9)
+
+
+def test_fit_transform__start_league_quantile_uses_existing_player_ratings(base_cn):
+    """
+    Bug reproduction: start_league_quantile should use percentile of existing player
+    ratings for new players, but update_players_to_leagues is never called so
+    _league_player_ratings stays empty and all new players get default rating.
+
+    Expected: New player P_NEW should start at 5th percentile of existing ratings (~920)
+    Actual: New player starts at default 1000 because _league_player_ratings is empty
+    """
+    import numpy as np
+
+    num_existing_players = 60
+    player_ids = [f"P{i}" for i in range(num_existing_players)]
+    team_ids = [f"T{i % 2 + 1}" for i in range(num_existing_players)]
+
+    df1 = pl.DataFrame(
+        {
+            "pid": player_ids,
+            "tid": team_ids,
+            "mid": ["M1"] * num_existing_players,
+            "dt": ["2024-01-01"] * num_existing_players,
+            "perf": [0.3 + (i % 10) * 0.07 for i in range(num_existing_players)],
+            "pw": [1.0] * num_existing_players,
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        start_league_quantile=0.05,
+        start_min_count_for_percentiles=50,
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+    )
+    gen.fit_transform(df1)
+
+    existing_ratings = [
+        gen._player_off_ratings[pid].rating_value for pid in player_ids
+    ]
+    expected_quantile_rating = np.percentile(existing_ratings, 5)
+
+    srg = gen.start_rating_generator
+    assert len(srg._league_player_ratings.get(None, [])) >= 50, (
+        f"Expected _league_player_ratings to have >=50 entries but got "
+        f"{len(srg._league_player_ratings.get(None, []))}. "
+        "update_players_to_leagues is never called."
+    )
+
+    df2 = pl.DataFrame(
+        {
+            "pid": ["P_NEW", "P0"],
+            "tid": ["T1", "T2"],
+            "mid": ["M2", "M2"],
+            "dt": ["2024-01-02", "2024-01-02"],
+            "pw": [1.0, 1.0],
+        }
+    )
+    result = gen.future_transform(df2)
+
+    new_player_start_rating = result.filter(pl.col("pid") == "P_NEW")[
+        "player_off_rating_perf"
+    ][0]
+
+    assert new_player_start_rating == pytest.approx(expected_quantile_rating, rel=0.1), (
+        f"New player should start at 5th percentile ({expected_quantile_rating:.1f}) "
+        f"but got {new_player_start_rating:.1f}. "
+        "start_league_quantile has no effect because update_players_to_leagues is never called."
+    )
