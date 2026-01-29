@@ -10,10 +10,16 @@ from spforge.transformers._other_transformer import GroupByReducer
 
 
 class GroupByEstimator(BaseEstimator):
-    def __init__(self, estimator: Any, granularity: list[str] | None = None):
+    def __init__(
+        self,
+        estimator: Any,
+        granularity: list[str] | None = None,
+        aggregation_weight: str | None = None,
+    ):
         self.estimator = estimator
         self.granularity = granularity or []
-        self._reducer = GroupByReducer(self.granularity)
+        self.aggregation_weight = aggregation_weight
+        self._reducer = GroupByReducer(self.granularity, aggregation_weight=aggregation_weight)
         self._est = None
 
     def __sklearn_is_fitted__(self):
@@ -22,7 +28,9 @@ class GroupByEstimator(BaseEstimator):
     @nw.narwhalify
     def fit(self, X: IntoFrameT, y: Any, sample_weight: np.ndarray | None = None):
         X = X.to_pandas()
-        self._reducer = GroupByReducer(self.granularity)
+        # Backwards compatibility: old pickled objects may not have aggregation_weight
+        agg_weight = getattr(self, "aggregation_weight", None)
+        self._reducer = GroupByReducer(self.granularity, aggregation_weight=agg_weight)
         X_red = nw.from_native(self._reducer.fit_transform(X))
         y_red, sw_red = self._reducer.reduce_y(X, y, sample_weight=sample_weight)
 
