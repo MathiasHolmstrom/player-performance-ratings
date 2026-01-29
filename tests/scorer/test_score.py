@@ -2138,3 +2138,145 @@ def test_scorers_respect_validation_column(scorer_factory, df_factory):
     score_all = scorer_factory().score(df)
     score_valid = scorer_factory().score(df_valid)
     assert score_all == score_valid
+
+
+# ============================================================================
+# PWMSE evaluation_labels Extension Tests
+# ============================================================================
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_pwmse__evaluation_labels_extends_predictions(df_type):
+    """PWMSE with evaluation_labels as superset extends predictions with small probs."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [
+                [0.3, 0.5, 0.2],
+                [0.2, 0.6, 0.2],
+            ],
+            "target": [0, 1],
+        },
+    )
+
+    scorer = PWMSE(
+        pred_column="pred",
+        target="target",
+        labels=[0, 1, 2],
+        evaluation_labels=[-1, 0, 1, 2, 3],
+    )
+    score = scorer.score(df)
+
+    n_eval_labels = 5
+    eps = 1e-5
+    preds_original = np.array([[0.3, 0.5, 0.2], [0.2, 0.6, 0.2]])
+    extended = np.full((2, n_eval_labels), eps, dtype=np.float64)
+    extended[:, 1] = preds_original[:, 0]
+    extended[:, 2] = preds_original[:, 1]
+    extended[:, 3] = preds_original[:, 2]
+    row_sums = extended.sum(axis=1, keepdims=True)
+    preds_renorm = extended / row_sums
+
+    eval_labels = np.array([-1, 0, 1, 2, 3], dtype=np.float64)
+    targets = np.array([0, 1], dtype=np.float64)
+    diffs_sqd = (eval_labels[None, :] - targets[:, None]) ** 2
+    expected = float((diffs_sqd * preds_renorm).sum(axis=1).mean())
+
+    assert abs(score - expected) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_pwmse__evaluation_labels_exact_match(df_type):
+    """PWMSE with evaluation_labels identical to labels (no-op)."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [
+                [0.3, 0.5, 0.2],
+                [0.2, 0.6, 0.2],
+            ],
+            "target": [0, 1],
+        },
+    )
+
+    scorer_with_eval = PWMSE(
+        pred_column="pred",
+        target="target",
+        labels=[0, 1, 2],
+        evaluation_labels=[0, 1, 2],
+    )
+    scorer_without_eval = PWMSE(
+        pred_column="pred",
+        target="target",
+        labels=[0, 1, 2],
+    )
+
+    score_with = scorer_with_eval.score(df)
+    score_without = scorer_without_eval.score(df)
+
+    assert abs(score_with - score_without) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_pwmse__evaluation_labels_partial_overlap_raises(df_type):
+    """PWMSE with partial overlap between labels and evaluation_labels raises."""
+    with pytest.raises(ValueError, match="evaluation_labels must be a subset or superset"):
+        PWMSE(
+            pred_column="pred",
+            target="target",
+            labels=[0, 1, 2],
+            evaluation_labels=[1, 2, 3],
+        )
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_pwmse__evaluation_labels_extends_with_compare_to_naive(df_type):
+    """PWMSE extension mode works correctly with compare_to_naive."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [
+                [0.8, 0.15, 0.05],
+                [0.1, 0.7, 0.2],
+                [0.05, 0.15, 0.8],
+                [0.3, 0.4, 0.3],
+            ],
+            "target": [0, 1, 2, 1],
+        },
+    )
+
+    scorer = PWMSE(
+        pred_column="pred",
+        target="target",
+        labels=[0, 1, 2],
+        evaluation_labels=[-1, 0, 1, 2, 3],
+        compare_to_naive=True,
+    )
+    score = scorer.score(df)
+
+    n_eval_labels = 5
+    eps = 1e-5
+    preds_original = np.array([
+        [0.8, 0.15, 0.05],
+        [0.1, 0.7, 0.2],
+        [0.05, 0.15, 0.8],
+        [0.3, 0.4, 0.3],
+    ])
+    extended = np.full((4, n_eval_labels), eps, dtype=np.float64)
+    extended[:, 1] = preds_original[:, 0]
+    extended[:, 2] = preds_original[:, 1]
+    extended[:, 3] = preds_original[:, 2]
+    row_sums = extended.sum(axis=1, keepdims=True)
+    preds_renorm = extended / row_sums
+
+    eval_labels = np.array([-1, 0, 1, 2, 3], dtype=np.float64)
+    targets = np.array([0, 1, 2, 1], dtype=np.float64)
+    diffs_sqd = (eval_labels[None, :] - targets[:, None]) ** 2
+    model_score = float((diffs_sqd * preds_renorm).sum(axis=1).mean())
+
+    naive_probs = np.array([0.0, 0.25, 0.5, 0.25, 0.0])
+    naive_preds = np.tile(naive_probs, (4, 1))
+    naive_score = float((diffs_sqd * naive_preds).sum(axis=1).mean())
+
+    expected = naive_score - model_score
+    assert abs(score - expected) < 1e-10
