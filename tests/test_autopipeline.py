@@ -328,7 +328,18 @@ def test_infer_categorical_from_feature_names_when_only_numeric_features_given(d
     assert any(c.startswith("cat") for c in cap.fit_columns)
 
 
-def test_granularity_groups_rows_before_estimator_fit_and_predict(df_reg):
+def test_granularity_groups_rows_before_estimator_fit_and_predict(frame):
+    df_pd = pd.DataFrame(
+        {
+            "gameid": ["g1", "g1", "g2", "g2", "g3", "g3"],
+            "num1": [1.0, 2.0, np.nan, 4.0, 5.0, 6.0],
+            "num2": [10.0, 20.0, 30.0, 40.0, np.nan, 60.0],
+            "cat1": ["a", "b", "a", None, "b", "c"],
+            "y": [1.0, 1.0, 2.0, 2.0, 3.0, 3.0],
+        }
+    )
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
+
     model = AutoPipeline(
         estimator=CaptureEstimator(),
         estimator_features=["gameid", "num1", "num2", "cat1"],
@@ -339,16 +350,16 @@ def test_granularity_groups_rows_before_estimator_fit_and_predict(df_reg):
         remainder="drop",
     )
 
-    X = _select(df_reg, ["gameid", "num1", "num2", "cat1"])
-    y = _col(df_reg, "y")
+    X = _select(df, ["gameid", "num1", "num2", "cat1"])
+    y = _col(df, "y")
     model.fit(X, y=y)
 
     inner = _inner_estimator(model)
 
-    if isinstance(df_reg, pl.DataFrame):
-        n_groups = df_reg.select(pl.col("gameid").n_unique()).item()
+    if isinstance(df, pl.DataFrame):
+        n_groups = df.select(pl.col("gameid").n_unique()).item()
     else:
-        n_groups = df_reg["gameid"].nunique()
+        n_groups = df["gameid"].nunique()
 
     assert inner.fit_shape[0] == n_groups
 
@@ -724,9 +735,10 @@ def test_feature_importance_names__granularity_uses_deep_feature_names():
             "gameid": ["g1", "g1", "g2", "g2"],
             "num1": [1.0, 2.0, 3.0, 4.0],
             "num2": [10.0, 20.0, 30.0, 40.0],
+            "y": [1.0, 1.0, 2.0, 2.0],
         }
     )
-    y = pd.Series([1.0, 2.0, 3.0, 4.0], name="y")
+    y = df["y"]
 
     model = AutoPipeline(
         estimator=RandomForestRegressor(n_estimators=5, random_state=42),
@@ -745,3 +757,127 @@ def test_feature_importance_names__granularity_uses_deep_feature_names():
     assert list(names.keys()) == list(inner.feature_names_in_)
     assert "gameid" not in names
     assert "const_pred" in names
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_granularity_with_aggregation_weight__features_weighted(frame):
+    df_pd = pd.DataFrame(
+        {
+            "gameid": ["g1", "g1", "g2", "g2"],
+            "num1": [10.0, 30.0, 20.0, 40.0],
+            "weight": [0.25, 0.75, 0.5, 0.5],
+            "y": [1.0, 1.0, 2.0, 2.0],
+        }
+    )
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
+
+    cap = CaptureEstimator()
+    model = AutoPipeline(
+        estimator=cap,
+        estimator_features=["num1"],
+        granularity=["gameid"],
+        aggregation_weight="weight",
+        remainder="drop",
+    )
+
+    X = _select(df, ["gameid", "num1", "weight"])
+    y = _col(df, "y")
+    model.fit(X, y=y)
+
+    inner = _inner_estimator(model)
+    assert inner.fit_shape[0] == 2
+
+    preds = model.predict(X)
+    assert preds.shape[0] == len(X)
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_granularity_aggregation_weight__weighted_mean_correct(frame):
+    df_pd = pd.DataFrame(
+        {
+            "gameid": ["g1", "g1"],
+            "num1": [10.0, 30.0],
+            "weight": [0.25, 0.75],
+            "y": [1.0, 1.0],
+        }
+    )
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
+
+    from spforge.transformers._other_transformer import GroupByReducer
+
+    reducer = GroupByReducer(granularity=["gameid"], aggregation_weight="weight")
+    transformed = reducer.fit_transform(df)
+
+    if frame == "pl":
+        num1_val = transformed["num1"].to_list()[0]
+    else:
+        num1_val = transformed["num1"].iloc[0]
+
+    expected = (10.0 * 0.25 + 30.0 * 0.75) / (0.25 + 0.75)
+    assert abs(num1_val - expected) < 1e-6
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_reduce_y_raises_when_target_not_uniform_per_group(frame):
+    df_pd = pd.DataFrame(
+        {
+            "gameid": ["g1", "g1"],
+            "num1": [10.0, 30.0],
+        }
+    )
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
+
+    from spforge.transformers._other_transformer import GroupByReducer
+
+    reducer = GroupByReducer(granularity=["gameid"])
+
+    y = np.array([1.0, 2.0])
+    with pytest.raises(ValueError, match="Target.*must be uniform"):
+        reducer.reduce_y(df, y)
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_reduce_y_works_when_target_uniform_per_group(frame):
+    df_pd = pd.DataFrame(
+        {
+            "gameid": ["g1", "g1", "g2", "g2"],
+            "num1": [10.0, 30.0, 20.0, 40.0],
+        }
+    )
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
+
+    from spforge.transformers._other_transformer import GroupByReducer
+
+    reducer = GroupByReducer(granularity=["gameid"])
+
+    y = np.array([1.0, 1.0, 2.0, 2.0])
+    y_out, _ = reducer.reduce_y(df, y)
+
+    assert len(y_out) == 2
+    assert set(y_out) == {1.0, 2.0}
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_aggregation_weight_sums_weight_column(frame):
+    df_pd = pd.DataFrame(
+        {
+            "gameid": ["g1", "g1"],
+            "num1": [10.0, 30.0],
+            "weight": [0.25, 0.75],
+            "y": [1.0, 1.0],
+        }
+    )
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
+
+    from spforge.transformers._other_transformer import GroupByReducer
+
+    reducer = GroupByReducer(granularity=["gameid"], aggregation_weight="weight")
+    transformed = reducer.fit_transform(df)
+
+    if frame == "pl":
+        weight_val = transformed["weight"].to_list()[0]
+    else:
+        weight_val = transformed["weight"].iloc[0]
+
+    expected = 0.25 + 0.75
+    assert abs(weight_val - expected) < 1e-6

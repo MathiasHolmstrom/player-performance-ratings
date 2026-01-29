@@ -236,6 +236,7 @@ class AutoPipeline(BaseEstimator):
         estimator_features: list[str],
         predictor_transformers: list[PredictorTransformer] | None = None,
         granularity: list[str] | None = None,
+        aggregation_weight: str | None = None,
         filters: list[Filter] | None = None,
         scale_features: bool = False,
         categorical_handling: CategoricalHandling = "auto",
@@ -250,6 +251,7 @@ class AutoPipeline(BaseEstimator):
         self.estimator_features = estimator_features
         self.feature_names = estimator_features  # Internal compat
         self.granularity = granularity or []
+        self.aggregation_weight = aggregation_weight
         self.predictor_transformers = predictor_transformers
         self.estimator = estimator
         self.filters = filters or []
@@ -325,6 +327,10 @@ class AutoPipeline(BaseEstimator):
 
         # Add granularity columns
         context.extend(self.granularity)
+
+        # Add aggregation weight column
+        if self.aggregation_weight:
+            context.append(self.aggregation_weight)
 
         # Add filter columns
         self._filter_feature_names = []
@@ -492,7 +498,11 @@ class AutoPipeline(BaseEstimator):
         pre = PreprocessorToDataFrame(pre_raw)
 
         est = (
-            GroupByEstimator(self.estimator, granularity=[f"{c}" for c in self.granularity])
+            GroupByEstimator(
+                self.estimator,
+                granularity=[f"{c}" for c in self.granularity],
+                aggregation_weight=self.aggregation_weight,
+            )
             if do_groupby
             else self.estimator
         )
