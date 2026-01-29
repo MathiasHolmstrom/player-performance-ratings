@@ -366,18 +366,49 @@ class PWMSE(BaseScorer):
         self.labels = labels
         self.evaluation_labels = evaluation_labels
 
+        self._needs_extension = False
+        self._needs_slicing = False
         self._eval_indices: list[int] | None = None
-        if self.evaluation_labels is not None and self.labels is not None:
-            label_to_idx = {lbl: i for i, lbl in enumerate(self.labels)}
-            self._eval_indices = [label_to_idx[lbl] for lbl in self.evaluation_labels]
+        self._extension_mapping: dict[int, int] | None = None
 
-    def _slice_and_renormalize(self, preds: np.ndarray) -> np.ndarray:
-        if self._eval_indices is None:
-            return preds
-        sliced = preds[:, self._eval_indices]
-        row_sums = sliced.sum(axis=1, keepdims=True)
-        row_sums = np.where(row_sums == 0, 1.0, row_sums)
-        return sliced / row_sums
+        if self.evaluation_labels is not None and self.labels is not None:
+            training_set = set(self.labels)
+            eval_set = set(self.evaluation_labels)
+
+            if eval_set <= training_set:
+                self._needs_slicing = True
+                label_to_idx = {lbl: i for i, lbl in enumerate(self.labels)}
+                self._eval_indices = [label_to_idx[lbl] for lbl in self.evaluation_labels]
+            elif training_set <= eval_set:
+                self._needs_extension = True
+                eval_label_to_idx = {lbl: i for i, lbl in enumerate(self.evaluation_labels)}
+                self._extension_mapping = {
+                    train_idx: eval_label_to_idx[lbl]
+                    for train_idx, lbl in enumerate(self.labels)
+                }
+            else:
+                raise ValueError(
+                    f"evaluation_labels must be a subset or superset of labels. "
+                    f"labels={self.labels}, evaluation_labels={self.evaluation_labels}"
+                )
+
+    def _align_predictions(self, preds: np.ndarray) -> np.ndarray:
+        if self._needs_slicing and self._eval_indices is not None:
+            sliced = preds[:, self._eval_indices]
+            row_sums = sliced.sum(axis=1, keepdims=True)
+            row_sums = np.where(row_sums == 0, 1.0, row_sums)
+            return sliced / row_sums
+
+        if self._needs_extension and self._extension_mapping is not None:
+            n_samples = preds.shape[0]
+            n_eval_labels = len(self.evaluation_labels)
+            extended = np.full((n_samples, n_eval_labels), 1e-5, dtype=np.float64)
+            for train_idx, eval_idx in self._extension_mapping.items():
+                extended[:, eval_idx] = preds[:, train_idx]
+            row_sums = extended.sum(axis=1, keepdims=True)
+            return extended / row_sums
+
+        return preds
 
     def _get_scoring_labels(self) -> list[int]:
         if self.evaluation_labels is not None:
@@ -446,7 +477,7 @@ class PWMSE(BaseScorer):
 
                 targets = gran_df[self.target].to_numpy().astype(np.float64)
                 preds = np.asarray(gran_df[self.pred_column].to_list(), dtype=np.float64)
-                preds = self._slice_and_renormalize(preds)
+                preds = self._align_predictions(preds)
                 score = self._pwmse_score(targets, preds)
                 if self.compare_to_naive:
                     naive_probs_list = _naive_probability_predictions_for_df(
@@ -464,7 +495,7 @@ class PWMSE(BaseScorer):
 
         targets = df[self.target].to_numpy().astype(np.float64)
         preds = np.asarray(df[self.pred_column].to_list(), dtype=np.float64)
-        preds = self._slice_and_renormalize(preds)
+        preds = self._align_predictions(preds)
         score = self._pwmse_score(targets, preds)
         if self.compare_to_naive:
             naive_probs_list = _naive_probability_predictions_for_df(
