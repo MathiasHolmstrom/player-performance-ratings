@@ -454,3 +454,160 @@ def test_param_spec__categorical_requires_choices():
 
     with pytest.raises(ValueError, match="requires choices"):
         spec.suggest(trial, "test_param")
+
+
+def test_param_ranges__overrides_bounds(
+    player_rating_generator, cross_validator, scorer, sample_player_df_pd
+):
+    """Test that param_ranges overrides low/high bounds while preserving param_type."""
+    tuner = RatingHyperparameterTuner(
+        rating_generator=player_rating_generator,
+        cross_validator=cross_validator,
+        scorer=scorer,
+        direction="minimize",
+        param_ranges={
+            "confidence_weight": (0.2, 0.3),
+        },
+        n_trials=3,
+        show_progress_bar=False,
+    )
+
+    result = tuner.optimize(sample_player_df_pd)
+
+    assert "confidence_weight" in result.best_params
+    assert 0.2 <= result.best_params["confidence_weight"] <= 0.3
+
+
+def test_exclude_params__removes_from_search(
+    player_rating_generator, cross_validator, scorer, sample_player_df_pd
+):
+    """Test that exclude_params removes parameters from search space."""
+    tuner = RatingHyperparameterTuner(
+        rating_generator=player_rating_generator,
+        cross_validator=cross_validator,
+        scorer=scorer,
+        direction="minimize",
+        exclude_params=["use_off_def_split", "confidence_weight"],
+        n_trials=3,
+        show_progress_bar=False,
+    )
+
+    result = tuner.optimize(sample_player_df_pd)
+
+    assert "use_off_def_split" not in result.best_params
+    assert "confidence_weight" not in result.best_params
+    assert "rating_change_multiplier_offense" in result.best_params
+
+
+def test_fixed_params__applies_values_without_tuning(
+    player_rating_generator, cross_validator, scorer, sample_player_df_pd
+):
+    """Test that fixed_params sets values without including in search space."""
+    tuner = RatingHyperparameterTuner(
+        rating_generator=player_rating_generator,
+        cross_validator=cross_validator,
+        scorer=scorer,
+        direction="minimize",
+        fixed_params={"use_off_def_split": False},
+        n_trials=3,
+        show_progress_bar=False,
+    )
+
+    result = tuner.optimize(sample_player_df_pd)
+
+    assert "use_off_def_split" not in result.best_params
+
+
+def test_param_ranges__unknown_param_raises_error(
+    player_rating_generator, cross_validator, scorer, sample_player_df_pd
+):
+    """Test that param_ranges with unknown param raises ValueError."""
+    tuner = RatingHyperparameterTuner(
+        rating_generator=player_rating_generator,
+        cross_validator=cross_validator,
+        scorer=scorer,
+        direction="minimize",
+        param_ranges={"nonexistent_param": (0.0, 1.0)},
+        n_trials=3,
+        show_progress_bar=False,
+    )
+
+    with pytest.raises(ValueError, match="unknown parameter"):
+        tuner.optimize(sample_player_df_pd)
+
+
+def test_param_ranges__non_numeric_param_raises_error(
+    player_rating_generator, cross_validator, scorer, sample_player_df_pd
+):
+    """Test that param_ranges on non-float/int param raises ValueError."""
+    tuner = RatingHyperparameterTuner(
+        rating_generator=player_rating_generator,
+        cross_validator=cross_validator,
+        scorer=scorer,
+        direction="minimize",
+        param_ranges={"use_off_def_split": (0, 1)},
+        n_trials=3,
+        show_progress_bar=False,
+    )
+
+    with pytest.raises(ValueError, match="can only override float/int"):
+        tuner.optimize(sample_player_df_pd)
+
+
+def test_combined_api__param_ranges_exclude_fixed(
+    player_rating_generator, cross_validator, scorer, sample_player_df_pd
+):
+    """Test using param_ranges, exclude_params, and fixed_params together."""
+    tuner = RatingHyperparameterTuner(
+        rating_generator=player_rating_generator,
+        cross_validator=cross_validator,
+        scorer=scorer,
+        direction="minimize",
+        param_ranges={
+            "confidence_weight": (0.2, 1.0),
+            "rating_change_multiplier_offense": (10.0, 150.0),
+        },
+        exclude_params=["start_league_quantile"],
+        fixed_params={"use_off_def_split": False},
+        n_trials=3,
+        show_progress_bar=False,
+    )
+
+    result = tuner.optimize(sample_player_df_pd)
+
+    assert 0.2 <= result.best_params["confidence_weight"] <= 1.0
+    assert 10.0 <= result.best_params["rating_change_multiplier_offense"] <= 150.0
+    assert "start_league_quantile" not in result.best_params
+    assert "use_off_def_split" not in result.best_params
+
+
+def test_default_search_space__excludes_performance_predictor_and_team_start(
+    player_rating_generator,
+):
+    """Test that performance_predictor and team start params are not in default search space."""
+    from spforge.hyperparameter_tuning._default_search_spaces import (
+        get_default_search_space,
+    )
+
+    defaults = get_default_search_space(player_rating_generator)
+
+    assert "performance_predictor" not in defaults
+    assert "start_team_rating_subtract" not in defaults
+    assert "start_team_weight" not in defaults
+    assert "start_min_match_count_team_rating" not in defaults
+
+
+def test_full_player_rating_search_space__includes_all_params():
+    """Test that full search space includes performance_predictor and team start params."""
+    from spforge.hyperparameter_tuning._default_search_spaces import (
+        get_full_player_rating_search_space,
+    )
+
+    full = get_full_player_rating_search_space()
+
+    assert "performance_predictor" in full
+    assert "start_team_rating_subtract" in full
+    assert "start_team_weight" in full
+    assert "start_min_match_count_team_rating" in full
+    assert "rating_change_multiplier_offense" in full
+    assert "confidence_weight" in full
