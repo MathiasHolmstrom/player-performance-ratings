@@ -835,6 +835,68 @@ def test_fit_transform_when_performance_out_of_range_then_error_is_raised(column
         generator.fit_transform(df)
 
 
+def test_transform_when_auto_scale_performance_then_uses_correct_column(column_names):
+    """
+    When auto_scale_performance=True, the performance manager renames the column
+    (e.g., 'won' -> 'performance__won'). Transform should still work by applying
+    the performance manager to transform the input data.
+
+    Bug: Currently transform doesn't apply the performance manager, causing
+    a column mismatch where it looks for 'performance__won' but data has 'won'.
+    This results in None being returned and defaulting to 0.0 performance.
+    """
+    generator = TeamRatingGenerator(
+        performance_column="won",
+        column_names=column_names,
+        start_team_rating=1000.0,
+        confidence_weight=0.0,
+        output_suffix="",
+        auto_scale_performance=True,
+    )
+
+    # fit_transform with valid performance values
+    fit_df = pl.DataFrame(
+        {
+            "match_id": [1, 1],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 1), datetime(2024, 1, 1)],
+            "won": [0.6, 0.4],
+        }
+    )
+    generator.fit_transform(fit_df)
+
+    # After fit_transform, performance_column is changed to 'performance__won'
+    assert generator.performance_column == "performance__won", (
+        f"Expected performance_column to be 'performance__won' but got '{generator.performance_column}'"
+    )
+
+    team_a_rating_before = generator._team_off_ratings["team_a"].rating_value
+
+    # transform with same format data (original column name 'won')
+    # team_a has good performance (0.6 > predicted ~0.5), so rating should INCREASE
+    transform_df = pl.DataFrame(
+        {
+            "match_id": [2, 2],
+            "team_id": ["team_a", "team_b"],
+            "start_date": [datetime(2024, 1, 2), datetime(2024, 1, 2)],
+            "won": [0.6, 0.4],  # Original column name, not 'performance__won'
+        }
+    )
+
+    generator.transform(transform_df)
+
+    team_a_rating_after = generator._team_off_ratings["team_a"].rating_value
+
+    # With 0.6 performance (above predicted ~0.5), rating should INCREASE
+    # Bug: column mismatch causes perf to default to 0.0, making rating DECREASE
+    assert team_a_rating_after > team_a_rating_before, (
+        f"Rating should increase with good performance (0.6), but it went from "
+        f"{team_a_rating_before} to {team_a_rating_after}. This indicates transform "
+        f"is not finding the performance column (looking for '{generator.performance_column}' "
+        f"but data has 'won') and defaulting to 0.0 performance."
+    )
+
+
 @pytest.mark.parametrize("confidence_weight", [0.0, 0.5, 1.0])
 def test_fit_transform_when_confidence_weight_varies_then_new_teams_have_different_rating_changes(
     column_names, confidence_weight
