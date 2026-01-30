@@ -107,6 +107,7 @@ def test_fit_transform_participation_weight_scaling(base_cn):
 
 def test_fit_transform_batch_update_logic(base_cn):
     """Test that ratings do not update between matches if update_match_id is the same."""
+    from dataclasses import replace
 
     df = pl.DataFrame(
         {
@@ -119,36 +120,25 @@ def test_fit_transform_batch_update_logic(base_cn):
             "pw": [1.0, 1.0, 1.0, 1.0],
         }
     )
-    from dataclasses import replace
 
     cn = replace(base_cn, update_match_id="update_id")
     gen = PlayerRatingGenerator(
-        performance_column="perf", column_names=cn, auto_scale_performance=True
+        performance_column="perf",
+        column_names=cn,
+        auto_scale_performance=True,
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
     )
     output = gen.fit_transform(df)
 
-    assert len(output) >= 2
+    assert len(output) == 4
 
-    assert len(gen._player_off_ratings) > 0
+    m1_rows = output.filter(pl.col("mid") == "M1")
+    m2_rows = output.filter(pl.col("mid") == "M2")
+    assert m1_rows["player_off_rating_perf"][0] == 1000.0
+    assert m2_rows["player_off_rating_perf"][0] == 1000.0
 
-
-@pytest.mark.parametrize(
-    "feature",
-    [
-        RatingKnownFeatures.PLAYER_OFF_RATING,
-        RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
-        RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED,
-    ],
-)
-def test_fit_transform_requested_features_presence(base_cn, sample_df, feature):
-    """Verify that specific requested features appear in the resulting DataFrame."""
-    gen = PlayerRatingGenerator(
-        performance_column="perf", column_names=base_cn, features_out=[feature]
-    )
-    res = gen.fit_transform(sample_df)
-
-    expected_col = f"{feature}_perf"
-    assert expected_col in res.columns
+    assert gen._player_off_ratings["P1"].rating_value > 1000.0
+    assert gen._player_off_ratings["P2"].rating_value < 1000.0
 
 
 def test_future_transform_no_state_mutation(base_cn, sample_df):
@@ -170,7 +160,10 @@ def test_future_transform_no_state_mutation(base_cn, sample_df):
 def test_future_transform_cold_start_player(base_cn, sample_df):
     """Check that future_transform handles players not seen during fit_transform."""
     gen = PlayerRatingGenerator(
-        performance_column="perf", column_names=base_cn, auto_scale_performance=True
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
     )
     gen.fit_transform(sample_df)
 
@@ -187,12 +180,16 @@ def test_future_transform_cold_start_player(base_cn, sample_df):
     res = gen.future_transform(new_player_df)
 
     assert "P99" in res["pid"].to_list()
+    assert len(res) == 4
 
-    assert len(res) >= 2
+    p99_row = res.filter(pl.col("pid") == "P99")
+    assert p99_row["player_off_rating_perf"][0] == 1000.0
 
 
 def test_transform_is_identical_to_future_transform(base_cn, sample_df):
     """Verify that the standard transform() call redirects to future_transform logic."""
+    import polars.testing as pl_testing
+
     gen = PlayerRatingGenerator(
         performance_column="perf", column_names=base_cn, auto_scale_performance=True
     )
@@ -202,9 +199,10 @@ def test_transform_is_identical_to_future_transform(base_cn, sample_df):
     res_transform = gen.transform(sample_df)
     res_future = gen.future_transform(sample_df)
 
-    assert len(res_transform) == len(res_future)
-
-    assert set(res_transform.columns) == set(res_future.columns)
+    pl_testing.assert_frame_equal(
+        res_transform.select(sorted(res_transform.columns)).sort("pid"),
+        res_future.select(sorted(res_future.columns)).sort("pid"),
+    )
 
 
 def test_fit_transform_offense_defense_independence(base_cn):
@@ -406,9 +404,11 @@ def test_fit_transform_when_date_formats_vary_then_processes_successfully_player
 
     result = gen.fit_transform(df)
 
-    assert len(result) >= 2
+    assert len(result) == 4
 
-    assert len(gen._player_off_ratings) > 0
+    assert gen._player_off_ratings["P1"].rating_value > 1000.0
+    assert gen._player_off_ratings["P2"].rating_value < 1000.0
+    assert gen._player_off_ratings["P3"].rating_value > gen._player_off_ratings["P4"].rating_value
 
 
 @pytest.mark.parametrize(
@@ -710,16 +710,17 @@ def test_fit_transform_confidence_decay_over_time(base_cn):
 
 
 def test_fit_transform_null_performance_handling(base_cn, sample_df):
-    """Rows with null performance should be handled or skipped without crashing."""
+    """Rows with null performance should be handled without crashing and not affect ratings."""
     df_with_null = sample_df.with_columns(
         pl.when(pl.col("pid") == "P1").then(None).otherwise(pl.col("perf")).alias("perf")
     )
     gen = PlayerRatingGenerator(performance_column="perf", column_names=base_cn)
 
-    # Depending on implementation, it might skip P1 or treat as 0.
-    # The key is that the generator shouldn't crash.
     res = gen.fit_transform(df_with_null)
     assert len(res) == 4
+
+    assert gen._player_off_ratings["P2"].rating_value < 1000.0
+    assert gen._player_off_ratings["P3"].rating_value > 1000.0
 
 
 def test_fit_transform_null_performance__no_rating_change(base_cn):
@@ -1706,7 +1707,6 @@ def test_player_rating_features_out_combinations(
     )
     result = gen.fit_transform(sample_df)
 
-    # Check that all expected columns are present
     result_cols = (
         result.columns.tolist() if hasattr(result.columns, "tolist") else list(result.columns)
     )
@@ -1715,93 +1715,17 @@ def test_player_rating_features_out_combinations(
             col in result_cols
         ), f"Expected column '{col}' not found in output. Columns: {result_cols}"
 
-    # Check that result has data
-    assert len(result) > 0
+    assert len(result) == 4
 
-
-@pytest.mark.parametrize("output_suffix", [None, "v2", "custom_suffix", "test123"])
-def test_player_rating_suffix_applied_to_all_features(base_cn, sample_df, output_suffix):
-    """Test that output_suffix is correctly applied to all requested features."""
-    features = [
-        RatingKnownFeatures.PLAYER_OFF_RATING,
-        RatingKnownFeatures.PLAYER_DEF_RATING,
-        RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED,
-    ]
-    non_predictor = [
-        RatingUnknownFeatures.PLAYER_PREDICTED_OFF_PERFORMANCE,
-        RatingUnknownFeatures.TEAM_RATING,
-    ]
-
-    gen = PlayerRatingGenerator(
-        performance_column="perf",
-        column_names=base_cn,
-        auto_scale_performance=True,
-        features_out=features,
-        non_predictor_features_out=non_predictor,
-        output_suffix=output_suffix,
-    )
-    result = gen.fit_transform(sample_df)
-
-    # Build expected column names
-    if output_suffix:
-        expected_cols = [
-            f"player_off_rating_{output_suffix}",
-            f"player_def_rating_{output_suffix}",
-            f"team_off_rating_projected_{output_suffix}",
-            f"player_predicted_off_performance_{output_suffix}",
-            f"team_rating_{output_suffix}",
-        ]
-    else:
-        # When output_suffix=None, it defaults to performance column name ("perf")
-        expected_cols = [
-            "player_off_rating_perf",
-            "player_def_rating_perf",
-            "team_off_rating_projected_perf",
-            "player_predicted_off_performance_perf",
-            "team_rating_perf",
-        ]
-
-    result_cols = (
-        result.columns.tolist() if hasattr(result.columns, "tolist") else list(result.columns)
-    )
     for col in expected_cols:
-        assert col in result_cols, f"Expected column '{col}' not found. Columns: {result_cols}"
-
-
-def test_player_rating_only_requested_features_present(base_cn, sample_df):
-    """Test that only requested features (and input columns) are present in output."""
-    gen = PlayerRatingGenerator(
-        performance_column="perf",
-        column_names=base_cn,
-        auto_scale_performance=True,
-        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
-        non_predictor_features_out=None,
-        output_suffix=None,
-    )
-    result = gen.fit_transform(sample_df)
-
-    # Should have input columns + requested feature
-    input_cols = set(sample_df.columns)
-    result_cols = set(result.columns)
-
-    # Check that input columns are preserved
-    for col in input_cols:
-        assert col in result_cols, f"Input column '{col}' missing from output"
-
-    # Check that requested feature is present (with performance column suffix)
-    assert "player_off_rating_perf" in result_cols
-
-    # Check that other rating features are NOT present (unless they're input columns)
-    unwanted_features = [
-        "player_def_rating",
-        "team_off_rating_projected",
-        "player_predicted_off_performance",
-    ]
-    for feature in unwanted_features:
-        if feature not in input_cols:
-            assert (
-                feature not in result_cols
-            ), f"Unrequested feature '{feature}' should not be in output"
+        if "rating" in col and "difference" not in col:
+            values = result[col].to_list()
+            for v in values:
+                assert 500 < v < 1500, f"Rating {col}={v} outside reasonable range"
+        elif "predicted" in col:
+            values = result[col].to_list()
+            for v in values:
+                assert 0.0 <= v <= 1.0, f"Prediction {col}={v} outside [0,1]"
 
 
 def test_player_rating_team_with_strong_offense_and_weak_defense_gets_expected_ratings_and_predictions(
@@ -2008,3 +1932,34 @@ def test_fit_transform__start_league_quantile_uses_existing_player_ratings(base_
         f"but got {new_player_start_rating:.1f}. "
         "start_league_quantile has no effect because update_players_to_leagues is never called."
     )
+
+
+def test_fit_transform__precise_rating_calculation(base_cn, sample_df):
+    """Verify precise rating calculations match expected formulas."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=False,
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+    )
+    gen.fit_transform(sample_df)
+
+    expected_mult = 50 * (17 / 14) * 0.9 + 5
+
+    assert gen._player_off_ratings["P1"].rating_value == pytest.approx(
+        1000 + 0.1 * expected_mult, rel=1e-6
+    )
+
+    assert gen._player_off_ratings["P2"].rating_value == pytest.approx(
+        1000 - 0.1 * expected_mult, rel=1e-6
+    )
+
+    assert gen._player_off_ratings["P3"].rating_value == pytest.approx(
+        1000 + 0.2 * expected_mult, rel=1e-6
+    )
+
+    assert gen._player_off_ratings["P4"].rating_value == pytest.approx(
+        1000 - 0.2 * expected_mult, rel=1e-6
+    )
+
+    assert gen._player_def_ratings["P1"].rating_value == pytest.approx(1000.0, rel=1e-6)
