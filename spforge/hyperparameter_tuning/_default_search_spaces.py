@@ -128,6 +128,7 @@ def get_default_player_rating_search_space() -> dict[str, ParamSpec]:
     Default search space for PlayerRatingGenerator.
 
     Focuses on core parameters that have the most impact on performance.
+    Excludes performance_predictor and team-based start rating params.
 
     Returns:
         Dictionary mapping parameter names to ParamSpec objects
@@ -163,10 +164,6 @@ def get_default_player_rating_search_space() -> dict[str, ParamSpec]:
         "use_off_def_split": ParamSpec(
             param_type="bool",
         ),
-        "performance_predictor": ParamSpec(
-            param_type="categorical",
-            choices=["difference", "mean", "ignore_opponent"],
-        ),
         "start_league_quantile": ParamSpec(
             param_type="float",
             low=0.05,
@@ -177,22 +174,44 @@ def get_default_player_rating_search_space() -> dict[str, ParamSpec]:
             low=40,
             high=500,
         ),
-        "start_team_rating_subtract": ParamSpec(
-            param_type="float",
-            low=0.0,
-            high=200.0,
-        ),
-        "start_team_weight": ParamSpec(
-            param_type="float",
-            low=0.0,
-            high=1.0,
-        ),
-        "start_min_match_count_team_rating": ParamSpec(
-            param_type="int",
-            low=1,
-            high=10,
-        ),
     }
+
+
+def get_full_player_rating_search_space() -> dict[str, ParamSpec]:
+    """
+    Full search space for PlayerRatingGenerator including all tunable parameters.
+
+    Includes performance_predictor and team-based start rating parameters.
+    Use this when you want to tune all parameters.
+
+    Returns:
+        Dictionary mapping parameter names to ParamSpec objects
+    """
+    base = get_default_player_rating_search_space()
+    base.update(
+        {
+            "performance_predictor": ParamSpec(
+                param_type="categorical",
+                choices=["difference", "mean", "ignore_opponent"],
+            ),
+            "start_team_rating_subtract": ParamSpec(
+                param_type="float",
+                low=0.0,
+                high=200.0,
+            ),
+            "start_team_weight": ParamSpec(
+                param_type="float",
+                low=0.0,
+                high=1.0,
+            ),
+            "start_min_match_count_team_rating": ParamSpec(
+                param_type="int",
+                low=1,
+                high=10,
+            ),
+        }
+    )
+    return base
 
 
 def get_default_team_rating_search_space() -> dict[str, ParamSpec]:
@@ -234,10 +253,6 @@ def get_default_team_rating_search_space() -> dict[str, ParamSpec]:
         ),
         "use_off_def_split": ParamSpec(
             param_type="bool",
-        ),
-        "performance_predictor": ParamSpec(
-            param_type="categorical",
-            choices=["difference", "mean", "ignore_opponent"],
         ),
     }
 

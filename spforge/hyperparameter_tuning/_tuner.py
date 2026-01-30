@@ -91,6 +91,9 @@ class RatingHyperparameterTuner:
         scorer: BaseScorer,
         direction: Literal["minimize", "maximize"],
         param_search_space: dict[str, ParamSpec] | None = None,
+        param_ranges: dict[str, tuple[float | int, float | int]] | None = None,
+        exclude_params: list[str] | None = None,
+        fixed_params: dict[str, Any] | None = None,
         n_trials: int = 50,
         n_jobs: int = 1,
         storage: str | None = None,
@@ -109,6 +112,14 @@ class RatingHyperparameterTuner:
             scorer: Scorer for evaluation (must have score(df) -> float | dict)
             direction: "minimize" or "maximize"
             param_search_space: Custom search space (merges with defaults if provided)
+            param_ranges: Easy range override for float/int params. Maps param name to
+                (low, high) tuple. Preserves param_type and log scale from defaults.
+                Example: {"confidence_weight": (0.2, 1.0)}
+            exclude_params: List of param names to exclude from tuning entirely.
+                Example: ["performance_predictor", "use_off_def_split"]
+            fixed_params: Parameters to fix at specific values (not tuned).
+                These values are applied to the rating generator each trial.
+                Example: {"performance_predictor": "mean"}
             n_trials: Number of optimization trials
             n_jobs: Number of parallel jobs (1 = sequential)
             storage: Optuna storage URL (e.g., "sqlite:///optuna.db") for persistence
@@ -123,6 +134,9 @@ class RatingHyperparameterTuner:
         self.scorer = scorer
         self.direction = direction
         self.custom_search_space = param_search_space
+        self.param_ranges = param_ranges
+        self.exclude_params = exclude_params or []
+        self.fixed_params = fixed_params or {}
         self.n_trials = n_trials
         self.n_jobs = n_jobs
         self.storage = storage
@@ -196,6 +210,9 @@ class RatingHyperparameterTuner:
         try:
             copied_gen = copy.deepcopy(self.rating_generator)
 
+            for param_name, param_value in self.fixed_params.items():
+                setattr(copied_gen, param_name, param_value)
+
             trial_params = self._suggest_params(trial, search_space)
 
             for param_name, param_value in trial_params.items():
@@ -243,18 +260,54 @@ class RatingHyperparameterTuner:
         defaults: dict[str, ParamSpec],
     ) -> dict[str, ParamSpec]:
         """
-        Merge custom search space with defaults (custom takes precedence).
+        Merge custom search space with defaults.
+
+        Priority order (highest to lowest):
+        1. exclude_params - removes param entirely
+        2. fixed_params - removes from search (applied separately)
+        3. custom (param_search_space) - full ParamSpec override
+        4. param_ranges - updates only low/high bounds
+        5. defaults - base search space
 
         Args:
             custom: Custom search space (may be None)
             defaults: Default search space
 
         Returns:
-            Merged search space
+            Merged search space (excludes fixed_params, those are applied separately)
         """
         merged = defaults.copy()
+
+        if self.param_ranges:
+            for param_name, (low, high) in self.param_ranges.items():
+                if param_name not in merged:
+                    raise ValueError(
+                        f"param_ranges contains unknown parameter: '{param_name}'. "
+                        f"Available parameters: {list(merged.keys())}"
+                    )
+                existing = merged[param_name]
+                if existing.param_type not in ("float", "int"):
+                    raise ValueError(
+                        f"param_ranges can only override float/int parameters. "
+                        f"'{param_name}' is {existing.param_type}."
+                    )
+                merged[param_name] = ParamSpec(
+                    param_type=existing.param_type,
+                    low=low,
+                    high=high,
+                    log=existing.log,
+                    step=existing.step,
+                )
+
         if custom:
             merged.update(custom)
+
+        for param_name in self.exclude_params:
+            merged.pop(param_name, None)
+
+        for param_name in self.fixed_params:
+            merged.pop(param_name, None)
+
         return merged
 
     @staticmethod
