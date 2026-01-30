@@ -722,6 +722,198 @@ def test_fit_transform_null_performance_handling(base_cn, sample_df):
     assert len(res) == 4
 
 
+def test_fit_transform_null_performance__no_rating_change(base_cn):
+    """Players with null performance should have zero rating change, not be treated as 0.0 perf."""
+    # Match 1: Both players have performance (P1=0.6, P2=0.4)
+    # Match 2: P1 has null performance, P2 has 0.6
+    # Match 3: Both players have performance again
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P1", "P2", "P1", "P2"],
+            "tid": ["T1", "T2", "T1", "T2", "T1", "T2"],
+            "mid": ["M1", "M1", "M2", "M2", "M3", "M3"],
+            "dt": [
+                "2024-01-01",
+                "2024-01-01",
+                "2024-01-02",
+                "2024-01-02",
+                "2024-01-03",
+                "2024-01-03",
+            ],
+            "perf": [0.6, 0.4, None, 0.6, 0.6, 0.4],  # P1 has null in M2
+            "pw": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+    )
+    result = gen.fit_transform(df)
+
+    # Get P1's pre-match rating for M2 (after M1) and M3 (after M2 with null perf)
+    p1_rating_before_m2 = result.filter(
+        (pl.col("pid") == "P1") & (pl.col("mid") == "M2")
+    )["player_off_rating_perf"][0]
+    p1_rating_before_m3 = result.filter(
+        (pl.col("pid") == "P1") & (pl.col("mid") == "M3")
+    )["player_off_rating_perf"][0]
+
+    # Key assertion: P1's rating before M3 should equal rating before M2
+    # because null performance in M2 means NO rating change
+    assert p1_rating_before_m3 == p1_rating_before_m2, (
+        f"P1's rating changed after null performance game! "
+        f"Before M2={p1_rating_before_m2}, Before M3={p1_rating_before_m3}"
+    )
+
+    # Also verify null is not treated as 0.0 by comparing with explicit 0.0
+    df_with_zero = df.with_columns(
+        pl.when((pl.col("pid") == "P1") & (pl.col("mid") == "M2"))
+        .then(0.0)
+        .otherwise(pl.col("perf"))
+        .alias("perf")
+    )
+
+    gen_zero = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+    )
+    result_zero = gen_zero.fit_transform(df_with_zero)
+
+    p1_rating_before_m3_with_zero = result_zero.filter(
+        (pl.col("pid") == "P1") & (pl.col("mid") == "M3")
+    )["player_off_rating_perf"][0]
+
+    # With 0.0 perf, rating should drop (different from null)
+    assert p1_rating_before_m3 > p1_rating_before_m3_with_zero, (
+        f"Null performance is being treated as 0.0! "
+        f"Rating with null={p1_rating_before_m3}, rating with 0.0={p1_rating_before_m3_with_zero}"
+    )
+
+
+def test_fit_transform_null_performance__still_outputs_player_rating(base_cn):
+    """Players with null performance should still have their pre-match rating in output."""
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.6, None, 0.4, 0.5],  # P2 has null performance
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+    )
+    result = gen.fit_transform(df)
+
+    # P2 should still be in output with their pre-match rating
+    assert len(result) == 4
+    p2_row = result.filter(pl.col("pid") == "P2")
+    assert len(p2_row) == 1
+    assert "player_off_rating_perf" in result.columns
+    # P2's rating should be the start rating (1000.0) since they're new and had no update
+    assert p2_row["player_off_rating_perf"][0] == 1000.0
+
+
+def test_transform_null_performance__no_rating_change(base_cn):
+    """In transform (historical), null performance should result in no rating change."""
+    # First fit with some data
+    fit_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-01", "2024-01-01"],
+            "perf": [0.6, 0.4],
+            "pw": [1.0, 1.0],
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+    )
+    gen.fit_transform(fit_df)
+
+    p1_rating_before = gen._player_off_ratings["P1"].rating_value
+
+    # Now transform with P1 having null performance
+    transform_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M2", "M2"],
+            "dt": ["2024-01-02", "2024-01-02"],
+            "perf": [None, 0.6],  # P1 has null
+            "pw": [1.0, 1.0],
+        }
+    )
+
+    gen.transform(transform_df)
+
+    p1_rating_after = gen._player_off_ratings["P1"].rating_value
+
+    # P1's rating should not change significantly (only confidence decay, not performance-based)
+    # Since null perf means no rating change from performance
+    assert abs(p1_rating_after - p1_rating_before) < 0.01, (
+        f"P1's rating changed significantly with null performance: "
+        f"before={p1_rating_before}, after={p1_rating_after}"
+    )
+
+
+def test_future_transform_null_performance__outputs_projections(base_cn):
+    """In future_transform, null performance should still output rating projections."""
+    # First fit with some data
+    fit_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-01", "2024-01-01"],
+            "perf": [0.6, 0.4],
+            "pw": [1.0, 1.0],
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+    )
+    gen.fit_transform(fit_df)
+
+    p1_rating_before = gen._player_off_ratings["P1"].rating_value
+
+    # Future transform (no performance needed, but if null it shouldn't affect anything)
+    future_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M2", "M2"],
+            "dt": ["2024-01-02", "2024-01-02"],
+            "pw": [1.0, 1.0],
+            # No perf column - this is a future match
+        }
+    )
+
+    result = gen.future_transform(future_df)
+
+    # Should output projections for all players
+    assert len(result) == 2
+    assert "player_off_rating_perf" in result.columns
+
+    # Ratings should NOT be updated (future_transform doesn't update state)
+    assert gen._player_off_ratings["P1"].rating_value == p1_rating_before
+
+
 # --- transform & future_transform Tests ---
 
 

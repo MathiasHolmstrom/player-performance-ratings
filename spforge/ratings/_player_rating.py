@@ -484,26 +484,31 @@ class PlayerRatingGenerator(RatingGenerator):
                     ),
                 )
 
-                off_perf = float(pre_player.match_performance.performance_value)
-                def_perf = float(team1_def_perf)  # same for all players on team1 (derived)
+                perf_value = pre_player.match_performance.performance_value
+                if perf_value is None:
+                    off_change = 0.0
+                    def_change = 0.0
+                else:
+                    off_perf = float(perf_value)
+                    def_perf = float(team1_def_perf)
 
-                if not self.use_off_def_split:
-                    pred_def = pred_off
-                    def_perf = off_perf
+                    if not self.use_off_def_split:
+                        pred_def = pred_off
+                        def_perf = off_perf
 
-                mult_off = self._applied_multiplier_off(off_state)
-                mult_def = self._applied_multiplier_def(def_state)
+                    mult_off = self._applied_multiplier_off(off_state)
+                    mult_def = self._applied_multiplier_def(def_state)
 
-                off_change = (
-                    (off_perf - float(pred_off))
-                    * mult_off
-                    * float(pre_player.match_performance.participation_weight)
-                )
-                def_change = (
-                    (def_perf - float(pred_def))
-                    * mult_def
-                    * float(pre_player.match_performance.participation_weight)
-                )
+                    off_change = (
+                        (off_perf - float(pred_off))
+                        * mult_off
+                        * float(pre_player.match_performance.participation_weight)
+                    )
+                    def_change = (
+                        (def_perf - float(pred_def))
+                        * mult_def
+                        * float(pre_player.match_performance.participation_weight)
+                    )
 
                 if math.isnan(off_change) or math.isnan(def_change):
                     raise ValueError(
@@ -562,31 +567,36 @@ class PlayerRatingGenerator(RatingGenerator):
                     ),
                 )
 
-                off_perf = float(pre_player.match_performance.performance_value)
-                def_perf = float(team2_def_perf)
+                perf_value = pre_player.match_performance.performance_value
+                if perf_value is None:
+                    off_change = 0.0
+                    def_change = 0.0
+                else:
+                    off_perf = float(perf_value)
+                    def_perf = float(team2_def_perf)
 
-                if not self.use_off_def_split:
-                    pred_def = pred_off
-                    def_perf = off_perf
+                    if not self.use_off_def_split:
+                        pred_def = pred_off
+                        def_perf = off_perf
 
-                mult_off = self._applied_multiplier_off(off_state)
-                mult_def = self._applied_multiplier_def(def_state)
+                    mult_off = self._applied_multiplier_off(off_state)
+                    mult_def = self._applied_multiplier_def(def_state)
 
-                off_change = (
-                    (off_perf - float(pred_off))
-                    * mult_off
-                    * float(pre_player.match_performance.participation_weight)
-                )
-                def_change = (
-                    (def_perf - float(pred_def))
-                    * mult_def
-                    * float(pre_player.match_performance.participation_weight)
-                )
-
-                if math.isnan(off_change) or math.isnan(def_change):
-                    raise ValueError(
-                        f"NaN player rating change for player_id={pid}, match_id={r[cn.match_id]}"
+                    off_change = (
+                        (off_perf - float(pred_off))
+                        * mult_off
+                        * float(pre_player.match_performance.participation_weight)
                     )
+                    def_change = (
+                        (def_perf - float(pred_def))
+                        * mult_def
+                        * float(pre_player.match_performance.participation_weight)
+                    )
+
+                    if math.isnan(off_change) or math.isnan(def_change):
+                        raise ValueError(
+                            f"NaN player rating change for player_id={pid}, match_id={r[cn.match_id]}"
+                        )
 
                 player_updates.append(
                     (
@@ -933,7 +943,7 @@ class PlayerRatingGenerator(RatingGenerator):
                     self.performance_column in team_player
                     and team_player[self.performance_column] is not None
                 )
-                else 0.0
+                else None
             )
 
             mp = MatchPerformance(
@@ -1023,18 +1033,22 @@ class PlayerRatingGenerator(RatingGenerator):
 
     def _team_off_perf_from_collection(self, c: PreMatchPlayersCollection) -> float:
         # observed offense perf = weighted mean of player performance_value using participation_weight if present
+        # skip players with null performance
         cn = self.column_names
         if not c.pre_match_player_ratings:
             return 0.0
         wsum = 0.0
         psum = 0.0
         for pre in c.pre_match_player_ratings:
+            perf_val = pre.match_performance.performance_value
+            if perf_val is None:
+                continue
             w = (
                 float(pre.match_performance.participation_weight)
                 if cn.participation_weight
                 else 1.0
             )
-            psum += float(pre.match_performance.performance_value) * w
+            psum += float(perf_val) * w
             wsum += w
         return psum / wsum if wsum else 0.0
 
@@ -1101,13 +1115,13 @@ class PlayerRatingGenerator(RatingGenerator):
             self.PLAYER_PRED_PERF_COL: [],
         }
 
-        def get_perf_value(team_player: dict) -> float:
+        def get_perf_value(team_player: dict) -> float | None:
             if (
                 self.performance_column in team_player
                 and team_player[self.performance_column] is not None
             ):
                 return float(team_player[self.performance_column])
-            return 0.0
+            return None
 
         def ensure_new_player(
             pid: str,
@@ -1187,8 +1201,9 @@ class PlayerRatingGenerator(RatingGenerator):
                     )
                     off_vals.append(float(local_off[pid].rating_value))
 
-                    psum += float(mp.performance_value) * float(pw)
-                    wsum += float(pw)
+                    if mp.performance_value is not None:
+                        psum += float(mp.performance_value) * float(pw)
+                        wsum += float(pw)
 
                 team_off_perf = psum / wsum if wsum else 0.0
                 return pre_list, player_ids, off_vals, proj_w, team_off_perf
