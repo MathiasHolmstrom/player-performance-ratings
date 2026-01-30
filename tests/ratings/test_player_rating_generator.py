@@ -2008,3 +2008,79 @@ def test_fit_transform__start_league_quantile_uses_existing_player_ratings(base_
         f"but got {new_player_start_rating:.1f}. "
         "start_league_quantile has no effect because update_players_to_leagues is never called."
     )
+
+
+def test_fit_transform_when_all_players_have_null_performance_then_no_rating_change(base_cn):
+    """
+    When ALL players on a team have null performance, opponent defense ratings should not change.
+
+    Scenario:
+    - Match 1: Normal match with performance values (P1=0.6 on T1, P2=0.4 on T2)
+    - Match 2: T1 has ALL null performance, T2 has normal performance (0.6)
+
+    Expected:
+    - T2 players' defensive rating should NOT change after M2 because T1's offensive
+      performance is unknown (all null) - we can't evaluate how well T2 defended
+    - T1 players' offensive rating should NOT change after M2 (null perf = no update)
+    """
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4", "P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2", "T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1", "M2", "M2", "M2", "M2"],
+            "dt": [
+                "2024-01-01",
+                "2024-01-01",
+                "2024-01-01",
+                "2024-01-01",
+                "2024-01-02",
+                "2024-01-02",
+                "2024-01-02",
+                "2024-01-02",
+            ],
+            "perf": [0.6, 0.4, 0.6, 0.4, None, None, 0.6, 0.4],
+            "pw": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        features_out=[
+            RatingKnownFeatures.PLAYER_OFF_RATING,
+            RatingKnownFeatures.PLAYER_DEF_RATING,
+        ],
+    )
+    result = gen.fit_transform(df)
+
+    p3_def_before_m2 = result.filter((pl.col("pid") == "P3") & (pl.col("mid") == "M2"))[
+        "player_def_rating_perf"
+    ][0]
+    p4_def_before_m2 = result.filter((pl.col("pid") == "P4") & (pl.col("mid") == "M2"))[
+        "player_def_rating_perf"
+    ][0]
+
+    p3_def_after_m2 = gen._player_def_ratings["P3"].rating_value
+    p4_def_after_m2 = gen._player_def_ratings["P4"].rating_value
+
+    assert p3_def_before_m2 == p3_def_after_m2, (
+        f"P3's def rating changed after M2 with all-null T1 performance! "
+        f"Before={p3_def_before_m2}, After={p3_def_after_m2}. "
+        "T2 defense should not be evaluated when T1 offense is unknown."
+    )
+    assert p4_def_before_m2 == p4_def_after_m2, (
+        f"P4's def rating changed after M2 with all-null T1 performance! "
+        f"Before={p4_def_before_m2}, After={p4_def_after_m2}. "
+        "T2 defense should not be evaluated when T1 offense is unknown."
+    )
+
+    p1_off_before_m2 = result.filter((pl.col("pid") == "P1") & (pl.col("mid") == "M2"))[
+        "player_off_rating_perf"
+    ][0]
+    p1_off_after_m2 = gen._player_off_ratings["P1"].rating_value
+
+    assert p1_off_before_m2 == p1_off_after_m2, (
+        f"P1's off rating changed after M2 with null performance! "
+        f"Before={p1_off_before_m2}, After={p1_off_after_m2}. "
+        "Null performance should result in no rating change."
+    )
