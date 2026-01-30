@@ -835,6 +835,87 @@ def test_fit_transform_when_performance_out_of_range_then_error_is_raised(column
         generator.fit_transform(df)
 
 
+def test_fit_transform_when_performance_is_null_then_no_rating_change(column_names):
+    """
+    When performance is null, then we should expect to see no rating change
+    because null means missing data, not 0.0 (worst) performance.
+    The team's pre-match rating for the next game should equal their rating before the null game.
+    """
+    generator = TeamRatingGenerator(
+        performance_column="won",
+        column_names=column_names,
+        start_team_rating=1000.0,
+        confidence_weight=0.0,
+        output_suffix="",
+        features_out=[RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
+    )
+
+    # Match 1: team_a perf=0.6, team_b perf=0.4
+    # Match 2: team_a has null performance, team_b perf=0.6
+    # Match 3: team_a perf=0.6, team_b perf=0.4
+    df = pl.DataFrame(
+        {
+            "match_id": [1, 1, 2, 2, 3, 3],
+            "team_id": ["team_a", "team_b", "team_a", "team_b", "team_a", "team_b"],
+            "start_date": [
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 2),
+                datetime(2024, 1, 2),
+                datetime(2024, 1, 3),
+                datetime(2024, 1, 3),
+            ],
+            "won": [0.6, 0.4, None, 0.6, 0.6, 0.4],  # team_a has null in match 2
+        }
+    )
+
+    result = generator.fit_transform(df)
+
+    # Get team_a's pre-match rating for match 2 (after match 1) and match 3 (after match 2)
+    team_a_rating_before_m2 = result.filter(
+        (pl.col("team_id") == "team_a") & (pl.col("match_id") == 2)
+    )["team_off_rating_projected"][0]
+    team_a_rating_before_m3 = result.filter(
+        (pl.col("team_id") == "team_a") & (pl.col("match_id") == 3)
+    )["team_off_rating_projected"][0]
+
+    # Key assertion: rating before M3 should equal rating before M2
+    # because null performance in M2 means NO rating change
+    assert team_a_rating_before_m3 == team_a_rating_before_m2, (
+        f"team_a's rating changed after null performance game! "
+        f"Before M2={team_a_rating_before_m2}, Before M3={team_a_rating_before_m3}"
+    )
+
+    # Also verify null is not treated as 0.0 by comparing with explicit 0.0
+    # Use 0.3 instead of 0.0 to keep mean in valid range
+    df_with_low_perf = df.with_columns(
+        pl.when((pl.col("team_id") == "team_a") & (pl.col("match_id") == 2))
+        .then(0.3)  # Low performance (below predicted ~0.5) causes rating drop
+        .otherwise(pl.col("won"))
+        .alias("won")
+    )
+
+    gen_low = TeamRatingGenerator(
+        performance_column="won",
+        column_names=column_names,
+        start_team_rating=1000.0,
+        confidence_weight=0.0,
+        output_suffix="",
+        features_out=[RatingKnownFeatures.TEAM_OFF_RATING_PROJECTED],
+    )
+    result_low = gen_low.fit_transform(df_with_low_perf)
+
+    team_a_rating_before_m3_with_low = result_low.filter(
+        (pl.col("team_id") == "team_a") & (pl.col("match_id") == 3)
+    )["team_off_rating_projected"][0]
+
+    # With low perf (0.3), rating should drop (different from null which has no change)
+    assert team_a_rating_before_m3 > team_a_rating_before_m3_with_low, (
+        f"Null performance is being treated as low performance! "
+        f"Rating with null={team_a_rating_before_m3}, rating with low perf={team_a_rating_before_m3_with_low}"
+    )
+
+
 @pytest.mark.parametrize("confidence_weight", [0.0, 0.5, 1.0])
 def test_fit_transform_when_confidence_weight_varies_then_new_teams_have_different_rating_changes(
     column_names, confidence_weight
@@ -1283,12 +1364,11 @@ def test_transform_when_called_after_fit_transform_then_uses_updated_ratings(
     assert team_a_row["team_off_rating_projected"][0] == pytest.approx(team_a_rating_after_first)
 
 
-def test_transform_when_called_without_performance_column_then_defaults_to_zero(column_names):
+def test_transform_when_called_without_performance_column_then_no_rating_change(column_names):
     """
     When transform is called without performance column, then we should expect to see
-    it works but defaults performance to 0.0 because _calculate_ratings uses
-    r.get(self.performance_column) which returns None, defaulting to 0.0.
-    This means ratings will be updated as if teams lost (performance=0.0).
+    ratings remain unchanged because null/missing performance means no rating update
+    (not treated as 0.0 which would cause a rating drop).
     """
     generator = TeamRatingGenerator(
         performance_column="won",
@@ -1321,7 +1401,8 @@ def test_transform_when_called_without_performance_column_then_defaults_to_zero(
     generator.transform(df)
     team_a_rating_after = generator._team_off_ratings["team_a"].rating_value
 
-    assert team_a_rating_after < team_a_rating_before
+    # Null/missing performance means no rating change
+    assert team_a_rating_after == team_a_rating_before
 
 
 def test_future_transform_when_called_then_ratings_not_updated(basic_rating_generator):
@@ -1539,14 +1620,13 @@ def test_transform_vs_future_transform_when_same_match_then_transform_updates_ra
     assert team_a_rating_after_future == team_a_rating_before_2
 
 
-def test_transform_vs_future_transform_when_performance_column_missing_then_both_work_but_transform_defaults_performance(
+def test_transform_vs_future_transform_when_performance_column_missing_then_both_work_with_no_rating_change(
     column_names,
 ):
     """
     When performance column is missing, then we should expect to see
-    both future_transform and transform work, but transform defaults performance
-    to 0.0 (treating it as a loss), while future_transform doesn't need performance
-    at all since it only computes predictions.
+    both future_transform and transform work, and both result in no rating change
+    because null/missing performance means no update (not treated as 0.0).
     """
     generator = TeamRatingGenerator(
         performance_column="won",
@@ -1594,8 +1674,9 @@ def test_transform_vs_future_transform_when_performance_column_missing_then_both
     result_transform = generator.transform(transform_df)
     assert result_transform is not None
 
+    # Null/missing performance means no rating change
     team_a_rating_after_transform = generator._team_off_ratings["team_a"].rating_value
-    assert team_a_rating_after_transform < team_a_rating_before
+    assert team_a_rating_after_transform == team_a_rating_before
 
 
 def test_transform_vs_future_transform_when_games_played_then_transform_increments_but_future_transform_does_not(
@@ -1878,7 +1959,6 @@ def test_transform_when_date_formats_vary_then_processes_successfully(column_nam
         start_team_rating=1000.0,
         confidence_weight=0.0,
         output_suffix="",
-        auto_scale_performance=True,
     )
 
     fit_df = pl.DataFrame(

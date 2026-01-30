@@ -326,16 +326,7 @@ class TeamRatingGenerator(RatingGenerator):
             opp_off_pre = float(o_off.rating_value)
             opp_def_pre = float(o_def.rating_value)
 
-            off_perf = (
-                float(r[self.performance_column])
-                if r.get(self.performance_column) is not None
-                else 0.0
-            )
-            opp_off_perf = float(r[perf_opp_col]) if r.get(perf_opp_col) is not None else 0.0
-            if self.use_off_def_split:
-                def_perf = 1.0 - opp_off_perf
-            else:
-                def_perf = off_perf
+            off_perf_raw = r.get(self.performance_column)
 
             pred_off = self._performance_predictor.predict_performance(
                 rating_value=s_off.rating_value, opponent_team_rating_value=o_def.rating_value
@@ -346,16 +337,28 @@ class TeamRatingGenerator(RatingGenerator):
             if not self.use_off_def_split:
                 pred_def = pred_off
 
-            mult_off = self._applied_multiplier(s_off, self.rating_change_multiplier_offense)
-            mult_def = self._applied_multiplier(s_def, self.rating_change_multiplier_defense)
+            # Null performance means no rating change
+            if off_perf_raw is None:
+                off_change = 0.0
+                def_change = 0.0
+            else:
+                off_perf = float(off_perf_raw)
+                opp_off_perf = float(r[perf_opp_col]) if r.get(perf_opp_col) is not None else 0.0
+                if self.use_off_def_split:
+                    def_perf = 1.0 - opp_off_perf
+                else:
+                    def_perf = off_perf
 
-            off_change = (off_perf - pred_off) * mult_off
-            def_change = (def_perf - pred_def) * mult_def
+                mult_off = self._applied_multiplier(s_off, self.rating_change_multiplier_offense)
+                mult_def = self._applied_multiplier(s_def, self.rating_change_multiplier_defense)
 
-            if math.isnan(off_change) or math.isnan(def_change):
-                raise ValueError(
-                    f"NaN rating change for team_id={team_id}, match_id={r[cn.match_id]}"
-                )
+                off_change = (off_perf - pred_off) * mult_off
+                def_change = (def_perf - pred_def) * mult_def
+
+                if math.isnan(off_change) or math.isnan(def_change):
+                    raise ValueError(
+                        f"NaN rating change for team_id={team_id}, match_id={r[cn.match_id]}"
+                    )
 
             rows.append(
                 {
