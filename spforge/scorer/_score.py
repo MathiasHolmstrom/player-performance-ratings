@@ -263,6 +263,7 @@ class BaseScorer(ABC):
         validation_column: str | None,
         filters: list[Filter] | None = None,
         aggregation_level: list[str] | None = None,
+        aggregation_method: dict[str, Any] | None = None,
         granularity: list[str] | None = None,
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
@@ -274,6 +275,7 @@ class BaseScorer(ABC):
             If set, the scorer will be calculated only once the values of the validation column are equal to 1
         :param filters: The filters to apply before calculating
         :param aggregation_level: The columns to group by before calculating the score (e.g., group from game-player to game-team)
+        :param aggregation_method: Aggregation methods for pred/target when aggregation_level is set.
         :param granularity: The columns to calculate separate scores for each unique combination (e.g., different scores for each team)
         """
         self.target = target
@@ -289,27 +291,58 @@ class BaseScorer(ABC):
                 )
             )
         self.aggregation_level = aggregation_level
+        self.aggregation_method = aggregation_method
         self.granularity = granularity
         self.compare_to_naive = compare_to_naive
         self.naive_granularity = naive_granularity
 
+    def _resolve_aggregation_method(self, key: str) -> Any:
+        if self.aggregation_method is None:
+            return "sum"
+        method = self.aggregation_method.get(key)
+        if method is None:
+            return "sum"
+        return method
+
+    def _build_aggregation_expr(self, df: IntoFrameT, col: str, method: Any) -> Any:
+        if isinstance(method, tuple):
+            if len(method) != 2 or method[0] != "weighted_mean":
+                raise ValueError(f"Unsupported aggregation method for {col}: {method}")
+            weight_col = method[1]
+            if weight_col not in df.columns:
+                raise ValueError(
+                    f"Aggregation weight column '{weight_col}' not found in dataframe columns."
+                )
+            weighted_sum = (nw.col(col) * nw.col(weight_col)).sum()
+            weight_total = nw.col(weight_col).sum()
+            return (weighted_sum / weight_total).alias(col)
+
+        if method == "sum":
+            return nw.col(col).sum().alias(col)
+        if method == "mean":
+            return nw.col(col).mean().alias(col)
+        if method == "first":
+            return nw.col(col).first().alias(col)
+        raise ValueError(f"Unsupported aggregation method for {col}: {method}")
+
     def _apply_aggregation_level(self, df: IntoFrameT) -> IntoFrameT:
         """Apply aggregation_level grouping if set"""
         if self.aggregation_level:
-            # Determine aggregation method based on column types
-            # For numeric columns, use sum; for others, use first or mean
-            agg_exprs = []
-            for col in [self.pred_column, self.target]:
-                # Try to determine if numeric
-                try:
-                    # Use sum for aggregation
-                    agg_exprs.append(nw.col(col).sum().alias(col))
-                except Exception:
-                    # Fallback to mean or first
-                    agg_exprs.append(nw.col(col).mean().alias(col))
-
+            pred_method = self._resolve_aggregation_method("pred")
+            target_method = self._resolve_aggregation_method("target")
+            agg_exprs = [
+                self._build_aggregation_expr(df, self.pred_column, pred_method),
+                self._build_aggregation_expr(df, self.target, target_method),
+            ]
             df = df.group_by(self.aggregation_level).agg(agg_exprs)
         return df
+
+    @narwhals.narwhalify
+    def aggregate(self, df: IntoFrameT) -> IntoFrameT:
+        df = apply_filters(df, self.filters)
+        if not hasattr(df, "to_native"):
+            df = nw.from_native(df)
+        return self._apply_aggregation_level(df)
 
     def _get_granularity_groups(self, df: IntoFrameT) -> list[tuple]:
         """Get list of granularity tuples from dataframe"""
@@ -345,6 +378,7 @@ class PWMSE(BaseScorer):
         target: str,
         validation_column: str | None = None,
         aggregation_level: list[str] | None = None,
+        aggregation_method: dict[str, Any] | None = None,
         granularity: list[str] | None = None,
         filters: list[Filter] | None = None,
         labels: list[int] | None = None,
@@ -357,6 +391,7 @@ class PWMSE(BaseScorer):
             target=target,
             pred_column=pred_column,
             aggregation_level=aggregation_level,
+            aggregation_method=aggregation_method,
             granularity=granularity,
             filters=filters,
             validation_column=validation_column,
@@ -454,12 +489,7 @@ class PWMSE(BaseScorer):
 
                 pass
             else:
-                df = df.group_by(self.aggregation_level).agg(
-                    [
-                        nw.col(self.pred_column).mean().alias(self.pred_column),
-                        nw.col(self.target).mean().alias(self.target),
-                    ]
-                )
+                df = self._apply_aggregation_level(df)
 
         if self.granularity:
             results = {}
@@ -517,6 +547,7 @@ class MeanBiasScorer(BaseScorer):
         target: str,
         validation_column: str | None = None,
         aggregation_level: list[str] | None = None,
+        aggregation_method: dict[str, Any] | None = None,
         granularity: list[str] | None = None,
         filters: list[Filter] | None = None,
         labels: list[int] | None = None,
@@ -540,6 +571,7 @@ class MeanBiasScorer(BaseScorer):
             target=target,
             pred_column=pred_column,
             aggregation_level=aggregation_level,
+            aggregation_method=aggregation_method,
             granularity=granularity,
             filters=filters,
             validation_column=validation_column,
@@ -582,12 +614,7 @@ class MeanBiasScorer(BaseScorer):
 
         # Apply aggregation_level if set
         if self.aggregation_level:
-            df = df.group_by(self.aggregation_level).agg(
-                [
-                    nw.col(self.pred_column_name).sum().alias(self.pred_column_name),
-                    nw.col(self.target).sum().alias(self.target),
-                ]
-            )
+            df = self._apply_aggregation_level(df)
             # After group_by, ensure df is still a Narwhals DataFrame
             if not hasattr(df, "to_native"):
                 df = nw.from_native(df)
@@ -658,6 +685,7 @@ class SklearnScorer(BaseScorer):
         target: str,
         validation_column: str | None = None,
         aggregation_level: list[str] | None = None,
+        aggregation_method: dict[str, Any] | None = None,
         granularity: list[str] | None = None,
         filters: list[Filter] | None = None,
         params: dict[str, Any] = None,
@@ -679,6 +707,7 @@ class SklearnScorer(BaseScorer):
             target=target,
             pred_column=pred_column,
             aggregation_level=aggregation_level,
+            aggregation_method=aggregation_method,
             granularity=granularity,
             filters=filters,
             validation_column=validation_column,
@@ -756,12 +785,7 @@ class SklearnScorer(BaseScorer):
             )
 
         if self.aggregation_level:
-            df = df.group_by(self.aggregation_level).agg(
-                [
-                    nw.col(self.pred_column_name).sum().alias(self.pred_column_name),
-                    nw.col(self.target).sum().alias(self.target),
-                ]
-            )
+            df = self._apply_aggregation_level(df)
             if not hasattr(df, "to_native"):
                 df = nw.from_native(df)
 
@@ -798,6 +822,7 @@ class ProbabilisticMeanBias(BaseScorer):
         class_column_name: str = "classes",
         validation_column: str | None = None,
         aggregation_level: list[str] | None = None,
+        aggregation_method: dict[str, Any] | None = None,
         granularity: list[str] | None = None,
         filters: list[Filter] | None = None,
         compare_to_naive: bool = False,
@@ -810,12 +835,56 @@ class ProbabilisticMeanBias(BaseScorer):
             target=target,
             pred_column=pred_column,
             aggregation_level=aggregation_level,
+            aggregation_method=aggregation_method,
             granularity=granularity,
             filters=filters,
             validation_column=validation_column,
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
         )
+
+    def _aggregate_pandas_series(
+        self, df: pd.DataFrame, col: str, method: Any
+    ) -> pd.Series:
+        grouped = df.groupby(self.aggregation_level, dropna=False)
+        if isinstance(method, tuple):
+            if len(method) != 2 or method[0] != "weighted_mean":
+                raise ValueError(f"Unsupported aggregation method for {col}: {method}")
+            weight_col = method[1]
+            if weight_col not in df.columns:
+                raise ValueError(
+                    f"Aggregation weight column '{weight_col}' not found in dataframe columns."
+                )
+            return grouped.apply(
+                lambda g: (g[col] * g[weight_col]).sum() / g[weight_col].sum()
+            )
+
+        if method == "sum":
+            return grouped[col].sum()
+        if method == "mean":
+            return grouped[col].mean()
+        if method == "first":
+            return grouped[col].first()
+        raise ValueError(f"Unsupported aggregation method for {col}: {method}")
+
+    def _aggregate_pandas(self, df: pd.DataFrame) -> pd.DataFrame:
+        if not self.aggregation_level:
+            return df
+        pred_method = self._resolve_aggregation_method("pred")
+        target_method = self._resolve_aggregation_method("target")
+        agg_df = pd.DataFrame(
+            {
+                self.pred_column: self._aggregate_pandas_series(
+                    df, self.pred_column, pred_method
+                ),
+                self.target: self._aggregate_pandas_series(df, self.target, target_method),
+                self.class_column_name: df.groupby(self.aggregation_level, dropna=False)[
+                    self.class_column_name
+                ].first(),
+            }
+        )
+        agg_df.reset_index(inplace=True)
+        return agg_df
 
     def _calculate_score_for_group(self, df: pd.DataFrame) -> float:
         """Calculate score for a single group (used for granularity)"""
@@ -948,13 +1017,7 @@ class ProbabilisticMeanBias(BaseScorer):
 
         # Apply aggregation_level if set
         if self.aggregation_level:
-            df = (
-                df.groupby(self.aggregation_level)
-                .agg(
-                    {self.pred_column: "mean", self.target: "mean", self.class_column_name: "first"}
-                )
-                .reset_index()
-            )
+            df = self._aggregate_pandas(df)
 
         # If granularity is set, calculate separate scores per group
         if self.granularity:
@@ -995,6 +1058,7 @@ class OrdinalLossScorer(BaseScorer):
         classes: list[int],
         validation_column: str | None = None,
         aggregation_level: list[str] | None = None,
+        aggregation_method: dict[str, Any] | None = None,
         granularity: list[str] | None = None,
         filters: list[Filter] | None = None,
         labels: list[int] | None = None,
@@ -1006,6 +1070,7 @@ class OrdinalLossScorer(BaseScorer):
             target=target,
             pred_column=pred_column,
             aggregation_level=aggregation_level,
+            aggregation_method=aggregation_method,
             granularity=granularity,
             filters=filters,
             validation_column=validation_column,
@@ -1102,14 +1167,10 @@ class OrdinalLossScorer(BaseScorer):
         if not hasattr(df, "to_native"):
             df = nw.from_native(df)
 
-        df_native = df.to_native()
-        df_pl = pl.DataFrame(df_native) if isinstance(df_native, pd.DataFrame) else df_native
-
         # Filter out null and NaN targets
-        before = len(df_pl)
-        target_col = pl.col(self.target)
-        df_pl = df_pl.filter(target_col.is_not_null() & target_col.is_not_nan())
-        after = len(df_pl)
+        before = len(df)
+        df = _filter_nulls_and_nans(df, self.target)
+        after = len(df)
         if before != after:
             _logger.info(
                 "OrdinalLossScorer: Dropped %d rows with NaN target (%d → %d)",
@@ -1119,12 +1180,12 @@ class OrdinalLossScorer(BaseScorer):
             )
 
         if self.aggregation_level:
-            df_pl = df_pl.group_by(self.aggregation_level).agg(
-                [
-                    pl.col(self.pred_column).mean().alias(self.pred_column),
-                    pl.col(self.target).mean().alias(self.target),
-                ]
-            )
+            df = self._apply_aggregation_level(df)
+
+        df_native = df.to_native()
+        df_pl = pl.DataFrame(df_native) if isinstance(df_native, pd.DataFrame) else df_native
+        if df_pl.is_empty():
+            return {} if self.granularity else 0.0
 
         if self.granularity:
             results = {}
@@ -1197,6 +1258,7 @@ class ThresholdEventScorer(BaseScorer):
         threshold_rounding: str = "ceil",
         validation_column: str | None = None,
         aggregation_level: list[str] | None = None,
+        aggregation_method: dict[str, Any] | None = None,
         granularity: list[str] | None = None,
         filters: list["Filter"] | None = None,
         compare_to_naive: bool = False,
@@ -1207,6 +1269,7 @@ class ThresholdEventScorer(BaseScorer):
             target=self._EVENT_COL,
             pred_column=dist_column,
             aggregation_level=aggregation_level,
+            aggregation_method=aggregation_method,
             granularity=granularity,
             filters=filters,
             validation_column=validation_column,
@@ -1227,6 +1290,7 @@ class ThresholdEventScorer(BaseScorer):
             target=self._EVENT_COL,
             pred_column=self._P_EVENT_COL,
             aggregation_level=aggregation_level,
+            aggregation_method=aggregation_method,
             granularity=granularity,
             filters=None,
             validation_column=validation_column,
