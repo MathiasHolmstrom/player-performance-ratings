@@ -21,6 +21,16 @@ def create_dataframe(df_type, data: dict):
     return df_type(data)
 
 
+def to_pandas_df(df):
+    if hasattr(df, "to_native"):
+        df = df.to_native()
+    if isinstance(df, pd.DataFrame):
+        return df
+    if isinstance(df, pl.DataFrame):
+        return df.to_pandas()
+    raise TypeError(f"Unsupported dataframe type: {type(df)}")
+
+
 # ============================================================================
 # Aggregation Level Tests
 # ============================================================================
@@ -102,6 +112,65 @@ def test_pwmse_aggregation_level(df_type):
     score = scorer.score(df)
     assert isinstance(score, float)
     assert score >= 0
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_aggregate_returns_grouped_frame(df_type):
+    """aggregate returns filtered, grouped dataframe with default sum behavior"""
+    df = create_dataframe(
+        df_type,
+        {
+            "game_id": [1, 1, 1, 1],
+            "player_id": [1, 2, 3, 4],
+            "team_id": [1, 1, 2, 2],
+            "pred": [0.5, 0.6, 0.3, 0.4],
+            "target": [0, 1, 0, 1],
+        },
+    )
+
+    scorer = MeanBiasScorer(
+        pred_column="pred", target="target", aggregation_level=["game_id", "team_id"]
+    )
+    aggregated = to_pandas_df(scorer.aggregate(df))
+
+    assert len(aggregated) == 2
+    team1 = aggregated[aggregated["team_id"] == 1].iloc[0]
+    team2 = aggregated[aggregated["team_id"] == 2].iloc[0]
+    assert abs(team1["pred"] - 1.1) < 1e-10
+    assert abs(team1["target"] - 1.0) < 1e-10
+    assert abs(team2["pred"] - 0.7) < 1e-10
+    assert abs(team2["target"] - 1.0) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_weighted_mean_aggregation_method(df_type):
+    """Weighted mean aggregation uses provided weight column"""
+    df = create_dataframe(
+        df_type,
+        {
+            "game_id": [1, 1, 1],
+            "team_id": [1, 1, 1],
+            "pred": [0.4, 0.6, 0.9],
+            "target": [0.5, 0.7, 0.2],
+            "attempts": [10, 20, 30],
+        },
+    )
+
+    scorer = MeanBiasScorer(
+        pred_column="pred",
+        target="target",
+        aggregation_level=["game_id", "team_id"],
+        aggregation_method={
+            "pred": ("weighted_mean", "attempts"),
+            "target": ("weighted_mean", "attempts"),
+        },
+    )
+
+    score = scorer.score(df)
+    expected_pred = (0.4 * 10 + 0.6 * 20 + 0.9 * 30) / 60
+    expected_target = (0.5 * 10 + 0.7 * 20 + 0.2 * 30) / 60
+    expected = expected_pred - expected_target
+    assert abs(score - expected) < 1e-10
 
 
 # ============================================================================
