@@ -176,6 +176,8 @@ class LagGenerator(FeatureGenerator):
         if additional_cols:
             cols.extend(additional_cols)
 
+        cols = list(dict.fromkeys(cols))
+
         if self._df is None:
             self._df = df.select(cols)
         else:
