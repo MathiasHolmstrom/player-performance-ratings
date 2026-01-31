@@ -684,3 +684,39 @@ def test_rolling_mean_historical_transform_higher_granularity(column_names, use_
         }
     )
     pd.testing.assert_frame_equal(transformed_df, expected_df, check_like=True, check_dtype=False)
+
+
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_rolling_window__feature_also_used_as_column_names_field(df):
+    column_names = ColumnNames(
+        match_id="game_id",
+        player_id="player_id",
+        team_id="team_id",
+        start_date="game_date",
+        participation_weight="three_pointers_attempted",
+    )
+    data = df(
+        {
+            "game_id": [1, 1, 2, 2],
+            "player_id": ["a", "b", "a", "b"],
+            "team_id": [1, 2, 1, 2],
+            "game_date": [
+                pd.to_datetime("2023-01-01"),
+                pd.to_datetime("2023-01-01"),
+                pd.to_datetime("2023-01-02"),
+                pd.to_datetime("2023-01-02"),
+            ],
+            "three_pointers_attempted": [5.0, 3.0, 7.0, 4.0],
+        }
+    )
+
+    transformer = RollingWindowTransformer(
+        features=["three_pointers_attempted"],
+        window=20,
+        granularity=["player_id"],
+    )
+
+    transformed_df = transformer.fit_transform(data, column_names=column_names)
+
+    assert transformer.features_out[0] in transformed_df.columns
+    assert len(transformed_df) == len(data)
