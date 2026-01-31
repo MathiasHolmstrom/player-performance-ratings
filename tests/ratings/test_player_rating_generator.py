@@ -4,7 +4,12 @@ import polars as pl
 import pytest
 
 from spforge import ColumnNames
-from spforge.data_structures import PlayerRating, RatingState
+from spforge.data_structures import (
+    MatchPerformance,
+    PlayerRating,
+    PreMatchPlayerRating,
+    PreMatchTeamRating,
+)
 from spforge.ratings import PlayerRatingGenerator, RatingKnownFeatures, RatingUnknownFeatures
 
 
@@ -136,6 +141,60 @@ def test_fit_transform_participation_weight_scaling(base_cn):
 
     assert full_rating > half_rating
     assert half_rating > 0
+
+
+def test_player_rating_generator_team_rating_coef_affects_predictor(base_cn):
+    """Passing a team rating coefficient should affect the predictor used by the generator."""
+    generator = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        performance_predictor="difference",
+        team_rating_diff_coef=0.5,
+        rating_diff_coef=0.0,
+        rating_diff_team_from_entity_coef=0.0,
+    )
+
+    predictor = generator._performance_predictor
+    match_perf = MatchPerformance(
+        performance_value=0.5,
+        participation_weight=1.0,
+        projected_participation_weight=1.0,
+    )
+    player_rating = PreMatchPlayerRating(
+        id="P1",
+        rating_value=100.0,
+        games_played=1,
+        league=None,
+        position=None,
+        match_performance=match_perf,
+    )
+    opponent_team_rating = PreMatchTeamRating(id="Opp", players=[], rating_value=100.0)
+    high_team_rating = PreMatchTeamRating(
+        id="TeamHigh",
+        players=[player_rating],
+        rating_value=110.0,
+    )
+    low_team_rating = PreMatchTeamRating(
+        id="TeamLow",
+        players=[player_rating],
+        rating_value=90.0,
+    )
+
+    high_pred = predictor.predict_performance(
+        player_rating=player_rating,
+        opponent_team_rating=opponent_team_rating,
+        team_rating=high_team_rating,
+    )
+    low_pred = predictor.predict_performance(
+        player_rating=player_rating,
+        opponent_team_rating=opponent_team_rating,
+        team_rating=low_team_rating,
+    )
+
+    assert predictor.team_rating_diff_coef == 0.5
+    assert high_pred > low_pred
+    assert high_pred > 0.5
+    assert low_pred < 0.5
 
 
 def test_fit_transform_batch_update_logic(base_cn):
