@@ -2039,3 +2039,283 @@ def test_fit_transform_when_all_players_have_null_performance_then_no_rating_cha
         f"Before={p1_off_before_m2}, After={p1_off_after_m2}. "
         "Null performance should result in no rating change."
     )
+
+
+# --- team_players_playing_time Tests ---
+
+
+def test_fit_transform_team_players_playing_time_column_not_found_raises_error(base_cn):
+    """Specifying a nonexistent team_players_playing_time column should raise ValueError."""
+    from dataclasses import replace
+
+    cn = replace(base_cn, team_players_playing_time="nonexistent_column")
+
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-01", "2024-01-01"],
+            "perf": [0.6, 0.4],
+            "pw": [1.0, 1.0],
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=cn,
+    )
+
+    with pytest.raises(ValueError, match="team_players_playing_time column"):
+        gen.fit_transform(df)
+
+
+def test_fit_transform_opponent_players_playing_time_column_not_found_raises_error(base_cn):
+    """Specifying a nonexistent opponent_players_playing_time column should raise ValueError."""
+    from dataclasses import replace
+
+    cn = replace(base_cn, opponent_players_playing_time="nonexistent_column")
+
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2"],
+            "tid": ["T1", "T2"],
+            "mid": ["M1", "M1"],
+            "dt": ["2024-01-01", "2024-01-01"],
+            "perf": [0.6, 0.4],
+            "pw": [1.0, 1.0],
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=cn,
+    )
+
+    with pytest.raises(ValueError, match="opponent_players_playing_time column"):
+        gen.fit_transform(df)
+
+
+def test_fit_transform_null_playing_time_uses_standard_team_rating(base_cn):
+    """When team_players_playing_time is null for a row, should use standard team rating."""
+    from dataclasses import replace
+
+    cn = replace(
+        base_cn,
+        team_players_playing_time="team_pt",
+        opponent_players_playing_time="opp_pt",
+    )
+
+    # First establish ratings with a normal match (no playing time data)
+    df1 = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.8, 0.6, 0.4, 0.2],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+            "team_pt": [None, None, None, None],
+            "opp_pt": [None, None, None, None],
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=cn,
+        auto_scale_performance=True,
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+        non_predictor_features_out=[RatingUnknownFeatures.PLAYER_PREDICTED_OFF_PERFORMANCE],
+    )
+
+    result = gen.fit_transform(df1)
+
+    # Should work without error and produce predictions
+    assert len(result) == 4
+    assert "player_predicted_off_performance_perf" in result.columns
+
+    # All predictions should be valid (between 0 and 1)
+    predictions = result["player_predicted_off_performance_perf"].to_list()
+    for pred in predictions:
+        assert 0.0 <= pred <= 1.0
+
+
+def test_fit_transform_weighted_calculation_with_playing_time(base_cn):
+    """Test that playing time weighted calculation produces different predictions."""
+    from dataclasses import replace
+
+    cn = replace(
+        base_cn,
+        team_players_playing_time="team_pt",
+        opponent_players_playing_time="opp_pt",
+    )
+
+    # First establish different ratings for players
+    df1 = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.9, 0.1, 0.5, 0.5],  # P1 high rating, P2 low rating
+            "pw": [1.0, 1.0, 1.0, 1.0],
+            "team_pt": [None, None, None, None],
+            "opp_pt": [None, None, None, None],
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=cn,
+        auto_scale_performance=True,
+        start_harcoded_start_rating=1000.0,
+        non_predictor_features_out=[RatingUnknownFeatures.PLAYER_PREDICTED_OFF_PERFORMANCE],
+    )
+    gen.fit_transform(df1)
+
+    # Verify P1 and P2 have different ratings now
+    p1_rating = gen._player_off_ratings["P1"].rating_value
+    p2_rating = gen._player_off_ratings["P2"].rating_value
+    assert p1_rating > p2_rating, "Setup: P1 should have higher rating than P2"
+
+    # Second match with playing time data
+    # P3 faces opponent P1 80% of time (high rating), P4 faces P2 80% of time (low rating)
+    # Use consistent schema for all dict entries (all keys present in all rows)
+    df2 = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M2", "M2", "M2", "M2"],
+            "dt": ["2024-01-02"] * 4,
+            "pw": [1.0, 1.0, 1.0, 1.0],
+            # Team playing time - who they play WITH on same team
+            "team_pt": [
+                {"P1": 0.0, "P2": 1.0, "P3": 0.5, "P4": 0.5},  # P1 on T1, plays with P2
+                {"P1": 1.0, "P2": 0.0, "P3": 0.5, "P4": 0.5},  # P2 on T1, plays with P1
+                {"P1": 0.5, "P2": 0.5, "P3": 0.0, "P4": 1.0},  # P3 on T2, plays with P4
+                {"P1": 0.5, "P2": 0.5, "P3": 1.0, "P4": 0.0},  # P4 on T2, plays with P3
+            ],
+            # Opponent playing time - who they face on opposing team
+            "opp_pt": [
+                {"P1": 0.0, "P2": 0.0, "P3": 0.5, "P4": 0.5},  # P1 faces T2 opponents evenly
+                {"P1": 0.0, "P2": 0.0, "P3": 0.5, "P4": 0.5},  # P2 faces T2 opponents evenly
+                {"P1": 0.8, "P2": 0.2, "P3": 0.0, "P4": 0.0},  # P3 faces P1 80% of time
+                {"P1": 0.2, "P2": 0.8, "P3": 0.0, "P4": 0.0},  # P4 faces P2 80% of time
+            ],
+        }
+    )
+
+    result = gen.future_transform(df2)
+
+    # Verify we get predictions
+    assert len(result) == 4
+
+    # Get predictions for P3 and P4
+    # P3 faces stronger opponents (mainly P1), P4 faces weaker opponents (mainly P2)
+    # So P3 should have lower predicted performance than P4 (all else equal)
+    p3_pred = result.filter(pl.col("pid") == "P3")["player_predicted_off_performance_perf"][0]
+    p4_pred = result.filter(pl.col("pid") == "P4")["player_predicted_off_performance_perf"][0]
+
+    # P3 faces P1 (high rating) 80% of time, P4 faces P2 (low rating) 80% of time
+    # So P4 should have higher predicted performance
+    assert p4_pred > p3_pred, (
+        f"P4 (facing weak opponents) should have higher prediction than P3 (facing strong opponents). "
+        f"P3 pred={p3_pred:.4f}, P4 pred={p4_pred:.4f}"
+    )
+
+
+def test_future_transform_weighted_calculation_with_playing_time(base_cn):
+    """Test that future_transform correctly uses playing time weights."""
+    from dataclasses import replace
+
+    cn = replace(
+        base_cn,
+        team_players_playing_time="team_pt",
+        opponent_players_playing_time="opp_pt",
+    )
+
+    # First establish ratings
+    df1 = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.9, 0.1, 0.5, 0.5],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+            "team_pt": [None, None, None, None],
+            "opp_pt": [None, None, None, None],
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=cn,
+        auto_scale_performance=True,
+        start_harcoded_start_rating=1000.0,
+        non_predictor_features_out=[RatingUnknownFeatures.PLAYER_PREDICTED_OFF_PERFORMANCE],
+    )
+    gen.fit_transform(df1)
+
+    # Future match with playing time weights (consistent schema)
+    future_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M2", "M2", "M2", "M2"],
+            "dt": ["2024-01-02"] * 4,
+            "pw": [1.0, 1.0, 1.0, 1.0],
+            "team_pt": [
+                {"P1": 0.0, "P2": 1.0, "P3": 0.5, "P4": 0.5},  # P1 plays with P2
+                {"P1": 1.0, "P2": 0.0, "P3": 0.5, "P4": 0.5},  # P2 plays with P1
+                {"P1": 0.5, "P2": 0.5, "P3": 0.0, "P4": 1.0},  # P3 plays with P4
+                {"P1": 0.5, "P2": 0.5, "P3": 1.0, "P4": 0.0},  # P4 plays with P3
+            ],
+            "opp_pt": [
+                {"P1": 0.0, "P2": 0.0, "P3": 1.0, "P4": 0.0},  # P1 faces only P3
+                {"P1": 0.0, "P2": 0.0, "P3": 0.0, "P4": 1.0},  # P2 faces only P4
+                {"P1": 1.0, "P2": 0.0, "P3": 0.0, "P4": 0.0},  # P3 faces only P1
+                {"P1": 0.0, "P2": 1.0, "P3": 0.0, "P4": 0.0},  # P4 faces only P2
+            ],
+        }
+    )
+
+    result = gen.future_transform(future_df)
+
+    # Verify predictions are valid
+    assert len(result) == 4
+    predictions = result["player_predicted_off_performance_perf"].to_list()
+    for pred in predictions:
+        assert 0.0 <= pred <= 1.0
+
+
+def test_fit_transform_backward_compatible_without_playing_time_columns(base_cn):
+    """Behavior should be unchanged when team_players_playing_time columns are not specified."""
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.6, 0.4, 0.7, 0.3],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+
+    # Without specifying playing time columns (backward compatible)
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,  # No playing time columns specified
+        auto_scale_performance=True,
+        features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+    )
+
+    result = gen.fit_transform(df)
+
+    # Should work normally
+    assert len(result) == 4
+    assert "player_off_rating_perf" in result.columns
+
+    # Ratings should be updated normally
+    assert gen._player_off_ratings["P1"].rating_value != 1000.0
+    assert gen._player_off_ratings["P3"].rating_value > gen._player_off_ratings["P4"].rating_value
