@@ -133,7 +133,7 @@ class RatingPlayerDifferencePerformancePredictor(PlayerPerformancePredictor):
             team_rating_value = team_rating.rating_value
 
         if player_rating.match_performance.opponent_players_playing_time and isinstance(
-            player_rating.match_performance.team_players_playing_time, dict
+            player_rating.match_performance.opponent_players_playing_time, dict
         ):
             weight_opp_rating = 0
             sum_playing_time = 0
