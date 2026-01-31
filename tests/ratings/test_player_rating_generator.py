@@ -4,7 +4,7 @@ import polars as pl
 import pytest
 
 from spforge import ColumnNames
-from spforge.data_structures import RatingState
+from spforge.data_structures import PlayerRating, RatingState
 from spforge.ratings import PlayerRatingGenerator, RatingKnownFeatures, RatingUnknownFeatures
 
 
@@ -77,6 +77,39 @@ def test_fit_transform_updates_internal_state(base_cn, sample_df):
 
     assert "P1" in gen._player_off_ratings
     assert "P1" in gen._player_def_ratings
+
+
+def test_pre_match_collection_parses_playing_time_json(base_cn):
+    """JSON strings in the team/opponent playing time columns should become dicts."""
+    from dataclasses import replace
+
+    cn = replace(
+        base_cn,
+        team_players_playing_time="team_pt",
+        opponent_players_playing_time="opp_pt",
+    )
+    gen = PlayerRatingGenerator(performance_column="perf", column_names=cn)
+    gen._player_off_ratings["P1"] = PlayerRating(id="P1", rating_value=100.0)
+    gen._player_def_ratings["P1"] = PlayerRating(id="P1", rating_value=100.0)
+
+    stats_entry = {
+        cn.player_id: "P1",
+        "perf": 0.75,
+        cn.participation_weight: 1.0,
+        cn.team_players_playing_time: '{"P1": 30}',
+        cn.opponent_players_playing_time: '{"P3": 25}',
+    }
+
+    collection = gen._create_pre_match_players_collection(
+        r={"__PLAYER_STATS": [stats_entry]},
+        stats_col="__PLAYER_STATS",
+        day_number=1,
+        team_id="T1",
+    )
+
+    match_perf = collection.pre_match_player_ratings[0].match_performance
+    assert match_perf.team_players_playing_time == {"P1": 30.0}
+    assert match_perf.opponent_players_playing_time == {"P3": 25.0}
 
     assert gen._player_off_ratings["P1"].rating_value > 0
 

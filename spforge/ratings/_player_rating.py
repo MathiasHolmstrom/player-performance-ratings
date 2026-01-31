@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import copy
-import math
+import json
 import logging
+import math
+from collections.abc import Mapping
 from typing import Any, Literal
 
 import narwhals.stable.v2 as nw
@@ -912,10 +914,16 @@ class PlayerRatingGenerator(RatingGenerator):
         if cn.league and cn.league in df.columns:
             player_stat_cols.append(cn.league)
 
-        if cn.team_players_playing_time and cn.team_players_playing_time in df.columns:
+        if (
+            cn.team_players_playing_time
+            and cn.team_players_playing_time in df.columns
+        ):
             player_stat_cols.append(cn.team_players_playing_time)
 
-        if cn.opponent_players_playing_time and cn.opponent_players_playing_time in df.columns:
+        if (
+            cn.opponent_players_playing_time
+            and cn.opponent_players_playing_time in df.columns
+        ):
             player_stat_cols.append(cn.opponent_players_playing_time)
 
         df = df.with_columns(pl.struct(player_stat_cols).alias(PLAYER_STATS))
@@ -947,6 +955,40 @@ class PlayerRatingGenerator(RatingGenerator):
 
         match_df = self._add_day_number(match_df, cn.start_date, "__day_number")
         return match_df
+
+    def _get_players_playing_time(
+        self, source: Mapping[str, Any], column_name: str | None
+    ) -> dict[str, float] | None:
+        if not column_name:
+            return None
+        return self._normalize_players_playing_time(source.get(column_name))
+
+    @staticmethod
+    def _normalize_players_playing_time(raw_value: Any) -> dict[str, float] | None:
+        if raw_value is None:
+            return None
+
+        if isinstance(raw_value, str):
+            raw_text = raw_value
+            raw_value = raw_value.strip()
+            if not raw_value:
+                return None
+            try:
+                raw_value = json.loads(raw_value)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"unable to parse playing time JSON {raw_text!r}: {exc}"
+                ) from exc
+
+        if isinstance(raw_value, Mapping):
+            normalized: dict[str, float] = {}
+            for key, value in raw_value.items():
+                if value is None:
+                    continue
+                normalized[str(key)] = float(value)
+            return normalized or None
+
+        return None
 
     def _create_pre_match_players_collection(
         self, r: dict, stats_col: str, day_number: int, team_id: str
@@ -994,17 +1036,12 @@ class PlayerRatingGenerator(RatingGenerator):
                 else None
             )
 
-            team_playing_time = None
-            opponent_playing_time = None
-            if cn.team_players_playing_time:
-                raw_value = team_player.get(cn.team_players_playing_time)
-                if raw_value is not None:
-                    team_playing_time = raw_value
-
-            if cn.opponent_players_playing_time:
-                raw_value = team_player.get(cn.opponent_players_playing_time)
-                if raw_value is not None:
-                    opponent_playing_time = raw_value
+            team_playing_time = self._get_players_playing_time(
+                team_player, cn.team_players_playing_time
+            )
+            opponent_playing_time = self._get_players_playing_time(
+                team_player, cn.opponent_players_playing_time
+            )
 
             mp = MatchPerformance(
                 performance_value=perf_val,
@@ -1245,16 +1282,12 @@ class PlayerRatingGenerator(RatingGenerator):
                         ppw = pw
                     proj_w.append(float(ppw))
 
-                    team_playing_time = None
-                    opponent_playing_time = None
-                    if cn.team_players_playing_time:
-                        raw_value = tp.get(cn.team_players_playing_time)
-                        if raw_value is not None:
-                            team_playing_time = raw_value
-                    if cn.opponent_players_playing_time:
-                        raw_value = tp.get(cn.opponent_players_playing_time)
-                        if raw_value is not None:
-                            opponent_playing_time = raw_value
+                    team_playing_time = self._get_players_playing_time(
+                        tp, cn.team_players_playing_time
+                    )
+                    opponent_playing_time = self._get_players_playing_time(
+                        tp, cn.opponent_players_playing_time
+                    )
 
                     mp = MatchPerformance(
                         performance_value=get_perf_value(tp),
