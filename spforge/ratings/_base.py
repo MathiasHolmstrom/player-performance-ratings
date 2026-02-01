@@ -156,17 +156,20 @@ class RatingGenerator(FeatureGenerator):
                 )
 
         perf = df[self.performance_column]
-        if perf.max() > 1.02 or perf.min() < -0.02:
-            raise ValueError(
-                f"Max {self.performance_column} must be less than than 1.02 and min value larger than -0.02. "
-                "Either transform it manually or set auto_scale_performance to True"
-            )
+        # Filter to finite values for validation (NaN/inf are treated as missing data)
+        finite_perf = perf.filter(perf.is_finite())
+        if len(finite_perf) > 0:
+            if finite_perf.max() > 1.02 or finite_perf.min() < -0.02:
+                raise ValueError(
+                    f"Max {self.performance_column} must be less than than 1.02 and min value larger than -0.02. "
+                    "Either transform it manually or set auto_scale_performance to True"
+                )
 
-        if perf.mean() < 0.42 or perf.mean() > 0.58:
-            raise ValueError(
-                f"Mean {self.performance_column} must be between 0.42 and 0.58. "
-                "Either transform it manually or set auto_scale_performance to True"
-            )
+            if finite_perf.mean() < 0.42 or finite_perf.mean() > 0.58:
+                raise ValueError(
+                    f"Mean {self.performance_column} must be between 0.42 and 0.58. "
+                    "Either transform it manually or set auto_scale_performance to True"
+                )
 
         pl_df: pl.DataFrame
         pl_df = df.to_native() if df.implementation.is_polars() else df.to_polars().to_native()

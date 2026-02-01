@@ -2938,3 +2938,141 @@ def test_player_opponent_mean_projected_feature(base_cn, sample_df):
         (pl.col("player_opponent_mean_projected_perf") - expected).abs().max()
     ).item()
     assert diff < 1e-6, f"Max difference from expected mean: {diff}"
+
+
+class TestNaNPerformanceHandling:
+    """Tests that PlayerRatingGenerator handles NaN performance values correctly."""
+
+    @pytest.fixture
+    def nan_cn(self):
+        return ColumnNames(
+            player_id="player_id",
+            team_id="team_id",
+            match_id="match_id",
+            start_date="start_date",
+            participation_weight="participation_weight",
+        )
+
+    def _create_test_df(self, performance_values: list) -> pl.DataFrame:
+        """Create minimal test DataFrame with 2 teams, 2 players each."""
+        import numpy as np
+
+        return pl.DataFrame({
+            "match_id": ["game1"] * 4,
+            "player_id": ["p1", "p2", "p3", "p4"],
+            "team_id": ["A", "A", "B", "B"],
+            "start_date": ["2024-01-01"] * 4,
+            "performance": performance_values,
+            "participation_weight": [1.0] * 4,
+        })
+
+    def test_nan_performance_does_not_raise(self, nan_cn):
+        """NaN performance values should not raise ValueError."""
+        import numpy as np
+
+        # Use values that give mean ~0.5 when NaN is excluded
+        df = self._create_test_df([0.6, np.nan, 0.4, 0.5])
+
+        gen = PlayerRatingGenerator(
+            performance_column="performance",
+            column_names=nan_cn,
+            features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+        )
+
+        # Should not raise
+        result = gen.fit_transform(df)
+        assert len(result) == 4
+
+    def test_inf_performance_does_not_raise(self, nan_cn):
+        """Inf performance values should not raise ValueError."""
+        # Use values that give mean ~0.5 when inf is excluded
+        df = self._create_test_df([0.6, float('inf'), 0.4, 0.5])
+
+        gen = PlayerRatingGenerator(
+            performance_column="performance",
+            column_names=nan_cn,
+            features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+        )
+
+        result = gen.fit_transform(df)
+        assert len(result) == 4
+
+    def test_neg_inf_performance_does_not_raise(self, nan_cn):
+        """Negative inf performance values should not raise ValueError."""
+        # Use values that give mean ~0.5 when -inf is excluded
+        df = self._create_test_df([0.6, float('-inf'), 0.4, 0.5])
+
+        gen = PlayerRatingGenerator(
+            performance_column="performance",
+            column_names=nan_cn,
+            features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+        )
+
+        result = gen.fit_transform(df)
+        assert len(result) == 4
+
+    def test_nan_performance_treated_as_zero_rating_change(self, nan_cn):
+        """Players with NaN performance should have zero rating change."""
+        import numpy as np
+
+        # Two games: first establishes ratings, second tests NaN handling
+        df = pl.DataFrame({
+            "match_id": ["game1"] * 4 + ["game2"] * 4,
+            "player_id": ["p1", "p2", "p3", "p4"] * 2,
+            "team_id": ["A", "A", "B", "B"] * 2,
+            "start_date": ["2024-01-01"] * 4 + ["2024-01-02"] * 4,
+            "performance": [0.5, 0.5, 0.5, 0.5, 0.6, np.nan, 0.4, 0.5],
+            "participation_weight": [1.0] * 8,
+        })
+
+        gen = PlayerRatingGenerator(
+            performance_column="performance",
+            column_names=nan_cn,
+            features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+        )
+
+        result = gen.fit_transform(df)
+
+        # Get player p2's ratings for both games
+        p2_game1 = result.filter(
+            (pl.col("player_id") == "p2") & (pl.col("match_id") == "game1")
+        )["player_off_rating_performance"][0]
+
+        p2_game2 = result.filter(
+            (pl.col("player_id") == "p2") & (pl.col("match_id") == "game2")
+        )["player_off_rating_performance"][0]
+
+        # Rating should not change when performance is NaN
+        assert p2_game1 == p2_game2, "NaN performance should result in zero rating change"
+
+    def test_all_nan_performance_in_match_handled(self, nan_cn):
+        """Match where all players have NaN should not raise."""
+        import numpy as np
+
+        # All NaN - validation is skipped when no finite values exist
+        df = self._create_test_df([np.nan, np.nan, np.nan, np.nan])
+
+        gen = PlayerRatingGenerator(
+            performance_column="performance",
+            column_names=nan_cn,
+            features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+        )
+
+        result = gen.fit_transform(df)
+        assert len(result) == 4
+
+    def test_mixed_nan_none_performance(self, nan_cn):
+        """Mix of NaN and None performance values should both be handled."""
+        import numpy as np
+
+        # Use values that give mean ~0.5 when NaN/None are excluded
+        df = self._create_test_df([0.6, np.nan, None, 0.5])
+
+        gen = PlayerRatingGenerator(
+            performance_column="performance",
+            column_names=nan_cn,
+            features_out=[RatingKnownFeatures.PLAYER_OFF_RATING],
+        )
+
+        result = gen.fit_transform(df)
+        assert len(result) == 4

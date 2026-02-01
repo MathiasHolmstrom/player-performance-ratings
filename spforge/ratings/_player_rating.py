@@ -587,8 +587,9 @@ class PlayerRatingGenerator(RatingGenerator):
                 )
 
                 perf_value = pre_player.match_performance.performance_value
+                perf_is_valid = perf_value is not None and math.isfinite(float(perf_value))
 
-                if perf_value is None:
+                if not perf_is_valid:
                     off_change = 0.0
                 else:
                     off_perf = float(perf_value)
@@ -599,7 +600,7 @@ class PlayerRatingGenerator(RatingGenerator):
                         * float(pre_player.match_performance.participation_weight)
                     )
 
-                if team1_def_perf is None or (not self.use_off_def_split and perf_value is None):
+                if team1_def_perf is None or (not self.use_off_def_split and not perf_is_valid):
                     def_change = 0.0
                 else:
                     def_perf = float(team1_def_perf)
@@ -681,8 +682,9 @@ class PlayerRatingGenerator(RatingGenerator):
                 )
 
                 perf_value = pre_player.match_performance.performance_value
+                perf_is_valid = perf_value is not None and math.isfinite(float(perf_value))
 
-                if perf_value is None:
+                if not perf_is_valid:
                     off_change = 0.0
                 else:
                     off_perf = float(perf_value)
@@ -693,7 +695,7 @@ class PlayerRatingGenerator(RatingGenerator):
                         * float(pre_player.match_performance.participation_weight)
                     )
 
-                if team2_def_perf is None or (not self.use_off_def_split and perf_value is None):
+                if team2_def_perf is None or (not self.use_off_def_split and not perf_is_valid):
                     def_change = 0.0
                 else:
                     def_perf = float(team2_def_perf)
@@ -1254,7 +1256,7 @@ class PlayerRatingGenerator(RatingGenerator):
         self, c: PreMatchPlayersCollection
     ) -> float | None:
         # observed offense perf = weighted mean of player performance_value using participation_weight if present
-        # skip players with null performance
+        # skip players with null/non-finite performance
         cn = self.column_names
         if not c.pre_match_player_ratings:
             return None
@@ -1264,12 +1266,15 @@ class PlayerRatingGenerator(RatingGenerator):
             perf_val = pre.match_performance.performance_value
             if perf_val is None:
                 continue
+            perf_float = float(perf_val)
+            if not math.isfinite(perf_float):
+                continue
             w = (
                 float(pre.match_performance.participation_weight)
                 if cn.participation_weight
                 else 1.0
             )
-            psum += float(perf_val) * w
+            psum += perf_float * w
             wsum += w
         return psum / wsum if wsum else None
 
@@ -1341,7 +1346,9 @@ class PlayerRatingGenerator(RatingGenerator):
                 self.performance_column in team_player
                 and team_player[self.performance_column] is not None
             ):
-                return float(team_player[self.performance_column])
+                val = float(team_player[self.performance_column])
+                if math.isfinite(val):
+                    return val
             return None
 
         def ensure_new_player(
