@@ -2133,6 +2133,77 @@ def test_fit_transform_when_all_players_have_null_performance_then_no_rating_cha
     )
 
 
+def test_fit_transform_null_individual_performance__def_rating_still_updates(base_cn):
+    """
+    Regression test for DEF rating bug with null individual performance.
+
+    Bug: Players with null individual performance were incorrectly skipping DEF rating updates.
+    Fix: Defense is team-level. Even if a player has null individual performance (e.g., 0 3PA),
+         they were still on court defending, so DEF rating should update based on team defense.
+
+    Test verifies:
+    - Player with null perf: OFF stays same, DEF updates (because team defense is known)
+    - Player with valid perf: Both OFF and DEF update
+
+    This test uses a single match to verify the defensive rating gets updated from its
+    initial value when a player has null individual performance.
+    """
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [None, 0.3, 0.8, 0.8],  # P1 has null; T2 dominates offense
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        use_off_def_split=True,
+        auto_scale_performance=True,
+        rating_change_multiplier_offense=20.0,
+        rating_change_multiplier_defense=20.0,
+        features_out=[
+            RatingKnownFeatures.PLAYER_OFF_RATING,
+            RatingKnownFeatures.PLAYER_DEF_RATING,
+        ],
+    )
+    result = gen.fit_transform(df)
+
+    # Get P1's initial (pre-match) and final ratings
+    p1_off_initial = 1000.0  # Start rating
+    p1_def_initial = 1000.0  # Start rating
+    p1_off_final = gen._player_off_ratings["P1"].rating_value
+    p1_def_final = gen._player_def_ratings["P1"].rating_value
+
+    # P1's OFF rating should NOT change from initial (null individual performance)
+    assert p1_off_final == p1_off_initial, (
+        f"P1's OFF rating changed with null performance! "
+        f"Initial={p1_off_initial}, Final={p1_off_final}. "
+        "Null individual performance should result in no OFF rating change."
+    )
+
+    # P1's DEF rating SHOULD change from initial (team-level defense)
+    # T1 defended against T2's 0.8 offense, so T1 def = 1.0 - 0.8 = 0.2 (weak)
+    # This should decrease P1's defensive rating from the initial 1000
+    assert p1_def_final < p1_def_initial, (
+        f"P1's DEF rating did NOT decrease after poor team defense! "
+        f"Initial={p1_def_initial}, Final={p1_def_final}. "
+        "DEF is team-level and should update even when individual performance is null. "
+        "T1's defense was 0.2 (weak), so defensive rating should drop."
+    )
+
+    # Verify P2 (has valid perf) also gets defensive update
+    p2_def_final = gen._player_def_ratings["P2"].rating_value
+    assert p2_def_final < 1000.0, (
+        f"P2's DEF rating did NOT decrease after poor team defense! "
+        f"Final={p2_def_final}. Both P1 and P2 were defending, so both should have DEF updates."
+    )
+
+
 # --- team_players_playing_time Tests ---
 
 
