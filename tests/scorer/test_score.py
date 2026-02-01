@@ -66,7 +66,7 @@ def test_apply_filters_greater_than(df_type):
     filters = [Filter(column_name="col1", value=2, operator=Operator.GREATER_THAN)]
     result = apply_filters(df, filters)
     assert len(result) == 2
-    assert all(x > 2 for x in result["col1"].to_list())
+    assert (result["col1"] > 2).all()
 
 
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
@@ -76,7 +76,7 @@ def test_apply_filters_less_than(df_type):
     filters = [Filter(column_name="col1", value=3, operator=Operator.LESS_THAN)]
     result = apply_filters(df, filters)
     assert len(result) == 2
-    assert all(x < 3 for x in result["col1"].to_list())
+    assert (result["col1"] < 3).all()
 
 
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
@@ -86,7 +86,7 @@ def test_apply_filters_greater_than_or_equals(df_type):
     filters = [Filter(column_name="col1", value=2, operator=Operator.GREATER_THAN_OR_EQUALS)]
     result = apply_filters(df, filters)
     assert len(result) == 3
-    assert all(x >= 2 for x in result["col1"].to_list())
+    assert (result["col1"] >= 2).all()
 
 
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
@@ -96,7 +96,7 @@ def test_apply_filters_less_than_or_equals(df_type):
     filters = [Filter(column_name="col1", value=3, operator=Operator.LESS_THAN_OR_EQUALS)]
     result = apply_filters(df, filters)
     assert len(result) == 3
-    assert all(x <= 3 for x in result["col1"].to_list())
+    assert (result["col1"] <= 3).all()
 
 
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
@@ -129,8 +129,8 @@ def test_apply_filters_multiple_filters(df_type):
     ]
     result = apply_filters(df, filters)
     assert len(result) == 2
-    assert all(x > 2 for x in result["col1"].to_list())
-    assert all(x == "A" for x in result["col2"].to_list())
+    assert (result["col1"] > 2).all()
+    assert (result["col2"] == "A").all()
 
 
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])

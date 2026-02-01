@@ -163,8 +163,7 @@ def test_predict_row_false_uses_existing_row_prediction_column(df_factory):
 
     assert list(out.columns) == ["ratio", "row_pred"]
     ratio = out["ratio"] if isinstance(out, pd.DataFrame) else out.get_column("ratio")
-    ratio_values = ratio.to_list() if hasattr(ratio, "to_list") else ratio.tolist()
-    assert all(v == 1.0 for v in ratio_values)
+    assert (ratio == 1.0).all()
 
 
 @pytest.mark.parametrize("df_factory", [pd.DataFrame, pl.DataFrame])
