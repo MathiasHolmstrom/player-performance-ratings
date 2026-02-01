@@ -2415,21 +2415,20 @@ def test_fit_transform_backward_compatible_without_playing_time_columns(base_cn)
 
 def test_fit_transform_ignore_opponent_predictor_adapts_to_performance_drift(base_cn):
     """
-    Test that PlayerRatingNonOpponentPerformancePredictor converges properly
-    with fixed reference instead of rolling average.
+    Test that PlayerRatingNonOpponentPerformancePredictor converges to actual
+    performance with fixed reference (not stuck at 0.5 like rolling average).
 
-    When actual avg performance = 0.48 (not 0.5), ratings should adjust
-    until predictions converge to ~0.48. System should stabilize and capture
-    absolute skill levels relative to fixed reference rating.
+    With pre-scaled data (mean=0.48 ≠ 0.5), predictions should converge to 0.48,
+    not stay stuck at 0.5. This verifies the fixed reference allows convergence.
     """
     import numpy as np
 
-    # Create dataset with consistent ~0.48 average performance
-    n_matches = 2000
+    np.random.seed(42)  # Reproducible test
+    n_matches = 1500
     n_players_per_team = 5
     n_teams = 2
 
-    # Performance centered around 0.48 (slightly below sigmoid midpoint)
+    # Target mean intentionally NOT 0.5 to test convergence
     target_mean = 0.48
 
     data = {
@@ -2446,15 +2445,15 @@ def test_fit_transform_ignore_opponent_predictor_adapts_to_performance_drift(bas
         date = datetime(2019, 1, 1) + timedelta(days=i * 2)
         date_str = date.strftime("%Y-%m-%d")
 
-        # Add noise around target mean
-        noise = np.random.normal(0, 0.05, n_players_per_team * n_teams)
-
+        # Generate performance data already in [0,1] with mean at target
+        # Small std to keep values tightly around target mean
         for team_idx in range(n_teams):
             team_id = f"T{team_idx + 1}"
             for player_idx in range(n_players_per_team):
                 player_id = f"P{team_idx}_{player_idx}"
-                perf = target_mean + noise[team_idx * n_players_per_team + player_idx]
-                perf = max(0.0, min(1.0, perf))  # Clip to [0, 1]
+                # Draw from normal distribution, clip to [0,1]
+                perf = np.random.normal(target_mean, 0.08)
+                perf = max(0.0, min(1.0, perf))
 
                 data["pid"].append(player_id)
                 data["tid"].append(team_id)
@@ -2467,40 +2466,49 @@ def test_fit_transform_ignore_opponent_predictor_adapts_to_performance_drift(bas
 
     df = pl.DataFrame(data)
 
-    # Check actual mean performance in the data
-    actual_perf_mean = sum(data["perf"]) / len(data["perf"])
+    # Verify input data has mean ≠ 0.5 (before any scaling)
+    input_mean = sum(data["perf"]) / len(data["perf"])
+    assert abs(input_mean - target_mean) < 0.01, f"Input data mean should be ~{target_mean}"
 
     # Use ignore_opponent predictor with fixed reference
+    # CRITICAL: auto_scale_performance=False to preserve the input mean
     gen = PlayerRatingGenerator(
         performance_column="perf",
         column_names=base_cn,
         performance_predictor="ignore_opponent",
-        auto_scale_performance=True,
+        auto_scale_performance=False,  # Keep input mean at 0.48
         start_harcoded_start_rating=1000.0,
+        rating_change_multiplier_offense=100,  # Faster convergence for test
+        rating_change_multiplier_defense=100,
         non_predictor_features_out=[RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE],
     )
 
     result = gen.fit_transform(df)
 
-    # After warmup, system should converge to actual mean performance
-    warmup_matches = 300
-    subsample_df = result.filter(
-        pl.col("mid").cast(pl.Utf8).str.extract(r"M(\d+)", 1).cast(pl.Int32) >= warmup_matches
+    # Check tail (after convergence period)
+    tail_start_match = (n_matches // 2) - 200
+    tail_df = result.filter(
+        pl.col("mid").cast(pl.Utf8).str.extract(r"M(\d+)", 1).cast(pl.Int32) >= tail_start_match
     )
 
-    pred_col = "player_predicted_performance_perf"
-    assert pred_col in subsample_df.columns
+    tail_actual = tail_df["perf"].to_list()
+    tail_preds = tail_df["player_predicted_performance_perf"].to_list()
 
-    predictions = subsample_df[pred_col].to_list()
-    mean_pred = sum(predictions) / len(predictions)
+    mean_actual = sum(tail_actual) / len(tail_actual)
+    mean_pred = sum(tail_preds) / len(tail_preds)
 
-    # With fixed reference, predictions should converge to actual mean
-    # Allow tolerance for: (1) convergence time, (2) random noise in data
-    # The key is that predictions don't stay at 0.5 when actual != 0.5
-    assert 0.45 <= mean_pred <= 0.52, (
-        f"Mean predicted performance {mean_pred:.4f} is outside [0.45, 0.52]. "
-        f"Actual performance mean: {actual_perf_mean:.4f}. "
-        f"With fixed reference, system should converge toward actual performance mean."
+    # With fixed reference, predictions should converge close to actual mean
+    deviation = abs(mean_pred - mean_actual)
+    assert deviation < 0.015, (
+        f"Mean predicted performance {mean_pred:.4f} deviates from "
+        f"actual mean {mean_actual:.4f} by {deviation:.4f}. "
+        f"With fixed reference, predictions should converge to actual performance mean."
+    )
+
+    # Verify we're not stuck at 0.5 (the original rolling average bug)
+    assert abs(mean_pred - 0.5) > 0.01, (
+        f"Mean predicted performance {mean_pred:.4f} is too close to 0.5. "
+        f"System appears stuck at sigmoid midpoint (original rolling average bug)."
     )
 
 
