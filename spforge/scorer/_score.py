@@ -388,16 +388,14 @@ class BaseScorer(ABC):
         return re.sub(r'[^a-zA-Z0-9_]', '_', name)
 
     def _count_user_filters(self) -> int:
-        """Count filters excluding auto-added validation filter."""
+        """Count filters excluding any filter on validation column."""
         if not self.filters:
             return 0
         if self.validation_column is None:
             return len(self.filters)
         count = 0
         for f in self.filters:
-            if not (f.column_name == self.validation_column and
-                    f.operator == Operator.EQUALS and
-                    f.value == 1):
+            if f.column_name != self.validation_column:
                 count += 1
         return count
 
