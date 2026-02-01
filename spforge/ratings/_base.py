@@ -7,6 +7,7 @@ from abc import abstractmethod
 from typing import Any, Literal
 
 import narwhals.stable.v2 as nw
+import numpy as np
 import polars as pl
 from narwhals.stable.v2 import DataFrame
 from narwhals.stable.v2.typing import IntoFrameT
@@ -149,6 +150,17 @@ class RatingGenerator(FeatureGenerator):
 
         if self.performance_manager:
             if self.performance_manager:
+                # Wire in participation weight column for weighted quantile scaling
+                # This ensures zero-inflated distributions use weights for calibration
+                if (
+                    self.column_names
+                    and self.column_names.participation_weight
+                    and self.column_names.participation_weight in df.columns
+                ):
+                    self.performance_manager.quantile_weight_column = (
+                        self.column_names.participation_weight
+                    )
+
                 ori_perf_values = df[self.performance_manager.ori_performance_column].to_list()
                 df = nw.from_native(self.performance_manager.fit_transform(df))
                 assert (
@@ -165,7 +177,26 @@ class RatingGenerator(FeatureGenerator):
                     "Either transform it manually or set auto_scale_performance to True"
                 )
 
-            if finite_perf.mean() < 0.42 or finite_perf.mean() > 0.58:
+            # Use weighted mean when weighted quantile scaling is active
+            # because the weighted mean is what's calibrated to 0.5
+            if (
+                self.performance_manager
+                and self.performance_manager._using_quantile_scaler
+                and self.performance_manager.quantile_weight_column
+                and self.performance_manager.quantile_weight_column in df.columns
+            ):
+                weights = df[self.performance_manager.quantile_weight_column]
+                valid_mask = perf.is_finite() & weights.is_finite() & (weights > 0)
+                if valid_mask.sum() > 0:
+                    perf_values = perf.filter(valid_mask).to_numpy()
+                    weight_values = weights.filter(valid_mask).to_numpy()
+                    mean_val = float(np.average(perf_values, weights=weight_values))
+                else:
+                    mean_val = float(finite_perf.mean())
+            else:
+                mean_val = float(finite_perf.mean())
+
+            if mean_val < 0.42 or mean_val > 0.58:
                 raise ValueError(
                     f"Mean {self.performance_column} must be between 0.42 and 0.58. "
                     "Either transform it manually or set auto_scale_performance to True"
