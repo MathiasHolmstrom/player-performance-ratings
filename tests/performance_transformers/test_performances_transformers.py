@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import polars as pl
 import pytest
@@ -6,6 +7,7 @@ from sklearn.linear_model import LinearRegression
 
 from spforge.performance_transformers import (
     DiminishingValueTransformer,
+    QuantilePerformanceScaler,
     SymmetricDistributionTransformer,
 )
 from spforge.performance_transformers._performances_transformers import (
@@ -355,3 +357,197 @@ def test_symmetric_distribution_transformer_with_granularity_fit_transform():
         abs(transformed_df.loc[lambda x: x.position == "SG"]["performance"].skew())
         < transformer.skewness_allowed
     )
+
+
+class TestQuantilePerformanceScaler:
+    @pytest.fixture
+    def zero_inflated_data(self):
+        """Create zero-inflated data with ~37.7% zeros."""
+        np.random.seed(42)
+        n = 1000
+        # ~37.7% zeros
+        zeros = np.zeros(377)
+        # Non-zeros from exponential distribution
+        nonzeros = np.random.exponential(scale=2, size=n - 377)
+        raw = np.concatenate([zeros, nonzeros])
+        np.random.shuffle(raw)
+        return raw
+
+    @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+    def test_zeros_map_to_midpoint(self, df_type, zero_inflated_data):
+        """Test that zeros map to π/2 (midpoint of zero probability mass)."""
+        df = df_type({"performance": zero_inflated_data})
+
+        scaler = QuantilePerformanceScaler(features=["performance"], prefix="")
+        transformed = scaler.fit_transform(df)
+
+        if isinstance(transformed, pd.DataFrame):
+            scaled = transformed["performance"].values
+        else:
+            scaled = transformed["performance"].to_numpy()
+
+        pi = scaler._zero_proportion["performance"]
+        is_zero = np.abs(zero_inflated_data) < 1e-10
+
+        # Zeros should map to π/2
+        assert np.allclose(scaled[is_zero], pi / 2, atol=1e-10)
+
+    @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+    def test_mean_approximately_half(self, df_type, zero_inflated_data):
+        """Test that mean ≈ 0.5."""
+        df = df_type({"performance": zero_inflated_data})
+
+        scaler = QuantilePerformanceScaler(features=["performance"], prefix="")
+        transformed = scaler.fit_transform(df)
+
+        if isinstance(transformed, pd.DataFrame):
+            scaled = transformed["performance"].values
+        else:
+            scaled = transformed["performance"].to_numpy()
+
+        # Mean should be approximately 0.5
+        assert abs(np.mean(scaled) - 0.5) < 0.02
+
+    @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+    def test_monotonicity_preserved(self, df_type, zero_inflated_data):
+        """Test that monotonicity is preserved (sorted input → sorted output)."""
+        df = df_type({"performance": zero_inflated_data})
+
+        scaler = QuantilePerformanceScaler(features=["performance"], prefix="")
+        transformed = scaler.fit_transform(df)
+
+        if isinstance(transformed, pd.DataFrame):
+            scaled = transformed["performance"].values
+        else:
+            scaled = transformed["performance"].to_numpy()
+
+        # Check monotonicity: if we sort the raw data, the scaled values should also be sorted
+        order = np.argsort(zero_inflated_data)
+        sorted_scaled = scaled[order]
+        # Allow for tiny numerical errors
+        assert np.all(np.diff(sorted_scaled) >= -1e-10)
+
+    @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+    def test_bounded_zero_one(self, df_type, zero_inflated_data):
+        """Test that output is bounded [0, 1]."""
+        df = df_type({"performance": zero_inflated_data})
+
+        scaler = QuantilePerformanceScaler(features=["performance"], prefix="")
+        transformed = scaler.fit_transform(df)
+
+        if isinstance(transformed, pd.DataFrame):
+            scaled = transformed["performance"].values
+        else:
+            scaled = transformed["performance"].to_numpy()
+
+        assert np.all((scaled >= 0) & (scaled <= 1))
+
+    @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+    def test_nonzeros_span_pi_to_one(self, df_type, zero_inflated_data):
+        """Test that non-zeros map to range (π, 1)."""
+        df = df_type({"performance": zero_inflated_data})
+
+        scaler = QuantilePerformanceScaler(features=["performance"], prefix="")
+        transformed = scaler.fit_transform(df)
+
+        if isinstance(transformed, pd.DataFrame):
+            scaled = transformed["performance"].values
+        else:
+            scaled = transformed["performance"].to_numpy()
+
+        pi = scaler._zero_proportion["performance"]
+        is_nonzero = np.abs(zero_inflated_data) >= 1e-10
+
+        # Non-zeros should be >= π
+        assert np.all(scaled[is_nonzero] >= pi - 1e-10)
+        # Non-zeros should be <= 1
+        assert np.all(scaled[is_nonzero] <= 1 + 1e-10)
+
+    def test_with_prefix(self):
+        """Test that prefix is applied correctly."""
+        np.random.seed(42)
+        raw = np.concatenate([np.zeros(50), np.random.exponential(2, 50)])
+        df = pd.DataFrame({"feat": raw})
+
+        scaler = QuantilePerformanceScaler(features=["feat"], prefix="scaled_")
+        transformed = scaler.fit_transform(df)
+
+        assert "scaled_feat" in transformed.columns
+        assert scaler.features_out == ["scaled_feat"]
+
+    def test_multiple_features(self):
+        """Test that multiple features are handled correctly."""
+        np.random.seed(42)
+        raw_a = np.concatenate([np.zeros(50), np.random.exponential(2, 50)])
+        raw_b = np.concatenate([np.zeros(30), np.random.exponential(3, 70)])
+        df = pd.DataFrame({"a": raw_a, "b": raw_b})
+
+        scaler = QuantilePerformanceScaler(features=["a", "b"], prefix="")
+        transformed = scaler.fit_transform(df)
+
+        assert "a" in transformed.columns
+        assert "b" in transformed.columns
+
+        # Both should have mean ≈ 0.5
+        assert abs(transformed["a"].mean() - 0.5) < 0.05
+        assert abs(transformed["b"].mean() - 0.5) < 0.05
+
+    def test_all_zeros(self):
+        """Test edge case: all values are zero (π=1)."""
+        df = pd.DataFrame({"x": [0.0, 0.0, 0.0, 0.0, 0.0]})
+
+        scaler = QuantilePerformanceScaler(features=["x"], prefix="")
+        transformed = scaler.fit_transform(df)
+
+        # π=1, so all values should map to π/2 = 0.5
+        assert np.allclose(transformed["x"].values, 0.5)
+        assert scaler._zero_proportion["x"] == 1.0
+
+    def test_no_zeros(self):
+        """Test edge case: no zeros (π=0)."""
+        np.random.seed(42)
+        df = pd.DataFrame({"x": np.random.exponential(2, 100) + 0.1})  # All positive
+
+        scaler = QuantilePerformanceScaler(features=["x"], prefix="")
+        transformed = scaler.fit_transform(df)
+
+        # π=0, so values should span (0, 1) via quantiles
+        assert scaler._zero_proportion["x"] == 0.0
+        assert transformed["x"].min() >= 0
+        assert transformed["x"].max() <= 1
+        # Mean should still be ~0.5
+        assert abs(transformed["x"].mean() - 0.5) < 0.05
+
+    def test_nan_handling(self):
+        """Test that NaN values are preserved in output."""
+        df = pd.DataFrame({"x": [0.0, 1.0, np.nan, 2.0, 0.0, np.nan, 3.0]})
+
+        scaler = QuantilePerformanceScaler(features=["x"], prefix="")
+        transformed = scaler.fit_transform(df)
+
+        # NaN positions should remain NaN
+        assert np.isnan(transformed["x"].iloc[2])
+        assert np.isnan(transformed["x"].iloc[5])
+
+        # Non-NaN values should be valid
+        non_nan_mask = ~np.isnan(transformed["x"].values)
+        assert np.all((transformed["x"].values[non_nan_mask] >= 0) &
+                      (transformed["x"].values[non_nan_mask] <= 1))
+
+    def test_single_unique_nonzero(self):
+        """Test edge case: single unique non-zero value."""
+        df = pd.DataFrame({"x": [0.0, 0.0, 5.0, 5.0, 0.0, 5.0]})
+
+        scaler = QuantilePerformanceScaler(features=["x"], prefix="")
+        transformed = scaler.fit_transform(df)
+
+        # Should still work - zeros map to π/2, non-zeros to (π, 1)
+        pi = scaler._zero_proportion["x"]
+        is_zero = df["x"] == 0
+
+        # Zeros should map to π/2
+        assert np.allclose(transformed["x"].values[is_zero.values], pi / 2)
+
+        # Non-zeros should all map to same value (since they're all equal)
+        nonzero_values = transformed["x"].values[~is_zero.values]
+        assert np.allclose(nonzero_values, nonzero_values[0])

@@ -3,6 +3,7 @@ from typing import Literal, Protocol
 
 import narwhals
 import narwhals.stable.v2 as nw
+import numpy as np
 from lightgbm import LGBMRegressor
 from narwhals.typing import IntoFrameT
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -420,3 +421,82 @@ class GroupByTransformer(BaseEstimator, TransformerMixin):
     @nw.narwhalify
     def transform(self, df: IntoFrameT) -> IntoFrameT:
         return df.join(self._grouped, on=self.granularity, how="left").to_native()
+
+
+class QuantilePerformanceScaler(BaseEstimator, TransformerMixin):
+    """
+    Quantile-based scaling for zero-inflated distributions.
+
+    Uses probability integral transform:
+    - Zeros → π/2 (midpoint of zero probability mass)
+    - Non-zeros → uniform on (π, 1) via empirical CDF
+
+    Fast: O(n log n) for fit, O(n) for transform.
+    """
+
+    def __init__(
+        self,
+        features: list[str],
+        zero_threshold: float = 1e-10,
+        n_quantiles: int = 1000,
+        prefix: str = "",
+    ):
+        self.features = features
+        self.zero_threshold = zero_threshold
+        self.n_quantiles = n_quantiles
+        self.prefix = prefix
+        self.features_out = [self.prefix + f for f in self.features]
+
+        self._zero_proportion: dict[str, float] = {}
+        self._nonzero_quantiles: dict[str, np.ndarray | None] = {}
+
+    @nw.narwhalify
+    def fit(self, df: IntoFrameT, y=None):
+        for feature in self.features:
+            values = df[feature].to_numpy()
+            values = values[np.isfinite(values)]
+
+            is_zero = np.abs(values) < self.zero_threshold
+            self._zero_proportion[feature] = np.mean(is_zero)
+
+            nonzero_values = values[~is_zero]
+            if len(nonzero_values) > 0:
+                percentiles = np.linspace(0, 100, self.n_quantiles + 1)
+                self._nonzero_quantiles[feature] = np.percentile(nonzero_values, percentiles)
+            else:
+                self._nonzero_quantiles[feature] = None
+        return self
+
+    @nw.narwhalify
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
+        for feature in self.features:
+            out_feature = self.prefix + feature
+            values = df[feature].to_numpy()
+            result = np.full_like(values, np.nan, dtype=float)
+
+            # Handle NaN explicitly - preserve NaN in output
+            is_finite = np.isfinite(values)
+            is_zero = is_finite & (np.abs(values) < self.zero_threshold)
+            is_nonzero = is_finite & ~is_zero
+
+            pi = self._zero_proportion[feature]
+
+            # Zeros → midpoint of zero mass
+            result[is_zero] = pi / 2
+
+            # Non-zeros → interpolate to (π, 1)
+            nonzero_quantiles = self._nonzero_quantiles[feature]
+            if nonzero_quantiles is not None and np.any(is_nonzero):
+                nonzero_values = np.clip(
+                    values[is_nonzero], nonzero_quantiles[0], nonzero_quantiles[-1]
+                )
+                ranks = np.interp(
+                    nonzero_values,
+                    nonzero_quantiles,
+                    np.linspace(0, 1, len(nonzero_quantiles)),
+                )
+                result[is_nonzero] = pi + (1 - pi) * ranks
+
+            df = df.with_columns(**{out_feature: result})
+
+        return df.to_native()
