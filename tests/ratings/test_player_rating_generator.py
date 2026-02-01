@@ -2874,3 +2874,38 @@ def test_defense_participation_weight_backwards_compatibility(base_cn, library):
     assert result is not None
     assert len(gen._player_off_ratings) > 0
     assert len(gen._player_def_ratings) > 0
+
+
+def test_fit_transform_null_perf_with_use_off_def_split_false__no_crash(base_cn):
+    """
+    Regression test: null performance with use_off_def_split=False should not crash.
+
+    Bug: When use_off_def_split=False and a player has null performance:
+    - Line 598 checks `if team1_def_perf is None` (team-level avg, not None if any played)
+    - Line 605 does `def_perf = float(perf_value)` where perf_value is None
+    - Crash: TypeError: float() argument must be a string or a number, not 'NoneType'
+
+    Fix: Check `if team1_def_perf is None or perf_value is None` to skip def update
+    for players who didn't play (null performance means no rating update).
+    """
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4", "P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2", "T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1", "M2", "M2", "M2", "M2"],
+            "dt": ["2024-01-01"] * 4 + ["2024-01-02"] * 4,
+            "perf": [0.6, 0.4, 0.5, 0.5, None, 0.6, 0.5, 0.5],  # P1 null in M2
+            "pw": [1.0] * 8,
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        use_off_def_split=False,  # This triggers the buggy code path
+    )
+
+    # Should not crash - before fix this raises:
+    # TypeError: float() argument must be a string or a number, not 'NoneType'
+    result = gen.fit_transform(df)
+    assert result is not None
