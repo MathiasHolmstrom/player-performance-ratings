@@ -432,6 +432,9 @@ class QuantilePerformanceScaler(BaseEstimator, TransformerMixin):
     - Non-zeros → uniform on (π, 1) via empirical CDF
 
     Fast: O(n log n) for fit, O(n) for transform.
+
+    If weight_column is provided, weighted quantiles are computed so that
+    the scaling respects participation weights (e.g., minutes played).
     """
 
     def __init__(
@@ -440,11 +443,13 @@ class QuantilePerformanceScaler(BaseEstimator, TransformerMixin):
         zero_threshold: float = 1e-10,
         n_quantiles: int = 1000,
         prefix: str = "",
+        weight_column: str | None = None,
     ):
         self.features = features
         self.zero_threshold = zero_threshold
         self.n_quantiles = n_quantiles
         self.prefix = prefix
+        self.weight_column = weight_column
         self.features_out = [self.prefix + f for f in self.features]
 
         self._zero_proportion: dict[str, float] = {}
@@ -452,20 +457,81 @@ class QuantilePerformanceScaler(BaseEstimator, TransformerMixin):
 
     @nw.narwhalify
     def fit(self, df: IntoFrameT, y=None):
+        # Get weights if specified
+        weights = None
+        if self.weight_column is not None:
+            weights = df[self.weight_column].to_numpy()
+
         for feature in self.features:
             values = df[feature].to_numpy()
-            values = values[np.isfinite(values)]
 
-            is_zero = np.abs(values) < self.zero_threshold
-            self._zero_proportion[feature] = np.mean(is_zero)
+            # Create finite mask
+            finite_mask = np.isfinite(values)
+            if weights is not None:
+                # Also require finite, positive weights
+                weight_valid = np.isfinite(weights) & (weights > 0)
+                finite_mask = finite_mask & weight_valid
 
-            nonzero_values = values[~is_zero]
+            values_finite = values[finite_mask]
+
+            if weights is not None:
+                weights_finite = weights[finite_mask]
+            else:
+                weights_finite = None
+
+            is_zero = np.abs(values_finite) < self.zero_threshold
+
+            if weights_finite is not None:
+                # Weighted zero proportion: sum(weights where zero) / sum(weights)
+                total_weight = np.sum(weights_finite)
+                if total_weight > 0:
+                    self._zero_proportion[feature] = np.sum(weights_finite[is_zero]) / total_weight
+                else:
+                    self._zero_proportion[feature] = np.mean(is_zero)
+            else:
+                self._zero_proportion[feature] = np.mean(is_zero)
+
+            nonzero_mask = ~is_zero
+            nonzero_values = values_finite[nonzero_mask]
+
             if len(nonzero_values) > 0:
-                percentiles = np.linspace(0, 100, self.n_quantiles + 1)
-                self._nonzero_quantiles[feature] = np.percentile(nonzero_values, percentiles)
+                if weights_finite is not None:
+                    # Weighted quantiles using interpolation on weighted CDF
+                    nonzero_weights = weights_finite[nonzero_mask]
+                    self._nonzero_quantiles[feature] = self._compute_weighted_quantiles(
+                        nonzero_values, nonzero_weights
+                    )
+                else:
+                    percentiles = np.linspace(0, 100, self.n_quantiles + 1)
+                    self._nonzero_quantiles[feature] = np.percentile(nonzero_values, percentiles)
             else:
                 self._nonzero_quantiles[feature] = None
         return self
+
+    def _compute_weighted_quantiles(
+        self, values: np.ndarray, weights: np.ndarray
+    ) -> np.ndarray:
+        """Compute weighted quantiles using weighted CDF interpolation."""
+        # Sort by value
+        order = np.argsort(values)
+        sorted_values = values[order]
+        sorted_weights = weights[order]
+
+        # Compute weighted CDF
+        cumulative_weights = np.cumsum(sorted_weights)
+        total_weight = cumulative_weights[-1]
+
+        # Normalize CDF to [0, 1]
+        cdf = cumulative_weights / total_weight
+
+        # Sample quantiles at evenly spaced CDF positions
+        target_cdf = np.linspace(0, 1, self.n_quantiles + 1)
+
+        # Interpolate to get quantile values
+        # Use np.interp which handles edge cases gracefully
+        quantiles = np.interp(target_cdf, cdf, sorted_values)
+
+        return quantiles
 
     @nw.narwhalify
     def transform(self, df: IntoFrameT) -> IntoFrameT:

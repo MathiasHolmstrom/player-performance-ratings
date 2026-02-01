@@ -89,6 +89,7 @@ class PerformanceManager(BaseEstimator, TransformerMixin):
         min_value: float = 0.0,
         max_value: float = 1.0,
         zero_inflation_threshold: float = 0.15,
+        quantile_weight_column: str | None = None,
     ):
         self.features = features
         self.prefix = prefix
@@ -106,6 +107,7 @@ class PerformanceManager(BaseEstimator, TransformerMixin):
         self.min_value = min_value
         self.max_value = max_value
         self.zero_inflation_threshold = zero_inflation_threshold
+        self.quantile_weight_column = quantile_weight_column
 
         self.transformers = create_performance_scalers_transformers(
             transformer_names=self.transformer_names,
@@ -150,6 +152,7 @@ class PerformanceManager(BaseEstimator, TransformerMixin):
                             QuantilePerformanceScaler(
                                 features=prefixed_features,
                                 prefix="",
+                                weight_column=self.quantile_weight_column,
                             )
                         ]
                         break
@@ -214,6 +217,7 @@ class PerformanceWeightsManager(PerformanceManager):
         prefix: str = "performance__",
         return_all_features: bool = False,
         zero_inflation_threshold: float = 0.15,
+        quantile_weight_column: str | None = None,
     ):
         self.weights = weights
         self.return_all_features = return_all_features
@@ -227,6 +231,7 @@ class PerformanceWeightsManager(PerformanceManager):
             min_value=min_value,
             performance_column=performance_column,
             zero_inflation_threshold=zero_inflation_threshold,
+            quantile_weight_column=quantile_weight_column,
         )
 
     @nw.narwhalify

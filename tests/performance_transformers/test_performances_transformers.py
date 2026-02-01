@@ -551,3 +551,214 @@ class TestQuantilePerformanceScaler:
         # Non-zeros should all map to same value (since they're all equal)
         nonzero_values = transformed["x"].values[~is_zero.values]
         assert np.allclose(nonzero_values, nonzero_values[0])
+
+
+class TestWeightedQuantilePerformanceScaler:
+    """Tests for weighted quantile scaling."""
+
+    @pytest.fixture
+    def weighted_zero_inflated_data(self):
+        """Create zero-inflated data where high-weight rows have higher non-zero rate."""
+        np.random.seed(42)
+        n = 1000
+
+        # Create weights (e.g., minutes played)
+        weights = np.random.exponential(scale=20, size=n) + 1  # 1 to ~100
+
+        # High-weight rows have lower zero probability
+        # This simulates: players with more minutes are more likely to have non-zero stats
+        values = []
+        for w in weights:
+            # Zero probability decreases as weight increases
+            zero_prob = 0.6 - 0.4 * (w / weights.max())  # 0.2 to 0.6
+            if np.random.random() < zero_prob:
+                values.append(0.0)
+            else:
+                values.append(np.random.exponential(scale=2))
+
+        return np.array(values), weights
+
+    @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+    def test_weighted_mean_alignment(self, df_type, weighted_zero_inflated_data):
+        """Test that weighted mean of scaled values is closer to 0.5 with weighted scaling."""
+        values, weights = weighted_zero_inflated_data
+        df = df_type({"performance": values, "weight": weights})
+
+        # Weighted scaler
+        weighted_scaler = QuantilePerformanceScaler(
+            features=["performance"], prefix="", weight_column="weight"
+        )
+        weighted_transformed = weighted_scaler.fit_transform(df)
+
+        if isinstance(weighted_transformed, pd.DataFrame):
+            weighted_scaled = weighted_transformed["performance"].values
+        else:
+            weighted_scaled = weighted_transformed["performance"].to_numpy()
+
+        # Compute weighted mean
+        weighted_mean = np.average(weighted_scaled, weights=weights)
+
+        # Weighted scaling should have weighted mean close to 0.5
+        assert abs(weighted_mean - 0.5) < 0.02, (
+            f"Weighted mean should be close to 0.5, got {weighted_mean}"
+        )
+
+    @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+    def test_backward_compatibility_without_weights(self, df_type):
+        """Test that weight_column=None matches original unweighted behavior."""
+        np.random.seed(42)
+        n = 500
+        zeros = np.zeros(200)
+        nonzeros = np.random.exponential(scale=2, size=n - 200)
+        raw = np.concatenate([zeros, nonzeros])
+        np.random.shuffle(raw)
+
+        df = df_type({"performance": raw})
+
+        # Unweighted scaler (explicitly None)
+        unweighted_scaler = QuantilePerformanceScaler(
+            features=["performance"], prefix="", weight_column=None
+        )
+        unweighted_result = unweighted_scaler.fit_transform(df)
+
+        # Scaler without weight_column argument
+        default_scaler = QuantilePerformanceScaler(features=["performance"], prefix="")
+        default_result = default_scaler.fit_transform(df)
+
+        if isinstance(unweighted_result, pd.DataFrame):
+            unweighted_values = unweighted_result["performance"].values
+            default_values = default_result["performance"].values
+        else:
+            unweighted_values = unweighted_result["performance"].to_numpy()
+            default_values = default_result["performance"].to_numpy()
+
+        # Results should be identical
+        assert np.allclose(unweighted_values, default_values, atol=1e-10)
+
+    @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+    def test_equal_weights_matches_unweighted(self, df_type):
+        """Test that all equal weights produce same result as unweighted."""
+        np.random.seed(42)
+        n = 500
+        zeros = np.zeros(200)
+        nonzeros = np.random.exponential(scale=2, size=n - 200)
+        raw = np.concatenate([zeros, nonzeros])
+        np.random.shuffle(raw)
+        equal_weights = np.ones(n)
+
+        df = df_type({"performance": raw, "weight": equal_weights})
+
+        # Weighted scaler with equal weights
+        weighted_scaler = QuantilePerformanceScaler(
+            features=["performance"], prefix="", weight_column="weight"
+        )
+        weighted_result = weighted_scaler.fit_transform(df)
+
+        # Unweighted scaler
+        unweighted_scaler = QuantilePerformanceScaler(
+            features=["performance"], prefix="", weight_column=None
+        )
+        unweighted_result = unweighted_scaler.fit_transform(df)
+
+        if isinstance(weighted_result, pd.DataFrame):
+            weighted_values = weighted_result["performance"].values
+            unweighted_values = unweighted_result["performance"].values
+        else:
+            weighted_values = weighted_result["performance"].to_numpy()
+            unweighted_values = unweighted_result["performance"].to_numpy()
+
+        # Results should be very close (may differ slightly due to algorithm differences)
+        assert np.allclose(weighted_values, unweighted_values, atol=0.02)
+
+    @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+    def test_weights_with_zeros_excluded(self, df_type):
+        """Test that rows with zero weights are excluded from fitting."""
+        np.random.seed(42)
+        # Create data where zeros have zero weight
+        values = np.array([0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+        weights = np.array([0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0])  # Zero weight for zeros
+
+        df = df_type({"performance": values, "weight": weights})
+
+        scaler = QuantilePerformanceScaler(
+            features=["performance"], prefix="", weight_column="weight"
+        )
+        scaler.fit(df)
+
+        # Zero proportion should be 0 because zero-weight rows are excluded
+        assert scaler._zero_proportion["performance"] == 0.0
+
+    @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+    def test_weighted_zero_proportion(self, df_type):
+        """Test that zero proportion is computed using weights."""
+        # 3 zeros with weight 10 each = 30
+        # 7 non-zeros with weight 10 each = 70
+        # Weighted zero proportion = 30/100 = 0.3
+        values = np.array([0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0])
+        weights = np.array([10.0] * 10)
+
+        df = df_type({"performance": values, "weight": weights})
+
+        scaler = QuantilePerformanceScaler(
+            features=["performance"], prefix="", weight_column="weight"
+        )
+        scaler.fit(df)
+
+        assert abs(scaler._zero_proportion["performance"] - 0.3) < 1e-10
+
+    @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+    def test_weighted_zero_proportion_unequal_weights(self, df_type):
+        """Test weighted zero proportion with unequal weights."""
+        # 2 zeros with weight 5 each = 10
+        # 2 non-zeros with weight 15 each = 30
+        # Weighted zero proportion = 10/40 = 0.25
+        values = np.array([0.0, 0.0, 1.0, 2.0])
+        weights = np.array([5.0, 5.0, 15.0, 15.0])
+
+        df = df_type({"performance": values, "weight": weights})
+
+        scaler = QuantilePerformanceScaler(
+            features=["performance"], prefix="", weight_column="weight"
+        )
+        scaler.fit(df)
+
+        assert abs(scaler._zero_proportion["performance"] - 0.25) < 1e-10
+
+    @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+    def test_monotonicity_preserved_with_weights(self, df_type, weighted_zero_inflated_data):
+        """Test that monotonicity is preserved with weighted scaling."""
+        values, weights = weighted_zero_inflated_data
+        df = df_type({"performance": values, "weight": weights})
+
+        scaler = QuantilePerformanceScaler(
+            features=["performance"], prefix="", weight_column="weight"
+        )
+        transformed = scaler.fit_transform(df)
+
+        if isinstance(transformed, pd.DataFrame):
+            scaled = transformed["performance"].values
+        else:
+            scaled = transformed["performance"].to_numpy()
+
+        # Check monotonicity
+        order = np.argsort(values)
+        sorted_scaled = scaled[order]
+        assert np.all(np.diff(sorted_scaled) >= -1e-10)
+
+    @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+    def test_bounded_zero_one_with_weights(self, df_type, weighted_zero_inflated_data):
+        """Test that output is bounded [0, 1] with weighted scaling."""
+        values, weights = weighted_zero_inflated_data
+        df = df_type({"performance": values, "weight": weights})
+
+        scaler = QuantilePerformanceScaler(
+            features=["performance"], prefix="", weight_column="weight"
+        )
+        transformed = scaler.fit_transform(df)
+
+        if isinstance(transformed, pd.DataFrame):
+            scaled = transformed["performance"].values
+        else:
+            scaled = transformed["performance"].to_numpy()
+
+        assert np.all((scaled >= 0) & (scaled <= 1))
