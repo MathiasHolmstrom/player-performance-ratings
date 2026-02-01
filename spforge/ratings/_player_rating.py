@@ -595,7 +595,7 @@ class PlayerRatingGenerator(RatingGenerator):
                         * float(pre_player.match_performance.participation_weight)
                     )
 
-                if team1_def_perf is None:
+                if team1_def_perf is None or (not self.use_off_def_split and perf_value is None):
                     def_change = 0.0
                 else:
                     def_perf = float(team1_def_perf)
@@ -689,7 +689,7 @@ class PlayerRatingGenerator(RatingGenerator):
                         * float(pre_player.match_performance.participation_weight)
                     )
 
-                if team2_def_perf is None:
+                if team2_def_perf is None or (not self.use_off_def_split and perf_value is None):
                     def_change = 0.0
                 else:
                     def_perf = float(team2_def_perf)
