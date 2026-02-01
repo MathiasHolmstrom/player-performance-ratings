@@ -2611,9 +2611,19 @@ def test_fit_transform_ignore_opponent_with_autoscale_and_temporal_drift(base_cn
     late_actual_mean = sum(late_actual_scaled) / len(late_actual_scaled)
     late_pred_mean = sum(late_preds) / len(late_preds)
 
-    # Verify drift is preserved after scaling
-    assert early_actual_mean > 0.5, "Early period should be > 0.5 after scaling"
-    assert late_actual_mean < 0.5, "Late period should be < 0.5 after scaling"
+    # Verify drift is preserved after scaling (strict bounds based on 0.505→0.495 drift)
+    assert early_actual_mean > 0.51, (
+        f"Early period should be > 0.51 after scaling, got {early_actual_mean:.4f}"
+    )
+    assert late_actual_mean < 0.49, (
+        f"Late period should be < 0.49 after scaling, got {late_actual_mean:.4f}"
+    )
+
+    # Verify drift magnitude is significant
+    drift_magnitude = early_actual_mean - late_actual_mean
+    assert drift_magnitude > 0.02, (
+        f"Drift magnitude should be > 0.02, got {drift_magnitude:.4f}"
+    )
 
     # Verify predictions track the SCALED values (not raw 0.505/0.495)
     # Tolerance: 0.025 accounts for convergence lag with temporal drift
