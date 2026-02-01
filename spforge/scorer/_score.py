@@ -267,6 +267,7 @@ class BaseScorer(ABC):
         granularity: list[str] | None = None,
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
+        _name_override: str | None = None,
     ):
         """
         :param target: The column name of the target
@@ -277,6 +278,9 @@ class BaseScorer(ABC):
         :param aggregation_level: The columns to group by before calculating the score (e.g., group from game-player to game-team)
         :param aggregation_method: Aggregation methods for pred/target when aggregation_level is set.
         :param granularity: The columns to calculate separate scores for each unique combination (e.g., different scores for each team)
+        :param compare_to_naive: If True, returns naive_score - model_score (improvement over naive baseline)
+        :param naive_granularity: Granularity for computing naive baseline predictions
+        :param _name_override: Override auto-generated name (internal use)
         """
         self.target = target
         self.pred_column = pred_column
@@ -295,6 +299,7 @@ class BaseScorer(ABC):
         self.granularity = granularity
         self.compare_to_naive = compare_to_naive
         self.naive_granularity = naive_granularity
+        self._name_override = _name_override
 
     def _resolve_aggregation_method(self, key: str) -> Any:
         if self.aggregation_method is None:
@@ -359,6 +364,98 @@ class BaseScorer(ABC):
             mask = col_mask if mask is None else (mask & col_mask)
         return df.filter(mask)
 
+    def _get_scorer_id(self) -> str:
+        """Get scorer-specific identifier in snake_case. Override in subclasses if needed."""
+        import re
+        name = self.__class__.__name__
+        # Check if name is all uppercase (acronym like PWMSE)
+        if name.isupper():
+            return name.lower()
+        # Otherwise use regular snake_case conversion
+        return re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
+
+    def _format_column_list(self, columns: list[str], max_display: int = 3) -> str:
+        """Format column list with abbreviation for long lists."""
+        if len(columns) <= max_display:
+            return "+".join(columns)
+        shown = "+".join(columns[:max_display])
+        remaining = len(columns) - max_display
+        return f"{shown}+{remaining}more"
+
+    def _sanitize_column_name(self, name: str) -> str:
+        """Replace special characters with underscores."""
+        import re
+        return re.sub(r'[^a-zA-Z0-9_]', '_', name)
+
+    def _count_user_filters(self) -> int:
+        """Count filters excluding auto-added validation filter."""
+        if not self.filters:
+            return 0
+        if self.validation_column is None:
+            return len(self.filters)
+        count = 0
+        for f in self.filters:
+            if not (f.column_name == self.validation_column and
+                    f.operator == Operator.EQUALS and
+                    f.value == 1):
+                count += 1
+        return count
+
+    def _generate_name(self) -> str:
+        """Generate readable name from scorer configuration."""
+        parts = []
+
+        parts.append(self._get_scorer_id())
+
+        parts.append(self._sanitize_column_name(self.target))
+
+        if self.granularity:
+            gran_str = self._format_column_list(self.granularity)
+            parts.append(f"gran:{gran_str}")
+
+        if self.compare_to_naive:
+            if self.naive_granularity:
+                naive_str = self._format_column_list(self.naive_granularity)
+                parts.append(f"naive:{naive_str}")
+            else:
+                parts.append("naive")
+
+        if self.aggregation_level:
+            agg_str = self._format_column_list(self.aggregation_level)
+            parts.append(f"agg:{agg_str}")
+
+        filter_count = self._count_user_filters()
+        if filter_count > 0:
+            parts.append(f"filters:{filter_count}")
+
+        return "_".join(parts)
+
+    @property
+    def name(self) -> str:
+        """
+        Generate a human-readable name for this scorer.
+
+        Returns descriptive name based on scorer configuration including
+        target, granularity, naive comparison, aggregation, and filters.
+        Only includes components that are actually set (non-None/non-empty).
+
+        Format: {scorer_id}_{target}[_gran:{cols}][_naive[:cols]][_agg:{cols}][_filters:{n}]
+
+        Can be overridden by passing _name_override to constructor.
+
+        Examples:
+            >>> scorer = MeanBiasScorer(target="points", pred_column="pred")
+            >>> scorer.name
+            'mean_bias_scorer_points'
+
+            >>> scorer = MeanBiasScorer(target="points", granularity=["team_id"], compare_to_naive=True)
+            >>> scorer.name
+            'mean_bias_scorer_points_gran:team_id_naive'
+        """
+        if hasattr(self, '_name_override') and self._name_override is not None:
+            return self._name_override
+        return self._generate_name()
+
     @abstractmethod
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
         """
@@ -385,6 +482,7 @@ class PWMSE(BaseScorer):
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
         evaluation_labels: list[int] | None = None,
+        _name_override: str | None = None,
     ):
         self.pred_column_name = pred_column
         super().__init__(
@@ -397,6 +495,7 @@ class PWMSE(BaseScorer):
             validation_column=validation_column,
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
+            _name_override=_name_override,
         )
         self.labels = labels
         self.evaluation_labels = evaluation_labels
@@ -553,6 +652,7 @@ class MeanBiasScorer(BaseScorer):
         labels: list[int] | None = None,
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
+        _name_override: str | None = None,
     ):
         """
         :param pred_column: The column name of the predictions
@@ -563,6 +663,7 @@ class MeanBiasScorer(BaseScorer):
         :param granularity: The columns to calculate separate scores for each unique combination (e.g., different scores for each team)
         :param filters: The filters to apply before calculating
         :param labels: The labels corresponding to each index in probability distributions (e.g., [-5, -4, ..., 35] for rush yards)
+        :param _name_override: Override auto-generated name (internal use)
         """
 
         self.pred_column_name = pred_column
@@ -577,6 +678,7 @@ class MeanBiasScorer(BaseScorer):
             validation_column=validation_column,
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
+            _name_override=_name_override,
         )
 
     def _mean_bias_score(self, df: IntoFrameT) -> float:
@@ -691,6 +793,7 @@ class SklearnScorer(BaseScorer):
         params: dict[str, Any] = None,
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
+        _name_override: str | None = None,
     ):
         """
         :param pred_column: The column name of the predictions
@@ -701,6 +804,7 @@ class SklearnScorer(BaseScorer):
         :param aggregation_level: The columns to group by before calculating the score (e.g., group from game-player to game-team)
         :param granularity: The columns to calculate separate scores for each unique combination (e.g., different scores for each team)
         :param filters: The filters to apply before calculating
+        :param _name_override: Override auto-generated name (internal use)
         """
 
         super().__init__(
@@ -713,10 +817,21 @@ class SklearnScorer(BaseScorer):
             validation_column=validation_column,
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
+            _name_override=_name_override,
         )
         self.pred_column_name = pred_column
         self.scorer_function = scorer_function
         self.params = params or {}
+
+    def _get_scorer_id(self) -> str:
+        """Use the scorer function name."""
+        if hasattr(self.scorer_function, '__name__'):
+            name = self.scorer_function.__name__
+            # Handle lambda functions
+            if name == '<lambda>':
+                return "custom_metric"
+            return name
+        return "custom_metric"
 
     def _pad_probabilities(
         self, y_true: list[Any], probabilities: list[list[float]]
@@ -827,6 +942,7 @@ class ProbabilisticMeanBias(BaseScorer):
         filters: list[Filter] | None = None,
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
+        _name_override: str | None = None,
     ):
 
         self.pred_column_name = pred_column
@@ -841,6 +957,7 @@ class ProbabilisticMeanBias(BaseScorer):
             validation_column=validation_column,
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
+            _name_override=_name_override,
         )
 
     def _aggregate_pandas_series(
@@ -1064,6 +1181,7 @@ class OrdinalLossScorer(BaseScorer):
         labels: list[int] | None = None,
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
+        _name_override: str | None = None,
     ):
         self.pred_column_name = pred_column
         super().__init__(
@@ -1076,6 +1194,7 @@ class OrdinalLossScorer(BaseScorer):
             validation_column=validation_column,
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
+            _name_override=_name_override,
         )
         self.classes = classes
 
@@ -1263,6 +1382,7 @@ class ThresholdEventScorer(BaseScorer):
         filters: list["Filter"] | None = None,
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
+        _name_override: str | None = None,
     ):
         self.pred_column_name = dist_column
         super().__init__(
@@ -1275,6 +1395,7 @@ class ThresholdEventScorer(BaseScorer):
             validation_column=validation_column,
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
+            _name_override=_name_override,
         )
 
         self.dist_column = dist_column
