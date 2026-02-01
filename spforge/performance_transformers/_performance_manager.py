@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Literal
 
 import narwhals.stable.v2 as nw
-import numpy as np
 from narwhals.typing import IntoFrameT
 from sklearn.base import BaseEstimator, TransformerMixin
 
@@ -12,7 +11,6 @@ from spforge.performance_transformers._performances_transformers import (
     MinMaxTransformer,
     NarwhalsFeatureTransformer,
     PartialStandardScaler,
-    QuantilePerformanceScaler,
     SymmetricDistributionTransformer,
 )
 
@@ -88,12 +86,9 @@ class PerformanceManager(BaseEstimator, TransformerMixin):
         prefix: str = "performance__",
         min_value: float = -0.02,
         max_value: float = 1.02,
-        zero_inflation_threshold: float = 0.15,
     ):
         self.features = features
         self.prefix = prefix
-        # Store whether user explicitly disabled transformers (passed empty list)
-        self._user_disabled_transformers = transformer_names is not None and len(transformer_names) == 0
         self.transformer_names = transformer_names or [
             "symmetric",
             "partial_standard_scaler",
@@ -105,7 +100,6 @@ class PerformanceManager(BaseEstimator, TransformerMixin):
         self.performance_column = self.prefix + performance_column
         self.min_value = min_value
         self.max_value = max_value
-        self.zero_inflation_threshold = zero_inflation_threshold
 
         self.transformers = create_performance_scalers_transformers(
             transformer_names=self.transformer_names,
@@ -113,47 +107,9 @@ class PerformanceManager(BaseEstimator, TransformerMixin):
             features=self.features,
             prefix=self.prefix,
         )
-        self._using_quantile_scaler = False
 
     @nw.narwhalify
     def fit(self, df: IntoFrameT, y=None):
-        # Check for zero-inflated distributions and swap to quantile scaler if needed
-        # Only apply when user hasn't explicitly disabled transformers (passed empty list)
-        if self.zero_inflation_threshold > 0 and not self._user_disabled_transformers:
-            df = self._ensure_inputs_exist(df, self.transformers[0])
-            prefixed_features = [self.prefix + f for f in self.features]
-
-            for feature in prefixed_features:
-                if feature in df.columns:
-                    values = df[feature].to_numpy()
-                    values = values[np.isfinite(values)]
-
-                    # Skip if binary/categorical data (few unique values)
-                    # Quantile scaler is for continuous zero-inflated data, not binary outcomes
-                    n_unique = len(np.unique(values))
-                    if n_unique <= 3:
-                        continue
-
-                    zero_proportion = np.mean(np.abs(values) < 1e-10)
-
-                    if zero_proportion > self.zero_inflation_threshold:
-                        logging.info(
-                            f"Detected zero-inflated distribution for {feature} "
-                            f"({zero_proportion:.1%} zeros). Using QuantilePerformanceScaler."
-                        )
-                        self._using_quantile_scaler = True
-                        # Use original_transformers (deepcopy made before standard transformers
-                        # were appended to custom_transformers)
-                        self.transformers = [
-                            copy.deepcopy(t) for t in self.original_transformers
-                        ] + [
-                            QuantilePerformanceScaler(
-                                features=prefixed_features,
-                                prefix="",
-                            )
-                        ]
-                        break
-
         for t in self.transformers:
             df = self._ensure_inputs_exist(df, t)
             t.fit(df)
@@ -213,7 +169,6 @@ class PerformanceWeightsManager(PerformanceManager):
         min_value: float = -0.02,
         prefix: str = "performance__",
         return_all_features: bool = False,
-        zero_inflation_threshold: float = 0.15,
     ):
         self.weights = weights
         self.return_all_features = return_all_features
@@ -226,7 +181,6 @@ class PerformanceWeightsManager(PerformanceManager):
             max_value=max_value,
             min_value=min_value,
             performance_column=performance_column,
-            zero_inflation_threshold=zero_inflation_threshold,
         )
 
     @nw.narwhalify
