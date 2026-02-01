@@ -39,6 +39,8 @@ from spforge.feature_generator._utils import to_polars
 PLAYER_STATS = "__PLAYER_STATS"
 _SCALED_PW = "__scaled_participation_weight__"
 _SCALED_PPW = "__scaled_projected_participation_weight__"
+_SCALED_DPW = "__scaled_defense_participation_weight__"
+_SCALED_PDPW = "__scaled_projected_defense_participation_weight__"
 
 
 class PlayerRatingGenerator(RatingGenerator):
@@ -186,6 +188,8 @@ class PlayerRatingGenerator(RatingGenerator):
         self.auto_scale_participation_weights = bool(auto_scale_participation_weights)
         self._participation_weight_max: float | None = None
         self._projected_participation_weight_max: float | None = None
+        self._defense_participation_weight_max: float | None = None
+        self._projected_defense_participation_weight_max: float | None = None
 
         self._player_off_ratings: dict[str, PlayerRating] = {}
         self._player_def_ratings: dict[str, PlayerRating] = {}
@@ -233,8 +237,11 @@ class PlayerRatingGenerator(RatingGenerator):
             eps = 1e-6
             return min_val < -eps or max_val > (1.0 + eps)
 
-        if _out_of_bounds(cn.participation_weight) or _out_of_bounds(
-            cn.projected_participation_weight
+        if (
+            _out_of_bounds(cn.participation_weight)
+            or _out_of_bounds(cn.projected_participation_weight)
+            or _out_of_bounds(cn.defense_participation_weight)
+            or _out_of_bounds(cn.projected_defense_participation_weight)
         ):
             self.scale_participation_weights = True
             logging.warning(
@@ -289,6 +296,25 @@ class PlayerRatingGenerator(RatingGenerator):
         elif self._participation_weight_max is not None:
             self._projected_participation_weight_max = self._participation_weight_max
 
+        if cn.defense_participation_weight and cn.defense_participation_weight in df.columns:
+            q_val = pl_df[cn.defense_participation_weight].quantile(0.99, "linear")
+            if q_val is not None:
+                self._defense_participation_weight_max = float(q_val)
+        elif self._participation_weight_max is not None:
+            self._defense_participation_weight_max = self._participation_weight_max
+
+        if (
+            cn.projected_defense_participation_weight
+            and cn.projected_defense_participation_weight in df.columns
+        ):
+            q_val = pl_df[cn.projected_defense_participation_weight].quantile(0.99, "linear")
+            if q_val is not None:
+                self._projected_defense_participation_weight_max = float(q_val)
+        elif self._defense_participation_weight_max is not None:
+            self._projected_defense_participation_weight_max = self._defense_participation_weight_max
+        elif self._projected_participation_weight_max is not None:
+            self._projected_defense_participation_weight_max = self._projected_participation_weight_max
+
     def _scale_participation_weight_columns(self, df: pl.DataFrame) -> pl.DataFrame:
         """Create internal scaled participation weight columns without mutating originals."""
         if not self.scale_participation_weights:
@@ -321,6 +347,32 @@ class PlayerRatingGenerator(RatingGenerator):
                 .alias(_SCALED_PPW)
             )
 
+        if (
+            cn.defense_participation_weight
+            and cn.defense_participation_weight in df.columns
+            and self._defense_participation_weight_max is not None
+            and self._defense_participation_weight_max > 0
+        ):
+            denom = float(self._defense_participation_weight_max)
+            df = df.with_columns(
+                (pl.col(cn.defense_participation_weight) / denom)
+                .clip(0.0, 1.0)
+                .alias(_SCALED_DPW)
+            )
+
+        if (
+            cn.projected_defense_participation_weight
+            and cn.projected_defense_participation_weight in df.columns
+            and self._projected_defense_participation_weight_max is not None
+            and self._projected_defense_participation_weight_max > 0
+        ):
+            denom = float(self._projected_defense_participation_weight_max)
+            df = df.with_columns(
+                (pl.col(cn.projected_defense_participation_weight) / denom)
+                .clip(0.0, 1.0)
+                .alias(_SCALED_PDPW)
+            )
+
         return df
 
     def _get_participation_weight_col(self) -> str:
@@ -339,7 +391,9 @@ class PlayerRatingGenerator(RatingGenerator):
 
     def _remove_internal_scaled_columns(self, df: pl.DataFrame) -> pl.DataFrame:
         """Remove internal scaled columns before returning."""
-        cols_to_drop = [c for c in [_SCALED_PW, _SCALED_PPW] if c in df.columns]
+        cols_to_drop = [
+            c for c in [_SCALED_PW, _SCALED_PPW, _SCALED_DPW, _SCALED_PDPW] if c in df.columns
+        ]
         if cols_to_drop:
             df = df.drop(cols_to_drop)
         return df
@@ -554,7 +608,7 @@ class PlayerRatingGenerator(RatingGenerator):
                     def_change = (
                         (def_perf - float(pred_def))
                         * mult_def
-                        * float(pre_player.match_performance.participation_weight)
+                        * float(pre_player.match_performance.defense_participation_weight)
                     )
 
                 if math.isnan(off_change) or math.isnan(def_change):
@@ -648,7 +702,7 @@ class PlayerRatingGenerator(RatingGenerator):
                     def_change = (
                         (def_perf - float(pred_def))
                         * mult_def
-                        * float(pre_player.match_performance.participation_weight)
+                        * float(pre_player.match_performance.defense_participation_weight)
                     )
 
                 if math.isnan(off_change) or math.isnan(def_change):
@@ -922,6 +976,19 @@ class PlayerRatingGenerator(RatingGenerator):
         if _SCALED_PPW in df.columns:
             player_stat_cols.append(_SCALED_PPW)
 
+        if cn.defense_participation_weight and cn.defense_participation_weight in df.columns:
+            player_stat_cols.append(cn.defense_participation_weight)
+        if _SCALED_DPW in df.columns:
+            player_stat_cols.append(_SCALED_DPW)
+
+        if (
+            cn.projected_defense_participation_weight
+            and cn.projected_defense_participation_weight in df.columns
+        ):
+            player_stat_cols.append(cn.projected_defense_participation_weight)
+        if _SCALED_PDPW in df.columns:
+            player_stat_cols.append(_SCALED_PDPW)
+
         if cn.position and cn.position in df.columns:
             player_stat_cols.append(cn.position)
 
@@ -1041,6 +1108,28 @@ class PlayerRatingGenerator(RatingGenerator):
                 projected_participation_weight = participation_weight
             projected_participation_weights.append(projected_participation_weight)
 
+            # Use scaled defense participation weight if available, otherwise default to participation_weight
+            if _SCALED_DPW in team_player:
+                defense_participation_weight = team_player.get(_SCALED_DPW, participation_weight)
+            elif cn.defense_participation_weight:
+                defense_participation_weight = team_player.get(
+                    cn.defense_participation_weight, participation_weight
+                )
+            else:
+                defense_participation_weight = participation_weight
+
+            # Use scaled projected defense participation weight if available
+            if _SCALED_PDPW in team_player:
+                projected_defense_participation_weight = team_player.get(
+                    _SCALED_PDPW, defense_participation_weight
+                )
+            elif cn.projected_defense_participation_weight:
+                projected_defense_participation_weight = team_player.get(
+                    cn.projected_defense_participation_weight, defense_participation_weight
+                )
+            else:
+                projected_defense_participation_weight = defense_participation_weight
+
             perf_val = (
                 float(team_player[self.performance_column])
                 if (
@@ -1061,6 +1150,8 @@ class PlayerRatingGenerator(RatingGenerator):
                 performance_value=perf_val,
                 projected_participation_weight=projected_participation_weight,
                 participation_weight=participation_weight,
+                defense_participation_weight=defense_participation_weight,
+                projected_defense_participation_weight=projected_defense_participation_weight,
                 team_players_playing_time=team_playing_time,
                 opponent_players_playing_time=opponent_playing_time,
             )
@@ -1296,6 +1387,22 @@ class PlayerRatingGenerator(RatingGenerator):
                         ppw = pw
                     proj_w.append(float(ppw))
 
+                    # Use scaled defense participation weight if available
+                    if _SCALED_DPW in tp:
+                        dpw = tp.get(_SCALED_DPW, pw)
+                    elif cn.defense_participation_weight:
+                        dpw = tp.get(cn.defense_participation_weight, pw)
+                    else:
+                        dpw = pw
+
+                    # Use scaled projected defense participation weight if available
+                    if _SCALED_PDPW in tp:
+                        pdpw = tp.get(_SCALED_PDPW, dpw)
+                    elif cn.projected_defense_participation_weight:
+                        pdpw = tp.get(cn.projected_defense_participation_weight, dpw)
+                    else:
+                        pdpw = dpw
+
                     team_playing_time = self._get_players_playing_time(
                         tp, cn.team_players_playing_time
                     )
@@ -1307,6 +1414,8 @@ class PlayerRatingGenerator(RatingGenerator):
                         performance_value=get_perf_value(tp),
                         projected_participation_weight=ppw,
                         participation_weight=pw,
+                        defense_participation_weight=dpw,
+                        projected_defense_participation_weight=pdpw,
                         team_players_playing_time=team_playing_time,
                         opponent_players_playing_time=opponent_playing_time,
                     )

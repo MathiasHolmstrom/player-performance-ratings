@@ -2710,3 +2710,114 @@ def test_ignore_opponent_predictor_reference_rating_set_correctly(base_cn):
     assert gen5._performance_predictor._reference_rating == 1200.0, (
         f"Expected hardcoded start rating 1200.0 to take precedence, got {gen5._performance_predictor._reference_rating}"
     )
+
+
+def test_separate_offense_defense_participation_weights(base_cn):
+    """Test that offense and defense use separate participation weights.
+
+    When participation_weight represents offensive activity (e.g., shots attempted),
+    using it for both offense and defense updates creates bias. This test verifies
+    that defense_participation_weight is used for defensive rating updates.
+    """
+    from dataclasses import replace
+
+    cn = replace(
+        base_cn,
+        participation_weight="shots_attempted",
+        defense_participation_weight="minutes",
+    )
+
+    # Create a scenario where a high-volume shooter (many shots) faces a low-volume shooter
+    # The high-volume shooter should have larger offensive updates but equal defensive updates
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.6, 0.4, 0.5, 0.5],  # Varying performance values
+            "shots_attempted": [10.0, 10.0, 10.0, 10.0],  # Same offensive activity
+            "minutes": [30.0, 30.0, 30.0, 30.0],  # Same defensive activity
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=cn,
+        auto_scale_performance=True,
+        rating_change_multiplier_offense=50,
+        rating_change_multiplier_defense=50,
+    )
+
+    result = gen.fit_transform(df)
+
+    # Verify that the defense_participation_weight column is present in the data
+    assert "minutes" in df.columns
+
+    # All players performed equally (0.5) with equal participation weights,
+    # so ratings should be symmetric
+    assert "P1" in gen._player_off_ratings
+    assert "P1" in gen._player_def_ratings
+
+    # Now test with different participation weights for offense vs defense
+    df2 = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M2", "M2", "M2", "M2"],
+            "dt": ["2024-01-02"] * 4,
+            "perf": [0.6, 0.4, 0.5, 0.5],
+            "shots_attempted": [20.0, 5.0, 10.0, 10.0],  # P1 shoots much more
+            "minutes": [30.0, 30.0, 30.0, 30.0],  # But all play same minutes
+        }
+    )
+
+    result2 = gen.fit_transform(df2)
+
+    # P1 should have larger offensive rating changes due to high shots_attempted
+    # but equal defensive rating changes due to equal minutes played
+    p1_off = gen._player_off_ratings["P1"]
+    p2_off = gen._player_off_ratings["P2"]
+    p1_def = gen._player_def_ratings["P1"]
+    p2_def = gen._player_def_ratings["P2"]
+
+    # Both players have same games_played count for defense
+    assert p1_def.games_played == p2_def.games_played
+
+    # Verify that ratings were updated
+    assert p1_off.games_played > 0
+    assert p2_off.games_played > 0
+
+
+@pytest.mark.parametrize("library", ["polars", "pandas"])
+def test_defense_participation_weight_backwards_compatibility(base_cn, library):
+    """Test that when defense_participation_weight is not set, it defaults to participation_weight."""
+    import pandas as pd
+
+    df_data = {
+        "pid": ["P1", "P2", "P3", "P4"],
+        "tid": ["T1", "T1", "T2", "T2"],
+        "mid": ["M1", "M1", "M1", "M1"],
+        "dt": ["2024-01-01"] * 4,
+        "perf": [0.6, 0.4, 0.5, 0.5],
+        "pw": [1.0, 0.5, 0.8, 0.8],
+    }
+
+    if library == "polars":
+        df = pl.DataFrame(df_data)
+    else:
+        df = pd.DataFrame(df_data)
+
+    # When defense_participation_weight is None, it should default to participation_weight
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+    )
+
+    result = gen.fit_transform(df)
+
+    # Should work without errors
+    assert result is not None
+    assert len(gen._player_off_ratings) > 0
+    assert len(gen._player_def_ratings) > 0

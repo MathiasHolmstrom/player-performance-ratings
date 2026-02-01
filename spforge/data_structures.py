@@ -12,6 +12,8 @@ class ColumnNames:
     position: str | None = None
     participation_weight: str | None = None
     projected_participation_weight: str | None = None
+    defense_participation_weight: str | None = None
+    projected_defense_participation_weight: str | None = None
     update_match_id: str | None = None
     parent_team_id: str | None = None
     team_players_playing_time: str | None = None
@@ -81,6 +83,8 @@ class MatchPerformance:
     performance_value: float | None
     participation_weight: float | None
     projected_participation_weight: float
+    defense_participation_weight: float | None = None
+    projected_defense_participation_weight: float | None = None
     team_players_playing_time: dict[str, float] | None = None
     opponent_players_playing_time: dict[str, float] | None = None
 
