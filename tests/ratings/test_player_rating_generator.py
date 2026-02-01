@@ -2133,6 +2133,59 @@ def test_fit_transform_when_all_players_have_null_performance_then_no_rating_cha
     )
 
 
+def test_null_individual_perf_still_updates_def_rating(base_cn):
+    """
+    Regression test: Players with null individual performance should still get DEF updates.
+
+    Bug: Line 598 had `if perf_value is None or team1_def_perf is None: def_change = 0.0`
+         This incorrectly skipped DEF updates when player had null individual performance.
+
+    Fix: Changed to `if team1_def_perf is None: def_change = 0.0`
+         Defense is team-level, so null individual perf should NOT block DEF updates.
+
+    Test creates scenario where P1 has null perf but team defense is known (poor).
+    Verifies P1's DEF rating decreases (proving defensive update logic ran).
+    """
+    # Match 1: Balanced to establish baseline ratings
+    # Match 2: P1 null perf, but T2 dominates offense (0.9) so T1 defense is poor (0.1)
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4", "P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2", "T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1", "M2", "M2", "M2", "M2"],
+            "dt": ["2024-01-01"] * 4 + ["2024-01-02"] * 4,
+            "perf": [0.5, 0.5, 0.5, 0.5, None, 0.1, 0.9, 0.9],
+            "pw": [1.0] * 8,
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        use_off_def_split=True,
+        rating_change_multiplier_offense=50.0,  # High multipliers to ensure visible changes
+        rating_change_multiplier_defense=50.0,
+        start_rating_value=1000.0,
+    )
+    gen.fit_transform(df)
+
+    # P1 had null perf in M2, so OFF rating should be unchanged from baseline
+    p1_off = gen._player_off_ratings["P1"].rating_value
+    assert p1_off == 1000.0, f"P1 OFF should be 1000 (null perf), got {p1_off}"
+
+    # P1's DEF rating MUST decrease because T1's defense was poor (0.1) in M2
+    # Team defense = 1.0 - opponent offense = 1.0 - 0.9 = 0.1 (much worse than expected 0.5)
+    p1_def = gen._player_def_ratings["P1"].rating_value
+    assert p1_def < 1000.0, (
+        f"P1 DEF should decrease (team defended poorly), but got {p1_def}. "
+        f"Bug: defensive update was incorrectly skipped for null individual performance."
+    )
+
+    # Sanity check: P2 had valid perf (0.1) so OFF should change too
+    p2_off = gen._player_off_ratings["P2"].rating_value
+    assert p2_off != 1000.0, f"P2 OFF should change (valid perf 0.1), got {p2_off}"
+
+
 # --- team_players_playing_time Tests ---
 
 
