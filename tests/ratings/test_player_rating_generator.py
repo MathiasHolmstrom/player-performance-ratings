@@ -2512,6 +2512,129 @@ def test_fit_transform_ignore_opponent_predictor_adapts_to_performance_drift(bas
     )
 
 
+def test_fit_transform_ignore_opponent_with_autoscale_and_temporal_drift(base_cn):
+    """
+    Test that fixed reference works with auto_scale_performance=True and temporal drift.
+
+    With balanced data (overall mean=0.5) and temporal drift (early=0.505, late=0.495):
+    - Auto_scale preserves overall mean at 0.5
+    - Predictions track the SCALED values (not raw 0.505/0.495)
+    - Drift is preserved (early predictions > late predictions)
+    """
+    import numpy as np
+
+    np.random.seed(42)
+    n_matches = 1000
+    n_players_per_team = 5
+
+    data = {
+        "pid": [],
+        "tid": [],
+        "mid": [],
+        "dt": [],
+        "perf": [],
+        "pw": [],
+    }
+
+    match_id = 0
+    for i in range(n_matches // 2):
+        date = datetime(2019, 1, 1) + timedelta(days=i * 2)
+        date_str = date.strftime("%Y-%m-%d")
+
+        # Temporal drift: 0.505 -> 0.495 (overall mean = 0.5)
+        progress = i / (n_matches // 2)
+        period_mean = 0.505 - (0.01 * progress)
+
+        for team_idx in range(2):
+            team_id = f"T{team_idx + 1}"
+            for player_idx in range(n_players_per_team):
+                player_id = f"P{team_idx}_{player_idx}"
+                # Add variance around period mean
+                perf = np.random.normal(period_mean, 0.03)
+                perf = max(0.0, min(1.0, perf))
+
+                data["pid"].append(player_id)
+                data["tid"].append(team_id)
+                data["mid"].append(f"M{match_id}")
+                data["dt"].append(date_str)
+                data["perf"].append(perf)
+                data["pw"].append(1.0)
+
+        match_id += 1
+
+    df = pl.DataFrame(data)
+
+    # Verify raw data is balanced
+    raw_mean = sum(data["perf"]) / len(data["perf"])
+    assert abs(raw_mean - 0.5) < 0.01, f"Raw data should have mean ≈ 0.5, got {raw_mean}"
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        performance_predictor="ignore_opponent",
+        auto_scale_performance=True,  # ← Key: with auto_scale
+        start_harcoded_start_rating=1000.0,
+        rating_change_multiplier_offense=100,
+        rating_change_multiplier_defense=100,
+        non_predictor_features_out=[RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE],
+    )
+
+    result = gen.fit_transform(df)
+
+    # Check that auto_scale created the performance column
+    assert "performance__perf" in result.columns
+
+    # Get overall scaled mean
+    all_scaled = result["performance__perf"].to_list()
+    overall_scaled_mean = sum(all_scaled) / len(all_scaled)
+
+    # Verify overall scaled mean ≈ 0.5 (auto_scale preserves balance)
+    assert abs(overall_scaled_mean - 0.5) < 0.01, (
+        f"Auto_scale should preserve overall mean at 0.5, got {overall_scaled_mean}"
+    )
+
+    # Get early and late periods
+    early_df = result.filter(
+        pl.col("mid").cast(pl.Utf8).str.extract(r"M(\d+)", 1).cast(pl.Int32) < 100
+    )
+    late_df = result.filter(
+        pl.col("mid").cast(pl.Utf8).str.extract(r"M(\d+)", 1).cast(pl.Int32) >= (n_matches//2 - 100)
+    )
+
+    early_actual_scaled = early_df["performance__perf"].to_list()
+    early_preds = early_df["player_predicted_performance_perf"].to_list()
+    late_actual_scaled = late_df["performance__perf"].to_list()
+    late_preds = late_df["player_predicted_performance_perf"].to_list()
+
+    early_actual_mean = sum(early_actual_scaled) / len(early_actual_scaled)
+    early_pred_mean = sum(early_preds) / len(early_preds)
+    late_actual_mean = sum(late_actual_scaled) / len(late_actual_scaled)
+    late_pred_mean = sum(late_preds) / len(late_preds)
+
+    # Verify drift is preserved after scaling
+    assert early_actual_mean > 0.5, "Early period should be > 0.5 after scaling"
+    assert late_actual_mean < 0.5, "Late period should be < 0.5 after scaling"
+
+    # Verify predictions track the SCALED values (not raw 0.505/0.495)
+    # Tolerance: 0.025 accounts for convergence lag with temporal drift
+    early_deviation = abs(early_pred_mean - early_actual_mean)
+    late_deviation = abs(late_pred_mean - late_actual_mean)
+
+    assert early_deviation < 0.025, (
+        f"Early predictions should converge to scaled actual ({early_actual_mean:.4f}), "
+        f"got {early_pred_mean:.4f}, deviation={early_deviation:.4f}"
+    )
+    assert late_deviation < 0.025, (
+        f"Late predictions should converge to scaled actual ({late_actual_mean:.4f}), "
+        f"got {late_pred_mean:.4f}, deviation={late_deviation:.4f}"
+    )
+
+    # Verify drift is tracked in predictions
+    assert early_pred_mean > late_pred_mean, (
+        f"Predictions should track temporal drift: early ({early_pred_mean:.4f}) > late ({late_pred_mean:.4f})"
+    )
+
+
 def test_ignore_opponent_predictor_reference_rating_set_correctly(base_cn):
     """
     Test that PlayerRatingNonOpponentPerformancePredictor._reference_rating
