@@ -1951,9 +1951,11 @@ def test_fit_transform__player_rating_difference_from_team_projected_feature(bas
     assert player_col in result.columns
     assert team_col in result.columns
 
-    for row in result.iter_rows(named=True):
-        expected = row[player_col] - row[team_col]
-        assert row[diff_col] == pytest.approx(expected, rel=1e-9)
+    # Verify diff = player - team (vectorized)
+    max_diff = result.select(
+        (pl.col(diff_col) - (pl.col(player_col) - pl.col(team_col))).abs().max()
+    ).item()
+    assert max_diff < 1e-9
 
 
 def test_fit_transform__start_league_quantile_uses_existing_player_ratings(base_cn):
@@ -2909,3 +2911,30 @@ def test_fit_transform_null_perf_with_use_off_def_split_false__no_crash(base_cn)
     # TypeError: float() argument must be a string or a number, not 'NoneType'
     result = gen.fit_transform(df)
     assert result is not None
+
+
+def test_player_opponent_mean_projected_feature(base_cn, sample_df):
+    """Test that PLAYER_OPPONENT_MEAN_PROJECTED outputs mean of player and opponent team ratings."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        auto_scale_performance=True,
+        features_out=[
+            RatingKnownFeatures.PLAYER_RATING,
+            RatingKnownFeatures.OPPONENT_RATING_PROJECTED,
+            RatingKnownFeatures.PLAYER_OPPONENT_MEAN_PROJECTED,
+        ],
+    )
+    result = gen.fit_transform(sample_df)
+
+    # Verify column exists
+    assert "player_opponent_mean_projected_perf" in result.columns
+
+    # Verify it's the mean of player_rating and opponent_rating_projected (vectorized)
+    expected = (
+        pl.col("player_rating_perf") + pl.col("opponent_rating_projected_perf")
+    ) / 2
+    diff = result.select(
+        (pl.col("player_opponent_mean_projected_perf") - expected).abs().max()
+    ).item()
+    assert diff < 1e-6, f"Max difference from expected mean: {diff}"
