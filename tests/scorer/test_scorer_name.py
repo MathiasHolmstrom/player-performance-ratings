@@ -123,6 +123,19 @@ class TestScorerNameProperty:
         # Validation filter auto-added but not counted
         assert scorer.name == "mean_bias_scorer_yards"
 
+    def test_any_filter_on_validation_column_excluded_from_name(self):
+        scorer = MeanBiasScorer(
+            target="yards",
+            pred_column="pred",
+            validation_column="is_valid",
+            filters=[
+                Filter("is_valid", 0, Operator.EQUALS),
+                Filter("minutes", 10, Operator.GREATER_THAN),
+            ]
+        )
+        # Any filter on validation column should be excluded, not just value=1
+        assert scorer.name == "mean_bias_scorer_yards_filters:1"
+
     def test_complex_configuration_all_components(self):
         scorer = MeanBiasScorer(
             target="yards",
