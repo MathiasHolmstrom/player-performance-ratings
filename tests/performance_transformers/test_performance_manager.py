@@ -203,8 +203,8 @@ def test_performance_manager_aliases_unprefixed_input_when_transformer_expects_p
         transformer_names=[],
         prefix="performance__",
         performance_column="weighted_performance",
-        min_value=-0.02,
-        max_value=1.02,
+        min_value=0.0,
+        max_value=1.0,
     )
 
     pm.fit(df)
@@ -434,3 +434,99 @@ class TestZeroInflationHandling:
 
         # Should have switched to quantile scaler
         assert manager._using_quantile_scaler is True
+
+
+class TestAutoScalePerformanceBounds:
+    """Tests for ensuring scaled performance stays within [0, 1] bounds."""
+
+    @pytest.mark.parametrize("frame", ["pd", "pl"])
+    def test_auto_scale_performance_preserves_non_negative(self, frame):
+        """Scaled performance should be non-negative when input is non-negative."""
+        np.random.seed(42)
+        # Create data similar to free throw % - centered around 0.77 with some zeros
+        n = 400
+        data = []
+        for _ in range(n):
+            if np.random.random() < 0.25:  # 25% zeros (missed all free throws)
+                data.append(0.0)
+            else:
+                # Values between 0.6 and 1.0, centered around 0.77
+                data.append(np.clip(np.random.normal(0.77, 0.15), 0.0, 1.0))
+
+        df = _make_native_df(frame, {"x": data})
+
+        pm = PerformanceManager(
+            features=["x"],
+            transformer_names=["symmetric", "partial_standard_scaler", "min_max"],
+            prefix="performance__",
+            performance_column="perf",
+        )
+
+        result = pm.fit_transform(df)
+        result_nw = nw.from_native(result)
+        scaled = result_nw["performance__perf"].to_numpy()
+
+        assert np.all(scaled >= 0), f"Scaled performance should not be negative, min was {scaled.min()}"
+
+    @pytest.mark.parametrize("frame", ["pd", "pl"])
+    def test_auto_scale_performance_output_range(self, frame):
+        """Scaled performance should be in [0, 1] when input is in [0, 1]."""
+        np.random.seed(42)
+        # Create data with performance in [0, 1] but skewed distribution
+        n = 400
+        data = []
+        for _ in range(n):
+            if np.random.random() < 0.25:
+                data.append(0.0)
+            else:
+                data.append(np.clip(np.random.normal(0.77, 0.15), 0.0, 1.0))
+
+        df = _make_native_df(frame, {"x": data})
+
+        pm = PerformanceManager(
+            features=["x"],
+            transformer_names=["symmetric", "partial_standard_scaler", "min_max"],
+            prefix="performance__",
+            performance_column="perf",
+        )
+
+        result = pm.fit_transform(df)
+        result_nw = nw.from_native(result)
+        scaled = result_nw["performance__perf"].to_numpy()
+
+        assert np.all(scaled >= 0.0), f"Scaled min should be >= 0, got {scaled.min()}"
+        assert np.all(scaled <= 1.0), f"Scaled max should be <= 1, got {scaled.max()}"
+
+    @pytest.mark.parametrize("frame", ["pd", "pl"])
+    def test_default_bounds_are_unit_interval(self, frame):
+        """Test that default bounds are [0, 1]."""
+        pm = PerformanceManager(
+            features=["x"],
+            transformer_names=[],
+            prefix="",
+            performance_column="x",
+        )
+
+        assert pm.min_value == 0.0
+        assert pm.max_value == 1.0
+
+    @pytest.mark.parametrize("frame", ["pd", "pl"])
+    def test_custom_bounds_still_work(self, frame):
+        """Test that custom bounds can still be specified."""
+        df = _make_native_df(frame, {"x": [-10.0, 0.5, 10.0]})
+
+        pm = PerformanceManager(
+            features=["x"],
+            transformer_names=[],
+            prefix="",
+            performance_column="x",
+            min_value=-0.5,
+            max_value=1.5,
+        )
+
+        result = pm.fit_transform(df)
+        result_nw = nw.from_native(result)
+        scaled = result_nw["x"].to_numpy()
+
+        assert scaled.min() >= -0.5
+        assert scaled.max() <= 1.5
