@@ -491,3 +491,63 @@ class TestQuantilePerformanceScaler:
         # Both should have mean ≈ 0.5
         assert abs(transformed["a"].mean() - 0.5) < 0.05
         assert abs(transformed["b"].mean() - 0.5) < 0.05
+
+    def test_all_zeros(self):
+        """Test edge case: all values are zero (π=1)."""
+        df = pd.DataFrame({"x": [0.0, 0.0, 0.0, 0.0, 0.0]})
+
+        scaler = QuantilePerformanceScaler(features=["x"], prefix="")
+        transformed = scaler.fit_transform(df)
+
+        # π=1, so all values should map to π/2 = 0.5
+        assert np.allclose(transformed["x"].values, 0.5)
+        assert scaler._zero_proportion["x"] == 1.0
+
+    def test_no_zeros(self):
+        """Test edge case: no zeros (π=0)."""
+        np.random.seed(42)
+        df = pd.DataFrame({"x": np.random.exponential(2, 100) + 0.1})  # All positive
+
+        scaler = QuantilePerformanceScaler(features=["x"], prefix="")
+        transformed = scaler.fit_transform(df)
+
+        # π=0, so values should span (0, 1) via quantiles
+        assert scaler._zero_proportion["x"] == 0.0
+        assert transformed["x"].min() >= 0
+        assert transformed["x"].max() <= 1
+        # Mean should still be ~0.5
+        assert abs(transformed["x"].mean() - 0.5) < 0.05
+
+    def test_nan_handling(self):
+        """Test that NaN values are preserved in output."""
+        df = pd.DataFrame({"x": [0.0, 1.0, np.nan, 2.0, 0.0, np.nan, 3.0]})
+
+        scaler = QuantilePerformanceScaler(features=["x"], prefix="")
+        transformed = scaler.fit_transform(df)
+
+        # NaN positions should remain NaN
+        assert np.isnan(transformed["x"].iloc[2])
+        assert np.isnan(transformed["x"].iloc[5])
+
+        # Non-NaN values should be valid
+        non_nan_mask = ~np.isnan(transformed["x"].values)
+        assert np.all((transformed["x"].values[non_nan_mask] >= 0) &
+                      (transformed["x"].values[non_nan_mask] <= 1))
+
+    def test_single_unique_nonzero(self):
+        """Test edge case: single unique non-zero value."""
+        df = pd.DataFrame({"x": [0.0, 0.0, 5.0, 5.0, 0.0, 5.0]})
+
+        scaler = QuantilePerformanceScaler(features=["x"], prefix="")
+        transformed = scaler.fit_transform(df)
+
+        # Should still work - zeros map to π/2, non-zeros to (π, 1)
+        pi = scaler._zero_proportion["x"]
+        is_zero = df["x"] == 0
+
+        # Zeros should map to π/2
+        assert np.allclose(transformed["x"].values[is_zero.values], pi / 2)
+
+        # Non-zeros should all map to same value (since they're all equal)
+        nonzero_values = transformed["x"].values[~is_zero.values]
+        assert np.allclose(nonzero_values, nonzero_values[0])

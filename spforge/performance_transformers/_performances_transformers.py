@@ -472,9 +472,13 @@ class QuantilePerformanceScaler(BaseEstimator, TransformerMixin):
         for feature in self.features:
             out_feature = self.prefix + feature
             values = df[feature].to_numpy()
-            result = np.zeros_like(values, dtype=float)
+            result = np.full_like(values, np.nan, dtype=float)
 
-            is_zero = np.abs(values) < self.zero_threshold
+            # Handle NaN explicitly - preserve NaN in output
+            is_finite = np.isfinite(values)
+            is_zero = is_finite & (np.abs(values) < self.zero_threshold)
+            is_nonzero = is_finite & ~is_zero
+
             pi = self._zero_proportion[feature]
 
             # Zeros → midpoint of zero mass
@@ -482,16 +486,16 @@ class QuantilePerformanceScaler(BaseEstimator, TransformerMixin):
 
             # Non-zeros → interpolate to (π, 1)
             nonzero_quantiles = self._nonzero_quantiles[feature]
-            if nonzero_quantiles is not None and np.any(~is_zero):
+            if nonzero_quantiles is not None and np.any(is_nonzero):
                 nonzero_values = np.clip(
-                    values[~is_zero], nonzero_quantiles[0], nonzero_quantiles[-1]
+                    values[is_nonzero], nonzero_quantiles[0], nonzero_quantiles[-1]
                 )
                 ranks = np.interp(
                     nonzero_values,
                     nonzero_quantiles,
                     np.linspace(0, 1, len(nonzero_quantiles)),
                 )
-                result[~is_zero] = pi + (1 - pi) * ranks
+                result[is_nonzero] = pi + (1 - pi) * ranks
 
             df = df.with_columns(**{out_feature: result})
 
