@@ -29,6 +29,7 @@ from spforge.ratings._base import RatingGenerator, RatingKnownFeatures, RatingUn
 from spforge.ratings.start_rating_generator import StartRatingGenerator
 from spforge.ratings.utils import (
     add_opp_team_rating,
+    add_player_opponent_mean_projected,
     add_rating_difference_projected,
     add_rating_mean_projected,
     add_team_rating,
@@ -140,6 +141,9 @@ class PlayerRatingGenerator(RatingGenerator):
         self.MEAN_PROJ_COL = self._suffix(str(RatingKnownFeatures.RATING_MEAN_PROJECTED))
         self.PLAYER_DIFF_FROM_TEAM_PROJ_COL = self._suffix(
             str(RatingKnownFeatures.PLAYER_RATING_DIFFERENCE_FROM_TEAM_PROJECTED)
+        )
+        self.PLAYER_OPP_MEAN_PROJ_COL = self._suffix(
+            str(RatingKnownFeatures.PLAYER_OPPONENT_MEAN_PROJECTED)
         )
 
         self.TEAM_OFF_RATING_PROJ_COL = self._suffix(
@@ -844,6 +848,7 @@ class PlayerRatingGenerator(RatingGenerator):
             or self.OPP_RATING_PROJ_COL in cols_to_add
             or self.DIFF_PROJ_COL in cols_to_add
             or self.PLAYER_DIFF_PROJ_COL in cols_to_add
+            or self.PLAYER_OPP_MEAN_PROJ_COL in cols_to_add
         ):
             df = add_team_rating_projected(
                 df=df,
@@ -865,6 +870,7 @@ class PlayerRatingGenerator(RatingGenerator):
             or self.OPP_RATING_PROJ_COL in cols_to_add
             or self.DIFF_PROJ_COL in cols_to_add
             or self.PLAYER_DIFF_PROJ_COL in cols_to_add
+            or self.PLAYER_OPP_MEAN_PROJ_COL in cols_to_add
         ):
             df = add_opp_team_rating(
                 df=df,
@@ -923,6 +929,15 @@ class PlayerRatingGenerator(RatingGenerator):
                 column_names=cn,
                 player_rating_col=self.PLAYER_OFF_RATING_COL,
                 rating_mean_out=self.MEAN_PROJ_COL,
+            )
+
+        if self.PLAYER_OPP_MEAN_PROJ_COL in cols_to_add:
+            df = add_player_opponent_mean_projected(
+                df=df,
+                column_names=cn,
+                player_rating_col=self.PLAYER_RATING_COL,
+                opp_team_rating_col=self.OPP_RATING_PROJ_COL,
+                out_col=self.PLAYER_OPP_MEAN_PROJ_COL,
             )
 
         if self.DIFF_COL in cols_to_add and self.DIFF_COL not in df.columns:

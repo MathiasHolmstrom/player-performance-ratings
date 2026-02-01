@@ -137,3 +137,16 @@ def add_rating_mean_projected(
         )
 
     return df.with_columns(pl.col(player_rating_col).mean().over(mid).alias(rating_mean_out))
+
+
+def add_player_opponent_mean_projected(
+    df: pl.DataFrame,
+    column_names: ColumnNames,
+    player_rating_col: str,
+    opp_team_rating_col: str,
+    out_col: str,
+) -> pl.DataFrame:
+    """Mean of player rating and opponent team rating."""
+    return df.with_columns(
+        ((pl.col(player_rating_col) + pl.col(opp_team_rating_col)) / 2).alias(out_col)
+    )
