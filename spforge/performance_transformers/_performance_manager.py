@@ -86,8 +86,8 @@ class PerformanceManager(BaseEstimator, TransformerMixin):
         transformer_names: list[TransformerName] | None = None,
         custom_transformers: list[NarwhalsFeatureTransformer] | None = None,
         prefix: str = "performance__",
-        min_value: float = -0.02,
-        max_value: float = 1.02,
+        min_value: float = 0.0,
+        max_value: float = 1.0,
         zero_inflation_threshold: float = 0.15,
     ):
         self.features = features
@@ -209,8 +209,8 @@ class PerformanceWeightsManager(PerformanceManager):
         transformer_names: (
             list[Literal["partial_standard_scaler", "symmetric", "min_max"]] | None
         ) = None,
-        max_value: float = 1.02,
-        min_value: float = -0.02,
+        max_value: float = 1.0,
+        min_value: float = 0.0,
         prefix: str = "performance__",
         return_all_features: bool = False,
         zero_inflation_threshold: float = 0.15,
