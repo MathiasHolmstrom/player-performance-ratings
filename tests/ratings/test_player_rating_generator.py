@@ -2411,3 +2411,161 @@ def test_fit_transform_backward_compatible_without_playing_time_columns(base_cn)
     # Ratings should be updated normally
     assert gen._player_off_ratings["P1"].rating_value != 1000.0
     assert gen._player_off_ratings["P3"].rating_value > gen._player_off_ratings["P4"].rating_value
+
+
+def test_fit_transform_ignore_opponent_predictor_adapts_to_performance_drift(base_cn):
+    """
+    Test that PlayerRatingNonOpponentPerformancePredictor converges properly
+    with fixed reference instead of rolling average.
+
+    When actual avg performance = 0.48 (not 0.5), ratings should adjust
+    until predictions converge to ~0.48. System should stabilize and capture
+    absolute skill levels relative to fixed reference rating.
+    """
+    import numpy as np
+
+    # Create dataset with consistent ~0.48 average performance
+    n_matches = 2000
+    n_players_per_team = 5
+    n_teams = 2
+
+    # Performance centered around 0.48 (slightly below sigmoid midpoint)
+    target_mean = 0.48
+
+    data = {
+        "pid": [],
+        "tid": [],
+        "mid": [],
+        "dt": [],
+        "perf": [],
+        "pw": [],
+    }
+
+    match_id = 0
+    for i in range(n_matches // 2):
+        date = datetime(2019, 1, 1) + timedelta(days=i * 2)
+        date_str = date.strftime("%Y-%m-%d")
+
+        # Add noise around target mean
+        noise = np.random.normal(0, 0.05, n_players_per_team * n_teams)
+
+        for team_idx in range(n_teams):
+            team_id = f"T{team_idx + 1}"
+            for player_idx in range(n_players_per_team):
+                player_id = f"P{team_idx}_{player_idx}"
+                perf = target_mean + noise[team_idx * n_players_per_team + player_idx]
+                perf = max(0.0, min(1.0, perf))  # Clip to [0, 1]
+
+                data["pid"].append(player_id)
+                data["tid"].append(team_id)
+                data["mid"].append(f"M{match_id}")
+                data["dt"].append(date_str)
+                data["perf"].append(perf)
+                data["pw"].append(1.0)
+
+        match_id += 1
+
+    df = pl.DataFrame(data)
+
+    # Check actual mean performance in the data
+    actual_perf_mean = sum(data["perf"]) / len(data["perf"])
+
+    # Use ignore_opponent predictor with fixed reference
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        performance_predictor="ignore_opponent",
+        auto_scale_performance=True,
+        start_harcoded_start_rating=1000.0,
+        non_predictor_features_out=[RatingUnknownFeatures.PLAYER_PREDICTED_PERFORMANCE],
+    )
+
+    result = gen.fit_transform(df)
+
+    # After warmup, system should converge to actual mean performance
+    warmup_matches = 300
+    subsample_df = result.filter(
+        pl.col("mid").cast(pl.Utf8).str.extract(r"M(\d+)", 1).cast(pl.Int32) >= warmup_matches
+    )
+
+    pred_col = "player_predicted_performance_perf"
+    assert pred_col in subsample_df.columns
+
+    predictions = subsample_df[pred_col].to_list()
+    mean_pred = sum(predictions) / len(predictions)
+
+    # With fixed reference, predictions should converge to actual mean
+    # Allow tolerance for: (1) convergence time, (2) random noise in data
+    # The key is that predictions don't stay at 0.5 when actual != 0.5
+    assert 0.45 <= mean_pred <= 0.52, (
+        f"Mean predicted performance {mean_pred:.4f} is outside [0.45, 0.52]. "
+        f"Actual performance mean: {actual_perf_mean:.4f}. "
+        f"With fixed reference, system should converge toward actual performance mean."
+    )
+
+
+def test_ignore_opponent_predictor_reference_rating_set_correctly(base_cn):
+    """
+    Test that PlayerRatingNonOpponentPerformancePredictor._reference_rating
+    is set correctly from start rating parameters.
+    """
+    # Test 1: With hardcoded start rating
+    gen1 = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        performance_predictor="ignore_opponent",
+        auto_scale_performance=True,
+        start_harcoded_start_rating=1100.0,
+    )
+    assert gen1._performance_predictor._reference_rating == 1100.0, (
+        f"Expected reference rating 1100.0, got {gen1._performance_predictor._reference_rating}"
+    )
+
+    # Test 2: Without hardcoded start (should default to 1000)
+    gen2 = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        performance_predictor="ignore_opponent",
+        auto_scale_performance=True,
+    )
+    assert gen2._performance_predictor._reference_rating == 1000.0, (
+        f"Expected reference rating 1000.0, got {gen2._performance_predictor._reference_rating}"
+    )
+
+    # Test 3: With league ratings (single league)
+    gen3 = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        performance_predictor="ignore_opponent",
+        auto_scale_performance=True,
+        start_league_ratings={"NBA": 1150},
+    )
+    assert gen3._performance_predictor._reference_rating == 1150.0, (
+        f"Expected reference rating 1150.0, got {gen3._performance_predictor._reference_rating}"
+    )
+
+    # Test 4: With multiple league ratings (should use mean)
+    gen4 = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        performance_predictor="ignore_opponent",
+        auto_scale_performance=True,
+        start_league_ratings={"NBA": 1100, "G-League": 900, "EuroLeague": 1000},
+    )
+    expected_mean = (1100 + 900 + 1000) / 3
+    assert gen4._performance_predictor._reference_rating == expected_mean, (
+        f"Expected reference rating {expected_mean}, got {gen4._performance_predictor._reference_rating}"
+    )
+
+    # Test 5: Hardcoded start rating takes precedence over league ratings
+    gen5 = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        performance_predictor="ignore_opponent",
+        auto_scale_performance=True,
+        start_harcoded_start_rating=1200.0,
+        start_league_ratings={"NBA": 1100},
+    )
+    assert gen5._performance_predictor._reference_rating == 1200.0, (
+        f"Expected hardcoded start rating 1200.0 to take precedence, got {gen5._performance_predictor._reference_rating}"
+    )

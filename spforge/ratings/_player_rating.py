@@ -166,6 +166,18 @@ class PlayerRatingGenerator(RatingGenerator):
         self.start_min_match_count_team_rating = start_min_match_count_team_rating
         self.start_hardcoded_start_rating = start_harcoded_start_rating
 
+        if hasattr(self._performance_predictor, '_reference_rating'):
+            effective_start = self.start_hardcoded_start_rating
+
+            if effective_start is None and self.start_league_ratings:
+                league_ratings = list(self.start_league_ratings.values())
+                effective_start = sum(league_ratings) / len(league_ratings)
+
+            if effective_start is None:
+                effective_start = 1000
+
+            self._performance_predictor._reference_rating = effective_start
+
         self.team_id_change_confidence_sum_decrease = team_id_change_confidence_sum_decrease
         self.column_names = column_names
 
@@ -517,6 +529,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 )
 
                 perf_value = pre_player.match_performance.performance_value
+
                 if perf_value is None:
                     off_change = 0.0
                 else:
@@ -610,6 +623,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 )
 
                 perf_value = pre_player.match_performance.performance_value
+
                 if perf_value is None:
                     off_change = 0.0
                 else:
