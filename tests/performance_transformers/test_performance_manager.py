@@ -436,6 +436,146 @@ class TestZeroInflationHandling:
         assert manager._using_quantile_scaler is True
 
 
+class TestWeightedQuantileScaling:
+    """Tests for weighted quantile scaling in PerformanceManager."""
+
+    @pytest.fixture
+    def weighted_zero_inflated_data(self):
+        """Create zero-inflated data where high-weight rows have higher non-zero rate."""
+        np.random.seed(42)
+        n = 1000
+
+        # Create weights (e.g., minutes played)
+        weights = np.random.exponential(scale=20, size=n) + 1
+
+        # High-weight rows have lower zero probability
+        values = []
+        for w in weights:
+            zero_prob = 0.6 - 0.4 * (w / weights.max())
+            if np.random.random() < zero_prob:
+                values.append(0.0)
+            else:
+                values.append(np.random.exponential(scale=2))
+
+        return np.array(values), weights
+
+    @pytest.mark.parametrize("frame", ["pd", "pl"])
+    def test_performance_manager_with_weight_column(self, frame, weighted_zero_inflated_data):
+        """Test that PerformanceManager passes weight column to QuantilePerformanceScaler."""
+        values, weights = weighted_zero_inflated_data
+        df = _make_native_df(frame, {"x": values, "minutes": weights})
+
+        pm = PerformanceManager(
+            features=["x"],
+            transformer_names=None,  # Use defaults, auto-detect zero inflation
+            prefix="performance__",
+            performance_column="perf",
+            zero_inflation_threshold=0.15,
+            quantile_weight_column="minutes",
+        )
+
+        pm.fit(df)
+
+        # Should have switched to quantile scaler
+        assert pm._using_quantile_scaler is True
+        assert isinstance(pm.transformers[-1], QuantilePerformanceScaler)
+        # And should have the weight column set
+        assert pm.transformers[-1].weight_column == "minutes"
+
+    @pytest.mark.parametrize("frame", ["pd", "pl"])
+    def test_weighted_scaling_reduces_weighted_bias(self, frame, weighted_zero_inflated_data):
+        """Test that weighted scaling produces weighted mean closer to 0.5."""
+        values, weights = weighted_zero_inflated_data
+        df = _make_native_df(frame, {"x": values, "minutes": weights})
+
+        # With weighted scaling
+        pm_weighted = PerformanceManager(
+            features=["x"],
+            transformer_names=None,
+            prefix="performance__",
+            performance_column="perf",
+            zero_inflation_threshold=0.15,
+            quantile_weight_column="minutes",
+        )
+
+        result_weighted = pm_weighted.fit_transform(df)
+        result_weighted_nw = nw.from_native(result_weighted)
+        scaled_weighted = result_weighted_nw["performance__perf"].to_numpy()
+
+        # Without weighted scaling
+        pm_unweighted = PerformanceManager(
+            features=["x"],
+            transformer_names=None,
+            prefix="performance__",
+            performance_column="perf",
+            zero_inflation_threshold=0.15,
+            quantile_weight_column=None,  # No weighting
+        )
+
+        result_unweighted = pm_unweighted.fit_transform(df)
+        result_unweighted_nw = nw.from_native(result_unweighted)
+        scaled_unweighted = result_unweighted_nw["performance__perf"].to_numpy()
+
+        # Compute weighted means
+        weighted_mean_of_weighted = np.average(scaled_weighted, weights=weights)
+        weighted_mean_of_unweighted = np.average(scaled_unweighted, weights=weights)
+
+        # Weighted scaling should have weighted mean closer to 0.5
+        assert abs(weighted_mean_of_weighted - 0.5) < abs(weighted_mean_of_unweighted - 0.5), (
+            f"Weighted mean with weighted scaling ({weighted_mean_of_weighted:.4f}) "
+            f"should be closer to 0.5 than without ({weighted_mean_of_unweighted:.4f})"
+        )
+
+    @pytest.mark.parametrize("frame", ["pd", "pl"])
+    def test_performance_weights_manager_with_quantile_weight_column(
+        self, frame, weighted_zero_inflated_data
+    ):
+        """Test that PerformanceWeightsManager also supports quantile_weight_column."""
+        from spforge.performance_transformers._performance_manager import ColumnWeight
+
+        values, weights = weighted_zero_inflated_data
+        df = _make_native_df(frame, {"feat_a": values, "minutes": weights})
+
+        column_weights = [ColumnWeight(name="feat_a", weight=1.0)]
+        manager = PerformanceWeightsManager(
+            weights=column_weights,
+            transformer_names=None,
+            prefix="",
+            zero_inflation_threshold=0.15,
+            quantile_weight_column="minutes",
+        )
+
+        manager.fit(df)
+
+        # Should have switched to quantile scaler with weight column
+        assert manager._using_quantile_scaler is True
+        assert manager.transformers[-1].weight_column == "minutes"
+
+    @pytest.mark.parametrize("frame", ["pd", "pl"])
+    def test_weight_column_not_used_when_no_zero_inflation(self, frame):
+        """Test that weight column is not needed when zero inflation is not detected."""
+        np.random.seed(42)
+        # Normal distribution - no zero inflation
+        data = np.random.normal(loc=0.5, scale=0.1, size=1000)
+        weights = np.random.exponential(scale=20, size=1000) + 1
+
+        df = _make_native_df(frame, {"x": data, "minutes": weights})
+
+        pm = PerformanceManager(
+            features=["x"],
+            transformer_names=None,
+            prefix="performance__",
+            performance_column="perf",
+            zero_inflation_threshold=0.15,
+            quantile_weight_column="minutes",
+        )
+
+        pm.fit(df)
+
+        # Should NOT have switched to quantile scaler
+        assert pm._using_quantile_scaler is False
+
+
 class TestAutoScalePerformanceBounds:
     """Tests for ensuring scaled performance stays within [0, 1] bounds."""
 
