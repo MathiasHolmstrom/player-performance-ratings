@@ -161,9 +161,6 @@ def get_default_player_rating_search_space() -> dict[str, ParamSpec]:
             low=50.0,
             high=300.0,
         ),
-        "use_off_def_split": ParamSpec(
-            param_type="bool",
-        ),
         "start_league_quantile": ParamSpec(
             param_type="float",
             low=0.05,
@@ -250,9 +247,6 @@ def get_default_team_rating_search_space() -> dict[str, ParamSpec]:
             param_type="float",
             low=50.0,
             high=300.0,
-        ),
-        "use_off_def_split": ParamSpec(
-            param_type="bool",
         ),
     }
 
