@@ -551,3 +551,41 @@ class TestQuantilePerformanceScaler:
         # Non-zeros should all map to same value (since they're all equal)
         nonzero_values = transformed["x"].values[~is_zero.values]
         assert np.allclose(nonzero_values, nonzero_values[0])
+
+
+class TestWeightedQuantilePerformanceScaler:
+    """Tests for weighted quantile scaling algorithm."""
+
+    @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+    def test_weighted_mean_alignment(self, df_type):
+        """Weighted scaling should produce weighted mean close to 0.5."""
+        np.random.seed(42)
+        n = 1000
+        weights = np.random.exponential(scale=20, size=n) + 1
+        values = []
+        for w in weights:
+            zero_prob = 0.6 - 0.4 * (w / weights.max())
+            values.append(0.0 if np.random.random() < zero_prob else np.random.exponential(scale=2))
+
+        df = df_type({"performance": np.array(values), "weight": weights})
+        scaler = QuantilePerformanceScaler(features=["performance"], prefix="", weight_column="weight")
+        result = scaler.fit_transform(df)
+
+        scaled = result["performance"].values if isinstance(result, pd.DataFrame) else result["performance"].to_numpy()
+        weighted_mean = np.average(scaled, weights=weights)
+        assert abs(weighted_mean - 0.5) < 0.02
+
+    @pytest.mark.parametrize("df_type", [pd.DataFrame, pl.DataFrame])
+    def test_backward_compatibility_without_weights(self, df_type):
+        """weight_column=None should match original unweighted behavior."""
+        np.random.seed(42)
+        raw = np.concatenate([np.zeros(200), np.random.exponential(scale=2, size=300)])
+        np.random.shuffle(raw)
+        df = df_type({"performance": raw})
+
+        result1 = QuantilePerformanceScaler(features=["performance"], prefix="", weight_column=None).fit_transform(df)
+        result2 = QuantilePerformanceScaler(features=["performance"], prefix="").fit_transform(df)
+
+        v1 = result1["performance"].values if isinstance(result1, pd.DataFrame) else result1["performance"].to_numpy()
+        v2 = result2["performance"].values if isinstance(result2, pd.DataFrame) else result2["performance"].to_numpy()
+        assert np.allclose(v1, v2, atol=1e-10)
