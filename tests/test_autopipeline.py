@@ -809,7 +809,7 @@ def test_granularity_aggregation_weight__weighted_mean_correct(frame):
     transformed = reducer.fit_transform(df)
 
     if frame == "pl":
-        num1_val = transformed["num1"].to_list()[0]
+        num1_val = transformed["num1"].item(0)
     else:
         num1_val = transformed["num1"].iloc[0]
 
@@ -875,7 +875,7 @@ def test_aggregation_weight_sums_weight_column(frame):
     transformed = reducer.fit_transform(df)
 
     if frame == "pl":
-        weight_val = transformed["weight"].to_list()[0]
+        weight_val = transformed["weight"].item(0)
     else:
         weight_val = transformed["weight"].iloc[0]
 
