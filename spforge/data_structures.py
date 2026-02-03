@@ -252,6 +252,7 @@ class PreMatchPlayersCollection:
     new_players: list[MatchPlayer]
     player_ids: list[str]
     projected_particiation_weights: list[float]
+    pre_match_def_player_ratings: list[PreMatchPlayerRating] | None = None
 
 
 @dataclass
