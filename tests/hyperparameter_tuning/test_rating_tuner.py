@@ -536,21 +536,21 @@ def test_param_ranges__unknown_param_raises_error(
         tuner.optimize(sample_player_df_pd)
 
 
-def test_param_ranges__non_numeric_param_raises_error(
+def test_param_ranges__unknown_param_raises_error(
     player_rating_generator, cross_validator, scorer, sample_player_df_pd
 ):
-    """Test that param_ranges on non-float/int param raises ValueError."""
+    """Test that param_ranges with unknown parameter raises ValueError."""
     tuner = RatingHyperparameterTuner(
         rating_generator=player_rating_generator,
         cross_validator=cross_validator,
         scorer=scorer,
         direction="minimize",
-        param_ranges={"use_off_def_split": (0, 1)},
+        param_ranges={"unknown_param": (0, 1)},
         n_trials=3,
         show_progress_bar=False,
     )
 
-    with pytest.raises(ValueError, match="can only override float/int"):
+    with pytest.raises(ValueError, match="unknown parameter"):
         tuner.optimize(sample_player_df_pd)
 
 

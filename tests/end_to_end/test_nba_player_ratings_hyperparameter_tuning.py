@@ -95,7 +95,6 @@ def test_nba_player_ratings_hyperparameter_tuning__workflow_completes(
         "confidence_weight",
         "confidence_value_denom",
         "confidence_max_sum",
-        "use_off_def_split",
         "start_league_quantile",
         "start_min_count_for_percentiles",
     }
