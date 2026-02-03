@@ -402,21 +402,7 @@ class PlayerRatingGenerator(RatingGenerator):
             df = df.drop(cols_to_drop)
         return df
 
-    def _validate_playing_time_columns(self, df: pl.DataFrame) -> None:
-        cn = self.column_names
-        if cn.team_players_playing_time and cn.team_players_playing_time not in df.columns:
-            raise ValueError(
-                f"team_players_playing_time column '{cn.team_players_playing_time}' "
-                f"not found in DataFrame. Available columns: {list(df.columns)}"
-            )
-        if cn.opponent_players_playing_time and cn.opponent_players_playing_time not in df.columns:
-            raise ValueError(
-                f"opponent_players_playing_time column '{cn.opponent_players_playing_time}' "
-                f"not found in DataFrame. Available columns: {list(df.columns)}"
-            )
-
     def _historical_transform(self, df: pl.DataFrame) -> pl.DataFrame:
-        self._validate_playing_time_columns(df)
         df = self._scale_participation_weight_columns(df)
         match_df = self._create_match_df(df)
         ratings = self._calculate_ratings(match_df)

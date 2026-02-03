@@ -2191,11 +2191,15 @@ def test_null_individual_perf_still_updates_def_rating(base_cn):
 # --- team_players_playing_time Tests ---
 
 
-def test_fit_transform_team_players_playing_time_column_not_found_raises_error(base_cn):
-    """Specifying a nonexistent team_players_playing_time column should raise ValueError."""
+def test_fit_transform_missing_playing_time_columns_works(base_cn):
+    """Missing playing time columns should be handled gracefully."""
     from dataclasses import replace
 
-    cn = replace(base_cn, team_players_playing_time="nonexistent_column")
+    cn = replace(
+        base_cn,
+        team_players_playing_time="nonexistent_column",
+        opponent_players_playing_time="also_nonexistent",
+    )
 
     df = pl.DataFrame(
         {
@@ -2213,34 +2217,9 @@ def test_fit_transform_team_players_playing_time_column_not_found_raises_error(b
         column_names=cn,
     )
 
-    with pytest.raises(ValueError, match="team_players_playing_time column"):
-        gen.fit_transform(df)
-
-
-def test_fit_transform_opponent_players_playing_time_column_not_found_raises_error(base_cn):
-    """Specifying a nonexistent opponent_players_playing_time column should raise ValueError."""
-    from dataclasses import replace
-
-    cn = replace(base_cn, opponent_players_playing_time="nonexistent_column")
-
-    df = pl.DataFrame(
-        {
-            "pid": ["P1", "P2"],
-            "tid": ["T1", "T2"],
-            "mid": ["M1", "M1"],
-            "dt": ["2024-01-01", "2024-01-01"],
-            "perf": [0.6, 0.4],
-            "pw": [1.0, 1.0],
-        }
-    )
-
-    gen = PlayerRatingGenerator(
-        performance_column="perf",
-        column_names=cn,
-    )
-
-    with pytest.raises(ValueError, match="opponent_players_playing_time column"):
-        gen.fit_transform(df)
+    # Should work without error - columns are optional
+    result = gen.fit_transform(df)
+    assert len(result) == 2
 
 
 def test_fit_transform_null_playing_time_uses_standard_team_rating(base_cn):
