@@ -2420,6 +2420,59 @@ def test_future_transform_weighted_calculation_with_playing_time(base_cn):
         assert 0.0 <= pred <= 1.0
 
 
+def test_future_transform_without_playing_time_columns_works(base_cn):
+    """future_transform should work when playing time columns are missing from future data."""
+    from dataclasses import replace
+
+    cn = replace(
+        base_cn,
+        team_players_playing_time="team_pt",
+        opponent_players_playing_time="opp_pt",
+    )
+
+    # fit_transform with playing time columns present
+    df1 = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.9, 0.1, 0.5, 0.5],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+            "team_pt": [None, None, None, None],
+            "opp_pt": [None, None, None, None],
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=cn,
+        auto_scale_performance=True,
+        start_harcoded_start_rating=1000.0,
+        non_predictor_features_out=[RatingUnknownFeatures.PLAYER_PREDICTED_OFF_PERFORMANCE],
+    )
+    gen.fit_transform(df1)
+
+    # future_transform WITHOUT playing time columns (common for future predictions)
+    future_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M2", "M2", "M2", "M2"],
+            "dt": ["2024-01-02"] * 4,
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+
+    # Should not raise - playing time columns are optional for future predictions
+    result = gen.future_transform(future_df)
+
+    assert len(result) == 4
+    predictions = result["player_predicted_off_performance_perf"].to_list()
+    for pred in predictions:
+        assert 0.0 <= pred <= 1.0
+
+
 def test_fit_transform_backward_compatible_without_playing_time_columns(base_cn):
     """Behavior should be unchanged when team_players_playing_time columns are not specified."""
     df = pl.DataFrame(

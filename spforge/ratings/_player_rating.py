@@ -445,7 +445,6 @@ class PlayerRatingGenerator(RatingGenerator):
         return self._remove_internal_scaled_columns(result)
 
     def _future_transform(self, df: pl.DataFrame) -> pl.DataFrame:
-        self._validate_playing_time_columns(df)
         df = self._scale_participation_weight_columns(df)
         match_df = self._create_match_df(df)
         ratings = self._calculate_future_ratings(match_df)
