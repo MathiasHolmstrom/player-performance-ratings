@@ -43,6 +43,8 @@ _SCALED_PPW = "__scaled_projected_participation_weight__"
 _SCALED_DPW = "__scaled_defense_participation_weight__"
 _SCALED_PDPW = "__scaled_projected_defense_participation_weight__"
 
+_MIN_CALIBRATION_SAMPLES = 100
+
 
 class PlayerRatingGenerator(RatingGenerator):
     """
@@ -219,7 +221,69 @@ class PlayerRatingGenerator(RatingGenerator):
         self.column_names = column_names if column_names else self.column_names
         self._maybe_enable_participation_weight_scaling(df)
         self._set_participation_weight_max(df)
+
+        # Calibration pass for ignore_opponent predictor
+        if self.performance_predictor == "ignore_opponent":
+            self._calibrate_reference_rating(df)
+
         return super().fit_transform(df, column_names)
+
+    def _reset_rating_state(self) -> None:
+        """Clear all accumulated rating state for re-processing."""
+        self._player_off_ratings = {}
+        self._player_def_ratings = {}
+        self.start_rating_generator.reset()
+        self._performance_predictor.reset()
+
+    def _run_ratings_pass(self, df: pl.DataFrame) -> None:
+        """Run rating computation pass without assembling output DataFrame.
+
+        After this method completes, self._player_off_ratings and
+        self._player_def_ratings contain the final computed ratings.
+        """
+        self._validate_playing_time_columns(df)
+        scaled_df = self._scale_participation_weight_columns(df)
+        match_df = self._create_match_df(scaled_df)
+        self._calculate_ratings(match_df)  # Side effect: populates rating dicts
+
+    def _calibrate_reference_rating(self, df: DataFrame) -> None:
+        """Run calibration pass and set reference rating for ignore_opponent predictor."""
+        from spforge.ratings.calibration import calibrate_reference_rating
+
+        # Convert to polars for internal processing
+        pl_df = df.to_native() if df.implementation.is_polars() else df.to_polars().to_native()
+
+        # First pass: compute ratings
+        self._run_ratings_pass(pl_df)
+
+        # Extract ratings for calibration
+        ratings = [r.rating_value for r in self._player_off_ratings.values()]
+
+        # Skip calibration on small datasets
+        if len(ratings) < _MIN_CALIBRATION_SAMPLES:
+            self._reset_rating_state()
+            return
+
+        coef = self._performance_predictor.coef
+
+        # Compute bounds from actual rating distribution
+        min_r, max_r = min(ratings), max(ratings)
+        margin = (max_r - min_r) * 0.5 or 200.0
+
+        try:
+            anchor = calibrate_reference_rating(
+                ratings=ratings,
+                coef=coef,
+                target_mean=0.5,
+                lo=min_r - margin,
+                hi=max_r + margin,
+            )
+            self._performance_predictor._reference_rating = anchor
+        except ValueError:
+            pass  # Keep existing reference if calibration fails
+
+        # Reset state for second pass
+        self._reset_rating_state()
 
     def _maybe_enable_participation_weight_scaling(self, df: DataFrame) -> None:
         if self.scale_participation_weights or not self.auto_scale_participation_weights:
