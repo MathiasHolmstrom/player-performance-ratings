@@ -436,14 +436,66 @@ class TestZeroInflationHandling:
         assert manager._using_quantile_scaler is True
 
 
-class TestWeightedQuantileScaling:
-    """Test that RatingGenerator wires participation weights to quantile scaling."""
+class TestQuantileScalerUnweighted:
+    """Test that QuantilePerformanceScaler does NOT use participation weights.
 
-    def test_rating_generator_wires_weight_column(self):
-        """
-        RatingGenerator should automatically wire participation_weight to
-        quantile_weight_column when using auto_scale_performance with zero-inflated data.
-        """
+    participation_weight is for rating updates (players with more possessions have
+    ratings change faster), not for scaling performance. For rate stats like
+    3PA/possession, the rate is already normalized by possessions. Weighting the
+    scaler by possessions would double-count and skew the distribution.
+    """
+
+    def test_quantile_scaler_unweighted_mean_is_half(self):
+        """Scaled performance should have unweighted mean ≈ 0.5"""
+        from spforge import ColumnNames
+        from spforge.ratings import PlayerRatingGenerator
+
+        # Create test data with zero-inflated distribution (like 3PA/possession)
+        np.random.seed(42)
+        n = 10000
+
+        # 20% zeros, 80% from exponential distribution
+        is_zero = np.random.random(n) < 0.2
+        values = np.where(is_zero, 0.0, np.random.exponential(0.07, n))
+        values = np.clip(values, 0, 1)
+
+        # Participation weights (e.g., possessions) - zeros tend to have lower weights
+        weights = np.where(is_zero, np.random.uniform(5, 20, n), np.random.uniform(20, 100, n))
+
+        df = pl.DataFrame({
+            "player_id": [f"p{i}" for i in range(n)],
+            "team_id": [f"t{i % 10}" for i in range(n)],
+            "match_id": [f"m{i // 20}" for i in range(n)],
+            "start_date": ["2024-01-01"] * n,
+            "performance_col": values,
+            "possessions": weights,
+        })
+
+        column_names = ColumnNames(
+            player_id="player_id",
+            team_id="team_id",
+            match_id="match_id",
+            start_date="start_date",
+            participation_weight="possessions",
+        )
+
+        generator = PlayerRatingGenerator(
+            performance_column="performance_col",
+            column_names=column_names,
+            auto_scale_performance=True,
+        )
+
+        result = generator.fit_transform(df)
+
+        # Get the scaled performance column
+        perf_col = [c for c in result.columns if c.startswith("performance__")][0]
+        scaled_mean = result[perf_col].mean()
+
+        # Unweighted mean should be approximately 0.5
+        assert 0.48 < scaled_mean < 0.52, f"Unweighted mean {scaled_mean} should be ~0.5"
+
+    def test_quantile_scaler_does_not_use_participation_weight(self):
+        """QuantilePerformanceScaler should not have a weight column set."""
         from spforge import ColumnNames
         from spforge.ratings import PlayerRatingGenerator
 
@@ -467,8 +519,12 @@ class TestWeightedQuantileScaling:
                     data["minutes"].append(minutes / 48)
 
         cn = ColumnNames(
-            player_id="player_id", team_id="team_id", match_id="match_id",
-            start_date="start_date", update_match_id="match_id", participation_weight="minutes",
+            player_id="player_id",
+            team_id="team_id",
+            match_id="match_id",
+            start_date="start_date",
+            update_match_id="match_id",
+            participation_weight="minutes",
         )
 
         gen = PlayerRatingGenerator(performance_column="perf", column_names=cn, auto_scale_performance=True)
@@ -476,8 +532,9 @@ class TestWeightedQuantileScaling:
 
         pm = gen.performance_manager
         if pm._using_quantile_scaler:
-            assert pm.transformers[-1].weight_column == "minutes", (
-                "RatingGenerator should wire quantile_weight_column to participation_weight"
+            # weight_column should NOT be set (should remain None)
+            assert pm.transformers[-1].weight_column is None, (
+                "QuantilePerformanceScaler should not use participation_weight for scaling"
             )
 
 
