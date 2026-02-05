@@ -150,17 +150,6 @@ class RatingGenerator(FeatureGenerator):
 
         if self.performance_manager:
             if self.performance_manager:
-                # Wire in participation weight column for weighted quantile scaling
-                # This ensures zero-inflated distributions use weights for calibration
-                if (
-                    self.column_names
-                    and self.column_names.participation_weight
-                    and self.column_names.participation_weight in df.columns
-                ):
-                    self.performance_manager.quantile_weight_column = (
-                        self.column_names.participation_weight
-                    )
-
                 ori_perf_values = df[self.performance_manager.ori_performance_column].to_list()
                 df = nw.from_native(self.performance_manager.fit_transform(df))
                 assert (
