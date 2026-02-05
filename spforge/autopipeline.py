@@ -554,7 +554,8 @@ class AutoPipeline(BaseEstimator):
             prev_transformer_feats_out.extend(feats_out)
 
         # Use FunctionTransformer with global function for serializability
-        drop_filter_cols = set(self._filter_feature_names)
+        # Exclude context features from filter columns to drop (they may be needed by estimator)
+        drop_filter_cols = set(self._filter_feature_names) - set(self.context_feature_names)
         drop_cols = drop_ctx_set | drop_filter_cols
         final = FunctionTransformer(
             _drop_columns_transformer, validate=False, kw_args={"drop_cols": drop_cols}
