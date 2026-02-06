@@ -97,6 +97,11 @@ class PlayerRatingGenerator(RatingGenerator):
         rating_mean_adjustment_target: float | None = None,
         rating_mean_adjustment_check_frequency: int = 50,
         rating_mean_adjustment_active_days: int = 250,
+        defense_performance_column: str | None = None,
+        auto_scale_defense_performance: bool = False,
+        defense_performance_weights: list[ColumnWeight] | None = None,
+        defense_performance_manager: PerformanceManager | None = None,
+        defense_lower_is_better: bool = False,
         **kwargs: Any,
     ):
         super().__init__(
@@ -223,6 +228,16 @@ class PlayerRatingGenerator(RatingGenerator):
         else:
             self._rating_mean_adjustment_target = 1000.0
 
+        self.defense_performance_column = defense_performance_column
+        self.auto_scale_defense_performance = bool(auto_scale_defense_performance)
+        self.defense_performance_weights = defense_performance_weights
+        self.defense_lower_is_better = bool(defense_lower_is_better)
+        self._defense_performance_manager = self._create_defense_performance_manager(
+            defense_performance_manager
+        )
+        if self._defense_performance_manager:
+            self.defense_performance_column = self._defense_performance_manager.performance_column
+
         self.start_rating_generator = StartRatingGenerator(
             league_ratings=self.start_league_ratings,
             league_quantile=self.start_league_quantile,
@@ -234,6 +249,46 @@ class PlayerRatingGenerator(RatingGenerator):
             harcoded_start_rating=self.start_hardcoded_start_rating,
         )
 
+    def _create_defense_performance_manager(
+        self, defense_performance_manager: PerformanceManager | None
+    ) -> PerformanceManager | None:
+        if defense_performance_manager:
+            if (
+                self.defense_performance_column
+                and self.defense_performance_column != defense_performance_manager.performance_column
+            ):
+                defense_performance_manager.performance_column = self.defense_performance_column
+            elif not self.defense_performance_column:
+                self.defense_performance_column = defense_performance_manager.performance_column
+            return defense_performance_manager
+
+        if not self.defense_performance_column:
+            return None
+
+        if self.defense_performance_weights:
+            weights = self.defense_performance_weights
+            if isinstance(weights[0], dict):
+                converted = []
+                for w in weights:
+                    wd = dict(w)
+                    if "col" in wd and "name" not in wd:
+                        wd["name"] = wd.pop("col")
+                    converted.append(ColumnWeight(**wd))
+                weights = converted
+            from spforge.performance_transformers._performance_manager import PerformanceWeightsManager
+            return PerformanceWeightsManager(
+                weights=weights,
+                performance_column=self.defense_performance_column,
+            )
+
+        if self.auto_scale_defense_performance:
+            return PerformanceManager(
+                features=[self.defense_performance_column],
+                performance_column=self.defense_performance_column,
+            )
+
+        return None
+
     @to_polars
     @nw.narwhalify
     def fit_transform(
@@ -244,6 +299,15 @@ class PlayerRatingGenerator(RatingGenerator):
         self.column_names = column_names if column_names else self.column_names
         self._maybe_enable_participation_weight_scaling(df)
         self._set_participation_weight_max(df)
+
+        if self._defense_performance_manager:
+            df = nw.from_native(self._defense_performance_manager.fit_transform(df))
+            if self.defense_lower_is_better:
+                df = df.with_columns(
+                    (1.0 - nw.col(self.defense_performance_column)).alias(
+                        self.defense_performance_column
+                    )
+                )
 
         # Calibration pass for ignore_opponent predictor
         if self.performance_predictor == "ignore_opponent":
@@ -592,6 +656,20 @@ class PlayerRatingGenerator(RatingGenerator):
         result = self._add_rating_features(df_with_ratings)
         return self._remove_internal_scaled_columns(result)
 
+    def _team_individual_def_mean(
+        self, collection: PreMatchPlayersCollection
+    ) -> float | None:
+        """Weighted mean of individual defense stats for players in a team."""
+        wsum = 0.0
+        psum = 0.0
+        for p in collection.pre_match_player_ratings:
+            val = p.match_performance.defense_performance_value
+            if val is not None and math.isfinite(val):
+                w = p.match_performance.defense_participation_weight or 1.0
+                psum += val * w
+                wsum += w
+        return psum / wsum if wsum > 0 else None
+
     def _calculate_ratings(self, match_df: pl.DataFrame) -> pl.DataFrame:
         cn = self.column_names
 
@@ -650,6 +728,9 @@ class PlayerRatingGenerator(RatingGenerator):
 
             team1_off_rating, team1_def_rating = self._team_off_def_rating_from_collection(c1)
             team2_off_rating, team2_def_rating = self._team_off_def_rating_from_collection(c2)
+
+            team1_mean_def = self._team_individual_def_mean(c1) if self.use_off_def_split else None
+            team2_mean_def = self._team_individual_def_mean(c2) if self.use_off_def_split else None
 
             player_updates: list[
                 tuple[str, str, float, float, float, float, float, float, int, str | None]
@@ -717,7 +798,16 @@ class PlayerRatingGenerator(RatingGenerator):
                 if team1_def_perf is None or (not self.use_off_def_split and not perf_is_valid):
                     def_change = 0.0
                 else:
-                    def_perf = float(team1_def_perf)
+                    individual_def = pre_player.match_performance.defense_performance_value
+                    if (
+                        individual_def is not None
+                        and math.isfinite(individual_def)
+                        and team1_mean_def is not None
+                    ):
+                        deviation = individual_def - team1_mean_def
+                        def_perf = max(0.0, min(1.0, float(team1_def_perf) + deviation))
+                    else:
+                        def_perf = float(team1_def_perf)
 
                     if not self.use_off_def_split:
                         pred_def = pred_off
@@ -812,7 +902,16 @@ class PlayerRatingGenerator(RatingGenerator):
                 if team2_def_perf is None or (not self.use_off_def_split and not perf_is_valid):
                     def_change = 0.0
                 else:
-                    def_perf = float(team2_def_perf)
+                    individual_def = pre_player.match_performance.defense_performance_value
+                    if (
+                        individual_def is not None
+                        and math.isfinite(individual_def)
+                        and team2_mean_def is not None
+                    ):
+                        deviation = individual_def - team2_mean_def
+                        def_perf = max(0.0, min(1.0, float(team2_def_perf) + deviation))
+                    else:
+                        def_perf = float(team2_def_perf)
 
                     if not self.use_off_def_split:
                         pred_def = pred_off
@@ -1148,6 +1247,12 @@ class PlayerRatingGenerator(RatingGenerator):
         ):
             player_stat_cols.append(cn.opponent_players_playing_time)
 
+        if (
+            self.defense_performance_column
+            and self.defense_performance_column in df.columns
+        ):
+            player_stat_cols.append(self.defense_performance_column)
+
         df = df.with_columns(pl.struct(player_stat_cols).alias(PLAYER_STATS))
 
         group_cols = [cn.match_id, cn.team_id, cn.start_date]
@@ -1281,6 +1386,16 @@ class PlayerRatingGenerator(RatingGenerator):
                 else None
             )
 
+            def_perf_val = (
+                float(team_player[self.defense_performance_column])
+                if (
+                    self.defense_performance_column
+                    and self.defense_performance_column in team_player
+                    and team_player[self.defense_performance_column] is not None
+                )
+                else None
+            )
+
             team_playing_time = self._get_players_playing_time(
                 team_player, cn.team_players_playing_time
             )
@@ -1294,6 +1409,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 participation_weight=participation_weight,
                 defense_participation_weight=defense_participation_weight,
                 projected_defense_participation_weight=projected_defense_participation_weight,
+                defense_performance_value=def_perf_val,
                 team_players_playing_time=team_playing_time,
                 opponent_players_playing_time=opponent_playing_time,
             )
@@ -1579,6 +1695,16 @@ class PlayerRatingGenerator(RatingGenerator):
                     else:
                         pdpw = dpw
 
+                    def_perf_val = (
+                        float(tp[self.defense_performance_column])  # noqa: B023
+                        if (
+                            self.defense_performance_column  # noqa: B023
+                            and self.defense_performance_column in tp  # noqa: B023
+                            and tp[self.defense_performance_column] is not None  # noqa: B023
+                        )
+                        else None
+                    )
+
                     team_playing_time = self._get_players_playing_time(
                         tp, cn.team_players_playing_time
                     )
@@ -1592,6 +1718,7 @@ class PlayerRatingGenerator(RatingGenerator):
                         participation_weight=pw,
                         defense_participation_weight=dpw,
                         projected_defense_participation_weight=pdpw,
+                        defense_performance_value=def_perf_val,
                         team_players_playing_time=team_playing_time,
                         opponent_players_playing_time=opponent_playing_time,
                     )

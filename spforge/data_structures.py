@@ -85,6 +85,7 @@ class MatchPerformance:
     projected_participation_weight: float
     defense_participation_weight: float | None = None
     projected_defense_participation_weight: float | None = None
+    defense_performance_value: float | None = None
     team_players_playing_time: dict[str, float] | None = None
     opponent_players_playing_time: dict[str, float] | None = None
 
