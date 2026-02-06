@@ -93,8 +93,8 @@ class PlayerRatingGenerator(RatingGenerator):
         output_suffix: str | None = None,
         scale_participation_weights: bool = False,
         auto_scale_participation_weights: bool = True,
-        rating_mean_adjustment_enabled: bool = False,
-        rating_mean_adjustment_target: float = 1000.0,
+        rating_mean_adjustment_enabled: bool = True,
+        rating_mean_adjustment_target: float | None = None,
         rating_mean_adjustment_check_frequency: int = 50,
         rating_mean_adjustment_active_days: int = 250,
         **kwargs: Any,
@@ -205,10 +205,19 @@ class PlayerRatingGenerator(RatingGenerator):
         self._player_def_ratings: dict[str, PlayerRating] = {}
 
         self._rating_mean_adjustment_enabled = bool(rating_mean_adjustment_enabled)
-        self._rating_mean_adjustment_target = float(rating_mean_adjustment_target)
         self._rating_mean_adjustment_check_frequency = int(rating_mean_adjustment_check_frequency)
         self._rating_mean_adjustment_active_days = int(rating_mean_adjustment_active_days)
         self._matches_since_last_adjustment_check: int = 0
+
+        if rating_mean_adjustment_target is not None:
+            self._rating_mean_adjustment_target = float(rating_mean_adjustment_target)
+        elif self.start_hardcoded_start_rating is not None:
+            self._rating_mean_adjustment_target = float(self.start_hardcoded_start_rating)
+        elif self.start_league_ratings:
+            league_vals = list(self.start_league_ratings.values())
+            self._rating_mean_adjustment_target = sum(league_vals) / len(league_vals)
+        else:
+            self._rating_mean_adjustment_target = 1000.0
 
         self.start_rating_generator = StartRatingGenerator(
             league_ratings=self.start_league_ratings,

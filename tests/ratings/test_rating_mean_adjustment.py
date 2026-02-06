@@ -32,14 +32,14 @@ def create_matches_df(n_matches: int, base_date: str = "2024-01-01") -> pl.DataF
     return pl.DataFrame(rows)
 
 
-def test_rating_mean_adjustment_disabled_by_default(base_cn):
-    """Verify that rating mean adjustment is disabled by default."""
+def test_rating_mean_adjustment_enabled_by_default(base_cn):
+    """Verify that rating mean adjustment is enabled by default."""
     gen = PlayerRatingGenerator(
         performance_column="perf",
         column_names=base_cn,
         auto_scale_performance=True,
     )
-    assert gen._rating_mean_adjustment_enabled is False
+    assert gen._rating_mean_adjustment_enabled is True
 
 
 def test_rating_mean_adjustment_params_stored(base_cn):
@@ -56,6 +56,35 @@ def test_rating_mean_adjustment_params_stored(base_cn):
     assert gen._rating_mean_adjustment_target == 1500.0
     assert gen._rating_mean_adjustment_check_frequency == 100
     assert gen._rating_mean_adjustment_active_days == 300
+
+
+def test_rating_mean_adjustment_target_defaults_to_hardcoded_start(base_cn):
+    """Verify target defaults to hardcoded start rating when set."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        start_harcoded_start_rating=1200.0,
+    )
+    assert gen._rating_mean_adjustment_target == 1200.0
+
+
+def test_rating_mean_adjustment_target_defaults_to_league_mean(base_cn):
+    """Verify target defaults to mean of league ratings when set."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        start_league_ratings={"league1": 900.0, "league2": 1100.0},
+    )
+    assert gen._rating_mean_adjustment_target == 1000.0
+
+
+def test_rating_mean_adjustment_target_defaults_to_1000(base_cn):
+    """Verify target defaults to 1000 when no start ratings configured."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+    )
+    assert gen._rating_mean_adjustment_target == 1000.0
 
 
 def test_apply_rating_mean_adjustment_active_player_detection(base_cn):
