@@ -32,14 +32,37 @@ def create_matches_df(n_matches: int, base_date: str = "2024-01-01") -> pl.DataF
     return pl.DataFrame(rows)
 
 
-def test_rating_mean_adjustment_enabled_by_default(base_cn):
-    """Verify that rating mean adjustment is enabled by default."""
+def test_rating_mean_adjustment_enabled_by_default_for_difference(base_cn):
+    """Verify that rating mean adjustment is enabled by default for difference predictor."""
     gen = PlayerRatingGenerator(
         performance_column="perf",
         column_names=base_cn,
+        performance_predictor="difference",
         auto_scale_performance=True,
     )
     assert gen._rating_mean_adjustment_enabled is True
+
+
+def test_rating_mean_adjustment_enabled_by_default_for_mean(base_cn):
+    """Verify that rating mean adjustment is enabled by default for mean predictor."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        performance_predictor="mean",
+        auto_scale_performance=True,
+    )
+    assert gen._rating_mean_adjustment_enabled is True
+
+
+def test_rating_mean_adjustment_disabled_by_default_for_ignore_opponent(base_cn):
+    """Verify that rating mean adjustment is disabled by default for ignore_opponent predictor."""
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        performance_predictor="ignore_opponent",
+        auto_scale_performance=True,
+    )
+    assert gen._rating_mean_adjustment_enabled is False
 
 
 def test_rating_mean_adjustment_params_stored(base_cn):

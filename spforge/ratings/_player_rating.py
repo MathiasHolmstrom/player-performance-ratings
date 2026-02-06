@@ -93,7 +93,7 @@ class PlayerRatingGenerator(RatingGenerator):
         output_suffix: str | None = None,
         scale_participation_weights: bool = False,
         auto_scale_participation_weights: bool = True,
-        rating_mean_adjustment_enabled: bool = True,
+        rating_mean_adjustment_enabled: bool | None = None,
         rating_mean_adjustment_target: float | None = None,
         rating_mean_adjustment_check_frequency: int = 50,
         rating_mean_adjustment_active_days: int = 250,
@@ -204,7 +204,11 @@ class PlayerRatingGenerator(RatingGenerator):
         self._player_off_ratings: dict[str, PlayerRating] = {}
         self._player_def_ratings: dict[str, PlayerRating] = {}
 
-        self._rating_mean_adjustment_enabled = bool(rating_mean_adjustment_enabled)
+        if rating_mean_adjustment_enabled is not None:
+            self._rating_mean_adjustment_enabled = bool(rating_mean_adjustment_enabled)
+        else:
+            # Disable by default for ignore_opponent predictor
+            self._rating_mean_adjustment_enabled = performance_predictor != "ignore_opponent"
         self._rating_mean_adjustment_check_frequency = int(rating_mean_adjustment_check_frequency)
         self._rating_mean_adjustment_active_days = int(rating_mean_adjustment_active_days)
         self._matches_since_last_adjustment_check: int = 0
