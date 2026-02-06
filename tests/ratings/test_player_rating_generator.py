@@ -3201,3 +3201,273 @@ def test_opponent_players_playing_time_uses_def_ratings_for_offense_prediction(b
     )
 
 
+# ── Individual defense performance redistribution tests ──
+
+
+class TestIndividualDefensePerformance:
+    """Tests for defense_performance_column redistribution feature."""
+
+    @pytest.fixture
+    def cn(self):
+        return ColumnNames(
+            player_id="pid",
+            team_id="tid",
+            match_id="mid",
+            start_date="dt",
+            update_match_id="mid",
+            participation_weight="pw",
+        )
+
+    def test_redistribution_diverges_def_ratings(self, cn):
+        """Two teammates with same offense but different individual defense stats
+        should get different DEF ratings after the match."""
+        df = pl.DataFrame(
+            {
+                "pid": ["P1", "P2", "P3", "P4"],
+                "tid": ["T1", "T1", "T2", "T2"],
+                "mid": ["M1", "M1", "M1", "M1"],
+                "dt": ["2024-01-01"] * 4,
+                "perf": [0.5, 0.5, 0.5, 0.5],
+                "pw": [1.0, 1.0, 1.0, 1.0],
+                # P1 is a better defender (higher value), P2 worse
+                "def_stat": [0.7, 0.3, 0.5, 0.5],
+            }
+        )
+
+        gen = PlayerRatingGenerator(
+            performance_column="perf",
+            column_names=cn,
+            defense_performance_column="def_stat",
+        )
+        gen.fit_transform(df)
+
+        p1_def = gen._player_def_ratings["P1"].rating_value
+        p2_def = gen._player_def_ratings["P2"].rating_value
+
+        assert p1_def != p2_def, "DEF ratings should diverge with different defense stats"
+        assert p1_def > p2_def, "Player with higher defense stat should have higher DEF rating"
+
+    def test_zero_sum_property(self, cn):
+        """Weighted mean of individual def_perfs should approximately equal team_def_perf."""
+        df = pl.DataFrame(
+            {
+                "pid": ["P1", "P2", "P3", "P4"],
+                "tid": ["T1", "T1", "T2", "T2"],
+                "mid": ["M1", "M1", "M1", "M1"],
+                "dt": ["2024-01-01"] * 4,
+                "perf": [0.6, 0.4, 0.7, 0.3],
+                "pw": [1.0, 1.0, 1.0, 1.0],
+                "def_stat": [0.6, 0.4, 0.5, 0.5],
+            }
+        )
+
+        gen = PlayerRatingGenerator(
+            performance_column="perf",
+            column_names=cn,
+            defense_performance_column="def_stat",
+        )
+        gen.fit_transform(df)
+
+        # Both T1 players should have DEF ratings that average to the same
+        # as they would without defense_performance_column
+        gen_no_def = PlayerRatingGenerator(
+            performance_column="perf",
+            column_names=cn,
+        )
+        gen_no_def.fit_transform(df)
+
+        # The mean of T1 DEF ratings with redistribution should be close to
+        # the uniform DEF rating without redistribution
+        p1_def = gen._player_def_ratings["P1"].rating_value
+        p2_def = gen._player_def_ratings["P2"].rating_value
+        mean_def_with = (p1_def + p2_def) / 2
+
+        p1_def_no = gen_no_def._player_def_ratings["P1"].rating_value
+        p2_def_no = gen_no_def._player_def_ratings["P2"].rating_value
+        mean_def_without = (p1_def_no + p2_def_no) / 2
+
+        assert abs(mean_def_with - mean_def_without) < 1.0, (
+            f"Mean DEF rating with redistribution ({mean_def_with:.4f}) should be close to "
+            f"without redistribution ({mean_def_without:.4f})"
+        )
+
+    def test_backward_compat_no_defense_column(self, cn):
+        """Without defense_performance_column, teammates get identical DEF updates."""
+        df = pl.DataFrame(
+            {
+                "pid": ["P1", "P2", "P3", "P4"],
+                "tid": ["T1", "T1", "T2", "T2"],
+                "mid": ["M1", "M1", "M1", "M1"],
+                "dt": ["2024-01-01"] * 4,
+                "perf": [0.5, 0.5, 0.5, 0.5],
+                "pw": [1.0, 1.0, 1.0, 1.0],
+            }
+        )
+
+        gen = PlayerRatingGenerator(
+            performance_column="perf",
+            column_names=cn,
+        )
+        gen.fit_transform(df)
+
+        p1_def = gen._player_def_ratings["P1"].rating_value
+        p2_def = gen._player_def_ratings["P2"].rating_value
+
+        assert p1_def == p2_def, (
+            "Without defense_performance_column, teammates should get identical DEF ratings"
+        )
+
+    def test_none_fallback(self, cn):
+        """Players with None defense values fall back to team-level defense."""
+        df = pl.DataFrame(
+            {
+                "pid": ["P1", "P2", "P3", "P4"],
+                "tid": ["T1", "T1", "T2", "T2"],
+                "mid": ["M1", "M1", "M1", "M1"],
+                "dt": ["2024-01-01"] * 4,
+                "perf": [0.5, 0.5, 0.5, 0.5],
+                "pw": [1.0, 1.0, 1.0, 1.0],
+                # P1 has a value, P2 has None
+                "def_stat": [0.7, None, 0.5, 0.5],
+            }
+        )
+
+        gen = PlayerRatingGenerator(
+            performance_column="perf",
+            column_names=cn,
+            defense_performance_column="def_stat",
+        )
+        gen.fit_transform(df)
+
+        # P2 should fall back to team-level def_perf (no redistribution for None)
+        gen_no_def = PlayerRatingGenerator(
+            performance_column="perf",
+            column_names=cn,
+        )
+        gen_no_def.fit_transform(df)
+
+        p2_def = gen._player_def_ratings["P2"].rating_value
+        p2_def_no = gen_no_def._player_def_ratings["P2"].rating_value
+        assert p2_def == p2_def_no, (
+            "Player with None defense stat should get same DEF rating as without feature"
+        )
+
+    def test_auto_scale_defense_performance(self, cn):
+        """Auto-scaling should normalize raw defense stats to [0, 1]."""
+        df = pl.DataFrame(
+            {
+                "pid": ["P1", "P2", "P3", "P4"],
+                "tid": ["T1", "T1", "T2", "T2"],
+                "mid": ["M1", "M1", "M1", "M1"],
+                "dt": ["2024-01-01"] * 4,
+                "perf": [0.5, 0.5, 0.5, 0.5],
+                "pw": [1.0, 1.0, 1.0, 1.0],
+                # Raw stats on an arbitrary scale (e.g., 0-100)
+                "def_raw": [80.0, 20.0, 50.0, 50.0],
+            }
+        )
+
+        gen = PlayerRatingGenerator(
+            performance_column="perf",
+            column_names=cn,
+            defense_performance_column="def_raw",
+            auto_scale_defense_performance=True,
+        )
+        gen.fit_transform(df)
+
+        # P1 should have higher DEF rating than P2
+        p1_def = gen._player_def_ratings["P1"].rating_value
+        p2_def = gen._player_def_ratings["P2"].rating_value
+        assert p1_def > p2_def, (
+            "Auto-scaled defense: player with higher raw stat should have higher DEF rating"
+        )
+
+    def test_defense_lower_is_better(self, cn):
+        """With defense_lower_is_better=True, lower raw values should produce higher DEF."""
+        df = pl.DataFrame(
+            {
+                "pid": ["P1", "P2", "P3", "P4"],
+                "tid": ["T1", "T1", "T2", "T2"],
+                "mid": ["M1", "M1", "M1", "M1"],
+                "dt": ["2024-01-01"] * 4,
+                "perf": [0.5, 0.5, 0.5, 0.5],
+                "pw": [1.0, 1.0, 1.0, 1.0],
+                # Lower = better (e.g., opponent success rate)
+                "opp_success": [20.0, 80.0, 50.0, 50.0],
+            }
+        )
+
+        gen = PlayerRatingGenerator(
+            performance_column="perf",
+            column_names=cn,
+            defense_performance_column="opp_success",
+            auto_scale_defense_performance=True,
+            defense_lower_is_better=True,
+        )
+        gen.fit_transform(df)
+
+        p1_def = gen._player_def_ratings["P1"].rating_value
+        p2_def = gen._player_def_ratings["P2"].rating_value
+        assert p1_def > p2_def, (
+            "With lower_is_better, player with lower opponent success rate should have higher DEF"
+        )
+
+    def test_use_off_def_split_false_ignores_defense_column(self, cn):
+        """When use_off_def_split=False, defense_performance_column should be ignored."""
+        df = pl.DataFrame(
+            {
+                "pid": ["P1", "P2", "P3", "P4"],
+                "tid": ["T1", "T1", "T2", "T2"],
+                "mid": ["M1", "M1", "M1", "M1"],
+                "dt": ["2024-01-01"] * 4,
+                "perf": [0.5, 0.5, 0.5, 0.5],
+                "pw": [1.0, 1.0, 1.0, 1.0],
+                "def_stat": [0.9, 0.1, 0.5, 0.5],
+            }
+        )
+
+        gen = PlayerRatingGenerator(
+            performance_column="perf",
+            column_names=cn,
+            defense_performance_column="def_stat",
+            use_off_def_split=False,
+        )
+        gen.fit_transform(df)
+
+        # With use_off_def_split=False, def_perf is overridden by off_perf,
+        # so defense column has no effect
+        p1_def = gen._player_def_ratings["P1"].rating_value
+        p2_def = gen._player_def_ratings["P2"].rating_value
+        assert p1_def == p2_def, (
+            "With use_off_def_split=False, defense_performance_column should have no effect"
+        )
+
+    def test_multiple_matches_rating_evolution(self, cn):
+        """Defense ratings should evolve over multiple matches with individual defense."""
+        df = pl.DataFrame(
+            {
+                "pid": ["P1", "P2", "P3", "P4"] * 3,
+                "tid": ["T1", "T1", "T2", "T2"] * 3,
+                "mid": ["M1"] * 4 + ["M2"] * 4 + ["M3"] * 4,
+                "dt": ["2024-01-01"] * 4 + ["2024-01-02"] * 4 + ["2024-01-03"] * 4,
+                "perf": [0.5, 0.5, 0.5, 0.5] * 3,
+                "pw": [1.0, 1.0, 1.0, 1.0] * 3,
+                # P1 consistently better defender than P2
+                "def_stat": [0.7, 0.3, 0.5, 0.5] * 3,
+            }
+        )
+
+        gen = PlayerRatingGenerator(
+            performance_column="perf",
+            column_names=cn,
+            defense_performance_column="def_stat",
+        )
+        gen.fit_transform(df)
+
+        p1_def = gen._player_def_ratings["P1"].rating_value
+        p2_def = gen._player_def_ratings["P2"].rating_value
+
+        # Gap should be larger after multiple matches
+        assert p1_def > p2_def
+        gap = p1_def - p2_def
+        assert gap > 5.0, f"DEF rating gap should grow over matches, got {gap:.2f}"
