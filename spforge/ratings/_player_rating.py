@@ -93,6 +93,10 @@ class PlayerRatingGenerator(RatingGenerator):
         output_suffix: str | None = None,
         scale_participation_weights: bool = False,
         auto_scale_participation_weights: bool = True,
+        rating_mean_adjustment_enabled: bool = True,
+        rating_mean_adjustment_target: float | None = None,
+        rating_mean_adjustment_check_frequency: int = 50,
+        rating_mean_adjustment_active_days: int = 250,
         **kwargs: Any,
     ):
         super().__init__(
@@ -200,6 +204,21 @@ class PlayerRatingGenerator(RatingGenerator):
         self._player_off_ratings: dict[str, PlayerRating] = {}
         self._player_def_ratings: dict[str, PlayerRating] = {}
 
+        self._rating_mean_adjustment_enabled = bool(rating_mean_adjustment_enabled)
+        self._rating_mean_adjustment_check_frequency = int(rating_mean_adjustment_check_frequency)
+        self._rating_mean_adjustment_active_days = int(rating_mean_adjustment_active_days)
+        self._matches_since_last_adjustment_check: int = 0
+
+        if rating_mean_adjustment_target is not None:
+            self._rating_mean_adjustment_target = float(rating_mean_adjustment_target)
+        elif self.start_hardcoded_start_rating is not None:
+            self._rating_mean_adjustment_target = float(self.start_hardcoded_start_rating)
+        elif self.start_league_ratings:
+            league_vals = list(self.start_league_ratings.values())
+            self._rating_mean_adjustment_target = sum(league_vals) / len(league_vals)
+        else:
+            self._rating_mean_adjustment_target = 1000.0
+
         self.start_rating_generator = StartRatingGenerator(
             league_ratings=self.start_league_ratings,
             league_quantile=self.start_league_quantile,
@@ -232,8 +251,36 @@ class PlayerRatingGenerator(RatingGenerator):
         """Clear all accumulated rating state for re-processing."""
         self._player_off_ratings = {}
         self._player_def_ratings = {}
+        self._matches_since_last_adjustment_check = 0
         self.start_rating_generator.reset()
         self._performance_predictor.reset()
+
+    def _apply_rating_mean_adjustment(self, current_day_number: int) -> None:
+        """Adjust active player ratings to maintain target mean."""
+        if not self._rating_mean_adjustment_enabled:
+            return
+
+        active_ids: list[str] = []
+        total_rating = 0.0
+
+        for player_id, off_state in self._player_off_ratings.items():
+            if off_state.last_match_day_number is None:
+                continue
+            days_since = current_day_number - off_state.last_match_day_number
+            if days_since <= self._rating_mean_adjustment_active_days:
+                active_ids.append(player_id)
+                def_state = self._player_def_ratings[player_id]
+                total_rating += (off_state.rating_value + def_state.rating_value) / 2
+
+        if not active_ids:
+            return
+
+        current_mean = total_rating / len(active_ids)
+        adjustment = self._rating_mean_adjustment_target - current_mean
+
+        for player_id in active_ids:
+            self._player_off_ratings[player_id].rating_value += adjustment
+            self._player_def_ratings[player_id].rating_value += adjustment
 
     def _run_ratings_pass(self, df: pl.DataFrame) -> None:
         """Run rating computation pass without assembling output DataFrame.
@@ -882,6 +929,16 @@ class PlayerRatingGenerator(RatingGenerator):
                     rating_change_value=off_change,
                 )
             )
+
+        self._matches_since_last_adjustment_check += 1
+        if (
+            self._rating_mean_adjustment_enabled
+            and self._matches_since_last_adjustment_check
+            >= self._rating_mean_adjustment_check_frequency
+        ):
+            last_day_number = updates[-1][5] if updates else 0
+            self._apply_rating_mean_adjustment(last_day_number)
+            self._matches_since_last_adjustment_check = 0
 
     def _add_rating_features(self, df: pl.DataFrame) -> pl.DataFrame:
         cols_to_add = set((self._features_out or []) + (self.non_predictor_features_out or []))
