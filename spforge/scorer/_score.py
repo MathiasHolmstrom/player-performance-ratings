@@ -267,6 +267,7 @@ class BaseScorer(ABC):
         granularity: list[str] | None = None,
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
+        name: str | None = None,
         _name_override: str | None = None,
         sample_weight_column: str | None = None,
     ):
@@ -281,6 +282,7 @@ class BaseScorer(ABC):
         :param granularity: The columns to calculate separate scores for each unique combination (e.g., different scores for each team)
         :param compare_to_naive: If True, returns naive_score - model_score (improvement over naive baseline)
         :param naive_granularity: Granularity for computing naive baseline predictions
+        :param name: Optional user-provided scorer name
         :param _name_override: Override auto-generated name (internal use)
         :param sample_weight_column: Optional column name containing sample weights for the scoring function
         """
@@ -301,7 +303,9 @@ class BaseScorer(ABC):
         self.granularity = granularity
         self.compare_to_naive = compare_to_naive
         self.naive_granularity = naive_granularity
-        self._name_override = _name_override
+        if name is not None and _name_override is not None and name != _name_override:
+            raise ValueError("Received both name and _name_override with different values.")
+        self._name_override = name if name is not None else _name_override
         self.sample_weight_column = sample_weight_column
 
     def _resolve_aggregation_method(self, key: str) -> Any:
@@ -456,6 +460,9 @@ class BaseScorer(ABC):
             'mean_bias_scorer_points_gran:team_id_naive'
         """
         if hasattr(self, '_name_override') and self._name_override is not None:
+            if self.granularity:
+                gran_str = self._format_column_list(self.granularity)
+                return f"{self._name_override}_gran:{gran_str}"
             return self._name_override
         return self._generate_name()
 
@@ -485,6 +492,7 @@ class PWMSE(BaseScorer):
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
         evaluation_labels: list[int] | None = None,
+        name: str | None = None,
         _name_override: str | None = None,
         sample_weight_column: str | None = None,
     ):
@@ -499,6 +507,7 @@ class PWMSE(BaseScorer):
             validation_column=validation_column,
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
+            name=name,
             _name_override=_name_override,
             sample_weight_column=sample_weight_column,
         )
@@ -662,6 +671,7 @@ class MeanBiasScorer(BaseScorer):
         labels: list[int] | None = None,
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
+        name: str | None = None,
         _name_override: str | None = None,
         sample_weight_column: str | None = None,
     ):
@@ -674,6 +684,7 @@ class MeanBiasScorer(BaseScorer):
         :param granularity: The columns to calculate separate scores for each unique combination (e.g., different scores for each team)
         :param filters: The filters to apply before calculating
         :param labels: The labels corresponding to each index in probability distributions (e.g., [-5, -4, ..., 35] for rush yards)
+        :param name: Optional user-provided scorer name
         :param _name_override: Override auto-generated name (internal use)
         :param sample_weight_column: Optional column name containing sample weights for the scoring function
         """
@@ -690,6 +701,7 @@ class MeanBiasScorer(BaseScorer):
             validation_column=validation_column,
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
+            name=name,
             _name_override=_name_override,
             sample_weight_column=sample_weight_column,
         )
@@ -822,6 +834,7 @@ class SklearnScorer(BaseScorer):
         params: dict[str, Any] = None,
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
+        name: str | None = None,
         _name_override: str | None = None,
         sample_weight_column: str | None = None,
     ):
@@ -834,6 +847,7 @@ class SklearnScorer(BaseScorer):
         :param aggregation_level: The columns to group by before calculating the score (e.g., group from game-player to game-team)
         :param granularity: The columns to calculate separate scores for each unique combination (e.g., different scores for each team)
         :param filters: The filters to apply before calculating
+        :param name: Optional user-provided scorer name
         :param _name_override: Override auto-generated name (internal use)
         :param sample_weight_column: Optional column name containing sample weights for the scoring function
         """
@@ -848,6 +862,7 @@ class SklearnScorer(BaseScorer):
             validation_column=validation_column,
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
+            name=name,
             _name_override=_name_override,
             sample_weight_column=sample_weight_column,
         )
@@ -987,6 +1002,7 @@ class ProbabilisticMeanBias(BaseScorer):
         filters: list[Filter] | None = None,
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
+        name: str | None = None,
         _name_override: str | None = None,
     ):
 
@@ -1002,6 +1018,7 @@ class ProbabilisticMeanBias(BaseScorer):
             validation_column=validation_column,
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
+            name=name,
             _name_override=_name_override,
         )
 
@@ -1226,6 +1243,7 @@ class OrdinalLossScorer(BaseScorer):
         labels: list[int] | None = None,
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
+        name: str | None = None,
         _name_override: str | None = None,
     ):
         self.pred_column_name = pred_column
@@ -1239,6 +1257,7 @@ class OrdinalLossScorer(BaseScorer):
             validation_column=validation_column,
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
+            name=name,
             _name_override=_name_override,
         )
         self.classes = classes
@@ -1427,6 +1446,7 @@ class ThresholdEventScorer(BaseScorer):
         filters: list["Filter"] | None = None,
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
+        name: str | None = None,
         _name_override: str | None = None,
     ):
         self.pred_column_name = dist_column
@@ -1440,6 +1460,7 @@ class ThresholdEventScorer(BaseScorer):
             validation_column=validation_column,
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
+            name=name,
             _name_override=_name_override,
         )
 
