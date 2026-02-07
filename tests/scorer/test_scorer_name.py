@@ -172,14 +172,53 @@ class TestScorerNameProperty:
         scorer = MeanBiasScorer(target="pass/run_ratio", pred_column="pred")
         assert scorer.name == "mean_bias_scorer_pass_run_ratio"
 
-    def test_name_override(self):
+    def test_name_override_uses_granularity_suffix_when_set(self):
         scorer = MeanBiasScorer(
             target="points",
             pred_column="pred",
             granularity=["team_id"],
             _name_override="custom_name"
         )
+        assert scorer.name == "custom_name_gran:team_id"
+
+    def test_name_override_no_granularity(self):
+        scorer = MeanBiasScorer(
+            target="points",
+            pred_column="pred",
+            _name_override="custom_name"
+        )
         assert scorer.name == "custom_name"
+
+    def test_public_name_parameter_uses_granularity_suffix_when_set(self):
+        scorer = MeanBiasScorer(
+            target="points",
+            pred_column="pred",
+            granularity=["team_id"],
+            name="user_metric"
+        )
+        assert scorer.name == "user_metric_gran:team_id"
+
+    def test_public_name_parameter_ignores_auto_name_components_except_granularity(self):
+        scorer = MeanBiasScorer(
+            target="yards",
+            pred_column="pred",
+            granularity=["team_id"],
+            compare_to_naive=True,
+            naive_granularity=["season"],
+            aggregation_level=["game_id", "player_id"],
+            filters=[Filter("minutes", 0, Operator.GREATER_THAN)],
+            name="my_custom_metric",
+        )
+        assert scorer.name == "my_custom_metric_gran:team_id"
+
+    def test_name_and_name_override_conflict_raises(self):
+        with pytest.raises(ValueError, match="Received both name and _name_override"):
+            MeanBiasScorer(
+                target="points",
+                pred_column="pred",
+                name="one",
+                _name_override="two",
+            )
 
     def test_consistency_across_repeated_calls(self):
         scorer = MeanBiasScorer(
