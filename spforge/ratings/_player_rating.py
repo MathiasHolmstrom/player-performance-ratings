@@ -798,27 +798,32 @@ class PlayerRatingGenerator(RatingGenerator):
                 if team1_def_perf is None or (not self.use_off_def_split and not perf_is_valid):
                     def_change = 0.0
                 else:
-                    individual_def = pre_player.match_performance.defense_performance_value
-                    if (
-                        individual_def is not None
-                        and math.isfinite(individual_def)
-                        and team1_mean_def is not None
-                    ):
-                        deviation = individual_def - team1_mean_def
-                        def_perf = max(0.0, min(1.0, float(team1_def_perf) + deviation))
+                    def_weight = pre_player.match_performance.defense_participation_weight
+                    def_weight_is_valid = def_weight is not None and math.isfinite(float(def_weight))
+                    if not def_weight_is_valid:
+                        def_change = 0.0
                     else:
-                        def_perf = float(team1_def_perf)
+                        individual_def = pre_player.match_performance.defense_performance_value
+                        if (
+                            individual_def is not None
+                            and math.isfinite(individual_def)
+                            and team1_mean_def is not None
+                        ):
+                            deviation = individual_def - team1_mean_def
+                            def_perf = max(0.0, min(1.0, float(team1_def_perf) + deviation))
+                        else:
+                            def_perf = float(team1_def_perf)
 
-                    if not self.use_off_def_split:
-                        pred_def = pred_off
-                        def_perf = float(perf_value)
+                        if not self.use_off_def_split:
+                            pred_def = pred_off
+                            def_perf = float(perf_value)
 
-                    mult_def = self._applied_multiplier_def(def_state)
-                    def_change = (
-                        (def_perf - float(pred_def))
-                        * mult_def
-                        * float(pre_player.match_performance.defense_participation_weight)
-                    )
+                        mult_def = self._applied_multiplier_def(def_state)
+                        def_change = (
+                            (def_perf - float(pred_def))
+                            * mult_def
+                            * float(def_weight)
+                        )
 
                 if math.isnan(off_change) or math.isnan(def_change):
                     raise ValueError(
@@ -902,27 +907,32 @@ class PlayerRatingGenerator(RatingGenerator):
                 if team2_def_perf is None or (not self.use_off_def_split and not perf_is_valid):
                     def_change = 0.0
                 else:
-                    individual_def = pre_player.match_performance.defense_performance_value
-                    if (
-                        individual_def is not None
-                        and math.isfinite(individual_def)
-                        and team2_mean_def is not None
-                    ):
-                        deviation = individual_def - team2_mean_def
-                        def_perf = max(0.0, min(1.0, float(team2_def_perf) + deviation))
+                    def_weight = pre_player.match_performance.defense_participation_weight
+                    def_weight_is_valid = def_weight is not None and math.isfinite(float(def_weight))
+                    if not def_weight_is_valid:
+                        def_change = 0.0
                     else:
-                        def_perf = float(team2_def_perf)
+                        individual_def = pre_player.match_performance.defense_performance_value
+                        if (
+                            individual_def is not None
+                            and math.isfinite(individual_def)
+                            and team2_mean_def is not None
+                        ):
+                            deviation = individual_def - team2_mean_def
+                            def_perf = max(0.0, min(1.0, float(team2_def_perf) + deviation))
+                        else:
+                            def_perf = float(team2_def_perf)
 
-                    if not self.use_off_def_split:
-                        pred_def = pred_off
-                        def_perf = float(perf_value)
+                        if not self.use_off_def_split:
+                            pred_def = pred_off
+                            def_perf = float(perf_value)
 
-                    mult_def = self._applied_multiplier_def(def_state)
-                    def_change = (
-                        (def_perf - float(pred_def))
-                        * mult_def
-                        * float(pre_player.match_performance.defense_participation_weight)
-                    )
+                        mult_def = self._applied_multiplier_def(def_state)
+                        def_change = (
+                            (def_perf - float(pred_def))
+                            * mult_def
+                            * float(def_weight)
+                        )
 
                 if math.isnan(off_change) or math.isnan(def_change):
                     raise ValueError(

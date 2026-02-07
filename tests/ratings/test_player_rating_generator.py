@@ -2915,6 +2915,63 @@ def test_defense_participation_weight_backwards_compatibility(base_cn, library):
     assert len(gen._player_def_ratings) > 0
 
 
+def test_fit_transform_null_defense_participation_weight_with_off_def_split__no_crash_and_skips_def_update(
+    base_cn,
+):
+    """
+    Null defense_participation_weight should skip DEF update for that player.
+    """
+    from dataclasses import replace
+
+    cn = replace(base_cn, defense_participation_weight="dpw")
+
+    df1 = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "perf": [0.6, 0.4, 0.5, 0.5],
+            "pw": [1.0] * 4,
+            "dpw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+    df2 = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M2", "M2", "M2", "M2"],
+            "dt": ["2024-01-02"] * 4,
+            "perf": [None, 0.1, 0.9, 0.9],
+            "pw": [1.0] * 4,
+            "dpw": [None, 1.0, 1.0, 1.0],
+        }
+    )
+
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=cn,
+        use_off_def_split=True,
+        auto_scale_performance=True,
+        start_rating_value=1000.0,
+        rating_change_multiplier_defense=50.0,
+        rating_change_multiplier_offense=50.0,
+    )
+
+    result1 = gen.fit_transform(df1)
+    assert result1 is not None
+    p1_pre_m2 = gen._player_def_ratings["P1"].rating_value
+    p2_pre_m2 = gen._player_def_ratings["P2"].rating_value
+
+    result2 = gen.fit_transform(df2)
+    assert result2 is not None
+    p1_post_m2 = gen._player_def_ratings["P1"].rating_value
+    assert p1_post_m2 == p1_pre_m2
+
+    p2_post_m2 = gen._player_def_ratings["P2"].rating_value
+    assert p2_post_m2 != p2_pre_m2
+
+
 def test_fit_transform_null_perf_with_use_off_def_split_false__no_crash(base_cn):
     """
     Regression test: null performance with use_off_def_split=False should not crash.
