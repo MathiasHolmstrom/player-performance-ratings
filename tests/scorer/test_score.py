@@ -537,6 +537,106 @@ def test_mean_bias_scorer_with_granularity(df_type):
 
 
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_mean_bias_scorer_relative_bias_column(df_type):
+    """MeanBiasScorer relative bias compares predicted vs actual with/without deltas."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [0.05, 0.07, 0.03, 0.05],
+            "target": [0.10, 0.08, 0.04, 0.02],
+            "with_star_player": [1, 1, 0, 0],
+        },
+    )
+    scorer = MeanBiasScorer(
+        pred_column="pred",
+        target="target",
+        relative_bias_column="with_star_player",
+    )
+    score = scorer.score(df)
+    # Predicted delta: (0.06 - 0.04) = 0.02
+    # Actual delta: (0.09 - 0.03) = 0.06
+    # Relative bias: 0.02 - 0.06 = -0.04
+    assert abs(score - (-0.04)) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_mean_bias_scorer_relative_bias_column_probabilities(df_type):
+    """Relative bias works for list predictions using expected values."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [[0.9, 0.1], [0.7, 0.3], [0.4, 0.6], [0.2, 0.8]],
+            "target": [0.3, 0.5, 0.2, 0.4],
+            "with_star_player": [1, 1, 0, 0],
+        },
+    )
+    scorer = MeanBiasScorer(
+        pred_column="pred",
+        target="target",
+        relative_bias_column="with_star_player",
+    )
+    score = scorer.score(df)
+    # Expected preds: [0.1, 0.3, 0.6, 0.8]
+    # Predicted delta: (0.2 - 0.7) = -0.5
+    # Actual delta: (0.4 - 0.3) = 0.1
+    # Relative bias: -0.5 - 0.1 = -0.6
+    assert abs(score - (-0.6)) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_mean_bias_scorer_relative_bias_column_compare_to_naive(df_type):
+    """Relative bias supports compare_to_naive path."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [2.0, 2.0, 1.0, 1.0],
+            "target": [3.0, 3.0, 1.0, 1.0],
+            "with_star_player": [1, 1, 0, 0],
+        },
+    )
+    scorer = MeanBiasScorer(
+        pred_column="pred",
+        target="target",
+        relative_bias_column="with_star_player",
+        compare_to_naive=True,
+    )
+    score = scorer.score(df)
+    # Model relative bias: (2.0 - 1.0) - (3.0 - 1.0) = -1.0
+    # Naive relative bias: (2.0 - 2.0) - (3.0 - 1.0) = -2.0
+    # compare_to_naive returns naive - model = -1.0
+    assert abs(score - (-1.0)) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_mean_bias_scorer_relative_bias_column_invalid_value_raises(df_type):
+    """Relative bias column must be binary/bool."""
+    df = create_dataframe(
+        df_type,
+        {"pred": [1.0, 2.0], "target": [1.0, 2.0], "with_star_player": [1, 2]},
+    )
+    scorer = MeanBiasScorer(
+        pred_column="pred",
+        target="target",
+        relative_bias_column="with_star_player",
+    )
+    with pytest.raises(ValueError, match="expects binary values"):
+        scorer.score(df)
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_mean_bias_scorer_relative_bias_column_missing_raises(df_type):
+    """Relative bias column must exist in dataframe."""
+    df = create_dataframe(df_type, {"pred": [1.0, 2.0], "target": [1.0, 2.0]})
+    scorer = MeanBiasScorer(
+        pred_column="pred",
+        target="target",
+        relative_bias_column="with_star_player",
+    )
+    with pytest.raises(ValueError, match="not found in dataframe columns"):
+        scorer.score(df)
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
 def test_mean_bias_scorer_with_filters(df_type):
     """MeanBiasScorer with filters"""
     df = create_dataframe(

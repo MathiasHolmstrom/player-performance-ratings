@@ -255,6 +255,12 @@ def _filter_nulls_and_nans(df: IntoFrameT, target: str) -> IntoFrameT:
 
 
 class BaseScorer(ABC):
+    _SCORER_ID_ABBREVIATIONS: dict[str, str] = {
+        "mean_bias_scorer": "bias",
+        "mean_absolute_error": "mae",
+        "mean_squared_error": "mse",
+        "root_mean_squared_error": "rmse",
+    }
 
     def __init__(
         self,
@@ -379,9 +385,11 @@ class BaseScorer(ABC):
         name = self.__class__.__name__
         # Check if name is all uppercase (acronym like PWMSE)
         if name.isupper():
-            return name.lower()
+            scorer_id = name.lower()
+            return self._SCORER_ID_ABBREVIATIONS.get(scorer_id, scorer_id)
         # Otherwise use regular snake_case conversion
-        return re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
+        scorer_id = re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
+        return self._SCORER_ID_ABBREVIATIONS.get(scorer_id, scorer_id)
 
     def _format_column_list(self, columns: list[str], max_display: int = 3) -> str:
         """Format column list with abbreviation for long lists."""
@@ -396,16 +404,39 @@ class BaseScorer(ABC):
         import re
         return re.sub(r'[^a-zA-Z0-9_]', '_', name)
 
+    def _is_datetime_like_filter_value(self, value: Any) -> bool:
+        if isinstance(value, (datetime.datetime, datetime.date, np.datetime64, pd.Timestamp)):
+            return True
+        if isinstance(value, str):
+            candidate = value.strip()
+            if not candidate:
+                return False
+            if candidate.endswith("Z"):
+                candidate = f"{candidate[:-1]}+00:00"
+            try:
+                datetime.datetime.fromisoformat(candidate)
+                return True
+            except ValueError:
+                try:
+                    datetime.date.fromisoformat(candidate)
+                    return True
+                except ValueError:
+                    return False
+        if isinstance(value, (list, tuple, set)):
+            return any(self._is_datetime_like_filter_value(item) for item in value)
+        return False
+
     def _count_user_filters(self) -> int:
-        """Count filters excluding any filter on validation column."""
+        """Count user-visible filters, excluding validation and datetime-like filters."""
         if not self.filters:
             return 0
-        if self.validation_column is None:
-            return len(self.filters)
         count = 0
         for f in self.filters:
-            if f.column_name != self.validation_column:
-                count += 1
+            if self.validation_column is not None and f.column_name == self.validation_column:
+                continue
+            if self._is_datetime_like_filter_value(f.value):
+                continue
+            count += 1
         return count
 
     def _generate_name(self) -> str:
@@ -413,8 +444,6 @@ class BaseScorer(ABC):
         parts = []
 
         parts.append(self._get_scorer_id())
-
-        parts.append(self._sanitize_column_name(self.target))
 
         if self.granularity:
             gran_str = self._format_column_list(self.granularity)
@@ -443,21 +472,21 @@ class BaseScorer(ABC):
         Generate a human-readable name for this scorer.
 
         Returns descriptive name based on scorer configuration including
-        target, granularity, naive comparison, aggregation, and filters.
+        granularity, naive comparison, aggregation, and filters.
         Only includes components that are actually set (non-None/non-empty).
 
-        Format: {scorer_id}_{target}[_gran:{cols}][_naive[:cols]][_agg:{cols}][_filters:{n}]
+        Format: {scorer_id}[_gran:{cols}][_naive[:cols]][_agg:{cols}][_filters:{n}]
 
         Can be overridden by passing _name_override to constructor.
 
         Examples:
             >>> scorer = MeanBiasScorer(target="points", pred_column="pred")
             >>> scorer.name
-            'mean_bias_scorer_points'
+            'bias'
 
             >>> scorer = MeanBiasScorer(target="points", granularity=["team_id"], compare_to_naive=True)
             >>> scorer.name
-            'mean_bias_scorer_points_gran:team_id_naive'
+            'bias_gran:team_id_naive'
         """
         if hasattr(self, '_name_override') and self._name_override is not None:
             if self.granularity:
@@ -674,6 +703,7 @@ class MeanBiasScorer(BaseScorer):
         name: str | None = None,
         _name_override: str | None = None,
         sample_weight_column: str | None = None,
+        relative_bias_column: str | None = None,
     ):
         """
         :param pred_column: The column name of the predictions
@@ -687,10 +717,13 @@ class MeanBiasScorer(BaseScorer):
         :param name: Optional user-provided scorer name
         :param _name_override: Override auto-generated name (internal use)
         :param sample_weight_column: Optional column name containing sample weights for the scoring function
+        :param relative_bias_column: Optional binary column used to compute relative bias:
+            (mean_pred_when_1 - mean_pred_when_0) - (mean_target_when_1 - mean_target_when_0)
         """
 
         self.pred_column_name = pred_column
         self.labels = labels
+        self.relative_bias_column = relative_bias_column
         super().__init__(
             target=target,
             pred_column=pred_column,
@@ -734,6 +767,72 @@ class MeanBiasScorer(BaseScorer):
             return float(np.average(diffs[mask], weights=w[mask]))
         return float(np.nanmean(diffs))
 
+    def _relative_bias_from_lists(
+        self,
+        preds: list[Any],
+        targets: list[Any],
+        relative_groups: list[Any],
+        weights: list[Any] | None = None,
+    ) -> float:
+        if not preds:
+            return 0.0
+
+        preds_arr = np.asarray(preds, dtype=np.float64)
+        targets_arr = np.asarray(targets, dtype=np.float64)
+        if len(preds_arr) != len(targets_arr) or len(preds_arr) != len(relative_groups):
+            raise ValueError("preds, targets, and relative_groups must have the same length.")
+
+        group_values: list[float] = []
+        for value in relative_groups:
+            if pd.isna(value):
+                group_values.append(np.nan)
+            elif value is True or value == 1:
+                group_values.append(1.0)
+            elif value is False or value == 0:
+                group_values.append(0.0)
+            else:
+                raise ValueError(
+                    f"relative_bias_column expects binary values (0/1 or bool). Got: {value!r}"
+                )
+        group_arr = np.asarray(group_values, dtype=np.float64)
+
+        valid_mask = ~np.isnan(preds_arr) & ~np.isnan(targets_arr) & ~np.isnan(group_arr)
+        if weights is not None:
+            weights_arr = np.asarray(weights, dtype=np.float64)
+            if len(weights_arr) != len(preds_arr):
+                raise ValueError("weights must have the same length as preds.")
+            valid_mask = valid_mask & ~np.isnan(weights_arr)
+            weights_arr = weights_arr[valid_mask]
+        else:
+            weights_arr = None
+
+        if not valid_mask.any():
+            return 0.0
+
+        preds_arr = preds_arr[valid_mask]
+        targets_arr = targets_arr[valid_mask]
+        group_arr = group_arr[valid_mask]
+
+        with_mask = group_arr == 1.0
+        without_mask = group_arr == 0.0
+        if not with_mask.any() or not without_mask.any():
+            return 0.0
+
+        if weights_arr is None:
+            pred_delta = float(preds_arr[with_mask].mean() - preds_arr[without_mask].mean())
+            actual_delta = float(targets_arr[with_mask].mean() - targets_arr[without_mask].mean())
+        else:
+            pred_delta = float(
+                np.average(preds_arr[with_mask], weights=weights_arr[with_mask])
+                - np.average(preds_arr[without_mask], weights=weights_arr[without_mask])
+            )
+            actual_delta = float(
+                np.average(targets_arr[with_mask], weights=weights_arr[with_mask])
+                - np.average(targets_arr[without_mask], weights=weights_arr[without_mask])
+            )
+
+        return pred_delta - actual_delta
+
     @narwhals.narwhalify
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
         df = apply_filters(df, self.filters)
@@ -759,6 +858,10 @@ class MeanBiasScorer(BaseScorer):
             # After group_by, ensure df is still a Narwhals DataFrame
             if not hasattr(df, "to_native"):
                 df = nw.from_native(df)
+        if self.relative_bias_column and self.relative_bias_column not in df.columns:
+            raise ValueError(
+                f"relative_bias_column '{self.relative_bias_column}' not found in dataframe columns."
+            )
 
         # If granularity is set, calculate separate scores per group
         if self.granularity:
@@ -785,18 +888,40 @@ class MeanBiasScorer(BaseScorer):
                 weights = gran_df[self.sample_weight_column].to_list() if self.sample_weight_column else None
                 # Calculate score for this group
                 preds = gran_df[self.pred_column].to_list()
+                targets = gran_df[self.target].to_list()
                 if preds and isinstance(preds[0], (list, np.ndarray)):
-                    targets = gran_df[self.target].to_list()
                     expected_preds = _expected_from_probabilities(preds, self.labels)
-                    score = self._mean_bias_from_lists(expected_preds, targets, weights)
+                    point_preds = expected_preds
+                else:
+                    point_preds = preds
+
+                if self.relative_bias_column:
+                    relative_groups = gran_df[self.relative_bias_column].to_list()
+                    score = self._relative_bias_from_lists(
+                        point_preds,
+                        targets,
+                        relative_groups,
+                        weights,
+                    )
+                elif preds and isinstance(preds[0], (list, np.ndarray)):
+                    score = self._mean_bias_from_lists(point_preds, targets, weights)
                 else:
                     score = self._mean_bias_score(gran_df, weights)
+
                 if self.compare_to_naive:
-                    targets = gran_df[self.target].to_list()
                     naive_preds = _naive_point_predictions_for_df(
                         gran_df, self.target, self.naive_granularity
                     )
-                    naive_score = self._mean_bias_from_lists(naive_preds, targets, weights)
+                    if self.relative_bias_column:
+                        relative_groups = gran_df[self.relative_bias_column].to_list()
+                        naive_score = self._relative_bias_from_lists(
+                            naive_preds,
+                            targets,
+                            relative_groups,
+                            weights,
+                        )
+                    else:
+                        naive_score = self._mean_bias_from_lists(naive_preds, targets, weights)
                     score = naive_score - score
                 results[gran_tuple] = score
 
@@ -805,16 +930,37 @@ class MeanBiasScorer(BaseScorer):
         weights = df[self.sample_weight_column].to_list() if self.sample_weight_column else None
         # Single score calculation
         preds = df[self.pred_column].to_list()
+        targets = df[self.target].to_list()
         if preds and isinstance(preds[0], (list, np.ndarray)):
-            targets = df[self.target].to_list()
             expected_preds = _expected_from_probabilities(preds, self.labels)
-            score = self._mean_bias_from_lists(expected_preds, targets, weights)
+            point_preds = expected_preds
+        else:
+            point_preds = preds
+
+        if self.relative_bias_column:
+            relative_groups = df[self.relative_bias_column].to_list()
+            score = self._relative_bias_from_lists(
+                point_preds,
+                targets,
+                relative_groups,
+                weights,
+            )
+        elif preds and isinstance(preds[0], (list, np.ndarray)):
+            score = self._mean_bias_from_lists(point_preds, targets, weights)
         else:
             score = self._mean_bias_score(df, weights)
         if self.compare_to_naive:
-            targets = df[self.target].to_list()
             naive_preds = _naive_point_predictions_for_df(df, self.target, self.naive_granularity)
-            naive_score = self._mean_bias_from_lists(naive_preds, targets, weights)
+            if self.relative_bias_column:
+                relative_groups = df[self.relative_bias_column].to_list()
+                naive_score = self._relative_bias_from_lists(
+                    naive_preds,
+                    targets,
+                    relative_groups,
+                    weights,
+                )
+            else:
+                naive_score = self._mean_bias_from_lists(naive_preds, targets, weights)
             return float(naive_score - score)
         return float(score)
 
@@ -877,7 +1023,7 @@ class SklearnScorer(BaseScorer):
             # Handle lambda functions
             if name == '<lambda>':
                 return "custom_metric"
-            return name
+            return self._SCORER_ID_ABBREVIATIONS.get(name, name)
         return "custom_metric"
 
     def _pad_probabilities(
