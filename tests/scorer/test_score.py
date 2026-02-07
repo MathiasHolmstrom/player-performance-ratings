@@ -2280,3 +2280,176 @@ def test_pwmse__evaluation_labels_extends_with_compare_to_naive(df_type):
 
     expected = naive_score - model_score
     assert abs(score - expected) < 1e-10
+
+
+# ============================================================================
+# sample_weight_column Tests
+# ============================================================================
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_sklearn_scorer_sample_weight_column(df_type):
+    """SklearnScorer passes sample_weight to scoring function when sample_weight_column is set."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [1.0, 2.0, 3.0, 4.0],
+            "target": [1.5, 2.5, 3.5, 4.5],
+            "weight": [10.0, 1.0, 1.0, 1.0],
+        },
+    )
+    scorer_unweighted = SklearnScorer(
+        scorer_function=mean_absolute_error,
+        pred_column="pred",
+        target="target",
+    )
+    scorer_weighted = SklearnScorer(
+        scorer_function=mean_absolute_error,
+        pred_column="pred",
+        target="target",
+        sample_weight_column="weight",
+    )
+    score_unweighted = scorer_unweighted.score(df)
+    score_weighted = scorer_weighted.score(df)
+    # All errors are 0.5, so weighted and unweighted should be the same here
+    assert abs(score_unweighted - 0.5) < 1e-10
+    assert abs(score_weighted - 0.5) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_sklearn_scorer_sample_weight_column_affects_result(df_type):
+    """SklearnScorer: weights shift the score towards heavily-weighted samples."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [1.0, 2.0],
+            "target": [2.0, 2.0],
+            "weight": [10.0, 1.0],
+        },
+    )
+    scorer_weighted = SklearnScorer(
+        scorer_function=mean_absolute_error,
+        pred_column="pred",
+        target="target",
+        sample_weight_column="weight",
+    )
+    score = scorer_weighted.score(df)
+    # Weighted MAE: (10*1.0 + 1*0.0) / (10+1) = 10/11
+    expected = 10.0 / 11.0
+    assert abs(score - expected) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_sklearn_scorer_no_weight_column_unchanged(df_type):
+    """SklearnScorer without sample_weight_column behaves identically to before."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [1.0, 2.0, 3.0],
+            "target": [1.5, 2.0, 4.0],
+        },
+    )
+    scorer = SklearnScorer(
+        scorer_function=mean_absolute_error,
+        pred_column="pred",
+        target="target",
+    )
+    score = scorer.score(df)
+    expected = (0.5 + 0.0 + 1.0) / 3
+    assert abs(score - expected) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_mean_bias_scorer_sample_weight_column(df_type):
+    """MeanBiasScorer uses weighted mean when sample_weight_column is set."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [3.0, 1.0],
+            "target": [2.0, 2.0],
+            "weight": [3.0, 1.0],
+        },
+    )
+    scorer = MeanBiasScorer(
+        pred_column="pred",
+        target="target",
+        sample_weight_column="weight",
+    )
+    score = scorer.score(df)
+    # diffs: [1.0, -1.0], weights: [3, 1]
+    # weighted avg = (3*1.0 + 1*(-1.0)) / (3+1) = 2/4 = 0.5
+    assert abs(score - 0.5) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
+def test_mean_bias_scorer_no_weight_unchanged(df_type):
+    """MeanBiasScorer without weights returns simple mean."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [3.0, 1.0],
+            "target": [2.0, 2.0],
+        },
+    )
+    scorer = MeanBiasScorer(pred_column="pred", target="target")
+    score = scorer.score(df)
+    # diffs: [1.0, -1.0], mean = 0.0
+    assert abs(score - 0.0) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame])
+def test_pwmse_sample_weight_column(df_type):
+    """PWMSE uses weighted mean over per-row scores when sample_weight_column is set."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [[0.1, 0.9], [0.9, 0.1]],
+            "target": [1, 0],
+            "weight": [3.0, 1.0],
+        },
+    )
+    scorer_unweighted = PWMSE(
+        pred_column="pred",
+        target="target",
+        labels=[0, 1],
+    )
+    scorer_weighted = PWMSE(
+        pred_column="pred",
+        target="target",
+        labels=[0, 1],
+        sample_weight_column="weight",
+    )
+    score_u = scorer_unweighted.score(df)
+    score_w = scorer_weighted.score(df)
+
+    # Per-row: row0 target=1, preds=[0.1,0.9] -> (0-1)^2*0.1 + (1-1)^2*0.9 = 0.1
+    #          row1 target=0, preds=[0.9,0.1] -> (0-0)^2*0.9 + (1-0)^2*0.1 = 0.1
+    # Unweighted: (0.1 + 0.1) / 2 = 0.1
+    # Weighted: (3*0.1 + 1*0.1) / 4 = 0.1 (same here since per-row scores are equal)
+    assert abs(score_u - 0.1) < 1e-10
+    assert abs(score_w - 0.1) < 1e-10
+
+
+@pytest.mark.parametrize("df_type", [pl.DataFrame])
+def test_pwmse_sample_weight_column_affects_result(df_type):
+    """PWMSE: weights shift the score towards heavily-weighted samples."""
+    df = create_dataframe(
+        df_type,
+        {
+            "pred": [[0.0, 1.0], [1.0, 0.0]],
+            "target": [0, 0],
+            "weight": [10.0, 1.0],
+        },
+    )
+    scorer = PWMSE(
+        pred_column="pred",
+        target="target",
+        labels=[0, 1],
+        sample_weight_column="weight",
+    )
+    score = scorer.score(df)
+    # row0: target=0, preds=[0,1] -> (0-0)^2*0 + (1-0)^2*1 = 1.0
+    # row1: target=0, preds=[1,0] -> (0-0)^2*1 + (1-0)^2*0 = 0.0
+    # Weighted: (10*1.0 + 1*0.0) / 11 = 10/11
+    expected = 10.0 / 11.0
+    assert abs(score - expected) < 1e-10
