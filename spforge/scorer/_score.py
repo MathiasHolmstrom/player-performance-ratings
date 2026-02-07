@@ -268,6 +268,7 @@ class BaseScorer(ABC):
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
         _name_override: str | None = None,
+        sample_weight_column: str | None = None,
     ):
         """
         :param target: The column name of the target
@@ -281,6 +282,7 @@ class BaseScorer(ABC):
         :param compare_to_naive: If True, returns naive_score - model_score (improvement over naive baseline)
         :param naive_granularity: Granularity for computing naive baseline predictions
         :param _name_override: Override auto-generated name (internal use)
+        :param sample_weight_column: Optional column name containing sample weights for the scoring function
         """
         self.target = target
         self.pred_column = pred_column
@@ -300,6 +302,7 @@ class BaseScorer(ABC):
         self.compare_to_naive = compare_to_naive
         self.naive_granularity = naive_granularity
         self._name_override = _name_override
+        self.sample_weight_column = sample_weight_column
 
     def _resolve_aggregation_method(self, key: str) -> Any:
         if self.aggregation_method is None:
@@ -339,6 +342,8 @@ class BaseScorer(ABC):
                 self._build_aggregation_expr(df, self.pred_column, pred_method),
                 self._build_aggregation_expr(df, self.target, target_method),
             ]
+            if self.sample_weight_column and self.sample_weight_column in df.columns:
+                agg_exprs.append(nw.col(self.sample_weight_column).sum().alias(self.sample_weight_column))
             df = df.group_by(self.aggregation_level).agg(agg_exprs)
         return df
 
@@ -481,6 +486,7 @@ class PWMSE(BaseScorer):
         naive_granularity: list[str] | None = None,
         evaluation_labels: list[int] | None = None,
         _name_override: str | None = None,
+        sample_weight_column: str | None = None,
     ):
         self.pred_column_name = pred_column
         super().__init__(
@@ -494,6 +500,7 @@ class PWMSE(BaseScorer):
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
             _name_override=_name_override,
+            sample_weight_column=sample_weight_column,
         )
         self.labels = labels
         self.evaluation_labels = evaluation_labels
@@ -547,10 +554,13 @@ class PWMSE(BaseScorer):
             return self.evaluation_labels
         return self.labels
 
-    def _pwmse_score(self, targets: np.ndarray, preds: np.ndarray) -> float:
+    def _pwmse_score(self, targets: np.ndarray, preds: np.ndarray, weights: np.ndarray | None = None) -> float:
         labels = np.asarray(self._get_scoring_labels(), dtype=np.float64)
         diffs_sqd = (labels[None, :] - targets[:, None]) ** 2
-        return float((diffs_sqd * preds).sum(axis=1).mean())
+        per_row = (diffs_sqd * preds).sum(axis=1)
+        if weights is not None:
+            return float(np.average(per_row, weights=weights))
+        return float(per_row.mean())
 
     def _filter_targets_for_evaluation(self, df: IntoFrameT) -> IntoFrameT:
         if self.evaluation_labels is None:
@@ -602,10 +612,11 @@ class PWMSE(BaseScorer):
                     mask = col_mask if mask is None else (mask & col_mask)
                 gran_df = df.filter(mask)
 
+                weights = np.asarray(gran_df[self.sample_weight_column].to_list(), dtype=np.float64) if self.sample_weight_column else None
                 targets = gran_df[self.target].to_numpy().astype(np.float64)
                 preds = np.asarray(gran_df[self.pred_column].to_list(), dtype=np.float64)
                 preds = self._align_predictions(preds)
-                score = self._pwmse_score(targets, preds)
+                score = self._pwmse_score(targets, preds, weights)
                 if self.compare_to_naive:
                     naive_probs_list = _naive_probability_predictions_for_df(
                         gran_df,
@@ -614,16 +625,17 @@ class PWMSE(BaseScorer):
                         self.naive_granularity,
                     )
                     naive_preds = np.asarray(naive_probs_list, dtype=np.float64)
-                    naive_score = self._pwmse_score(targets, naive_preds)
+                    naive_score = self._pwmse_score(targets, naive_preds, weights)
                     score = naive_score - score
                 results[gran_tuple] = float(score)
 
             return results
 
+        weights = np.asarray(df[self.sample_weight_column].to_list(), dtype=np.float64) if self.sample_weight_column else None
         targets = df[self.target].to_numpy().astype(np.float64)
         preds = np.asarray(df[self.pred_column].to_list(), dtype=np.float64)
         preds = self._align_predictions(preds)
-        score = self._pwmse_score(targets, preds)
+        score = self._pwmse_score(targets, preds, weights)
         if self.compare_to_naive:
             naive_probs_list = _naive_probability_predictions_for_df(
                 df,
@@ -632,7 +644,7 @@ class PWMSE(BaseScorer):
                 self.naive_granularity,
             )
             naive_preds = np.asarray(naive_probs_list, dtype=np.float64)
-            naive_score = self._pwmse_score(targets, naive_preds)
+            naive_score = self._pwmse_score(targets, naive_preds, weights)
             return float(naive_score - score)
         return float(score)
 
@@ -651,6 +663,7 @@ class MeanBiasScorer(BaseScorer):
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
         _name_override: str | None = None,
+        sample_weight_column: str | None = None,
     ):
         """
         :param pred_column: The column name of the predictions
@@ -662,6 +675,7 @@ class MeanBiasScorer(BaseScorer):
         :param filters: The filters to apply before calculating
         :param labels: The labels corresponding to each index in probability distributions (e.g., [-5, -4, ..., 35] for rush yards)
         :param _name_override: Override auto-generated name (internal use)
+        :param sample_weight_column: Optional column name containing sample weights for the scoring function
         """
 
         self.pred_column_name = pred_column
@@ -677,20 +691,35 @@ class MeanBiasScorer(BaseScorer):
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
             _name_override=_name_override,
+            sample_weight_column=sample_weight_column,
         )
 
-    def _mean_bias_score(self, df: IntoFrameT) -> float:
-        mean_score = (df[self.pred_column] - df[self.target]).mean()
-        if mean_score is None or (isinstance(mean_score, float) and pd.isna(mean_score)):
+    def _mean_bias_score(self, df: IntoFrameT, weights: list[Any] | None = None) -> float:
+        diffs = (df[self.pred_column] - df[self.target]).to_list()
+        diffs_arr = np.asarray(diffs, dtype=np.float64)
+        if diffs_arr.size == 0 or np.isnan(diffs_arr).all():
             return 0.0
-        return float(mean_score)
+        if weights is not None:
+            w = np.asarray(weights, dtype=np.float64)
+            mask = ~np.isnan(diffs_arr)
+            if not mask.any():
+                return 0.0
+            return float(np.average(diffs_arr[mask], weights=w[mask]))
+        result = float(np.nanmean(diffs_arr))
+        return 0.0 if pd.isna(result) else result
 
-    def _mean_bias_from_lists(self, preds: list[Any], targets: list[Any]) -> float:
+    def _mean_bias_from_lists(self, preds: list[Any], targets: list[Any], weights: list[Any] | None = None) -> float:
         if not preds:
             return 0.0
         diffs = np.asarray(preds, dtype=np.float64) - np.asarray(targets, dtype=np.float64)
         if diffs.size == 0 or np.isnan(diffs).all():
             return 0.0
+        if weights is not None:
+            w = np.asarray(weights, dtype=np.float64)
+            mask = ~np.isnan(diffs)
+            if not mask.any():
+                return 0.0
+            return float(np.average(diffs[mask], weights=w[mask]))
         return float(np.nanmean(diffs))
 
     @narwhals.narwhalify
@@ -741,37 +770,39 @@ class MeanBiasScorer(BaseScorer):
                     mask = col_mask if mask is None else (mask & col_mask)
                 gran_df = df.filter(mask)
 
+                weights = gran_df[self.sample_weight_column].to_list() if self.sample_weight_column else None
                 # Calculate score for this group
                 preds = gran_df[self.pred_column].to_list()
                 if preds and isinstance(preds[0], (list, np.ndarray)):
                     targets = gran_df[self.target].to_list()
                     expected_preds = _expected_from_probabilities(preds, self.labels)
-                    score = self._mean_bias_from_lists(expected_preds, targets)
+                    score = self._mean_bias_from_lists(expected_preds, targets, weights)
                 else:
-                    score = self._mean_bias_score(gran_df)
+                    score = self._mean_bias_score(gran_df, weights)
                 if self.compare_to_naive:
                     targets = gran_df[self.target].to_list()
                     naive_preds = _naive_point_predictions_for_df(
                         gran_df, self.target, self.naive_granularity
                     )
-                    naive_score = self._mean_bias_from_lists(naive_preds, targets)
+                    naive_score = self._mean_bias_from_lists(naive_preds, targets, weights)
                     score = naive_score - score
                 results[gran_tuple] = score
 
             return results
 
+        weights = df[self.sample_weight_column].to_list() if self.sample_weight_column else None
         # Single score calculation
         preds = df[self.pred_column].to_list()
         if preds and isinstance(preds[0], (list, np.ndarray)):
             targets = df[self.target].to_list()
             expected_preds = _expected_from_probabilities(preds, self.labels)
-            score = self._mean_bias_from_lists(expected_preds, targets)
+            score = self._mean_bias_from_lists(expected_preds, targets, weights)
         else:
-            score = self._mean_bias_score(df)
+            score = self._mean_bias_score(df, weights)
         if self.compare_to_naive:
             targets = df[self.target].to_list()
             naive_preds = _naive_point_predictions_for_df(df, self.target, self.naive_granularity)
-            naive_score = self._mean_bias_from_lists(naive_preds, targets)
+            naive_score = self._mean_bias_from_lists(naive_preds, targets, weights)
             return float(naive_score - score)
         return float(score)
 
@@ -792,6 +823,7 @@ class SklearnScorer(BaseScorer):
         compare_to_naive: bool = False,
         naive_granularity: list[str] | None = None,
         _name_override: str | None = None,
+        sample_weight_column: str | None = None,
     ):
         """
         :param pred_column: The column name of the predictions
@@ -803,6 +835,7 @@ class SklearnScorer(BaseScorer):
         :param granularity: The columns to calculate separate scores for each unique combination (e.g., different scores for each team)
         :param filters: The filters to apply before calculating
         :param _name_override: Override auto-generated name (internal use)
+        :param sample_weight_column: Optional column name containing sample weights for the scoring function
         """
 
         super().__init__(
@@ -816,6 +849,7 @@ class SklearnScorer(BaseScorer):
             compare_to_naive=compare_to_naive,
             naive_granularity=naive_granularity,
             _name_override=_name_override,
+            sample_weight_column=sample_weight_column,
         )
         self.pred_column_name = pred_column
         self.scorer_function = scorer_function
@@ -861,23 +895,36 @@ class SklearnScorer(BaseScorer):
 
     def _score_group(self, df: IntoFrameT, preds: list[Any], is_probabilistic: bool) -> float:
         y_true = df[self.target].to_list()
+        weights = df[self.sample_weight_column].to_list() if self.sample_weight_column else None
         if is_probabilistic:
             probs = [item for item in preds]
             probs, params = self._pad_probabilities(y_true, probs)
-            score = self.scorer_function(y_true, probs, **params)
+            if weights is not None:
+                score = self.scorer_function(y_true, probs, sample_weight=weights, **params)
+            else:
+                score = self.scorer_function(y_true, probs, **params)
             if not self.compare_to_naive:
                 return float(score)
             naive_probs = _naive_probability_predictions_for_df(
                 df, self.target, params.get("labels"), self.naive_granularity
             )
-            naive_score = self.scorer_function(y_true, naive_probs, **params)
+            if weights is not None:
+                naive_score = self.scorer_function(y_true, naive_probs, sample_weight=weights, **params)
+            else:
+                naive_score = self.scorer_function(y_true, naive_probs, **params)
             return float(naive_score - score)
 
-        score = self.scorer_function(y_true, preds, **self.params)
+        if weights is not None:
+            score = self.scorer_function(y_true, preds, sample_weight=weights, **self.params)
+        else:
+            score = self.scorer_function(y_true, preds, **self.params)
         if not self.compare_to_naive:
             return float(score)
         naive_preds = _naive_point_predictions_for_df(df, self.target, self.naive_granularity)
-        naive_score = self.scorer_function(y_true, naive_preds, **self.params)
+        if weights is not None:
+            naive_score = self.scorer_function(y_true, naive_preds, sample_weight=weights, **self.params)
+        else:
+            naive_score = self.scorer_function(y_true, naive_preds, **self.params)
         return float(naive_score - score)
 
     @narwhals.narwhalify
