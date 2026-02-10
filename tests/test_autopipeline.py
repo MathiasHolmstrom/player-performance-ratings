@@ -881,3 +881,81 @@ def test_aggregation_weight_sums_weight_column(frame):
 
     expected = 0.25 + 0.75
     assert abs(weight_val - expected) < 1e-6
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_autopipeline__generated_estimator_features_are_not_raw_required(frame):
+    df_pd = pd.DataFrame({"x": [1.0, 2.0, 3.0, 4.0], "y": [1.5, 2.5, 3.5, 4.5]})
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
+
+    pipeline = AutoPipeline(
+        estimator=LinearRegression(),
+        estimator_features=["x"],
+        generated_estimator_features=["x_pred"],
+        predictor_transformers=[
+            EstimatorTransformer(
+                estimator=LinearRegression(),
+                prediction_column_name="x_pred",
+                features=["x"],
+            )
+        ],
+    )
+
+    X = _select(df, ["x"])
+    y = _col(df, "y")
+    pipeline.fit(X, y=y)
+    preds = pipeline.predict(X)
+
+    assert preds.shape == (_height(df),)
+    assert pipeline.required_input_features == ["x"]
+    assert pipeline.generated_features == ["x_pred"]
+    assert "x_pred" in pipeline.required_features
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_autopipeline__errors_when_generated_feature_declared_as_raw_input(frame):
+    df_pd = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0]})
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
+
+    pipeline = AutoPipeline(
+        estimator=LinearRegression(),
+        estimator_features=["x", "x_pred"],
+        predictor_transformers=[
+            EstimatorTransformer(
+                estimator=LinearRegression(),
+                prediction_column_name="x_pred",
+                features=["x"],
+            )
+        ],
+    )
+
+    X = _select(df, ["x"])
+    y = _col(df, "y")
+    with pytest.raises(ValueError, match="generated_estimator_features"):
+        pipeline.fit(X, y=y)
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_autopipeline__errors_when_generated_estimator_feature_not_produced(frame):
+    df_pd = pd.DataFrame({"x": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0]})
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
+
+    pipeline = AutoPipeline(
+        estimator=LinearRegression(),
+        estimator_features=["x"],
+        generated_estimator_features=["missing_generated"],
+        predictor_transformers=[
+            EstimatorTransformer(
+                estimator=LinearRegression(),
+                prediction_column_name="x_pred",
+                features=["x"],
+            )
+        ],
+    )
+
+    X = _select(df, ["x"])
+    y = _col(df, "y")
+    with pytest.raises(
+        ValueError, match="generated_estimator_features not produced by predictor_transformers"
+    ):
+        pipeline.fit(X, y=y)

@@ -1,4 +1,7 @@
 from ._base import PredictorTransformer as PredictorTransformer
+from ._group_aggregate_predictor import (
+    GroupAggregatePredictorTransformer as GroupAggregatePredictorTransformer,
+)
 from ._net_over_predicted import (
     NetOverPredictedTransformer as NetOverPredictedTransformer,
 )

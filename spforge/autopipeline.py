@@ -235,6 +235,7 @@ class AutoPipeline(BaseEstimator):
         estimator: Any,
         estimator_features: list[str],
         predictor_transformers: list[PredictorTransformer] | None = None,
+        generated_estimator_features: list[str] | None = None,
         granularity: list[str] | None = None,
         aggregation_weight: str | None = None,
         filters: list[Filter] | None = None,
@@ -249,6 +250,7 @@ class AutoPipeline(BaseEstimator):
         remainder: str = "drop",
     ):
         self.estimator_features = estimator_features
+        self.generated_estimator_features = generated_estimator_features or []
         self.feature_names = estimator_features  # Internal compat
         self.granularity = granularity or []
         self.aggregation_weight = aggregation_weight
@@ -277,6 +279,79 @@ class AutoPipeline(BaseEstimator):
         self._fitted_features: list[str] = []
         self._target_name: str | None = None
         self._resolved_categorical_handling: CategoricalHandling | None = None
+
+    def _duplicate_sources(self, source_map: dict[str, list[str]]) -> dict[str, list[str]]:
+        by_col: dict[str, list[str]] = {}
+        for source, cols in source_map.items():
+            for col in cols:
+                if col not in by_col:
+                    by_col[col] = []
+                if source not in by_col[col]:
+                    by_col[col].append(source)
+        return {col: src for col, src in by_col.items() if len(src) > 1}
+
+    def _format_duplicate_sources_error(self, duplicate_sources: dict[str, list[str]]) -> str:
+        parts = []
+        for col in sorted(duplicate_sources):
+            sources = sorted(duplicate_sources[col])
+            parts.append(f"{col}: {sources}")
+        return "; ".join(parts)
+
+    def validate_schema(self, X: IntoFrameT) -> None:
+        x_cols = set(X.columns)
+        base_feats = list(self.estimator_features)
+        ctx_feats = list(self.context_feature_names or [])
+        pt_ctx_feats = list(self.context_predictor_transformer_feature_names or [])
+        filter_feats = list(self._filter_feature_names or [])
+
+        raw_required = set(base_feats + ctx_feats + pt_ctx_feats + filter_feats + list(self.granularity))
+        missing = [c for c in sorted(raw_required) if c not in x_cols]
+        if missing:
+            raise ValueError(
+                "Missing required input columns: "
+                f"{missing}. "
+                "Tip: generated columns from predictor_transformers should be declared "
+                "in generated_estimator_features, not estimator_features."
+            )
+
+        generated_outputs: list[str] = []
+        for i, transformer in enumerate(self.predictor_transformers or []):
+            feats_out = list(_safe_feature_names_out(transformer, list(X.columns)))
+            dup_internal = sorted({c for c in feats_out if feats_out.count(c) > 1})
+            if dup_internal:
+                raise ValueError(
+                    f"Transformer[{i}]={type(transformer).__name__} produces duplicate output names: {dup_internal}"
+                )
+            generated_outputs.extend(feats_out)
+
+        duplicate_sources = self._duplicate_sources(
+            {
+                "estimator_features": base_feats,
+                "generated_estimator_features": list(self.generated_estimator_features),
+                "context_features": ctx_feats,
+                "predictor_context_features": pt_ctx_feats,
+            }
+        )
+        duplicate_sources = {
+            col: sources
+            for col, sources in duplicate_sources.items()
+            if ("generated_estimator_features" in sources)
+            or ("estimator_features" in sources and "context_features" in sources)
+        }
+        if duplicate_sources:
+            raise ValueError(
+                "Duplicate feature names across estimator/context/generated features: "
+                f"{self._format_duplicate_sources_error(duplicate_sources)}. "
+                "Tip: avoid declaring the same column in estimator_features and context_features."
+            )
+
+        gset = set(generated_outputs)
+        missing_generated = [c for c in self.generated_estimator_features if c not in gset]
+        if missing_generated:
+            raise ValueError(
+                "generated_estimator_features not produced by predictor_transformers: "
+                f"{missing_generated}"
+            )
 
     def _compute_context_features(self) -> list[str]:
         """Auto-compute context features from estimator and granularity.
@@ -584,15 +659,7 @@ class AutoPipeline(BaseEstimator):
     @nw.narwhalify
     def fit(self, X: IntoFrameT, y: Any, sample_weight: np.ndarray | None = None):
         self._target_name = getattr(y, "name", "target")
-        self._fitted_features = list(
-            set(
-                self.feature_names
-                + self.context_feature_names
-                + self.context_predictor_transformer_feature_names
-                + self._filter_feature_names
-                + self.granularity
-            )
-        )
+        self._fitted_features = self.required_input_features
 
         y_values = y.to_list() if hasattr(y, "to_list") else y
         df = X.with_columns(
@@ -605,16 +672,13 @@ class AutoPipeline(BaseEstimator):
 
         df = self._preprocess(df, self._target_name)
 
-        missing = [c for c in self._fitted_features if c not in df.columns]
-        if missing:
-            raise ValueError(f"Missing required feature columns: {missing}")
-
         if self._target_name not in df.columns:
             raise ValueError(f"Missing target column: {self._target_name}")
 
         if len(df) == 0:
             raise ValueError("DataFrame is empty after preprocessing. Cannot fit estimator.")
 
+        self.validate_schema(df)
         self.sklearn_pipeline = self._build_sklearn_pipeline(df)
 
         X_fit = df.select(self._fitted_features)
@@ -645,45 +709,42 @@ class AutoPipeline(BaseEstimator):
 
     @property
     def required_features(self) -> list[str]:
-        """All features required by this pipeline for fit/predict.
+        """Features used by the final estimator (raw + generated)."""
+        return _dedupe_preserve_order(self.required_input_features + self.generated_features)
 
-        This includes:
-        - estimator_features: features for the final estimator
-        - Features from each predictor_transformer
-        - Context features auto-detected from transformers and estimator
-        - Granularity and filter columns
-
-        Use this property when passing features to cross-validator:
-            cross_validator = MatchKFoldCrossValidator(
-                estimator=pipeline,
-                features=pipeline.required_features,
-                ...
-            )
-
-        Returns:
-            Complete list of all columns needed by the pipeline.
-        """
-
+    @property
+    def required_input_features(self) -> list[str]:
+        """Raw input columns required before predictor_transformers run."""
         all_features = list(self.estimator_features)
 
-        # Add features from each predictor transformer
         for transformer in self.predictor_transformers or []:
             if hasattr(transformer, "features") and transformer.features:
                 for feat in transformer.features:
                     if feat not in all_features:
                         all_features.append(feat)
 
-        # Add context features
         for ctx in self.context_feature_names:
             if ctx not in all_features:
                 all_features.append(ctx)
 
-        # Add filter columns (needed for fit-time filtering)
+        for ctx in self.context_predictor_transformer_feature_names:
+            if ctx not in all_features:
+                all_features.append(ctx)
+
         for col in self._filter_feature_names:
             if col not in all_features:
                 all_features.append(col)
 
+        for col in self.granularity:
+            if col not in all_features:
+                all_features.append(col)
+
         return all_features
+
+    @property
+    def generated_features(self) -> list[str]:
+        """Features expected to be generated by predictor_transformers."""
+        return list(self.generated_estimator_features)
 
     def _get_estimator_feature_names(self) -> list[str]:
         """Get feature names as seen by the final estimator after all transformations."""
