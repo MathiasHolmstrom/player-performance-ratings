@@ -214,9 +214,6 @@ class RatingGenerator(FeatureGenerator):
         - use existing ratings to compute pre-match ratings/features
         - do NOT update ratings
         """
-        if self.performance_manager and self.performance_manager.ori_performance_column in df.columns:
-            df = nw.from_native(self.performance_manager.transform(df))
-
         pl_df: pl.DataFrame
         pl_df = df.to_native() if df.implementation.is_polars() else df.to_polars().to_native()
         return self._future_transform(pl_df)

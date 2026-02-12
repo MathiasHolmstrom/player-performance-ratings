@@ -279,7 +279,7 @@ def test_future_transform_cold_start_player(base_cn, sample_df):
 
 
 def test_transform_is_identical_to_future_transform(base_cn, sample_df):
-    """Verify that the standard transform() call redirects to future_transform logic."""
+    """Verify transform and future_transform produce identical projections for shared columns."""
     import polars.testing as pl_testing
 
     gen = PlayerRatingGenerator(
@@ -291,9 +291,10 @@ def test_transform_is_identical_to_future_transform(base_cn, sample_df):
     res_transform = gen.transform(sample_df)
     res_future = gen.future_transform(sample_df)
 
+    common_cols = sorted(set(res_transform.columns).intersection(set(res_future.columns)))
     pl_testing.assert_frame_equal(
-        res_transform.select(sorted(res_transform.columns)).sort("pid"),
-        res_future.select(sorted(res_future.columns)).sort("pid"),
+        res_transform.select(common_cols).sort("pid"),
+        res_future.select(common_cols).sort("pid"),
     )
 
 
@@ -2471,6 +2472,46 @@ def test_future_transform_without_playing_time_columns_works(base_cn):
     predictions = result["player_predicted_off_performance_perf"].to_list()
     for pred in predictions:
         assert 0.0 <= pred <= 1.0
+
+
+def test_future_transform__ignores_missing_weighted_performance_columns(base_cn):
+    """future_transform should not require historical performance weight columns."""
+    gen = PlayerRatingGenerator(
+        performance_column="plus_minus",
+        performance_weights=[
+            {"col": "plus_minus", "weight": 0.7},
+            {"col": "won", "weight": 0.3},
+        ],
+        column_names=base_cn,
+        auto_scale_performance=True,
+    )
+
+    fit_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "plus_minus": [1.0, 0.0, 0.5, 0.5],
+            "won": [1.0, 1.0, 0.0, 0.0],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+    gen.fit_transform(fit_df)
+
+    future_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M2", "M2", "M2", "M2"],
+            "dt": ["2024-01-02"] * 4,
+            "plus_minus": [0.8, 0.2, 0.5, 0.5],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+
+    result = gen.future_transform(future_df)
+    assert len(result) == 4
 
 
 def test_fit_transform_backward_compatible_without_playing_time_columns(base_cn):
