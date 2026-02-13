@@ -21,6 +21,7 @@ class RollingMeanDaysTransformer(LagGenerator):
         features: list[str],
         days: int,
         granularity: list[str] | str,
+        min_games: int | None = None,
         scale_by_participation_weight: bool = False,
         add_count: bool = False,
         add_opponent: bool = False,
@@ -31,6 +32,9 @@ class RollingMeanDaysTransformer(LagGenerator):
         unique_constraint: list[str] | None = None,
     ):
         self.days = days
+        if min_games is not None and min_games <= 0:
+            raise ValueError("min_games must be positive when provided")
+        self.min_games = min_games
         self.scale_by_participation_weight = scale_by_participation_weight
         super().__init__(
             column_names=column_names,
@@ -203,6 +207,16 @@ class RollingMeanDaysTransformer(LagGenerator):
                 for col in self.features
             ]
         )
+        if self.min_games is not None:
+            grp = grp.with_columns(
+                [
+                    pl.when(pl.col(self._count_column_name) >= self.min_games)
+                    .then(pl.col(f"{self.prefix}_{col}{str(self.days)}"))
+                    .otherwise(pl.lit(None))
+                    .alias(f"{self.prefix}_{col}{str(self.days)}")
+                    for col in self.features
+                ]
+            )
 
         df = df.join(grp, on=grp_cols, how="left")
         if self.add_count:
