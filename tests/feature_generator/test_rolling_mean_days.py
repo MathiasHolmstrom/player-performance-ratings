@@ -656,3 +656,74 @@ def test_rolling_mean_days__future_transform_uses_trimmed_state(column_names: Co
 
     stored_df = transformer.historical_df.to_pandas()
     assert len(stored_df) == 2
+
+
+def test_rolling_mean_days__min_games_applies_to_historical(column_names: ColumnNames):
+    historical_df = pd.DataFrame(
+        {
+            "player": ["a", "a", "a"],
+            "game": [1, 2, 3],
+            "points": [1.0, 3.0, 5.0],
+            "start_date": pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-03"]),
+            "team": [1, 1, 1],
+        }
+    )
+
+    transformer = RollingMeanDaysTransformer(
+        features=["points"],
+        days=10,
+        min_games=3,
+        granularity=["player"],
+        add_count=True,
+    )
+    transformed_df = transformer.fit_transform(historical_df, column_names=column_names)
+
+    expected_df = historical_df.assign(
+        **{
+            transformer.features_out[0]: [None, None, None],
+            transformer.features_out[1]: [0, 1, 2],
+        }
+    )
+    pd.testing.assert_frame_equal(
+        transformed_df[expected_df.columns], expected_df, check_like=True, check_dtype=False
+    )
+
+
+def test_rolling_mean_days__min_games_applies_to_future(column_names: ColumnNames):
+    historical_df = pd.DataFrame(
+        {
+            "player": ["a", "a"],
+            "game": [1, 2],
+            "points": [1.0, 3.0],
+            "start_date": pd.to_datetime(["2023-01-01", "2023-01-02"]),
+            "team": [1, 1],
+        }
+    )
+    future_df = pd.DataFrame(
+        {
+            "player": ["a", "a"],
+            "game": [3, 4],
+            "start_date": pd.to_datetime(["2023-01-03", "2023-01-20"]),
+            "team": [1, 1],
+        }
+    )
+
+    transformer = RollingMeanDaysTransformer(
+        features=["points"],
+        days=10,
+        min_games=3,
+        granularity=["player"],
+        add_count=True,
+    )
+    transformer.fit_transform(historical_df, column_names=column_names)
+    transformed_future_df = transformer.future_transform(future_df)
+
+    expected_df = future_df.assign(
+        **{
+            transformer.features_out[0]: [None, None],
+            transformer.features_out[1]: [2, 2],
+        }
+    )
+    pd.testing.assert_frame_equal(
+        transformed_future_df[expected_df.columns], expected_df, check_like=True, check_dtype=False
+    )
