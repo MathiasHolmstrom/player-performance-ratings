@@ -213,6 +213,30 @@ class RollingMeanDaysTransformer(LagGenerator):
             return df.with_columns(pl.col("__ori_date").alias(self.date_column))
         return df
 
+    def _store_df(
+        self,
+        grouped_df: IntoFrameT,
+        ori_df: nw.DataFrame | None = None,
+        additional_cols: list[str] | None = None,
+    ):
+        super()._store_df(grouped_df=grouped_df, ori_df=ori_df, additional_cols=additional_cols)
+        self._trim_stored_history_to_days_window()
+
+    def _trim_stored_history_to_days_window(self) -> None:
+        if self._df is None or not self.date_column:
+            return
+
+        stored_df = nw.from_native(self._df).to_polars()
+        if self.date_column not in stored_df.columns:
+            return
+
+        max_date = stored_df.select(pl.col(self.date_column).max()).item()
+        if max_date is None:
+            return
+
+        cutoff = max_date - pd.Timedelta(days=self.days)
+        self._df = stored_df.filter(pl.col(self.date_column) >= cutoff)
+
     def reset(self):
         self._df = None
         self._fitted_game_ids = []
