@@ -584,3 +584,89 @@ def test_lag_transformer_fit_transform_transform_multiple_teams(df, column_names
         pl.testing.assert_frame_equal(
             future_df, expected_future_df.select(future_df.columns), check_dtype=False
         )
+
+
+def test_lag__stores_only_last_lag_rows_per_entity(column_names: ColumnNames):
+    historical_df = pd.DataFrame(
+        {
+            "player": ["a", "b"] * 3,
+            "game": [1, 1, 2, 2, 3, 3],
+            "points": [1, 10, 2, 20, 3, 30],
+            "start_date": pd.to_datetime(
+                [
+                    "2023-01-01",
+                    "2023-01-01",
+                    "2023-01-02",
+                    "2023-01-02",
+                    "2023-01-03",
+                    "2023-01-03",
+                ]
+            ),
+            "team": [1, 2, 1, 2, 1, 2],
+        }
+    )
+
+    transformer = LagTransformer(
+        features=["points"],
+        lag_length=2,
+        granularity=["player"],
+    )
+    transformer.fit_transform(historical_df, column_names=column_names)
+
+    stored_df = transformer.historical_df.to_pandas()
+    assert len(stored_df) == 4
+    assert stored_df.groupby(column_names.player_id).size().to_dict() == {"a": 2, "b": 2}
+    assert stored_df.groupby(column_names.player_id)[column_names.match_id].min().to_dict() == {
+        "a": 2,
+        "b": 2,
+    }
+
+
+def test_lag__future_transform_uses_trimmed_state(column_names: ColumnNames):
+    historical_df = pd.DataFrame(
+        {
+            "player": ["a", "b", "a", "b", "a", "b"],
+            "game": [1, 1, 2, 2, 3, 3],
+            "points": [1, 10, 2, 20, 3, 30],
+            "start_date": pd.to_datetime(
+                [
+                    "2023-01-01",
+                    "2023-01-01",
+                    "2023-01-02",
+                    "2023-01-02",
+                    "2023-01-03",
+                    "2023-01-03",
+                ]
+            ),
+            "team": [1, 2, 1, 2, 1, 2],
+        }
+    )
+    future_df = pd.DataFrame(
+        {
+            "player": ["a", "b"],
+            "game": [4, 4],
+            "start_date": pd.to_datetime(["2023-01-04", "2023-01-04"]),
+            "team": [1, 2],
+        }
+    )
+
+    transformer = LagTransformer(
+        features=["points"],
+        lag_length=2,
+        granularity=["player"],
+    )
+    transformer.fit_transform(historical_df, column_names=column_names)
+    transformed_future_df = transformer.future_transform(future_df)
+
+    expected_df = future_df.assign(
+        **{
+            f"{transformer.prefix}_points1": [3, 30],
+            f"{transformer.prefix}_points2": [2, 20],
+        }
+    )
+    pd.testing.assert_frame_equal(
+        transformed_future_df[expected_df.columns], expected_df, check_like=True, check_dtype=False
+    )
+
+    stored_df = transformer.historical_df.to_pandas()
+    assert stored_df.groupby(column_names.player_id).size().to_dict() == {"a": 2, "b": 2}

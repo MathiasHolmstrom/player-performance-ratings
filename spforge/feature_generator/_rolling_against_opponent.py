@@ -131,7 +131,6 @@ class RollingAgainstOpponentTransformer(LagGenerator):
             raise NotImplementedError("Only rolling_mean transformation is supported")
 
         if self.column_names:
-            self._store_df(df, ori_df=df)
             concat_df = self._concat_with_stored_and_calculate_feats(df, is_future=False)
             concat_df = self._rename_features(concat_df)
             return self._merge_into_input_df(

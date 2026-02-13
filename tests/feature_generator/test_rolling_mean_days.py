@@ -579,3 +579,80 @@ def test_rolling_mean__days_transform_future_granularity_differs_from_input_gran
     pd.testing.assert_frame_equal(
         transformed_future_df, expected_df, check_like=True, check_dtype=False
     )
+
+
+def test_rolling_mean_days__stores_only_recent_days_window(column_names: ColumnNames):
+    historical_df = pd.DataFrame(
+        {
+            "player": ["a", "a", "a", "b", "b"],
+            "game": [1, 2, 3, 1, 2],
+            "points": [1, 2, 3, 10, 20],
+            "start_date": pd.to_datetime(
+                [
+                    "2023-01-01",
+                    "2023-01-03",
+                    "2023-01-10",
+                    "2023-01-02",
+                    "2023-01-09",
+                ]
+            ),
+            "team": [1, 1, 1, 2, 2],
+        }
+    )
+
+    transformer = RollingMeanDaysTransformer(
+        features=["points"],
+        days=2,
+        granularity=["player"],
+    )
+    transformer.fit_transform(historical_df, column_names=column_names)
+
+    stored_df = transformer.historical_df.to_pandas()
+    assert len(stored_df) == 2
+    assert set(stored_df[column_names.match_id].tolist()) == {3, 2}
+    assert stored_df[column_names.start_date].min() >= pd.to_datetime("2023-01-08")
+
+
+def test_rolling_mean_days__future_transform_uses_trimmed_state(column_names: ColumnNames):
+    historical_df = pd.DataFrame(
+        {
+            "player": ["a", "a", "a", "b", "b", "b"],
+            "game": [1, 2, 3, 1, 2, 3],
+            "points": [1, 2, 3, 10, 20, 30],
+            "start_date": pd.to_datetime(
+                [
+                    "2023-01-01",
+                    "2023-01-03",
+                    "2023-01-10",
+                    "2023-01-01",
+                    "2023-01-03",
+                    "2023-01-10",
+                ]
+            ),
+            "team": [1, 1, 1, 2, 2, 2],
+        }
+    )
+    future_df = pd.DataFrame(
+        {
+            "player": ["a", "b"],
+            "game": [4, 4],
+            "start_date": pd.to_datetime(["2023-01-11", "2023-01-11"]),
+            "team": [1, 2],
+        }
+    )
+
+    transformer = RollingMeanDaysTransformer(
+        features=["points"],
+        days=2,
+        granularity=["player"],
+    )
+    transformer.fit_transform(historical_df, column_names=column_names)
+    transformed_future_df = transformer.future_transform(future_df)
+
+    expected_df = future_df.assign(**{transformer.features_out[0]: [3.0, 30.0]})
+    pd.testing.assert_frame_equal(
+        transformed_future_df[expected_df.columns], expected_df, check_like=True, check_dtype=False
+    )
+
+    stored_df = transformer.historical_df.to_pandas()
+    assert len(stored_df) == 2

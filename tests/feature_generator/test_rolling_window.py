@@ -720,3 +720,150 @@ def test_rolling_window__feature_also_used_as_column_names_field(df):
 
     assert transformer.features_out[0] in transformed_df.columns
     assert len(transformed_df) == len(data)
+
+
+def test_rolling_window__stores_only_last_window_rows_per_entity(column_names: ColumnNames):
+    data = pd.DataFrame(
+        {
+            column_names.player_id: ["a", "b"] * 3,
+            column_names.match_id: [1, 1, 2, 2, 3, 3],
+            "points": [1, 10, 2, 20, 3, 30],
+            column_names.start_date: pd.to_datetime(
+                [
+                    "2023-01-01",
+                    "2023-01-01",
+                    "2023-01-02",
+                    "2023-01-02",
+                    "2023-01-03",
+                    "2023-01-03",
+                ]
+            ),
+            column_names.team_id: [1, 2, 1, 2, 1, 2],
+        }
+    )
+
+    transformer = RollingWindowTransformer(
+        features=["points"],
+        window=2,
+        granularity=[column_names.player_id],
+    )
+    transformer.fit_transform(data, column_names=column_names)
+
+    stored = transformer.historical_df.to_pandas()
+    assert len(stored) == 4
+    assert stored.groupby(column_names.player_id).size().to_dict() == {"a": 2, "b": 2}
+    assert stored.groupby(column_names.player_id)[column_names.match_id].min().to_dict() == {
+        "a": 2,
+        "b": 2,
+    }
+
+
+def test_rolling_window__future_transform_uses_trimmed_state(column_names: ColumnNames):
+    historical_df_1 = pd.DataFrame(
+        {
+            column_names.player_id: ["a", "b", "a", "b", "a", "b"],
+            column_names.match_id: [1, 1, 2, 2, 3, 3],
+            "points": [1, 10, 2, 20, 3, 30],
+            column_names.start_date: pd.to_datetime(
+                [
+                    "2023-01-01",
+                    "2023-01-01",
+                    "2023-01-02",
+                    "2023-01-02",
+                    "2023-01-03",
+                    "2023-01-03",
+                ]
+            ),
+            column_names.team_id: [1, 2, 1, 2, 1, 2],
+        }
+    )
+    future_df = pd.DataFrame(
+        {
+            column_names.player_id: ["a", "b"],
+            column_names.match_id: [4, 4],
+            "points": [999, 999],
+            column_names.start_date: pd.to_datetime(["2023-01-04", "2023-01-04"]),
+            column_names.team_id: [1, 2],
+        }
+    )
+
+    transformer = RollingWindowTransformer(
+        features=["points"],
+        window=2,
+        granularity=[column_names.player_id],
+    )
+    transformer.fit_transform(historical_df_1, column_names=column_names)
+    transformed_df_2 = transformer.future_transform(future_df)
+
+    expected = future_df.assign(**{transformer.features_out[0]: [2.5, 25.0]})
+    pd.testing.assert_frame_equal(
+        transformed_df_2[expected.columns], expected, check_like=True, check_dtype=False
+    )
+
+    stored = transformer.historical_df.to_pandas()
+    assert stored.groupby(column_names.player_id).size().to_dict() == {"a": 2, "b": 2}
+
+
+def test_rolling_window__max_days_excludes_older_observations_historical(column_names: ColumnNames):
+    historical_df = pd.DataFrame(
+        {
+            column_names.player_id: ["a", "a", "a"],
+            column_names.match_id: [1, 2, 3],
+            "points": [1.0, 2.0, 3.0],
+            column_names.start_date: pd.to_datetime(
+                ["2023-01-01", "2023-01-05", "2023-02-20"]
+            ),
+            column_names.team_id: [1, 1, 1],
+        }
+    )
+
+    transformer = RollingWindowTransformer(
+        features=["points"],
+        window=3,
+        min_periods=1,
+        granularity=[column_names.player_id],
+        max_days=10,
+    )
+    transformed_df = transformer.fit_transform(historical_df, column_names=column_names)
+
+    expected_df = historical_df.assign(**{transformer.features_out[0]: [None, 1.0, None]})
+    pd.testing.assert_frame_equal(
+        transformed_df[expected_df.columns], expected_df, check_like=True, check_dtype=False
+    )
+
+
+def test_rolling_window__max_days_excludes_older_observations_future(column_names: ColumnNames):
+    historical_df = pd.DataFrame(
+        {
+            column_names.player_id: ["a", "a", "a"],
+            column_names.match_id: [1, 2, 3],
+            "points": [1.0, 2.0, 3.0],
+            column_names.start_date: pd.to_datetime(
+                ["2023-01-01", "2023-01-05", "2023-02-20"]
+            ),
+            column_names.team_id: [1, 1, 1],
+        }
+    )
+    future_df = pd.DataFrame(
+        {
+            column_names.player_id: ["a"],
+            column_names.match_id: [4],
+            column_names.start_date: pd.to_datetime(["2023-02-25"]),
+            column_names.team_id: [1],
+        }
+    )
+
+    transformer = RollingWindowTransformer(
+        features=["points"],
+        window=3,
+        min_periods=1,
+        granularity=[column_names.player_id],
+        max_days=10,
+    )
+    transformer.fit_transform(historical_df, column_names=column_names)
+    transformed_future_df = transformer.future_transform(future_df)
+
+    expected_df = future_df.assign(**{transformer.features_out[0]: [3.0]})
+    pd.testing.assert_frame_equal(
+        transformed_future_df[expected_df.columns], expected_df, check_like=True, check_dtype=False
+    )

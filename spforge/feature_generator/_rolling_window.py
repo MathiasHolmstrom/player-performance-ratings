@@ -39,6 +39,7 @@ class RollingWindowTransformer(LagGenerator):
         unique_constraint: list[str] | None = None,
         match_id_column: str | None = None,
         update_column: str | None = None,
+        max_days: int | None = None,
     ):
         """
         :param features:   Features to create rolling mean for
@@ -52,6 +53,8 @@ class RollingWindowTransformer(LagGenerator):
         :param are_estimator_features: If True, the features will be added to the estimator features.
             If false, it makes it possible for the outer layer (Pipeline) to exclude these features from the estimator.
         :param prefix: Prefix for the new rolling mean columns
+        :param max_days: Optional max lookback horizon in days. If set, observations older than max_days
+            from the current row are ignored in the rolling calculation.
         """
         if prefix == "rolling_mean":
             prefix = (
@@ -79,6 +82,9 @@ class RollingWindowTransformer(LagGenerator):
             )
         self.window = window
         self.min_periods = min_periods
+        if max_days is not None and max_days <= 0:
+            raise ValueError("max_days must be positive when provided")
+        self.max_days = max_days
 
     @nw.narwhalify
     @historical_lag_transformations_wrapper
@@ -150,6 +156,10 @@ class RollingWindowTransformer(LagGenerator):
             sort_col = "__row_index"
         concat_df = concat_df.sort(sort_col)
 
+        if self.max_days is not None:
+            concat_df = self._generate_features_with_max_days(concat_df)
+            return concat_df
+
         agg_method = {
             "sum": lambda col: col.rolling_sum(
                 window_size=self.window, min_samples=self.min_periods
@@ -208,4 +218,138 @@ class RollingWindowTransformer(LagGenerator):
                 nw.col(f).fill_null(strategy="forward").over(self.granularity).alias(f)
                 for f in self._entity_features_out
             ]
+        )
+
+    def _generate_features_with_max_days(self, concat_df: IntoFrameT) -> IntoFrameT:
+        if self.column_names is None:
+            raise ValueError("max_days requires column_names to be provided")
+
+        if self.aggregation == "var":
+            raise NotImplementedError("max_days is not supported for aggregation='var'")
+
+        if self.scale_by_participation_weight and self.aggregation != "mean":
+            raise NotImplementedError(
+                "max_days with scale_by_participation_weight is only supported for aggregation='mean'"
+            )
+
+        date_col = self.column_names.start_date
+        if date_col not in concat_df.columns:
+            raise ValueError(f"Date column '{date_col}' not found in input dataframe")
+
+        days_diff_divisor = 60 * 24
+        for feature in self.features:
+            sum_expr = nw.lit(0.0)
+            count_expr = nw.lit(0)
+            weight_sum_expr = nw.lit(0.0)
+            temp_cols = []
+
+            for lag in range(1, self.window + 1):
+                lag_date_col = f"__max_days_date_lag_{feature}_{lag}"
+                lag_feature_col = f"__max_days_feature_lag_{feature}_{lag}"
+                temp_cols.extend([lag_date_col, lag_feature_col])
+
+                if self.scale_by_participation_weight:
+                    lag_weight_col = f"__max_days_weight_lag_{feature}_{lag}"
+                    temp_cols.append(lag_weight_col)
+
+                    concat_df = concat_df.with_columns(
+                        [
+                            nw.col(date_col).shift(lag).over(self.granularity).alias(lag_date_col),
+                            (nw.col(feature) * nw.col(self.column_names.participation_weight))
+                            .shift(lag)
+                            .over(self.granularity)
+                            .alias(lag_feature_col),
+                            nw.col(self.column_names.participation_weight)
+                            .shift(lag)
+                            .over(self.granularity)
+                            .alias(lag_weight_col),
+                        ]
+                    )
+                else:
+                    concat_df = concat_df.with_columns(
+                        [
+                            nw.col(date_col).shift(lag).over(self.granularity).alias(lag_date_col),
+                            nw.col(feature).shift(lag).over(self.granularity).alias(lag_feature_col),
+                        ]
+                    )
+
+                within_max_days = (
+                    (
+                        (
+                            nw.col(date_col).cast(nw.Date) - nw.col(lag_date_col).cast(nw.Date)
+                        ).dt.total_minutes()
+                        / days_diff_divisor
+                    )
+                    <= self.max_days
+                )
+
+                concat_df = concat_df.with_columns(
+                    nw.when(within_max_days).then(nw.col(lag_feature_col)).otherwise(nw.lit(None)).alias(
+                        lag_feature_col
+                    )
+                )
+                count_expr = count_expr + nw.when(nw.col(lag_feature_col).is_null()).then(0).otherwise(1)
+
+                if self.scale_by_participation_weight:
+                    concat_df = concat_df.with_columns(
+                        nw.when(within_max_days)
+                        .then(nw.col(lag_weight_col))
+                        .otherwise(nw.lit(None))
+                        .alias(lag_weight_col)
+                    )
+                    sum_expr = sum_expr + nw.col(lag_feature_col).fill_null(0.0)
+                    weight_sum_expr = weight_sum_expr + nw.col(lag_weight_col).fill_null(0.0)
+                else:
+                    sum_expr = sum_expr + nw.col(lag_feature_col).fill_null(0.0)
+
+            if self.scale_by_participation_weight:
+                value_expr = nw.when(
+                    (count_expr >= self.min_periods) & (weight_sum_expr > 0.0)
+                ).then(sum_expr / weight_sum_expr).otherwise(nw.lit(None))
+            elif self.aggregation == "sum":
+                value_expr = nw.when(count_expr >= self.min_periods).then(sum_expr).otherwise(
+                    nw.lit(None)
+                )
+            else:
+                value_expr = nw.when(count_expr >= self.min_periods).then(sum_expr / count_expr).otherwise(
+                    nw.lit(None)
+                )
+
+            concat_df = concat_df.with_columns(
+                value_expr.alias(f"{self.prefix}_{feature}{self.window}")
+            ).drop(temp_cols)
+
+        return concat_df
+
+    def _store_df(
+        self,
+        grouped_df: IntoFrameT,
+        ori_df: nw.DataFrame | None = None,
+        additional_cols: list[str] | None = None,
+    ):
+        super()._store_df(grouped_df=grouped_df, ori_df=ori_df, additional_cols=additional_cols)
+        self._trim_stored_history_to_window()
+
+    def _trim_stored_history_to_window(self) -> None:
+        if self._df is None:
+            return
+
+        stored_df = nw.from_native(self._df)
+        if not self.granularity:
+            self._df = stored_df.tail(self.window).to_native()
+            return
+
+        sort_cols = [self.column_names.start_date]
+        if self.update_column and self.update_column in stored_df.columns:
+            sort_cols.append(self.update_column)
+
+        self._df = (
+            stored_df.sort(sort_cols, descending=True)
+            .with_columns(
+                nw.col(sort_cols[0]).cum_count().over(self.granularity).alias("__state_row_rank")
+            )
+            .filter(nw.col("__state_row_rank") <= self.window)
+            .drop("__state_row_rank")
+            .sort(sort_cols)
+            .to_native()
         )

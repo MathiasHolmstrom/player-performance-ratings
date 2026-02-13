@@ -169,6 +169,43 @@ class LagTransformer(LagGenerator):
 
         return concat_df
 
+    def _store_df(
+        self,
+        grouped_df: IntoFrameT,
+        ori_df: nw.DataFrame | None = None,
+        additional_cols: list[str] | None = None,
+    ):
+        super()._store_df(grouped_df=grouped_df, ori_df=ori_df, additional_cols=additional_cols)
+        self._trim_stored_history_for_lags()
+
+    def _trim_stored_history_for_lags(self) -> None:
+        if self._df is None:
+            return
+
+        max_history_rows = max([self.lag_length, *self.days_between_lags], default=self.lag_length)
+        if max_history_rows <= 0:
+            return
+
+        stored_df = nw.from_native(self._df)
+        if not self.granularity:
+            self._df = stored_df.tail(max_history_rows).to_native()
+            return
+
+        sort_cols = [self.column_names.start_date]
+        if self.update_column and self.update_column in stored_df.columns:
+            sort_cols.append(self.update_column)
+
+        self._df = (
+            stored_df.sort(sort_cols, descending=True)
+            .with_columns(
+                nw.col(sort_cols[0]).cum_count().over(self.granularity).alias("__state_row_rank")
+            )
+            .filter(nw.col("__state_row_rank") <= max_history_rows)
+            .drop("__state_row_rank")
+            .sort(sort_cols)
+            .to_native()
+        )
+
     @property
     def features_out(self) -> list[str]:
         return self._features_out
