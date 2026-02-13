@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import warnings
 from typing import Any, Literal
 
 import narwhals.stable.v2 as nw
@@ -377,7 +378,13 @@ class AutoPipeline(BaseEstimator):
             if pd.api.types.is_datetime64_any_dtype(s):
                 continue
             if pd.api.types.is_object_dtype(s):
-                parsed = pd.to_datetime(s, errors="coerce")
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        "ignore",
+                        message="Could not infer format",
+                        category=UserWarning,
+                    )
+                    parsed = pd.to_datetime(s, errors="coerce")
                 if parsed.notna().mean() > 0.9:
                     continue
             cat.append(c)
