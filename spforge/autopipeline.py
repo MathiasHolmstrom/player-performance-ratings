@@ -235,6 +235,7 @@ class AutoPipeline(BaseEstimator):
         self,
         estimator: Any,
         estimator_features: list[str],
+        sample_weight_column: str | None = None,
         predictor_transformers: list[PredictorTransformer] | None = None,
         granularity: list[str] | None = None,
         aggregation_weight: str | None = None,
@@ -251,6 +252,7 @@ class AutoPipeline(BaseEstimator):
     ):
         self.estimator_features = estimator_features
         self.feature_names = estimator_features  # Internal compat
+        self.sample_weight_column = sample_weight_column
         self.granularity = granularity or []
         self.aggregation_weight = aggregation_weight
         self.predictor_transformers = predictor_transformers
@@ -590,6 +592,11 @@ class AutoPipeline(BaseEstimator):
 
     @nw.narwhalify
     def fit(self, X: IntoFrameT, y: Any, sample_weight: np.ndarray | None = None):
+        if self.sample_weight_column and sample_weight is not None:
+            raise ValueError(
+                "Provide either sample_weight_column in AutoPipeline or sample_weight in fit(), not both."
+            )
+
         self._target_name = getattr(y, "name", "target")
         self._fitted_features = list(
             set(
@@ -601,6 +608,30 @@ class AutoPipeline(BaseEstimator):
             )
         )
 
+        sample_weight_values: np.ndarray | None = None
+        if self.sample_weight_column:
+            if self.sample_weight_column not in X.columns:
+                raise ValueError(
+                    f"Missing sample weight column in fit data: {self.sample_weight_column}"
+                )
+            sample_weight_values = np.asarray(
+                X[self.sample_weight_column].to_numpy(), dtype=np.float64
+            )
+            X = X.drop([self.sample_weight_column])
+        elif sample_weight is not None:
+            sample_weight_values = np.asarray(sample_weight, dtype=np.float64)
+
+        if sample_weight_values is not None and len(sample_weight_values) != len(X):
+            raise ValueError(
+                f"sample_weight length ({len(sample_weight_values)}) must match X length ({len(X)})."
+            )
+
+        row_id_col = "__spforge_row_id__"
+        if row_id_col in X.columns:
+            raise ValueError(
+                f"Temporary row id column already exists in input data: {row_id_col}"
+            )
+
         y_values = y.to_list() if hasattr(y, "to_list") else y
         df = X.with_columns(
             nw.new_series(
@@ -608,9 +639,21 @@ class AutoPipeline(BaseEstimator):
                 values=y_values,
                 backend=nw.get_native_namespace(X),
             )
+        ).with_columns(
+            nw.new_series(
+                name=row_id_col,
+                values=np.arange(len(X), dtype=np.int64),
+                backend=nw.get_native_namespace(X),
+            )
         )
 
         df = self._preprocess(df, self._target_name)
+
+        if sample_weight_values is not None:
+            kept_row_ids = np.asarray(df[row_id_col].to_numpy(), dtype=np.int64)
+            sample_weight_values = sample_weight_values[kept_row_ids]
+
+        df = df.drop([row_id_col])
 
         missing = [c for c in self._fitted_features if c not in df.columns]
         if missing:
@@ -627,8 +670,8 @@ class AutoPipeline(BaseEstimator):
         X_fit = df.select(self._fitted_features)
         y_fit = df[self._target_name].to_numpy()
 
-        if sample_weight is not None:
-            self.sklearn_pipeline.fit(X_fit, y_fit, est__sample_weight=sample_weight)
+        if sample_weight_values is not None:
+            self.sklearn_pipeline.fit(X_fit, y_fit, est__sample_weight=sample_weight_values)
         else:
             self.sklearn_pipeline.fit(X_fit, y_fit)
 
@@ -641,12 +684,16 @@ class AutoPipeline(BaseEstimator):
     def predict(self, X: IntoFrameT) -> IntoFrameT | np.ndarray:
         if self.sklearn_pipeline is None:
             raise RuntimeError("Pipeline not fitted. Call fit() first.")
+        if self.sample_weight_column and self.sample_weight_column in X.columns:
+            X = X.drop([self.sample_weight_column])
         return self.sklearn_pipeline.predict(X[self._fitted_features])
 
     @nw.narwhalify
     def predict_proba(self, X: IntoFrameT) -> np.ndarray:
         if self.sklearn_pipeline is None:
             raise RuntimeError("Pipeline not fitted. Call fit() first.")
+        if self.sample_weight_column and self.sample_weight_column in X.columns:
+            X = X.drop([self.sample_weight_column])
         X_pred = X[self._fitted_features]
         return self.sklearn_pipeline.predict_proba(X_pred)
 
@@ -689,6 +736,9 @@ class AutoPipeline(BaseEstimator):
         for col in self._filter_feature_names:
             if col not in all_features:
                 all_features.append(col)
+
+        if self.sample_weight_column and self.sample_weight_column not in all_features:
+            all_features.append(self.sample_weight_column)
 
         return all_features
 
