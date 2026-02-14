@@ -1,12 +1,10 @@
 import copy
-from datetime import datetime
 
 import numpy as np
 import pandas as pd
 import polars as pl
 import pytest
 from sklearn.dummy import DummyClassifier
-from sklearn.linear_model import LogisticRegression
 
 from spforge import AutoPipeline, ColumnNames, ParamSpec, RatingHyperparameterTuner
 from spforge.cross_validator import MatchKFoldCrossValidator

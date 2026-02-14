@@ -2,7 +2,6 @@ import numpy as np
 import polars as pl
 import pytest
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error
 
 from examples import get_sub_sample_nba_data
 from spforge import FeatureGeneratorPipeline

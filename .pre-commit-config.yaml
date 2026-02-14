@@ -17,7 +17,7 @@ repos:
 
       - id: unit-tests-pre-push
         name: unit tests (pre-push)
-        entry: uv run pytest -q tests --ignore=tests/end_to_end
+        entry: .venv/bin/python -m pytest -q tests --ignore=tests/end_to_end
         language: system
         pass_filenames: false
         stages: [pre-push]

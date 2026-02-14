@@ -151,7 +151,7 @@ class TestScorerNameProperty:
 
     def test_sklearn_with_lambda_fallback(self):
         scorer = SklearnScorer(
-            target="points", pred_column="pred", scorer_function=lambda y_true, _y_pred: 0.0
+            target="points", pred_column="pred", scorer_function=lambda _y_true, _y_pred: 0.0
         )
         assert scorer.name == "custom_metric"
 

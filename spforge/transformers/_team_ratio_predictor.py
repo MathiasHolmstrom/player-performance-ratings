@@ -172,7 +172,7 @@ class RatioEstimatorTransformer(PredictorTransformer):
         """Returns granularity columns needed for grouping."""
         return list(self.granularity)
 
-    def get_feature_names_out(self, input_features=None) -> list[str]:
+    def get_feature_names_out(self, _input_features=None) -> list[str]:
         out = []
         for c in self._extra_output_cols():
             if c not in set(out):

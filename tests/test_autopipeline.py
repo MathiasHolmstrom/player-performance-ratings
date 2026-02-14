@@ -77,6 +77,7 @@ class EstimatorHoldingTransformer(BaseEstimator, TransformerMixin):
         self.estimator = estimator
 
     def fit(self, X, y=None, **fit_params):
+        _ = fit_params
         if hasattr(X, "columns"):
             self.feature_names_in_ = np.asarray(list(X.columns), dtype=object)
         else:

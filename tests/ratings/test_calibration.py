@@ -1,6 +1,5 @@
 """Tests for calibration utilities."""
 
-import math
 from datetime import datetime, timedelta
 
 import numpy as np

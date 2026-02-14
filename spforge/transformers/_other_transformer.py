@@ -126,7 +126,8 @@ class ConvertDataFrameToCategoricalTransformer(BaseEstimator, TransformerMixin):
         )
 
     def set_output(self, *, transform=None):
-        pass
+        _ = transform
+        return self
 
     def get_feature_names_out(self, input_features=None):
         if input_features is None:

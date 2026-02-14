@@ -144,7 +144,7 @@ class NegativeBinomialEstimator(BaseEstimator):
         :param y: Target Series
         :param sample_weight: Optional sample weights (unused for distribution predictors)
         """
-
+        _ = sample_weight
         y_values = (
             y.to_list() if hasattr(y, "to_list") else (y.values if hasattr(y, "values") else y)
         )

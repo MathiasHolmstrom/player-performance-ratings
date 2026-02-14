@@ -47,6 +47,7 @@ class OperatorTransformer(TransformerMixin):
 
     @nw.narwhalify
     def fit(self, df: IntoFrameT, column_names=None) -> "OperatorTransformer":
+        _ = column_names
         return self
 
     @nw.narwhalify
@@ -136,6 +137,7 @@ class NormalizerToColumnTransformer(TransformerMixin):
 
     @nw.narwhalify
     def fit(self, df: IntoFrameT, column_names=None) -> "NormalizerToColumnTransformer":
+        _ = column_names
         return self
 
     @nw.narwhalify
