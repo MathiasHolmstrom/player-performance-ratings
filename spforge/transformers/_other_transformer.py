@@ -2,7 +2,6 @@ from typing import Any
 
 import narwhals.stable.v2 as nw
 import numpy as np
-import pandas as pd
 from narwhals.typing import IntoFrameT
 from sklearn.base import BaseEstimator, TransformerMixin
 
@@ -127,10 +126,10 @@ class ConvertDataFrameToCategoricalTransformer(BaseEstimator, TransformerMixin):
         )
 
     def set_output(self, *, transform=None):
-        pass
+        _ = transform
+        return self
 
     def get_feature_names_out(self, input_features=None):
-
         if input_features is None:
             input_features = getattr(self, "feature_names_in_", None)
 

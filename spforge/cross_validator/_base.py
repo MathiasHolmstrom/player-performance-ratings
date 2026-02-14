@@ -1,8 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from spforge.autopipeline import AutoPipeline
+from typing import Any
 
 from narwhals.typing import IntoFrameT
 
@@ -10,12 +7,11 @@ from spforge.scorer import BaseScorer
 
 
 class CrossValidator(ABC):
-
     def __init__(
         self,
         scorer: BaseScorer | None,
         min_validation_date: str,
-        estimator: "AutoPipeline",
+        estimator: Any,
     ):
         self.scorer = scorer
         self.min_validation_date = min_validation_date
@@ -32,6 +28,7 @@ class CrossValidator(ABC):
         return_features: bool = False,
         add_train_prediction: bool = False,
     ) -> IntoFrameT:
+        _ = return_features, add_train_prediction
         pass
 
     def cross_validation_score(

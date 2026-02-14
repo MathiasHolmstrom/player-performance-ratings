@@ -191,7 +191,7 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
             )
 
         raise AssertionError(
-            "Probabilities should sum to 1.0 for each sample.\n" f"Bad rows (first 10): {details}"
+            f"Probabilities should sum to 1.0 for each sample.\nBad rows (first 10): {details}"
         )
 
     # Assert 3: Calculate expected value using dot product: E[X] = sum(probabilities * classes)
@@ -202,27 +202,27 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
     future_df["expected_kills"] = expected_kills
 
     # Verify dot product calculation is correct
-    assert (
-        len(expected_kills) == n_samples
-    ), "Expected kills should have same length as number of samples"
+    assert len(expected_kills) == n_samples, (
+        "Expected kills should have same length as number of samples"
+    )
     assert expected_kills.dtype in [np.float64, np.float32], "Expected kills should be float"
 
     # Assert 4: Expected kills should be within valid range [0, max_value]
-    assert (
-        expected_kills >= 0
-    ).all(), f"Expected kills must be >= 0, got min={expected_kills.min():.2f}"
-    assert (
-        expected_kills <= 15
-    ).all(), f"Expected kills must be <= 15, got max={expected_kills.max():.2f}"
+    assert (expected_kills >= 0).all(), (
+        f"Expected kills must be >= 0, got min={expected_kills.min():.2f}"
+    )
+    assert (expected_kills <= 15).all(), (
+        f"Expected kills must be <= 15, got max={expected_kills.max():.2f}"
+    )
 
     # Assert 5: Expected kills should correlate positively with point estimates
     correlation = future_df["kills_pred"].corr(future_df["expected_kills"])
-    assert not np.isnan(
-        correlation
-    ), "Correlation between kills_pred and expected_kills should not be NaN"
-    assert (
-        correlation > 0.3
-    ), f"Expected kills should be positively correlated with kills_pred, got correlation={correlation:.3f}"
+    assert not np.isnan(correlation), (
+        "Correlation between kills_pred and expected_kills should not be NaN"
+    )
+    assert correlation > 0.3, (
+        f"Expected kills should be positively correlated with kills_pred, got correlation={correlation:.3f}"
+    )
 
     # Assert 6: Expected kills should be reasonably close to point estimates
     # (allowing for distribution shape differences)
@@ -269,15 +269,15 @@ def test_lol_feature_engineering_and_distribution_end_to_end():
 
             # Assert 9: Verify the difference is meaningful (not just noise)
             difference = top_avg_expected - bottom_avg_expected
-            assert (
-                difference > 0.5
-            ), f"Difference between top and bottom performers ({difference:.2f}) should be meaningful"
+            assert difference > 0.5, (
+                f"Difference between top and bottom performers ({difference:.2f}) should be meaningful"
+            )
 
     # Assert 10: Verify probabilities have reasonable spread (not all mass on one class)
     max_probs = probabilities.max(axis=1)
-    assert (
-        max_probs.mean() < 0.95
-    ), f"Probabilities should have some spread, but mean max probability is {max_probs.mean():.3f}"
+    assert max_probs.mean() < 0.95, (
+        f"Probabilities should have some spread, but mean max probability is {max_probs.mean():.3f}"
+    )
 
     # Assert 11: Verify that higher point estimates lead to higher expected values
     # Sort by kills_pred and check that expected_kills generally increases

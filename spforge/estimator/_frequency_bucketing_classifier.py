@@ -68,7 +68,10 @@ class FrequencyBucketingClassifier(BaseEstimator, ClassifierMixin):
 
                     next_idx = None
                     if left_idx is not None and class_freqs[classes[left_idx]] < self.min_prob:
-                        if right_idx is not None and class_freqs[classes[right_idx]] < self.min_prob:
+                        if (
+                            right_idx is not None
+                            and class_freqs[classes[right_idx]] < self.min_prob
+                        ):
                             dist_left = min_bucket_idx - left_idx
                             dist_right = right_idx - max_bucket_idx
                             next_idx = left_idx if dist_left <= dist_right else right_idx
@@ -112,7 +115,9 @@ class FrequencyBucketingClassifier(BaseEstimator, ClassifierMixin):
         self.classes_ = np.sort(unique_classes)
 
         n_samples = len(y_array)
-        class_freqs = {cls: count / n_samples for cls, count in zip(unique_classes, counts)}
+        class_freqs = {
+            cls: count / n_samples for cls, count in zip(unique_classes, counts, strict=False)
+        }
 
         self._class_to_bucket, self._bucket_to_classes = self._create_buckets(
             self.classes_, class_freqs

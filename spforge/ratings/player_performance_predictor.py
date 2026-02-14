@@ -16,7 +16,6 @@ def sigmoid_subtract_half_and_multiply2(value: float, x: float) -> float:
 
 
 class PlayerPerformancePredictor(ABC):
-
     @abstractmethod
     def reset(self):
         pass
@@ -31,9 +30,7 @@ class PlayerPerformancePredictor(ABC):
         pass
 
 
-
 class PlayerRatingNonOpponentPerformancePredictor(PlayerPerformancePredictor):
-
     def __init__(
         self,
         coef: float = 0.0015,
@@ -75,7 +72,6 @@ class PlayerRatingNonOpponentPerformancePredictor(PlayerPerformancePredictor):
 
 
 class RatingPlayerDifferencePerformancePredictor(PlayerPerformancePredictor):
-
     # TODO: Performance prediction based on team-players sharing time with.
     def __init__(
         self,
@@ -100,7 +96,6 @@ class RatingPlayerDifferencePerformancePredictor(PlayerPerformancePredictor):
         opponent_team_rating: PreMatchTeamRating,
         team_rating: PreMatchTeamRating,
     ) -> float:
-
         if player_rating.match_performance.team_players_playing_time and isinstance(
             player_rating.match_performance.team_players_playing_time, dict
         ):
@@ -181,7 +176,6 @@ class RatingPlayerDifferencePerformancePredictor(PlayerPerformancePredictor):
 
 
 class RatingMeanPerformancePredictor(PlayerPerformancePredictor):
-
     def __init__(
         self,
         coef: float = 0.005757,
@@ -206,7 +200,6 @@ class RatingMeanPerformancePredictor(PlayerPerformancePredictor):
         opponent_team_rating: PreMatchTeamRating,
         team_rating: PreMatchTeamRating,
     ) -> float:
-
         self.sum_ratings.append(player_rating.rating_value)
         self.rating_count += 1
         self.sum_rating += player_rating.rating_value

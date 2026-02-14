@@ -31,6 +31,7 @@ class SklearnEstimatorImputer(BaseEstimator, TransformerMixin):
 
     @nw.narwhalify
     def fit(self, df: IntoFrameT, y=None):
+        _ = y
         fit_df = df.filter(
             (nw.col(self.target_name).is_finite()) & (~nw.col(self.target_name).is_null())
         )
@@ -73,6 +74,7 @@ class PartialStandardScaler(BaseEstimator, TransformerMixin):
 
     @narwhals.narwhalify
     def fit(self, df: IntoFrameT, y=None):
+        _ = y
         for feature in self.features:
             rows = df.filter(nw.col(feature).is_finite())
             self._features_mean[feature] = rows[feature].mean()
@@ -125,6 +127,7 @@ class MinMaxTransformer(BaseEstimator, TransformerMixin):
 
     @nw.narwhalify
     def fit(self, df: IntoFrameT, y=None):
+        _ = y
         for feature in self.features:
             self._min_values[feature] = df.select(
                 nw.col(feature).quantile(1 - self.quantile, interpolation="linear")
@@ -189,6 +192,7 @@ class DiminishingValueTransformer(BaseEstimator, TransformerMixin):
 
     @nw.narwhalify
     def fit(self, df: IntoFrameT, y=None):
+        _ = y
         for feature_name in self.features:
             if self.cutoff_value is None:
                 if self.reverse:
@@ -260,6 +264,7 @@ class SymmetricDistributionTransformer(BaseEstimator, TransformerMixin):
 
     @nw.narwhalify
     def fit(self, df: IntoFrameT, y=None):
+        _ = y
         if self.granularity:
             df = df.with_columns(
                 nw.concat_str([nw.col(col) for col in self.granularity], separator="_").alias(
@@ -402,6 +407,7 @@ class GroupByTransformer(BaseEstimator, TransformerMixin):
 
     @nw.narwhalify
     def fit(self, df: IntoFrameT, y=None):
+        _ = y
         if self.aggregation == "sum":
             self._grouped = (
                 df.group_by(self.granularity)
@@ -457,6 +463,7 @@ class QuantilePerformanceScaler(BaseEstimator, TransformerMixin):
 
     @nw.narwhalify
     def fit(self, df: IntoFrameT, y=None):
+        _ = y
         # Get weights if specified
         weights = None
         if self.weight_column is not None:
@@ -474,10 +481,7 @@ class QuantilePerformanceScaler(BaseEstimator, TransformerMixin):
 
             values_finite = values[finite_mask]
 
-            if weights is not None:
-                weights_finite = weights[finite_mask]
-            else:
-                weights_finite = None
+            weights_finite = weights[finite_mask] if weights is not None else None
 
             is_zero = np.abs(values_finite) < self.zero_threshold
 
@@ -508,9 +512,7 @@ class QuantilePerformanceScaler(BaseEstimator, TransformerMixin):
                 self._nonzero_quantiles[feature] = None
         return self
 
-    def _compute_weighted_quantiles(
-        self, values: np.ndarray, weights: np.ndarray
-    ) -> np.ndarray:
+    def _compute_weighted_quantiles(self, values: np.ndarray, weights: np.ndarray) -> np.ndarray:
         """Compute weighted quantiles using weighted CDF interpolation."""
         # Sort by value
         order = np.argsort(values)

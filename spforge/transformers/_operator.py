@@ -40,7 +40,6 @@ class OperatorTransformer(PredictorTransformer):
         self.new_column_name = new_column_name
 
         if not self.new_column_name:
-
             if self.operation == Operation.SUBTRACT:
                 self.new_column_name = f"{self.feature1}_minus_{self.feature2}"
             elif self.operation == Operation.MULTIPLY:
@@ -59,6 +58,7 @@ class OperatorTransformer(PredictorTransformer):
 
     @nw.narwhalify
     def transform(self, df: IntoFrameT, cross_validate: bool = False) -> IntoFrameT:
+        _ = cross_validate
         df = self._transform(df)
         return df
 

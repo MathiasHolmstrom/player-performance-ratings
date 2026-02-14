@@ -33,7 +33,9 @@ class TestScorerNameProperty:
         assert scorer.name == "ordinal_loss_scorer"
 
     def test_simple_sklearn_scorer(self):
-        scorer = SklearnScorer(target="yards", pred_column="pred", scorer_function=mean_absolute_error)
+        scorer = SklearnScorer(
+            target="yards", pred_column="pred", scorer_function=mean_absolute_error
+        )
         assert scorer.name == "mae"
 
     def test_simple_probabilistic_mean_bias(self):
@@ -45,7 +47,7 @@ class TestScorerNameProperty:
             dist_column="dist",
             threshold_column="threshold",
             outcome_column="outcome",
-            labels=list(range(10))
+            labels=list(range(10)),
         )
         assert scorer.name == "threshold_event_scorer"
 
@@ -55,9 +57,7 @@ class TestScorerNameProperty:
 
     def test_with_multiple_granularity(self):
         scorer = MeanBiasScorer(
-            target="points",
-            pred_column="pred",
-            granularity=["game_id", "team_id"]
+            target="points", pred_column="pred", granularity=["game_id", "team_id"]
         )
         assert scorer.name == "bias_gran:game_id+team_id"
 
@@ -65,7 +65,7 @@ class TestScorerNameProperty:
         scorer = MeanBiasScorer(
             target="points",
             pred_column="pred",
-            granularity=["col1", "col2", "col3", "col4", "col5"]
+            granularity=["col1", "col2", "col3", "col4", "col5"],
         )
         assert scorer.name == "bias_gran:col1+col2+col3+2more"
 
@@ -74,24 +74,19 @@ class TestScorerNameProperty:
             target="goals",
             pred_column="pred",
             scorer_function=mean_absolute_error,
-            compare_to_naive=True
+            compare_to_naive=True,
         )
         assert scorer.name == "mae_naive"
 
     def test_with_naive_comparison_with_naive_granularity(self):
         scorer = MeanBiasScorer(
-            target="yards",
-            pred_column="pred",
-            compare_to_naive=True,
-            naive_granularity=["season"]
+            target="yards", pred_column="pred", compare_to_naive=True, naive_granularity=["season"]
         )
         assert scorer.name == "bias_naive:season"
 
     def test_with_aggregation_level(self):
         scorer = MeanBiasScorer(
-            target="yards",
-            pred_column="pred",
-            aggregation_level=["game_id", "player_id"]
+            target="yards", pred_column="pred", aggregation_level=["game_id", "player_id"]
         )
         assert scorer.name == "bias_agg:game_id+player_id"
 
@@ -101,8 +96,8 @@ class TestScorerNameProperty:
             pred_column="pred",
             filters=[
                 Filter("minutes", 0, Operator.GREATER_THAN),
-                Filter("position", "QB", Operator.EQUALS)
-            ]
+                Filter("position", "QB", Operator.EQUALS),
+            ],
         )
         assert scorer.name == "bias_filters:2"
 
@@ -111,17 +106,13 @@ class TestScorerNameProperty:
             target="yards",
             pred_column="pred",
             validation_column="is_valid",
-            filters=[Filter("minutes", 0, Operator.GREATER_THAN)]
+            filters=[Filter("minutes", 0, Operator.GREATER_THAN)],
         )
         # Should only count the minutes filter, not the auto-added validation filter
         assert scorer.name == "bias_filters:1"
 
     def test_validation_column_alone_not_shown(self):
-        scorer = MeanBiasScorer(
-            target="yards",
-            pred_column="pred",
-            validation_column="is_valid"
-        )
+        scorer = MeanBiasScorer(target="yards", pred_column="pred", validation_column="is_valid")
         # Validation filter auto-added but not counted
         assert scorer.name == "bias"
 
@@ -133,7 +124,7 @@ class TestScorerNameProperty:
             filters=[
                 Filter("is_valid", 0, Operator.EQUALS),
                 Filter("minutes", 10, Operator.GREATER_THAN),
-            ]
+            ],
         )
         # Any filter on validation column should be excluded, not just value=1
         assert scorer.name == "bias_filters:1"
@@ -146,23 +137,21 @@ class TestScorerNameProperty:
             compare_to_naive=True,
             naive_granularity=["season"],
             aggregation_level=["game_id", "player_id"],
-            filters=[Filter("minutes", 0, Operator.GREATER_THAN)]
+            filters=[Filter("minutes", 0, Operator.GREATER_THAN)],
         )
-        assert scorer.name == "bias_gran:game_id+team_id_naive:season_agg:game_id+player_id_filters:1"
+        assert (
+            scorer.name == "bias_gran:game_id+team_id_naive:season_agg:game_id+player_id_filters:1"
+        )
 
     def test_sklearn_with_different_function(self):
         scorer = SklearnScorer(
-            target="points",
-            pred_column="pred",
-            scorer_function=mean_squared_error
+            target="points", pred_column="pred", scorer_function=mean_squared_error
         )
         assert scorer.name == "mse"
 
     def test_sklearn_with_lambda_fallback(self):
         scorer = SklearnScorer(
-            target="points",
-            pred_column="pred",
-            scorer_function=lambda y_true, y_pred: 0.0
+            target="points", pred_column="pred", scorer_function=lambda _y_true, _y_pred: 0.0
         )
         assert scorer.name == "custom_metric"
 
@@ -179,24 +168,17 @@ class TestScorerNameProperty:
             target="points",
             pred_column="pred",
             granularity=["team_id"],
-            _name_override="custom_name"
+            _name_override="custom_name",
         )
         assert scorer.name == "custom_name_gran:team_id"
 
     def test_name_override_no_granularity(self):
-        scorer = MeanBiasScorer(
-            target="points",
-            pred_column="pred",
-            _name_override="custom_name"
-        )
+        scorer = MeanBiasScorer(target="points", pred_column="pred", _name_override="custom_name")
         assert scorer.name == "custom_name"
 
     def test_public_name_parameter_uses_granularity_suffix_when_set(self):
         scorer = MeanBiasScorer(
-            target="points",
-            pred_column="pred",
-            granularity=["team_id"],
-            name="user_metric"
+            target="points", pred_column="pred", granularity=["team_id"], name="user_metric"
         )
         assert scorer.name == "user_metric_gran:team_id"
 
@@ -224,10 +206,7 @@ class TestScorerNameProperty:
 
     def test_consistency_across_repeated_calls(self):
         scorer = MeanBiasScorer(
-            target="yards",
-            pred_column="pred",
-            granularity=["game_id"],
-            compare_to_naive=True
+            target="yards", pred_column="pred", granularity=["game_id"], compare_to_naive=True
         )
         name1 = scorer.name
         name2 = scorer.name
@@ -240,42 +219,26 @@ class TestScorerNameProperty:
         assert scorer1.name != scorer2.name
 
     def test_same_config_same_name(self):
-        scorer1 = MeanBiasScorer(
-            target="points",
-            pred_column="pred",
-            granularity=["team_id"]
-        )
+        scorer1 = MeanBiasScorer(target="points", pred_column="pred", granularity=["team_id"])
         scorer2 = MeanBiasScorer(
             target="points",
             pred_column="pred_2",  # Different pred column shouldn't affect name
-            granularity=["team_id"]
+            granularity=["team_id"],
         )
         assert scorer1.name == scorer2.name
 
     def test_none_granularity_excluded(self):
-        scorer = MeanBiasScorer(
-            target="points",
-            pred_column="pred",
-            granularity=None
-        )
+        scorer = MeanBiasScorer(target="points", pred_column="pred", granularity=None)
         assert "gran:" not in scorer.name
         assert scorer.name == "bias"
 
     def test_empty_filters_excluded(self):
-        scorer = MeanBiasScorer(
-            target="points",
-            pred_column="pred",
-            filters=[]
-        )
+        scorer = MeanBiasScorer(target="points", pred_column="pred", filters=[])
         assert "filters:" not in scorer.name
         assert scorer.name == "bias"
 
     def test_none_aggregation_level_excluded(self):
-        scorer = MeanBiasScorer(
-            target="points",
-            pred_column="pred",
-            aggregation_level=None
-        )
+        scorer = MeanBiasScorer(target="points", pred_column="pred", aggregation_level=None)
         assert "agg:" not in scorer.name
         assert scorer.name == "bias"
 
@@ -288,16 +251,13 @@ class TestScorerNameProperty:
             compare_to_naive=True,
             naive_granularity=["season"],
             aggregation_level=["game_id"],
-            filters=[Filter("minutes", 20, Operator.GREATER_THAN)]
+            filters=[Filter("minutes", 20, Operator.GREATER_THAN)],
         )
         assert scorer.name == "pwmse_gran:team_id_naive:season_agg:game_id_filters:1"
 
     def test_ordinal_loss_with_granularity(self):
         scorer = OrdinalLossScorer(
-            target="points",
-            pred_column="pred",
-            classes=list(range(0, 41)),
-            granularity=["game_id"]
+            target="points", pred_column="pred", classes=list(range(0, 41)), granularity=["game_id"]
         )
         assert scorer.name == "ordinal_loss_scorer_gran:game_id"
 
@@ -308,15 +268,13 @@ class TestScorerNameProperty:
             outcome_column="outcome",
             labels=list(range(10)),
             granularity=["game_id"],
-            compare_to_naive=True
+            compare_to_naive=True,
         )
         assert scorer.name == "threshold_event_scorer_gran:game_id_naive"
 
     def test_long_aggregation_abbreviated(self):
         scorer = MeanBiasScorer(
-            target="points",
-            pred_column="pred",
-            aggregation_level=["a", "b", "c", "d", "e"]
+            target="points", pred_column="pred", aggregation_level=["a", "b", "c", "d", "e"]
         )
         assert scorer.name == "bias_agg:a+b+c+2more"
 
@@ -325,23 +283,17 @@ class TestScorerNameProperty:
             target="points",
             pred_column="pred",
             compare_to_naive=True,
-            naive_granularity=["a", "b", "c", "d"]
+            naive_granularity=["a", "b", "c", "d"],
         )
         assert scorer.name == "bias_naive:a+b+c+1more"
 
     def test_exactly_three_columns_no_abbreviation(self):
-        scorer = MeanBiasScorer(
-            target="points",
-            pred_column="pred",
-            granularity=["a", "b", "c"]
-        )
+        scorer = MeanBiasScorer(target="points", pred_column="pred", granularity=["a", "b", "c"])
         assert scorer.name == "bias_gran:a+b+c"
 
     def test_four_columns_abbreviated(self):
         scorer = MeanBiasScorer(
-            target="points",
-            pred_column="pred",
-            granularity=["a", "b", "c", "d"]
+            target="points", pred_column="pred", granularity=["a", "b", "c", "d"]
         )
         assert scorer.name == "bias_gran:a+b+c+1more"
 

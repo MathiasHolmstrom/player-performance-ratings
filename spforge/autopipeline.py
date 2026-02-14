@@ -607,6 +607,10 @@ class AutoPipeline(BaseEstimator):
                 + self.granularity
             )
         )
+        if self.sample_weight_column:
+            self._fitted_features = [
+                c for c in self._fitted_features if c != self.sample_weight_column
+            ]
 
         sample_weight_values: np.ndarray | None = None
         if self.sample_weight_column:
@@ -617,7 +621,6 @@ class AutoPipeline(BaseEstimator):
             sample_weight_values = np.asarray(
                 X[self.sample_weight_column].to_numpy(), dtype=np.float64
             )
-            X = X.drop([self.sample_weight_column])
         elif sample_weight is not None:
             sample_weight_values = np.asarray(sample_weight, dtype=np.float64)
 
@@ -628,9 +631,7 @@ class AutoPipeline(BaseEstimator):
 
         row_id_col = "__spforge_row_id__"
         if row_id_col in X.columns:
-            raise ValueError(
-                f"Temporary row id column already exists in input data: {row_id_col}"
-            )
+            raise ValueError(f"Temporary row id column already exists in input data: {row_id_col}")
 
         y_values = y.to_list() if hasattr(y, "to_list") else y
         df = X.with_columns(
@@ -654,6 +655,8 @@ class AutoPipeline(BaseEstimator):
             sample_weight_values = sample_weight_values[kept_row_ids]
 
         df = df.drop([row_id_col])
+        if self.sample_weight_column and self.sample_weight_column in df.columns:
+            df = df.drop([self.sample_weight_column])
 
         missing = [c for c in self._fitted_features if c not in df.columns]
         if missing:
@@ -805,12 +808,7 @@ class AutoPipeline(BaseEstimator):
         raw = getattr(inner_est, attr_name)
 
         if attr_name == "coef_":
-            # Linear models: use absolute value of coefficients
-            if raw.ndim == 2:
-                # Multi-class: average absolute values across classes
-                importances = np.abs(raw).mean(axis=0)
-            else:
-                importances = np.abs(raw)
+            importances = np.abs(raw).mean(axis=0) if raw.ndim == 2 else np.abs(raw)
         else:
             importances = raw
 
@@ -839,13 +837,10 @@ class AutoPipeline(BaseEstimator):
         raw = getattr(inner_est, attr_name)
 
         if attr_name == "coef_":
-            if raw.ndim == 2:
-                importances = np.abs(raw).mean(axis=0)
-            else:
-                importances = np.abs(raw)
+            importances = np.abs(raw).mean(axis=0) if raw.ndim == 2 else np.abs(raw)
         else:
             importances = raw
 
         importances = np.asarray(importances)
         feature_names = self._resolve_importance_feature_names(inner_est, len(importances))
-        return dict(zip(feature_names, importances.tolist()))
+        return dict(zip(feature_names, importances.tolist(), strict=False))

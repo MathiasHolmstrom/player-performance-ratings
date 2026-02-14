@@ -15,7 +15,6 @@ from spforge.feature_generator._utils import (
 
 
 class RollingMeanDaysTransformer(LagGenerator):
-
     def __init__(
         self,
         features: list[str],
@@ -64,7 +63,6 @@ class RollingMeanDaysTransformer(LagGenerator):
     @required_lag_column_names
     @transformation_validator
     def fit_transform(self, df: IntoFrameT, column_names: ColumnNames | None = None) -> IntoFrameT:
-
         if not self.column_names and not self.date_column:
             raise ValueError("column_names or date_column must be provided")
 
@@ -151,7 +149,6 @@ class RollingMeanDaysTransformer(LagGenerator):
         return transformed_future
 
     def _concat_with_stored_and_calculate_feats(self, df: pl.DataFrame) -> pl.DataFrame:
-
         if self.column_names:
             concat_df = self._concat_with_stored(nw.from_native(df)).to_native()
         else:

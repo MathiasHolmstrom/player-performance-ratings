@@ -7,7 +7,6 @@ import narwhals.stable.v2 as nw
 import polars as pl
 from narwhals.stable.v2.typing import IntoFrameT
 
-
 DEFAULT_START_RATING = 1000.0
 
 
@@ -192,7 +191,9 @@ class LeagueStartRatingOptimizer:
             raise ValueError("rating_generator must define start_rating_generator.league_ratings")
         return dict(start_gen.league_ratings)
 
-    def _set_league_ratings(self, rating_generator: object, league_ratings: dict[str, float]) -> None:
+    def _set_league_ratings(
+        self, rating_generator: object, league_ratings: dict[str, float]
+    ) -> None:
         start_gen = getattr(rating_generator, "start_rating_generator", None)
         if start_gen is None or not hasattr(start_gen, "league_ratings"):
             raise ValueError("rating_generator must define start_rating_generator.league_ratings")

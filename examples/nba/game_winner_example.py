@@ -29,10 +29,7 @@ df = df.sort(
 # Drops games with less or more than 2 teams
 df = (
     df.with_columns(
-        pl.col(column_names.team_id)
-        .n_unique()
-        .over(column_names.match_id)
-        .alias("team_count")
+        pl.col(column_names.team_id).n_unique().over(column_names.match_id).alias("team_count")
     )
     .filter(pl.col("team_count") == 2)
     .drop("team_count")

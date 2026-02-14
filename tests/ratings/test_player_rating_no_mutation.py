@@ -64,8 +64,10 @@ def test_fit_transform_does_not_mutate_participation_weight(cn_with_projected, f
     result = gen.fit_transform(fit_df)
 
     # Check that each player's minutes value is preserved
-    original_by_player = dict(zip(fit_df["pid"].to_list(), fit_df["minutes"].to_list()))
-    result_by_player = dict(zip(result["pid"].to_list(), result["minutes"].to_list()))
+    original_by_player = dict(
+        zip(fit_df["pid"].to_list(), fit_df["minutes"].to_list(), strict=False)
+    )
+    result_by_player = dict(zip(result["pid"].to_list(), result["minutes"].to_list(), strict=False))
 
     for pid, original_val in original_by_player.items():
         result_val = result_by_player[pid]
@@ -86,8 +88,12 @@ def test_fit_transform_does_not_mutate_projected_participation_weight(cn_with_pr
     result = gen.fit_transform(fit_df)
 
     # Check that each player's minutes_prediction value is preserved
-    original_by_player = dict(zip(fit_df["pid"].to_list(), fit_df["minutes_prediction"].to_list()))
-    result_by_player = dict(zip(result["pid"].to_list(), result["minutes_prediction"].to_list()))
+    original_by_player = dict(
+        zip(fit_df["pid"].to_list(), fit_df["minutes_prediction"].to_list(), strict=False)
+    )
+    result_by_player = dict(
+        zip(result["pid"].to_list(), result["minutes_prediction"].to_list(), strict=False)
+    )
 
     for pid, original_val in original_by_player.items():
         result_val = result_by_player[pid]
@@ -110,8 +116,10 @@ def test_transform_does_not_mutate_participation_weight(cn_with_projected, fit_d
     result = gen.transform(future_df)
 
     # Check that each player's minutes value is preserved
-    original_by_player = dict(zip(future_df["pid"].to_list(), future_df["minutes"].to_list()))
-    result_by_player = dict(zip(result["pid"].to_list(), result["minutes"].to_list()))
+    original_by_player = dict(
+        zip(future_df["pid"].to_list(), future_df["minutes"].to_list(), strict=False)
+    )
+    result_by_player = dict(zip(result["pid"].to_list(), result["minutes"].to_list(), strict=False))
 
     for pid, original_val in original_by_player.items():
         result_val = result_by_player[pid]
@@ -121,7 +129,9 @@ def test_transform_does_not_mutate_participation_weight(cn_with_projected, fit_d
         )
 
 
-def test_transform_does_not_mutate_projected_participation_weight(cn_with_projected, fit_df, future_df):
+def test_transform_does_not_mutate_projected_participation_weight(
+    cn_with_projected, fit_df, future_df
+):
     """transform should not modify the projected_participation_weight column values."""
     gen = PlayerRatingGenerator(
         performance_column="perf",
@@ -134,8 +144,12 @@ def test_transform_does_not_mutate_projected_participation_weight(cn_with_projec
     result = gen.transform(future_df)
 
     # Check that each player's minutes_prediction value is preserved
-    original_by_player = dict(zip(future_df["pid"].to_list(), future_df["minutes_prediction"].to_list()))
-    result_by_player = dict(zip(result["pid"].to_list(), result["minutes_prediction"].to_list()))
+    original_by_player = dict(
+        zip(future_df["pid"].to_list(), future_df["minutes_prediction"].to_list(), strict=False)
+    )
+    result_by_player = dict(
+        zip(result["pid"].to_list(), result["minutes_prediction"].to_list(), strict=False)
+    )
 
     for pid, original_val in original_by_player.items():
         result_val = result_by_player[pid]
@@ -145,7 +159,9 @@ def test_transform_does_not_mutate_projected_participation_weight(cn_with_projec
         )
 
 
-def test_future_transform_does_not_mutate_participation_weight(cn_with_projected, fit_df, future_df):
+def test_future_transform_does_not_mutate_participation_weight(
+    cn_with_projected, fit_df, future_df
+):
     """future_transform should not modify the participation_weight column values."""
     gen = PlayerRatingGenerator(
         performance_column="perf",
@@ -166,7 +182,9 @@ def test_future_transform_does_not_mutate_participation_weight(cn_with_projected
     )
 
 
-def test_future_transform_does_not_mutate_projected_participation_weight(cn_with_projected, fit_df, future_df):
+def test_future_transform_does_not_mutate_projected_participation_weight(
+    cn_with_projected, fit_df, future_df
+):
     """future_transform should not modify the projected_participation_weight column values."""
     gen = PlayerRatingGenerator(
         performance_column="perf",
@@ -203,8 +221,12 @@ def test_multiple_transforms_do_not_compound_scaling(cn_with_projected, fit_df, 
     result3 = gen.transform(result2)
 
     # After 3 transforms, each player's values should still be the same as original
-    original_by_player = dict(zip(future_df["pid"].to_list(), future_df["minutes_prediction"].to_list()))
-    final_by_player = dict(zip(result3["pid"].to_list(), result3["minutes_prediction"].to_list()))
+    original_by_player = dict(
+        zip(future_df["pid"].to_list(), future_df["minutes_prediction"].to_list(), strict=False)
+    )
+    final_by_player = dict(
+        zip(result3["pid"].to_list(), result3["minutes_prediction"].to_list(), strict=False)
+    )
 
     for pid, original_val in original_by_player.items():
         final_val = final_by_player[pid]

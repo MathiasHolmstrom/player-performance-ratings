@@ -2,7 +2,6 @@ import numpy as np
 import polars as pl
 import pytest
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error
 
 from examples import get_sub_sample_nba_data
 from spforge import FeatureGeneratorPipeline
@@ -81,7 +80,7 @@ def test_nba_prediction_consistency__cv_vs_future_transform(dataframe_type):
         all_games = df[column_names.match_id].unique().tolist()
 
     train_games = all_games[:-10]  # All games except last 10
-    test_games = all_games[-10:]    # Last 10 games
+    test_games = all_games[-10:]  # Last 10 games
 
     if dataframe_type == "pl":
         train_df = df.filter(pl.col(column_names.match_id).is_in(train_games))
@@ -146,8 +145,7 @@ def test_nba_prediction_consistency__cv_vs_future_transform(dataframe_type):
 
     # Generate validation predictions for ENTIRE dataset
     df_with_cv_preds = cross_validator.generate_validation_df(
-        df=df_cv_transformed,
-        add_training_predictions=False
+        df=df_cv_transformed, add_training_predictions=False
     )
 
     # Extract validation predictions for last test_games only (to match future predictions)
@@ -229,19 +227,21 @@ def test_nba_prediction_consistency__cv_vs_future_transform(dataframe_type):
         merged = cv_test_pd.merge(
             future_test_pd[[column_names.match_id, column_names.player_id, "points_future_pred"]],
             on=[column_names.match_id, column_names.player_id],
-            how="inner"
+            how="inner",
         )
     else:
         merged = cv_test_pd.merge(
             future_test_pd[[column_names.match_id, column_names.player_id, "points_future_pred"]],
             on=[column_names.match_id, column_names.player_id],
-            how="inner"
+            how="inner",
         )
 
     print(f"Aligned rows for comparison: {len(merged)}")
 
     # Calculate mean prediction value
-    mean_prediction_value = (merged["points_cv_pred"].mean() + merged["points_future_pred"].mean()) / 2
+    mean_prediction_value = (
+        merged["points_cv_pred"].mean() + merged["points_future_pred"].mean()
+    ) / 2
 
     # Calculate MAE between the two prediction sets
     mae_between_predictions = np.abs(merged["points_cv_pred"] - merged["points_future_pred"]).mean()
@@ -254,5 +254,6 @@ def test_nba_prediction_consistency__cv_vs_future_transform(dataframe_type):
     print(f"3% tolerance: {tolerance_3_percent:.3f}")
     print(f"Ratio: {mae_between_predictions / tolerance_3_percent:.2f}x tolerance")
 
-    assert mae_between_predictions <= tolerance_3_percent, \
+    assert mae_between_predictions <= tolerance_3_percent, (
         f"MAE between predictions {mae_between_predictions:.3f} exceeds 3% tolerance {tolerance_3_percent:.3f}"
+    )

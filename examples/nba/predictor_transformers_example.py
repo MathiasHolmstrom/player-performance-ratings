@@ -14,7 +14,7 @@ Key concepts covered:
 
 import polars as pl
 from lightgbm import LGBMRegressor
-from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import mean_absolute_error
 
 from examples import get_sub_sample_nba_data
 from spforge import AutoPipeline, FeatureGeneratorPipeline
@@ -47,10 +47,7 @@ df = df.sort(
 # Filter to valid games
 df = (
     df.with_columns(
-        pl.col(column_names.team_id)
-        .n_unique()
-        .over(column_names.match_id)
-        .alias("team_count")
+        pl.col(column_names.team_id).n_unique().over(column_names.match_id).alias("team_count")
     )
     .filter(pl.col("team_count") == 2)
     .drop("team_count")
@@ -177,20 +174,20 @@ predictions = player_points_pipeline.predict(test_df)
 test_df["predicted_points"] = predictions
 
 # Evaluate
-from sklearn.metrics import mean_absolute_error
-
 mae = mean_absolute_error(test_df["points"], test_df["predicted_points"])
 print(f"Mean Absolute Error (two-stage model): {mae:.2f} points")
 print()
 
 # Show sample predictions
 print("Sample predictions (first 5 players in test set):")
-sample = test_df.head(5)[[
-    "player_id",
-    "points",
-    "predicted_points",
-    player_rating_generator.features_out[0]  # Show rating as context
-]]
+sample = test_df.head(5)[
+    [
+        "player_id",
+        "points",
+        "predicted_points",
+        player_rating_generator.features_out[0],  # Show rating as context
+    ]
+]
 print(sample.to_string(index=False))
 print()
 
@@ -216,7 +213,7 @@ improvement = ((mae_single - mae) / mae_single) * 100
 if improvement > 0:
     print(f"  Improvement from two-stage approach: {improvement:.1f}%")
 else:
-    print(f"  Note: Two-stage model similar to single-stage (typical with small datasets)")
+    print("  Note: Two-stage model similar to single-stage (typical with small datasets)")
 print()
 
 # ====================================================================

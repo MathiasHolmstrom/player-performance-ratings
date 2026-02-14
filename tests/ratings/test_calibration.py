@@ -1,6 +1,5 @@
 """Tests for calibration utilities."""
 
-import math
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -9,7 +8,7 @@ import pytest
 
 from spforge.data_structures import ColumnNames
 from spforge.ratings import PlayerRatingGenerator
-from spforge.ratings.calibration import sigmoid, calibrate_reference_rating
+from spforge.ratings.calibration import calibrate_reference_rating, sigmoid
 
 
 def test_calibration_hits_target_mean():
@@ -82,9 +81,7 @@ def test_different_target_means():
     tol = 1e-4
 
     for target_mean in [0.35, 0.45, 0.55, 0.65]:
-        anchor = calibrate_reference_rating(
-            ratings, coef, target_mean=target_mean, tol=tol
-        )
+        anchor = calibrate_reference_rating(ratings, coef, target_mean=target_mean, tol=tol)
 
         predictions = [sigmoid(coef, r, anchor) for r in ratings]
         actual_mean = sum(predictions) / len(predictions)
@@ -145,13 +142,15 @@ def test_ignore_opponent_calibration_applied_on_fit_transform(calibration_cn):
 
 def test_calibration_skipped_for_small_datasets(calibration_cn):
     """Calibration is skipped when fewer than 100 players."""
-    df = pl.DataFrame({
-        "pid": ["P1", "P2", "P3", "P4"],
-        "tid": ["T1", "T1", "T2", "T2"],
-        "mid": ["M1", "M1", "M1", "M1"],
-        "dt": ["2020-01-01"] * 4,
-        "perf": [0.6, 0.4, 0.5, 0.5],
-    })
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2020-01-01"] * 4,
+            "perf": [0.6, 0.4, 0.5, 0.5],
+        }
+    )
 
     gen = PlayerRatingGenerator(
         performance_column="perf",
@@ -168,13 +167,15 @@ def test_calibration_skipped_for_small_datasets(calibration_cn):
 
 def test_calibration_not_applied_to_difference_predictor(calibration_cn):
     """Difference predictor does not trigger calibration."""
-    df = pl.DataFrame({
-        "pid": ["P1", "P2", "P3", "P4"],
-        "tid": ["T1", "T1", "T2", "T2"],
-        "mid": ["M1", "M1", "M1", "M1"],
-        "dt": ["2020-01-01"] * 4,
-        "perf": [0.6, 0.4, 0.5, 0.5],
-    })
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2020-01-01"] * 4,
+            "perf": [0.6, 0.4, 0.5, 0.5],
+        }
+    )
 
     gen = PlayerRatingGenerator(
         performance_column="perf",
@@ -183,4 +184,4 @@ def test_calibration_not_applied_to_difference_predictor(calibration_cn):
     )
     gen.fit_transform(df)
 
-    assert not hasattr(gen._performance_predictor, '_reference_rating')
+    assert not hasattr(gen._performance_predictor, "_reference_rating")

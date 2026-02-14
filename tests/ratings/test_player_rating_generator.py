@@ -377,8 +377,8 @@ def test_plus_minus_team_diff_positive_next_match(base_cn):
     res = gen.fit_transform(df)
 
     diff_col = "team_rating_difference_projected_plus_minus"
-    m2_team = res.filter(pl.col("mid") == "M2").group_by("tid").agg(
-        pl.col(diff_col).mean().alias("diff")
+    m2_team = (
+        res.filter(pl.col("mid") == "M2").group_by("tid").agg(pl.col(diff_col).mean().alias("diff"))
     )
     t1_diff = m2_team.filter(pl.col("tid") == "T1").select("diff").item()
     t2_diff = m2_team.filter(pl.col("tid") == "T2").select("diff").item()
@@ -696,9 +696,7 @@ def test_fit_transform_auto_scale_logs_warning_when_out_of_bounds(base_cn, caplo
     with caplog.at_level("WARNING"):
         gen.fit_transform(df)
 
-    assert any(
-        "Auto-scaling participation weights" in record.message for record in caplog.records
-    )
+    assert any("Auto-scaling participation weights" in record.message for record in caplog.records)
 
 
 def test_future_transform_scales_projected_participation_weight_by_fit_quantile():
@@ -751,9 +749,7 @@ def test_future_transform_scales_projected_participation_weight_by_fit_quantile(
     expected_team_off = (a_rating * w_a + b_rating * w_b) / (w_a + w_b)
 
     team_off_col = "team_off_rating_projected_perf"
-    actual_team_off = (
-        res.filter(pl.col("tid") == "T1").select(team_off_col).unique().item()
-    )
+    actual_team_off = res.filter(pl.col("tid") == "T1").select(team_off_col).unique().item()
 
     assert actual_team_off == pytest.approx(expected_team_off, rel=1e-6)
 
@@ -847,12 +843,12 @@ def test_fit_transform_null_performance__no_rating_change(base_cn):
     result = gen.fit_transform(df)
 
     # Get P1's pre-match rating for M2 (after M1) and M3 (after M2 with null perf)
-    p1_rating_before_m2 = result.filter(
-        (pl.col("pid") == "P1") & (pl.col("mid") == "M2")
-    )["player_off_rating_perf"][0]
-    p1_rating_before_m3 = result.filter(
-        (pl.col("pid") == "P1") & (pl.col("mid") == "M3")
-    )["player_off_rating_perf"][0]
+    p1_rating_before_m2 = result.filter((pl.col("pid") == "P1") & (pl.col("mid") == "M2"))[
+        "player_off_rating_perf"
+    ][0]
+    p1_rating_before_m3 = result.filter((pl.col("pid") == "P1") & (pl.col("mid") == "M3"))[
+        "player_off_rating_perf"
+    ][0]
 
     # Key assertion: P1's rating before M3 should equal rating before M2
     # because null performance in M2 means NO rating change
@@ -1804,9 +1800,9 @@ def test_player_rating_features_out_combinations(
         result.columns.tolist() if hasattr(result.columns, "tolist") else list(result.columns)
     )
     for col in expected_cols:
-        assert (
-            col in result_cols
-        ), f"Expected column '{col}' not found in output. Columns: {result_cols}"
+        assert col in result_cols, (
+            f"Expected column '{col}' not found in output. Columns: {result_cols}"
+        )
 
     assert len(result) == 4
 
@@ -1995,9 +1991,7 @@ def test_fit_transform__start_league_quantile_uses_existing_player_ratings(base_
     )
     gen.fit_transform(df1)
 
-    existing_ratings = [
-        gen._player_off_ratings[pid].rating_value for pid in player_ids
-    ]
+    existing_ratings = [gen._player_off_ratings[pid].rating_value for pid in player_ids]
     expected_quantile_rating = np.percentile(existing_ratings, 5)
 
     srg = gen.start_rating_generator
@@ -2018,9 +2012,7 @@ def test_fit_transform__start_league_quantile_uses_existing_player_ratings(base_
     )
     result = gen.future_transform(df2)
 
-    new_player_start_rating = result.filter(pl.col("pid") == "P_NEW")[
-        "player_off_rating_perf"
-    ][0]
+    new_player_start_rating = result.filter(pl.col("pid") == "P_NEW")["player_off_rating_perf"][0]
 
     assert new_player_start_rating == pytest.approx(expected_quantile_rating, rel=0.1), (
         f"New player should start at 5th percentile ({expected_quantile_rating:.1f}) "
@@ -2573,7 +2565,6 @@ def test_fit_transform_ignore_opponent_predictor_adapts_to_performance_drift(bas
         "pw": [],
     }
 
-    match_id = 0
     for i in range(n_matches // 2):
         date = datetime(2019, 1, 1) + timedelta(days=i * 2)
         date_str = date.strftime("%Y-%m-%d")
@@ -2590,12 +2581,10 @@ def test_fit_transform_ignore_opponent_predictor_adapts_to_performance_drift(bas
 
                 data["pid"].append(player_id)
                 data["tid"].append(team_id)
-                data["mid"].append(f"M{match_id}")
+                data["mid"].append(f"M{i}")
                 data["dt"].append(date_str)
                 data["perf"].append(perf)
                 data["pw"].append(1.0)
-
-        match_id += 1
 
     df = pl.DataFrame(data)
 
@@ -2669,7 +2658,6 @@ def test_fit_transform_ignore_opponent_with_autoscale_and_temporal_drift(base_cn
         "pw": [],
     }
 
-    match_id = 0
     for i in range(n_matches // 2):
         date = datetime(2019, 1, 1) + timedelta(days=i * 2)
         date_str = date.strftime("%Y-%m-%d")
@@ -2688,12 +2676,10 @@ def test_fit_transform_ignore_opponent_with_autoscale_and_temporal_drift(base_cn
 
                 data["pid"].append(player_id)
                 data["tid"].append(team_id)
-                data["mid"].append(f"M{match_id}")
+                data["mid"].append(f"M{i}")
                 data["dt"].append(date_str)
                 data["perf"].append(perf)
                 data["pw"].append(1.0)
-
-        match_id += 1
 
     df = pl.DataFrame(data)
 
@@ -2731,7 +2717,8 @@ def test_fit_transform_ignore_opponent_with_autoscale_and_temporal_drift(base_cn
         pl.col("mid").cast(pl.Utf8).str.extract(r"M(\d+)", 1).cast(pl.Int32) < 100
     )
     late_df = result.filter(
-        pl.col("mid").cast(pl.Utf8).str.extract(r"M(\d+)", 1).cast(pl.Int32) >= (n_matches//2 - 100)
+        pl.col("mid").cast(pl.Utf8).str.extract(r"M(\d+)", 1).cast(pl.Int32)
+        >= (n_matches // 2 - 100)
     )
 
     early_actual_scaled = early_df["performance__perf"].to_list()
@@ -2754,9 +2741,7 @@ def test_fit_transform_ignore_opponent_with_autoscale_and_temporal_drift(base_cn
 
     # Verify drift magnitude is significant
     drift_magnitude = early_actual_mean - late_actual_mean
-    assert drift_magnitude > 0.02, (
-        f"Drift magnitude should be > 0.02, got {drift_magnitude:.4f}"
-    )
+    assert drift_magnitude > 0.02, f"Drift magnitude should be > 0.02, got {drift_magnitude:.4f}"
 
     # Verify predictions track the SCALED values (not raw 0.505/0.495)
     # Tolerance: 0.025 accounts for convergence lag with temporal drift
@@ -2882,7 +2867,7 @@ def test_separate_offense_defense_participation_weights(base_cn):
         rating_change_multiplier_defense=50,
     )
 
-    result = gen.fit_transform(df)
+    gen.fit_transform(df)
 
     # Verify that the defense_participation_weight column is present in the data
     assert "minutes" in df.columns
@@ -2905,7 +2890,7 @@ def test_separate_offense_defense_participation_weights(base_cn):
         }
     )
 
-    result2 = gen.fit_transform(df2)
+    gen.fit_transform(df2)
 
     # P1 should have larger offensive rating changes due to high shots_attempted
     # but equal defensive rating changes due to equal minutes played
@@ -2936,10 +2921,7 @@ def test_defense_participation_weight_backwards_compatibility(base_cn, library):
         "pw": [1.0, 0.5, 0.8, 0.8],
     }
 
-    if library == "polars":
-        df = pl.DataFrame(df_data)
-    else:
-        df = pd.DataFrame(df_data)
+    df = pl.DataFrame(df_data) if library == "polars" else pd.DataFrame(df_data)
 
     # When defense_participation_weight is None, it should default to participation_weight
     gen = PlayerRatingGenerator(
@@ -3066,9 +3048,7 @@ def test_player_opponent_mean_projected_feature(base_cn, sample_df):
     assert "player_opponent_mean_projected_perf" in result.columns
 
     # Verify it's the mean of player_rating and opponent_rating_projected (vectorized)
-    expected = (
-        pl.col("player_rating_perf") + pl.col("opponent_rating_projected_perf")
-    ) / 2
+    expected = (pl.col("player_rating_perf") + pl.col("opponent_rating_projected_perf")) / 2
     diff = result.select(
         (pl.col("player_opponent_mean_projected_perf") - expected).abs().max()
     ).item()
@@ -3092,14 +3072,16 @@ class TestNaNPerformanceHandling:
         """Create minimal test DataFrame with 2 teams, 2 players each."""
         import numpy as np
 
-        return pl.DataFrame({
-            "match_id": ["game1"] * 4,
-            "player_id": ["p1", "p2", "p3", "p4"],
-            "team_id": ["A", "A", "B", "B"],
-            "start_date": ["2024-01-01"] * 4,
-            "performance": performance_values,
-            "participation_weight": [1.0] * 4,
-        })
+        return pl.DataFrame(
+            {
+                "match_id": ["game1"] * 4,
+                "player_id": ["p1", "p2", "p3", "p4"],
+                "team_id": ["A", "A", "B", "B"],
+                "start_date": ["2024-01-01"] * 4,
+                "performance": performance_values,
+                "participation_weight": [1.0] * 4,
+            }
+        )
 
     def test_nan_performance_does_not_raise(self, nan_cn):
         """NaN performance values should not raise ValueError."""
@@ -3121,7 +3103,7 @@ class TestNaNPerformanceHandling:
     def test_inf_performance_does_not_raise(self, nan_cn):
         """Inf performance values should not raise ValueError."""
         # Use values that give mean ~0.5 when inf is excluded
-        df = self._create_test_df([0.6, float('inf'), 0.4, 0.5])
+        df = self._create_test_df([0.6, float("inf"), 0.4, 0.5])
 
         gen = PlayerRatingGenerator(
             performance_column="performance",
@@ -3135,7 +3117,7 @@ class TestNaNPerformanceHandling:
     def test_neg_inf_performance_does_not_raise(self, nan_cn):
         """Negative inf performance values should not raise ValueError."""
         # Use values that give mean ~0.5 when -inf is excluded
-        df = self._create_test_df([0.6, float('-inf'), 0.4, 0.5])
+        df = self._create_test_df([0.6, float("-inf"), 0.4, 0.5])
 
         gen = PlayerRatingGenerator(
             performance_column="performance",
@@ -3151,14 +3133,16 @@ class TestNaNPerformanceHandling:
         import numpy as np
 
         # Two games: first establishes ratings, second tests NaN handling
-        df = pl.DataFrame({
-            "match_id": ["game1"] * 4 + ["game2"] * 4,
-            "player_id": ["p1", "p2", "p3", "p4"] * 2,
-            "team_id": ["A", "A", "B", "B"] * 2,
-            "start_date": ["2024-01-01"] * 4 + ["2024-01-02"] * 4,
-            "performance": [0.5, 0.5, 0.5, 0.5, 0.6, np.nan, 0.4, 0.5],
-            "participation_weight": [1.0] * 8,
-        })
+        df = pl.DataFrame(
+            {
+                "match_id": ["game1"] * 4 + ["game2"] * 4,
+                "player_id": ["p1", "p2", "p3", "p4"] * 2,
+                "team_id": ["A", "A", "B", "B"] * 2,
+                "start_date": ["2024-01-01"] * 4 + ["2024-01-02"] * 4,
+                "performance": [0.5, 0.5, 0.5, 0.5, 0.6, np.nan, 0.4, 0.5],
+                "participation_weight": [1.0] * 8,
+            }
+        )
 
         gen = PlayerRatingGenerator(
             performance_column="performance",
@@ -3169,13 +3153,13 @@ class TestNaNPerformanceHandling:
         result = gen.fit_transform(df)
 
         # Get player p2's ratings for both games
-        p2_game1 = result.filter(
-            (pl.col("player_id") == "p2") & (pl.col("match_id") == "game1")
-        )["player_off_rating_performance"][0]
+        p2_game1 = result.filter((pl.col("player_id") == "p2") & (pl.col("match_id") == "game1"))[
+            "player_off_rating_performance"
+        ][0]
 
-        p2_game2 = result.filter(
-            (pl.col("player_id") == "p2") & (pl.col("match_id") == "game2")
-        )["player_off_rating_performance"][0]
+        p2_game2 = result.filter((pl.col("player_id") == "p2") & (pl.col("match_id") == "game2"))[
+            "player_off_rating_performance"
+        ][0]
 
         # Rating should not change when performance is NaN
         assert p2_game1 == p2_game2, "NaN performance should result in zero rating change"
@@ -3225,8 +3209,8 @@ def test_opponent_players_playing_time_uses_def_ratings_for_offense_prediction(b
     This test sets up players with divergent OFF and DEF ratings and verifies the correct
     ratings are used.
     """
-    from dataclasses import replace
     import math
+    from dataclasses import replace
 
     cn = replace(
         base_cn,

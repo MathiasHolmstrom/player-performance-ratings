@@ -37,7 +37,6 @@ def neg_binom_log_likelihood(r, actual_points, predicted_points):
 
 
 class NegativeBinomialEstimator(BaseEstimator):
-
     def __init__(
         self,
         point_estimate_pred_column: str,
@@ -145,7 +144,7 @@ class NegativeBinomialEstimator(BaseEstimator):
         :param y: Target Series
         :param sample_weight: Optional sample weights (unused for distribution predictors)
         """
-
+        _ = sample_weight
         y_values = (
             y.to_list() if hasattr(y, "to_list") else (y.values if hasattr(y, "values") else y)
         )
@@ -340,10 +339,8 @@ class NegativeBinomialEstimator(BaseEstimator):
             )
             pred_df = pred_df.with_columns(
                 (
-                    (
-                        nw.col("__predicted_r") * self.predicted_r_weight
-                        + nw.lit(self._mean_r) * (1 - self.predicted_r_weight)
-                    )
+                    nw.col("__predicted_r") * self.predicted_r_weight
+                    + nw.lit(self._mean_r) * (1 - self.predicted_r_weight)
                 ).alias("__predicted_r")
             )
 
@@ -359,7 +356,6 @@ class NegativeBinomialEstimator(BaseEstimator):
             return self._add_probabilities(df=df).select([*input_cols, prob_col])
 
     def _grp_to_r_granularity(self, df: IntoFrameT, is_train: bool) -> IntoFrameT:
-
         aggregation = (
             [
                 nw.col([self.point_estimate_pred_column, self.target]).mean(),
@@ -392,7 +388,6 @@ class NegativeBinomialEstimator(BaseEstimator):
         )
 
     def _add_predicted_r(self, df: IntoFrameT) -> IntoFrameT:
-
         df = df.with_columns(nw.lit(self._mean_r).alias("__predicted_r"))
         for (mu_bin, var_bin), predicted_r in self._r_estimates.items():
             next_higher_mu_bins = [m[0] for m in self._r_estimates if m[0] > mu_bin]
@@ -404,7 +399,6 @@ class NegativeBinomialEstimator(BaseEstimator):
             if len(next_higher_var_bins) == 0:
                 next_higher_var_bin = 9999
             else:
-
                 next_higher_var_bin = min(next_higher_var_bins)
 
             df = df.with_columns(
@@ -421,7 +415,6 @@ class NegativeBinomialEstimator(BaseEstimator):
         return df
 
     def _add_probabilities(self, df: IntoFrameT) -> IntoFrameT:
-
         all_outcome_probs = []
 
         if self.predict_granularity:

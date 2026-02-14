@@ -6,7 +6,6 @@ from sklearn.base import BaseEstimator
 
 
 class NormalDistributionPredictor(BaseEstimator):
-
     def __init__(
         self,
         point_estimate_pred_column: str,
@@ -33,6 +32,7 @@ class NormalDistributionPredictor(BaseEstimator):
         :param y: Target Series (unused, kept for sklearn interface)
         :param sample_weight: Optional sample weights (unused)
         """
+        _ = sample_weight
         if isinstance(X.to_native() if hasattr(X, "to_native") else X, np.ndarray):
             raise TypeError(
                 "X must be a DataFrame (pandas, polars, or Narwhals), not a numpy array"

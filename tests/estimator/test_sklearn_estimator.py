@@ -1,6 +1,4 @@
-from datetime import date, datetime
-from unittest import mock
-from unittest.mock import Mock
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -906,14 +904,16 @@ def test_conditional_estimator__classes_expansion_stays_reasonable(df_type):
     # This creates large negative diffs when ydstogo is large
     y = np.random.choice(range(-5, 36), size=n)
 
-    data = df_type({
-        'feature1': np.random.randn(n),
-        'gate_distance': gate_distance,
-    })
+    data = df_type(
+        {
+            "feature1": np.random.randn(n),
+            "gate_distance": gate_distance,
+        }
+    )
 
     estimator = ConditionalEstimator(
         gate_estimator=LogisticRegression(random_state=42, max_iter=1000),
-        gate_distance_col='gate_distance',
+        gate_distance_col="gate_distance",
         outcome_0_value=0,
         outcome_1_value=1,
         outcome_0_estimator=LogisticRegression(random_state=42, max_iter=1000),
@@ -1016,15 +1016,15 @@ def test_frequency_bucketing_classifier__fit_creates_buckets(df_type):
     np.random.seed(42)
     # Create dataset with common classes (0-3) and rare classes (10, 11)
     X = create_dataframe(df_type, {"feature": np.random.randn(1000)})
-    y = np.concatenate([
-        np.random.choice([0, 1, 2, 3], size=970),  # Common: 97%
-        np.array([10] * 15),  # Rare: 1.5%
-        np.array([11] * 15),  # Rare: 1.5%
-    ])
-
-    clf = FrequencyBucketingClassifier(
-        estimator=LogisticRegression(max_iter=1000), min_prob=0.03
+    y = np.concatenate(
+        [
+            np.random.choice([0, 1, 2, 3], size=970),  # Common: 97%
+            np.array([10] * 15),  # Rare: 1.5%
+            np.array([11] * 15),  # Rare: 1.5%
+        ]
     )
+
+    clf = FrequencyBucketingClassifier(estimator=LogisticRegression(max_iter=1000), min_prob=0.03)
     clf.fit(X, y)
 
     assert clf.classes_ is not None
@@ -1049,16 +1049,16 @@ def test_frequency_bucketing_classifier__predict_proba_distributes_evenly(df_typ
     """Test that predict_proba distributes bucket probability evenly among classes"""
     np.random.seed(42)
     X = create_dataframe(df_type, {"feature": np.random.randn(100)})
-    y = np.concatenate([
-        np.array([0] * 50),
-        np.array([1] * 40),
-        np.array([10] * 5),  # Rare
-        np.array([11] * 5),  # Rare
-    ])
-
-    clf = FrequencyBucketingClassifier(
-        estimator=LogisticRegression(max_iter=1000), min_prob=0.15
+    y = np.concatenate(
+        [
+            np.array([0] * 50),
+            np.array([1] * 40),
+            np.array([10] * 5),  # Rare
+            np.array([11] * 5),  # Rare
+        ]
     )
+
+    clf = FrequencyBucketingClassifier(estimator=LogisticRegression(max_iter=1000), min_prob=0.15)
     clf.fit(X, y)
 
     proba = clf.predict_proba(X)
@@ -1084,16 +1084,16 @@ def test_frequency_bucketing_classifier__predict_returns_valid_classes(df_type):
     """Test that predict returns valid class labels from original classes"""
     np.random.seed(42)
     X = create_dataframe(df_type, {"feature": np.random.randn(100)})
-    y = np.concatenate([
-        np.array([0] * 50),
-        np.array([5] * 30),
-        np.array([10] * 10),
-        np.array([15] * 10),
-    ])
-
-    clf = FrequencyBucketingClassifier(
-        estimator=LogisticRegression(max_iter=1000), min_prob=0.15
+    y = np.concatenate(
+        [
+            np.array([0] * 50),
+            np.array([5] * 30),
+            np.array([10] * 10),
+            np.array([15] * 10),
+        ]
     )
+
+    clf = FrequencyBucketingClassifier(estimator=LogisticRegression(max_iter=1000), min_prob=0.15)
     clf.fit(X, y)
 
     predictions = clf.predict(X)
@@ -1107,15 +1107,15 @@ def test_frequency_bucketing_classifier__all_classes_frequent(df_type):
     """Test when all classes meet min_prob threshold (no bucketing needed)"""
     np.random.seed(42)
     X = create_dataframe(df_type, {"feature": np.random.randn(100)})
-    y = np.concatenate([
-        np.array([0] * 30),
-        np.array([1] * 30),
-        np.array([2] * 40),
-    ])
-
-    clf = FrequencyBucketingClassifier(
-        estimator=LogisticRegression(max_iter=1000), min_prob=0.1
+    y = np.concatenate(
+        [
+            np.array([0] * 30),
+            np.array([1] * 30),
+            np.array([2] * 40),
+        ]
     )
+
+    clf = FrequencyBucketingClassifier(estimator=LogisticRegression(max_iter=1000), min_prob=0.1)
     clf.fit(X, y)
 
     # All classes should have individual buckets
@@ -1130,17 +1130,17 @@ def test_frequency_bucketing_classifier__all_classes_rare(df_type):
     """Test when all classes are below threshold (all bucketed together)"""
     np.random.seed(42)
     X = create_dataframe(df_type, {"feature": np.random.randn(100)})
-    y = np.concatenate([
-        np.array([0] * 15),
-        np.array([1] * 15),
-        np.array([2] * 15),
-        np.array([3] * 15),
-        np.array([4] * 40),
-    ])
-
-    clf = FrequencyBucketingClassifier(
-        estimator=LogisticRegression(max_iter=1000), min_prob=0.5
+    y = np.concatenate(
+        [
+            np.array([0] * 15),
+            np.array([1] * 15),
+            np.array([2] * 15),
+            np.array([3] * 15),
+            np.array([4] * 40),
+        ]
     )
+
+    clf = FrequencyBucketingClassifier(estimator=LogisticRegression(max_iter=1000), min_prob=0.5)
     clf.fit(X, y)
 
     # All classes should be in at most 2 buckets (common class 4 alone, others together)
@@ -1153,14 +1153,14 @@ def test_frequency_bucketing_classifier__probability_normalization(df_type):
     """Test that probabilities always sum to 1"""
     np.random.seed(42)
     X = create_dataframe(df_type, {"feature": np.random.randn(200)})
-    y = np.concatenate([
-        np.random.choice([0, 1, 2, 3, 4, 5], size=180),
-        np.random.choice([40, 41, -7, -8], size=20)
-    ])
-
-    clf = FrequencyBucketingClassifier(
-        estimator=LogisticRegression(max_iter=1000), min_prob=0.03
+    y = np.concatenate(
+        [
+            np.random.choice([0, 1, 2, 3, 4, 5], size=180),
+            np.random.choice([40, 41, -7, -8], size=20),
+        ]
     )
+
+    clf = FrequencyBucketingClassifier(estimator=LogisticRegression(max_iter=1000), min_prob=0.03)
     clf.fit(X, y)
 
     proba = clf.predict_proba(X)
@@ -1174,21 +1174,21 @@ def test_frequency_bucketing_classifier__sample_weight_passed_to_estimator(df_ty
     """Test that sample_weight is passed to internal estimator but not used for bucketing"""
     np.random.seed(42)
     X = create_dataframe(df_type, {"feature": np.random.randn(100)})
-    y = np.concatenate([
-        np.array([0] * 40),
-        np.array([1] * 40),
-        np.array([2] * 20),  # Rare
-    ])
+    y = np.concatenate(
+        [
+            np.array([0] * 40),
+            np.array([1] * 40),
+            np.array([2] * 20),  # Rare
+        ]
+    )
     # Even though class 2 has high weight, bucketing is based on raw counts
     sample_weight = np.array([1.0] * 80 + [100.0] * 20)
 
-    clf = FrequencyBucketingClassifier(
-        estimator=LogisticRegression(max_iter=1000), min_prob=0.3
-    )
+    clf = FrequencyBucketingClassifier(estimator=LogisticRegression(max_iter=1000), min_prob=0.3)
     clf.fit(X, y, sample_weight=sample_weight)
 
     # Class 2 should still be rare (20% < 30%) based on raw counts
-    bucket_2 = clf._class_to_bucket[2]
+    clf._class_to_bucket[2]
     # Check if class 2 is bucketed with another class
     # (may be alone or with neighbors, depends on algorithm)
     assert clf._class_to_bucket is not None
@@ -1224,17 +1224,17 @@ def test_frequency_bucketing_classifier__boundary_classes(df_type):
     np.random.seed(42)
     # Create dataset where boundary classes are rare
     X = create_dataframe(df_type, {"feature": np.random.randn(1210)})
-    y = np.concatenate([
-        np.array([10] * 5),    # Rare lowest
-        np.array([15] * 400),  # Common
-        np.array([20] * 400),  # Common
-        np.array([25] * 400),  # Common
-        np.array([90] * 5),    # Rare highest
-    ])
-
-    clf = FrequencyBucketingClassifier(
-        estimator=LogisticRegression(max_iter=1000), min_prob=0.02
+    y = np.concatenate(
+        [
+            np.array([10] * 5),  # Rare lowest
+            np.array([15] * 400),  # Common
+            np.array([20] * 400),  # Common
+            np.array([25] * 400),  # Common
+            np.array([90] * 5),  # Rare highest
+        ]
     )
+
+    clf = FrequencyBucketingClassifier(estimator=LogisticRegression(max_iter=1000), min_prob=0.02)
     clf.fit(X, y)
 
     # Rare boundary classes should be bucketed

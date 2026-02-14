@@ -462,14 +462,16 @@ class TestQuantileScalerUnweighted:
         # Participation weights (e.g., possessions) - zeros tend to have lower weights
         weights = np.where(is_zero, np.random.uniform(5, 20, n), np.random.uniform(20, 100, n))
 
-        df = pl.DataFrame({
-            "player_id": [f"p{i}" for i in range(n)],
-            "team_id": [f"t{i % 10}" for i in range(n)],
-            "match_id": [f"m{i // 20}" for i in range(n)],
-            "start_date": ["2024-01-01"] * n,
-            "performance_col": values,
-            "possessions": weights,
-        })
+        df = pl.DataFrame(
+            {
+                "player_id": [f"p{i}" for i in range(n)],
+                "team_id": [f"t{i % 10}" for i in range(n)],
+                "match_id": [f"m{i // 20}" for i in range(n)],
+                "start_date": ["2024-01-01"] * n,
+                "performance_col": values,
+                "possessions": weights,
+            }
+        )
 
         column_names = ColumnNames(
             player_id="player_id",
@@ -500,7 +502,14 @@ class TestQuantileScalerUnweighted:
         from spforge.ratings import PlayerRatingGenerator
 
         np.random.seed(42)
-        data = {"player_id": [], "team_id": [], "match_id": [], "start_date": [], "perf": [], "minutes": []}
+        data = {
+            "player_id": [],
+            "team_id": [],
+            "match_id": [],
+            "start_date": [],
+            "perf": [],
+            "minutes": [],
+        }
 
         for match_idx in range(50):
             date = f"2024-{(match_idx // 28) + 1:02d}-{(match_idx % 28) + 1:02d}"
@@ -527,7 +536,9 @@ class TestQuantileScalerUnweighted:
             participation_weight="minutes",
         )
 
-        gen = PlayerRatingGenerator(performance_column="perf", column_names=cn, auto_scale_performance=True)
+        gen = PlayerRatingGenerator(
+            performance_column="perf", column_names=cn, auto_scale_performance=True
+        )
         gen.fit_transform(pl.DataFrame(data))
 
         pm = gen.performance_manager
@@ -568,7 +579,9 @@ class TestAutoScalePerformanceBounds:
         result_nw = nw.from_native(result)
         scaled = result_nw["performance__perf"].to_numpy()
 
-        assert np.all(scaled >= 0), f"Scaled performance should not be negative, min was {scaled.min()}"
+        assert np.all(scaled >= 0), (
+            f"Scaled performance should not be negative, min was {scaled.min()}"
+        )
 
     @pytest.mark.parametrize("frame", ["pd", "pl"])
     def test_auto_scale_performance_output_range(self, frame):

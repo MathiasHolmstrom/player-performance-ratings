@@ -7,7 +7,6 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 
 
 class ConditionalEstimator(BaseEstimator, ClassifierMixin):
-
     def __init__(
         self,
         gate_estimator: Any,
@@ -30,6 +29,7 @@ class ConditionalEstimator(BaseEstimator, ClassifierMixin):
     def fit(
         self, X: IntoFrameT, y: list[int] | np.ndarray, sample_weight: np.ndarray | None = None
     ):
+        _ = sample_weight
         self.fitted_feats = (
             X.columns
             if self.gate_distance_col_is_feature
@@ -99,7 +99,7 @@ class ConditionalEstimator(BaseEstimator, ClassifierMixin):
             out = np.zeros((n, C), dtype=float)
             class_to_idx = {int(c): j for j, c in enumerate(classes)}
             min_class = int(classes[0])
-            max_class = int(classes[-1])
+            int(classes[-1])
 
             for i in range(n):
                 gd = int(gate_distance[i])

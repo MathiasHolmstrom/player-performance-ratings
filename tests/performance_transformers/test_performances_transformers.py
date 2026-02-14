@@ -531,8 +531,10 @@ class TestQuantilePerformanceScaler:
 
         # Non-NaN values should be valid
         non_nan_mask = ~np.isnan(transformed["x"].values)
-        assert np.all((transformed["x"].values[non_nan_mask] >= 0) &
-                      (transformed["x"].values[non_nan_mask] <= 1))
+        assert np.all(
+            (transformed["x"].values[non_nan_mask] >= 0)
+            & (transformed["x"].values[non_nan_mask] <= 1)
+        )
 
     def test_single_unique_nonzero(self):
         """Test edge case: single unique non-zero value."""
@@ -568,10 +570,16 @@ class TestWeightedQuantilePerformanceScaler:
             values.append(0.0 if np.random.random() < zero_prob else np.random.exponential(scale=2))
 
         df = df_type({"performance": np.array(values), "weight": weights})
-        scaler = QuantilePerformanceScaler(features=["performance"], prefix="", weight_column="weight")
+        scaler = QuantilePerformanceScaler(
+            features=["performance"], prefix="", weight_column="weight"
+        )
         result = scaler.fit_transform(df)
 
-        scaled = result["performance"].values if isinstance(result, pd.DataFrame) else result["performance"].to_numpy()
+        scaled = (
+            result["performance"].values
+            if isinstance(result, pd.DataFrame)
+            else result["performance"].to_numpy()
+        )
         weighted_mean = np.average(scaled, weights=weights)
         assert abs(weighted_mean - 0.5) < 0.02
 
@@ -583,9 +591,19 @@ class TestWeightedQuantilePerformanceScaler:
         np.random.shuffle(raw)
         df = df_type({"performance": raw})
 
-        result1 = QuantilePerformanceScaler(features=["performance"], prefix="", weight_column=None).fit_transform(df)
+        result1 = QuantilePerformanceScaler(
+            features=["performance"], prefix="", weight_column=None
+        ).fit_transform(df)
         result2 = QuantilePerformanceScaler(features=["performance"], prefix="").fit_transform(df)
 
-        v1 = result1["performance"].values if isinstance(result1, pd.DataFrame) else result1["performance"].to_numpy()
-        v2 = result2["performance"].values if isinstance(result2, pd.DataFrame) else result2["performance"].to_numpy()
+        v1 = (
+            result1["performance"].values
+            if isinstance(result1, pd.DataFrame)
+            else result1["performance"].to_numpy()
+        )
+        v2 = (
+            result2["performance"].values
+            if isinstance(result2, pd.DataFrame)
+            else result2["performance"].to_numpy()
+        )
         assert np.allclose(v1, v2, atol=1e-10)

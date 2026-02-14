@@ -10,7 +10,6 @@ from spforge.transformers import NetOverPredictedTransformer
 
 
 class NetOverPredictedFeatureGenerator(FeatureGenerator):
-
     def __init__(
         self,
         estimator: BaseEstimator | Any,

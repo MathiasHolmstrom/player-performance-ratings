@@ -20,7 +20,6 @@ class LeaguePlayerRatings:
 
 
 class StartRatingGenerator:
-
     def __init__(
         self,
         league_ratings: dict[str, float] | None = None,
@@ -32,7 +31,6 @@ class StartRatingGenerator:
         min_match_count_team_rating: int = 2,
         harcoded_start_rating: float | None = None,
     ):
-
         self.league_ratings = league_ratings or {}
         self.league_quantile = league_quantile
         self.min_count_for_percentiles = min_count_for_percentiles
@@ -64,7 +62,6 @@ class StartRatingGenerator:
         match_player: MatchPlayer,
         team_pre_match_player_ratings: list[PreMatchPlayerRating],
     ) -> float:
-
         if self.harcoded_start_rating is not None:
             return self.harcoded_start_rating
 
@@ -162,7 +159,6 @@ class StartRatingGenerator:
             league_last_day_numbers.append(day_number)
             self._player_to_league[id] = league
         else:
-
             index = league_player_ids.index(id)
             league_last_day_numbers[index] = day_number
             league_data[index] = rating_value

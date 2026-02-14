@@ -56,7 +56,6 @@ class RatingGenerator(FeatureGenerator):
         output_suffix: str | None = None,
         **kwargs: Any,
     ):
-
         if performance_predictor == "mean":
             _performance_predictor_class = RatingMeanPerformancePredictor
             default_features = [RatingKnownFeatures.RATING_MEAN_PROJECTED]
@@ -148,13 +147,10 @@ class RatingGenerator(FeatureGenerator):
         if self.column_names.league:
             self.league_identifier = LeagueIdentifer2(column_names=self.column_names)
 
-        if self.performance_manager:
-            if self.performance_manager:
-                ori_perf_values = df[self.performance_manager.ori_performance_column].to_list()
-                df = nw.from_native(self.performance_manager.fit_transform(df))
-                assert (
-                    df[self.performance_manager.ori_performance_column].to_list() == ori_perf_values
-                )
+        if self.performance_manager and self.performance_manager:
+            ori_perf_values = df[self.performance_manager.ori_performance_column].to_list()
+            df = nw.from_native(self.performance_manager.fit_transform(df))
+            assert df[self.performance_manager.ori_performance_column].to_list() == ori_perf_values
 
         perf = df[self.performance_column]
         # Filter to finite values for validation (NaN/inf are treated as missing data)
@@ -199,7 +195,10 @@ class RatingGenerator(FeatureGenerator):
     @to_polars
     @nw.narwhalify
     def transform(self, df: IntoFrameT) -> IntoFrameT:
-        if self.performance_manager and self.performance_manager.ori_performance_column in df.columns:
+        if (
+            self.performance_manager
+            and self.performance_manager.ori_performance_column in df.columns
+        ):
             df = nw.from_native(self.performance_manager.transform(df))
 
         pl_df: pl.DataFrame
@@ -254,9 +253,9 @@ class RatingGenerator(FeatureGenerator):
             )
 
         if self.auto_scale_performance and not self.performance_manager:
-            assert (
-                self.performance_column
-            ), "performance_column must be set if auto_scale_performance is True"
+            assert self.performance_column, (
+                "performance_column must be set if auto_scale_performance is True"
+            )
             if not self.performance_weights:
                 return PerformanceManager(
                     features=[self.performance_column],

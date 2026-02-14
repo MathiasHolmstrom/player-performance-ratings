@@ -25,10 +25,7 @@ df = (
     )
     .filter(pl.col(column_names.position) != "team")
     .with_columns(
-        pl.col(column_names.team_id)
-        .n_unique()
-        .over(column_names.match_id)
-        .alias("team_count"),
+        pl.col(column_names.team_id).n_unique().over(column_names.match_id).alias("team_count"),
         pl.col(column_names.player_id)
         .n_unique()
         .over([column_names.match_id, column_names.team_id])
