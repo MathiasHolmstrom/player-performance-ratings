@@ -607,6 +607,10 @@ class AutoPipeline(BaseEstimator):
                 + self.granularity
             )
         )
+        if self.sample_weight_column:
+            self._fitted_features = [
+                c for c in self._fitted_features if c != self.sample_weight_column
+            ]
 
         sample_weight_values: np.ndarray | None = None
         if self.sample_weight_column:
@@ -617,7 +621,6 @@ class AutoPipeline(BaseEstimator):
             sample_weight_values = np.asarray(
                 X[self.sample_weight_column].to_numpy(), dtype=np.float64
             )
-            X = X.drop([self.sample_weight_column])
         elif sample_weight is not None:
             sample_weight_values = np.asarray(sample_weight, dtype=np.float64)
 
@@ -652,6 +655,8 @@ class AutoPipeline(BaseEstimator):
             sample_weight_values = sample_weight_values[kept_row_ids]
 
         df = df.drop([row_id_col])
+        if self.sample_weight_column and self.sample_weight_column in df.columns:
+            df = df.drop([self.sample_weight_column])
 
         missing = [c for c in self._fitted_features if c not in df.columns]
         if missing:

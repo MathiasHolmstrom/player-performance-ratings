@@ -659,6 +659,35 @@ def test_fit_uses_sample_weight_column_and_aligns_after_preprocess(frame):
 
 
 @pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_fit_allows_filter_on_same_sample_weight_column(frame):
+    df_pd = pd.DataFrame(
+        {
+            "x": [1.0, 2.0, 3.0, 4.0],
+            "sw": [0.0, 1.0, 2.0, 3.0],
+            "y": [1.0, 2.0, 3.0, 4.0],
+        }
+    )
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
+
+    estimator = CaptureSampleWeightEstimator()
+    model = AutoPipeline(
+        estimator=estimator,
+        estimator_features=["x"],
+        sample_weight_column="sw",
+        filters=[Filter(column_name="sw", value=0.0, operator=Operator.GREATER_THAN)],
+    )
+
+    X = _select(df, ["x", "sw"])
+    y = _col(df, "y")
+    model.fit(X, y=y)
+
+    assert estimator.received_sample_weight is not None
+    np.testing.assert_allclose(estimator.received_sample_weight, np.array([1.0, 2.0, 3.0]))
+    assert estimator.fit_columns is not None
+    assert "sw" not in estimator.fit_columns
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
 def test_predict_and_predict_proba_ignore_sample_weight_column(frame):
     df_pd = pd.DataFrame(
         {
