@@ -94,7 +94,9 @@ class PerformanceManager(BaseEstimator, TransformerMixin):
         self.features = features
         self.prefix = prefix
         # Store whether user explicitly disabled transformers (passed empty list)
-        self._user_disabled_transformers = transformer_names is not None and len(transformer_names) == 0
+        self._user_disabled_transformers = (
+            transformer_names is not None and len(transformer_names) == 0
+        )
         self.transformer_names = transformer_names or [
             "symmetric",
             "partial_standard_scaler",
@@ -247,7 +249,6 @@ class PerformanceWeightsManager(PerformanceManager):
         return df.select(list(set([*input_cols, *self.features_out]))).to_native()
 
     def _calculate_weights(self, df: IntoFrameT) -> IntoFrameT:
-
         df = self._weight_columns(df=df)
 
         if len(df.filter(nw.col(self.performance_column).is_null())) > 0 or len(

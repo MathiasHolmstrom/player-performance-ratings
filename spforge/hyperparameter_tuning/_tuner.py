@@ -175,7 +175,7 @@ class RatingHyperparameterTuner:
             pruner=self.pruner,
             storage=self.storage,
             study_name=self.study_name,
-            load_if_exists=True if self.storage else False,
+            load_if_exists=bool(self.storage),
         )
 
         study.optimize(
@@ -435,8 +435,7 @@ class EstimatorHyperparameterTuner:
 
         leaf_estimators = _get_leaf_estimator_paths(self.estimator)
         default_targets = {
-            path: get_default_estimator_search_space(est)
-            for path, est in leaf_estimators.items()
+            path: get_default_estimator_search_space(est) for path, est in leaf_estimators.items()
         }
         default_targets = {path: space for path, space in default_targets.items() if space}
 
@@ -464,7 +463,7 @@ class EstimatorHyperparameterTuner:
             pruner=self.pruner,
             storage=self.storage,
             study_name=self.study_name,
-            load_if_exists=True if self.storage else False,
+            load_if_exists=bool(self.storage),
         )
 
         _enqueue_predicted_r_weight_zero(study, search_space)

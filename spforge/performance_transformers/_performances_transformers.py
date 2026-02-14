@@ -474,10 +474,7 @@ class QuantilePerformanceScaler(BaseEstimator, TransformerMixin):
 
             values_finite = values[finite_mask]
 
-            if weights is not None:
-                weights_finite = weights[finite_mask]
-            else:
-                weights_finite = None
+            weights_finite = weights[finite_mask] if weights is not None else None
 
             is_zero = np.abs(values_finite) < self.zero_threshold
 
@@ -508,9 +505,7 @@ class QuantilePerformanceScaler(BaseEstimator, TransformerMixin):
                 self._nonzero_quantiles[feature] = None
         return self
 
-    def _compute_weighted_quantiles(
-        self, values: np.ndarray, weights: np.ndarray
-    ) -> np.ndarray:
+    def _compute_weighted_quantiles(self, values: np.ndarray, weights: np.ndarray) -> np.ndarray:
         """Compute weighted quantiles using weighted CDF interpolation."""
         # Sort by value
         order = np.argsort(values)

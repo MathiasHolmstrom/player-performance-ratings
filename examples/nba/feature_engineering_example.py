@@ -47,10 +47,7 @@ df = df.sort(
 # Keep only games with exactly 2 teams (filter out invalid data)
 df = (
     df.with_columns(
-        pl.col(column_names.team_id)
-        .n_unique()
-        .over(column_names.match_id)
-        .alias("team_count")
+        pl.col(column_names.team_id).n_unique().over(column_names.match_id).alias("team_count")
     )
     .filter(pl.col("team_count") == 2)
     .drop("team_count")
@@ -143,9 +140,7 @@ most_recent_5_games = (
 historical_df = df.filter(~pl.col(column_names.match_id).is_in(most_recent_5_games))
 future_df = df.filter(pl.col(column_names.match_id).is_in(most_recent_5_games))
 
-historical_games = (
-    historical_df.select(pl.col(column_names.match_id).n_unique()).to_series().item()
-)
+historical_games = historical_df.select(pl.col(column_names.match_id).n_unique()).to_series().item()
 future_games = future_df.select(pl.col(column_names.match_id).n_unique()).to_series().item()
 print(f"Historical data: {len(historical_df)} rows, {historical_games} games")
 print(f"Future data: {len(future_df)} rows, {future_games} games")
@@ -176,13 +171,23 @@ print()
 # ====================================================================
 
 print("Sample of generated features (first player):")
-sample_player = historical_df[historical_df[column_names.player_id] == historical_df.iloc[0][column_names.player_id]].head(3)
-print(sample_player[[column_names.player_id, "points", "minutes"] + features_pipeline.features_out].to_string(index=False))
+sample_player = historical_df[
+    historical_df[column_names.player_id] == historical_df.iloc[0][column_names.player_id]
+].head(3)
+print(
+    sample_player[
+        [column_names.player_id, "points", "minutes"] + features_pipeline.features_out
+    ].to_string(index=False)
+)
 print()
 
 # Show statistics to verify features make sense
 print("Feature statistics (historical data):")
-feature_stats = historical_df[features_pipeline.features_out].describe().T[["count", "mean", "std", "min", "max"]]
+feature_stats = (
+    historical_df[features_pipeline.features_out]
+    .describe()
+    .T[["count", "mean", "std", "min", "max"]]
+)
 print(feature_stats.to_string())
 print()
 

@@ -18,7 +18,6 @@ class LeagueTeamRatings:
 
 
 class TeamStartRatingGenerator:
-
     def __init__(
         self,
         league_ratings: dict[str, float] | None = None,
@@ -56,7 +55,6 @@ class TeamStartRatingGenerator:
         day_number: int,
         league: str,
     ) -> float:
-
         if self.harcoded_start_rating is not None:
             return self.harcoded_start_rating
 
@@ -125,7 +123,6 @@ class TeamStartRatingGenerator:
             league_last_day_numbers.append(day_number)
             self._team_to_league[id] = league
         else:
-
             index = league_team_ids.index(id)
             league_last_day_numbers[index] = day_number
             league_data[index] = rating_value

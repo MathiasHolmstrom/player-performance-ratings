@@ -6,7 +6,6 @@ from sklearn.base import BaseEstimator
 
 
 class NormalDistributionPredictor(BaseEstimator):
-
     def __init__(
         self,
         point_estimate_pred_column: str,

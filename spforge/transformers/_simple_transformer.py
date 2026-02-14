@@ -71,7 +71,6 @@ class OperatorTransformer(TransformerMixin):
 
 
 class AggregatorTransformer(TransformerMixin):
-
     def __init__(
         self,
         columns: list[str],
@@ -123,7 +122,6 @@ class AggregatorTransformer(TransformerMixin):
 
 
 class NormalizerToColumnTransformer(TransformerMixin):
-
     def __init__(
         self,
         column: str,

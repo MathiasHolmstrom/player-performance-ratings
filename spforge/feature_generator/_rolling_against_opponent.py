@@ -107,12 +107,12 @@ class RollingAgainstOpponentTransformer(LagGenerator):
             self.update_column = self.column_names.update_match_id or self.update_column
             self.team_column = self.column_names.team_id or self.team_column
         else:
-            assert (
-                self.team_column is not None
-            ), "team_column must be set if column names is not passed"
-            assert (
-                self.update_column is not None
-            ), "match_id_update_column must be set if column names is not passed"
+            assert self.team_column is not None, (
+                "team_column must be set if column names is not passed"
+            )
+            assert self.update_column is not None, (
+                "match_id_update_column must be set if column names is not passed"
+            )
         if self.transformation == "rolling_mean":
             self._transformer = RollingWindowTransformer(
                 granularity=[self.opponent_column, *self.granularity],
@@ -208,7 +208,6 @@ class RollingAgainstOpponentTransformer(LagGenerator):
     def _concat_with_stored_and_calculate_feats(
         self, df: IntoFrameT, is_future: bool
     ) -> IntoFrameT:
-
         cols_to_drop = [c for c in self.features_out if c in df.columns]
         df = df.drop(cols_to_drop)
         concat_df = df.clone()
@@ -242,6 +241,7 @@ class RollingAgainstOpponentTransformer(LagGenerator):
     def _merge_into_input_df(
         self, df: IntoFrameT, concat_df: IntoFrameT, match_id_join_on: str | None = None
     ) -> IntoFrameT:
+        _ = match_id_join_on
         sort_cols = (
             [
                 self.column_names.start_date,

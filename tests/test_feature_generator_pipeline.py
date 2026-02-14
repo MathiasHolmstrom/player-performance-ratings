@@ -558,7 +558,7 @@ def test_feature_generator_pipeline__future_transform_no_state_mutation(df_type,
     )
 
     # Fit on initial data
-    result_fit = pipeline.fit_transform(data, column_names=column_names)
+    pipeline.fit_transform(data, column_names=column_names)
 
     # Call future_transform
     future_data = df_type(

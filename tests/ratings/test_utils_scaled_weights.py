@@ -6,8 +6,8 @@ import pytest
 from spforge import ColumnNames
 from spforge.ratings.utils import (
     _SCALED_PPW,
-    add_team_rating_projected,
     add_rating_mean_projected,
+    add_team_rating_projected,
 )
 
 
@@ -25,28 +25,32 @@ def column_names():
 @pytest.fixture
 def df_with_scaled():
     """DataFrame with both raw and scaled projected participation weights."""
-    return pl.DataFrame({
-        "pid": ["A", "B", "C", "D"],
-        "tid": ["T1", "T1", "T2", "T2"],
-        "mid": ["M1", "M1", "M1", "M1"],
-        "dt": ["2024-01-01"] * 4,
-        "rating": [1100.0, 900.0, 1050.0, 950.0],
-        "ppw": [20.0, 5.0, 10.0, 10.0],  # Raw weights (would give wrong answer)
-        _SCALED_PPW: [1.0, 0.5, 1.0, 1.0],  # Scaled/clipped weights
-    })
+    return pl.DataFrame(
+        {
+            "pid": ["A", "B", "C", "D"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "rating": [1100.0, 900.0, 1050.0, 950.0],
+            "ppw": [20.0, 5.0, 10.0, 10.0],  # Raw weights (would give wrong answer)
+            _SCALED_PPW: [1.0, 0.5, 1.0, 1.0],  # Scaled/clipped weights
+        }
+    )
 
 
 @pytest.fixture
 def df_without_scaled():
     """DataFrame with only raw projected participation weights (no scaled column)."""
-    return pl.DataFrame({
-        "pid": ["A", "B", "C", "D"],
-        "tid": ["T1", "T1", "T2", "T2"],
-        "mid": ["M1", "M1", "M1", "M1"],
-        "dt": ["2024-01-01"] * 4,
-        "rating": [1100.0, 900.0, 1050.0, 950.0],
-        "ppw": [0.8, 0.4, 1.0, 1.0],  # Already scaled weights
-    })
+    return pl.DataFrame(
+        {
+            "pid": ["A", "B", "C", "D"],
+            "tid": ["T1", "T1", "T2", "T2"],
+            "mid": ["M1", "M1", "M1", "M1"],
+            "dt": ["2024-01-01"] * 4,
+            "rating": [1100.0, 900.0, 1050.0, 950.0],
+            "ppw": [0.8, 0.4, 1.0, 1.0],  # Already scaled weights
+        }
+    )
 
 
 def test_add_team_rating_projected_uses_scaled_column(column_names, df_with_scaled):
@@ -98,8 +102,12 @@ def test_add_rating_mean_projected_uses_scaled_column(column_names, df_with_scal
     # = (1100 + 450 + 1050 + 950) / 3.5 = 3550/3.5 = 1014.29
     mean_rating = result["mean_rating"][0]
 
-    expected_with_scaled = (1100.0*1.0 + 900.0*0.5 + 1050.0*1.0 + 950.0*1.0) / (1.0+0.5+1.0+1.0)
-    wrong_with_raw = (1100.0*20.0 + 900.0*5.0 + 1050.0*10.0 + 950.0*10.0) / (20.0+5.0+10.0+10.0)
+    expected_with_scaled = (1100.0 * 1.0 + 900.0 * 0.5 + 1050.0 * 1.0 + 950.0 * 1.0) / (
+        1.0 + 0.5 + 1.0 + 1.0
+    )
+    wrong_with_raw = (1100.0 * 20.0 + 900.0 * 5.0 + 1050.0 * 10.0 + 950.0 * 10.0) / (
+        20.0 + 5.0 + 10.0 + 10.0
+    )
 
     assert mean_rating == pytest.approx(expected_with_scaled, rel=1e-6)
     assert mean_rating != pytest.approx(wrong_with_raw, rel=1e-6)
@@ -117,7 +125,7 @@ def test_add_rating_mean_projected_falls_back_to_raw(column_names, df_without_sc
     # With raw weights (0.8, 0.4, 1.0, 1.0)
     mean_rating = result["mean_rating"][0]
 
-    expected = (1100.0*0.8 + 900.0*0.4 + 1050.0*1.0 + 950.0*1.0) / (0.8+0.4+1.0+1.0)
+    expected = (1100.0 * 0.8 + 900.0 * 0.4 + 1050.0 * 1.0 + 950.0 * 1.0) / (0.8 + 0.4 + 1.0 + 1.0)
     assert mean_rating == pytest.approx(expected, rel=1e-6)
 
 

@@ -1,4 +1,3 @@
-
 import narwhals.stable.v2 as nw
 from narwhals.typing import IntoFrameT
 from sklearn.base import is_regressor
@@ -10,7 +9,6 @@ from spforge.data_structures import ColumnNames
 
 
 class RegressorFeatureGenerator(FeatureGenerator):
-
     def __init__(
         self,
         estimator: AutoPipeline,
@@ -94,9 +92,7 @@ class RegressorFeatureGenerator(FeatureGenerator):
             df = df.with_row_index(name="__row_index")
 
         cv = self._build_cross_validator(df)
-        pred_df = nw.from_native(
-            cv.generate_validation_df(df, add_training_predictions=True)
-        )
+        pred_df = nw.from_native(cv.generate_validation_df(df, add_training_predictions=True))
         if "is_validation" in pred_df.columns:
             pred_df = pred_df.drop("is_validation")
 

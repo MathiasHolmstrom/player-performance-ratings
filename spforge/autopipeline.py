@@ -628,9 +628,7 @@ class AutoPipeline(BaseEstimator):
 
         row_id_col = "__spforge_row_id__"
         if row_id_col in X.columns:
-            raise ValueError(
-                f"Temporary row id column already exists in input data: {row_id_col}"
-            )
+            raise ValueError(f"Temporary row id column already exists in input data: {row_id_col}")
 
         y_values = y.to_list() if hasattr(y, "to_list") else y
         df = X.with_columns(
@@ -805,12 +803,7 @@ class AutoPipeline(BaseEstimator):
         raw = getattr(inner_est, attr_name)
 
         if attr_name == "coef_":
-            # Linear models: use absolute value of coefficients
-            if raw.ndim == 2:
-                # Multi-class: average absolute values across classes
-                importances = np.abs(raw).mean(axis=0)
-            else:
-                importances = np.abs(raw)
+            importances = np.abs(raw).mean(axis=0) if raw.ndim == 2 else np.abs(raw)
         else:
             importances = raw
 
@@ -839,13 +832,10 @@ class AutoPipeline(BaseEstimator):
         raw = getattr(inner_est, attr_name)
 
         if attr_name == "coef_":
-            if raw.ndim == 2:
-                importances = np.abs(raw).mean(axis=0)
-            else:
-                importances = np.abs(raw)
+            importances = np.abs(raw).mean(axis=0) if raw.ndim == 2 else np.abs(raw)
         else:
             importances = raw
 
         importances = np.asarray(importances)
         feature_names = self._resolve_importance_feature_names(inner_est, len(importances))
-        return dict(zip(feature_names, importances.tolist()))
+        return dict(zip(feature_names, importances.tolist(), strict=False))

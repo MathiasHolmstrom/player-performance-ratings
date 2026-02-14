@@ -6,7 +6,6 @@ from spforge.data_structures import ColumnNames
 
 
 class FeatureGenerator(ABC):
-
     def __init__(self, features_out: list[str]):
         self._features_out = features_out
 

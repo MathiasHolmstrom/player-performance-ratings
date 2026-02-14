@@ -178,8 +178,3 @@ class RatioEstimatorTransformer(PredictorTransformer):
             if c not in set(out):
                 out.append(c)
         return list(set(out))
-
-    @property
-    def context_features(self) -> list[str]:
-        """Returns granularity columns needed for grouping."""
-        return list(self.granularity)

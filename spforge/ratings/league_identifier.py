@@ -7,7 +7,6 @@ from spforge.data_structures import ColumnNames, Match
 
 
 class LeagueIdentifer2:
-
     def __init__(self, column_names: ColumnNames, matches_back: int = 25):
         self.column_names = column_names
         self.matches_back = matches_back
@@ -59,7 +58,6 @@ class LeagueIdentifer2:
 
 
 class LeagueIdentifier:
-
     def __init__(self, matches_back: int = 25):
         self.matches_back = matches_back
         self.entity_to_match_leagues: dict[str, list[str]] = {}
@@ -118,7 +116,6 @@ class LeagueIdentifier:
         return max_league
 
     def _get_opponent_league(self, team_id: str, team_leagues: dict[str, str]) -> str:
-
         for team_id2, _league in team_leagues.items():
             if team_id2 != team_id:
                 return team_leagues[team_id2]
@@ -126,7 +123,6 @@ class LeagueIdentifier:
         raise KeyError
 
     def _generate_team_league_counts(self, match: Match) -> dict[str, dict[str, int]]:
-
         team_league_counts: dict[str, dict[str, int]] = {}
         for team in match.teams:
             for player in team.players:

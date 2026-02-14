@@ -107,9 +107,9 @@ def future_lag_transformations_wrapper(method):
             ori_native = "pl"
 
         if self.unique_constraint:
-            assert len(df.select(self.unique_constraint)) == len(
-                df
-            ), f"Specified unique constraint {self.unique_constraint} is not unique on the input dataframe"
+            assert len(df.select(self.unique_constraint)) == len(df), (
+                f"Specified unique constraint {self.unique_constraint} is not unique on the input dataframe"
+            )
 
         result = method(self, df, *args, **kwargs).sort("__row_index")
 
@@ -143,9 +143,9 @@ def historical_lag_transformations_wrapper(method):
                 ]
             else:
                 self.group_to_granularity = None
-            assert (
-                self.group_to_granularity is not None
-            ), "Either group_to_granularity or match_id_column must be passed"
+            assert self.group_to_granularity is not None, (
+                "Either group_to_granularity or match_id_column must be passed"
+            )
 
         if self.column_names and not self.unique_constraint:
             self.unique_constraint = (
@@ -167,9 +167,9 @@ def historical_lag_transformations_wrapper(method):
                 )
 
         if self.unique_constraint:
-            assert len(df.select(self.unique_constraint)) == len(
-                df
-            ), f"Specified unique constraint {self.unique_constraint} is not unique on the input dataframe"
+            assert len(df.select(self.unique_constraint)) == len(df), (
+                f"Specified unique constraint {self.unique_constraint} is not unique on the input dataframe"
+            )
         if (
             self.scale_by_participation_weight
             and not self.column_names
@@ -206,9 +206,9 @@ def transformation_validator(method):
         input_cols = df.columns
         result = method(self, df, *args, **kwargs)
         output_row_count = len(result)
-        assert (
-            input_row_count == output_row_count
-        ), f"Row count mismatch: input had {input_row_count} rows, output had {output_row_count} rows"
+        assert input_row_count == output_row_count, (
+            f"Row count mismatch: input had {input_row_count} rows, output had {output_row_count} rows"
+        )
         for col in input_cols:
             if col == "__row_index":
                 continue
@@ -225,16 +225,15 @@ def required_lag_column_names(method):
         self.column_names = column_names or self.column_names
 
         if not self.column_names:
-
             if "__row_index" not in df.columns:
                 df = df.with_row_index(name="__row_index")
 
             if hasattr(self, "days_between_lags") and self.days_between_lags:
                 raise ValueError("column names must be passed if days_between_lags is set")
 
-            assert (
-                self.update_column is not None or self.group_to_granularity is not None
-            ), "if column names is not passed. Either update_column or group_to_granularity must be passed"
+            assert self.update_column is not None or self.group_to_granularity is not None, (
+                "if column names is not passed. Either update_column or group_to_granularity must be passed"
+            )
 
             if self.add_opponent:
                 logging.warning(
@@ -242,9 +241,9 @@ def required_lag_column_names(method):
                 )
         elif self.column_names.update_match_id != self.column_names.match_id:
             self.update_column = self.column_names.update_match_id
-            assert (
-                self.update_column in df.columns
-            ), f"update_column {self.update_column} not found in input dataframe"
+            assert self.update_column in df.columns, (
+                f"update_column {self.update_column} not found in input dataframe"
+            )
         return method(self, df, self.column_names, *args, **kwargs)
 
     return wrapper

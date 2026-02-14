@@ -29,9 +29,7 @@ def test_nba_estimator_hyperparameter_tuning__workflow_completes():
 
     df = df.with_columns(
         [
-            (pl.col("minutes") / pl.col("minutes").sum().over("game_id")).alias(
-                "minutes_ratio"
-            ),
+            (pl.col("minutes") / pl.col("minutes").sum().over("game_id")).alias("minutes_ratio"),
             (pl.col("points") > pl.lit(10)).cast(pl.Int64).alias("points_over_10"),
         ]
     )

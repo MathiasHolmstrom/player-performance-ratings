@@ -6,7 +6,6 @@ from spforge.data_structures import ColumnNames
 
 
 class LagGenerator(FeatureGenerator):
-
     def __init__(
         self,
         granularity: list[str],
@@ -22,7 +21,6 @@ class LagGenerator(FeatureGenerator):
         match_id_column: str | None = None,
         scale_by_participation_weight: bool = False,
     ):
-
         self._features_out = []
         self.features = features
         self._entity_features_out = []
@@ -55,7 +53,9 @@ class LagGenerator(FeatureGenerator):
             else (
                 [cn.player_id, cn.match_id, cn.team_id]
                 if cn and cn.player_id
-                else [cn.match_id, cn.team_id] if cn else None
+                else [cn.match_id, cn.team_id]
+                if cn
+                else None
             )
         )
 
@@ -122,7 +122,6 @@ class LagGenerator(FeatureGenerator):
             and self.group_to_granularity
             and self.update_column not in self.group_to_granularity
         ):
-
             concat_df = self._group_to_granularity_level(
                 df=concat_df,
                 sort_col=self.column_names.start_date,
@@ -227,6 +226,7 @@ class LagGenerator(FeatureGenerator):
         match_id_join_on: str | None = None,
         features_out: list[str] | None = None,
     ) -> IntoFrameT:
+        _ = match_id_join_on
         features_out = features_out or self._entity_features_out
 
         ori_cols = [c for c in df.columns if c not in self.features_out]
@@ -314,7 +314,6 @@ class LagGenerator(FeatureGenerator):
         self,
         df: IntoFrameT,
     ) -> IntoFrameT:
-
         cn = self.column_names
 
         df = df.with_columns(

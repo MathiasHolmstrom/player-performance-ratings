@@ -270,7 +270,6 @@ class MatchTeam:
     update_id: str | None = None
 
     def __post_init__(self):
-
         if self.update_id is None:
             self.update_id = self.id
 

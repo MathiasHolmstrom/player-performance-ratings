@@ -63,10 +63,7 @@ def test_nba_player_ratings_hyperparameter_tuning__workflow_completes(
     Validates the full integration: RatingGenerator → FeatureGeneratorPipeline →
     AutoPipeline → CrossValidator → Scorer → Tuner
     """
-    if dataframe_type == "pl":
-        df = pl.from_pandas(nba_df)
-    else:
-        df = nba_df.copy()
+    df = pl.from_pandas(nba_df) if dataframe_type == "pl" else nba_df.copy()
 
     rating_gen = PlayerRatingGenerator(
         performance_column="points_clipped",

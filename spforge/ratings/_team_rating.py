@@ -344,10 +344,7 @@ class TeamRatingGenerator(RatingGenerator):
             else:
                 off_perf = float(off_perf_raw)
                 opp_off_perf = float(r[perf_opp_col]) if r.get(perf_opp_col) is not None else 0.0
-                if self.use_off_def_split:
-                    def_perf = 1.0 - opp_off_perf
-                else:
-                    def_perf = off_perf
+                def_perf = 1.0 - opp_off_perf if self.use_off_def_split else off_perf
 
                 mult_off = self._applied_multiplier(s_off, self.rating_change_multiplier_offense)
                 mult_def = self._applied_multiplier(s_def, self.rating_change_multiplier_defense)
@@ -400,7 +397,6 @@ class TeamRatingGenerator(RatingGenerator):
             s.last_match_day_number = int(day_number)
 
     def _add_rating_features(self, df: pl.DataFrame) -> pl.DataFrame:
-
         cols_to_add = set((self._features_out or []) + (self.non_predictor_features_out or []))
 
         perf_col_name = self._suffix(str(RatingUnknownFeatures.PERFORMANCE))

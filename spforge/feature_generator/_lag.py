@@ -13,7 +13,6 @@ from spforge.feature_generator._utils import (
 
 
 class LagTransformer(LagGenerator):
-
     def __init__(
         self,
         features: list[str],
@@ -74,9 +73,9 @@ class LagTransformer(LagGenerator):
             df = self._merge_into_input_df(df=df, concat_df=df_with_feats)
 
         else:
-            assert (
-                self.add_opponent is False
-            ), "Column Names must be passed for opponent features to be added"
+            assert self.add_opponent is False, (
+                "Column Names must be passed for opponent features to be added"
+            )
             join_on_cols = (
                 self.group_to_granularity
                 if self.group_to_granularity
@@ -96,7 +95,6 @@ class LagTransformer(LagGenerator):
     @future_validator
     @transformation_validator
     def future_transform(self, df: IntoFrameT) -> IntoFrameT:
-
         sort_col = self.column_names.start_date if self.column_names else "__row_index"
         grouped = self._group_to_granularity_level(df=df, sort_col=sort_col)
 

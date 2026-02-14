@@ -110,10 +110,7 @@ def _expected_from_probabilities(
     if arr.size == 0:
         return []
 
-    if labels is not None:
-        labels_arr = np.asarray(labels, dtype=np.float64)
-    else:
-        labels_arr = None
+    labels_arr = np.asarray(labels, dtype=np.float64) if labels is not None else None
 
     if arr.ndim == 1:
         if labels_arr is not None:
@@ -169,7 +166,6 @@ def _apply_filters_pandas(df: pd.DataFrame, filters: list[Filter]) -> pd.DataFra
 
 def _apply_filters_polars(df: pl.DataFrame, filters: list[Filter]) -> pl.DataFrame:
     for filter in filters:
-
         if df[filter.column_name].dtype in (pl.Datetime, pl.Date) and isinstance(filter.value, str):
             filter_value = datetime.datetime.fromisoformat(filter.value).replace(
                 tzinfo=datetime.UTC
@@ -200,7 +196,6 @@ def _apply_filters_polars(df: pl.DataFrame, filters: list[Filter]) -> pl.DataFra
 @narwhals.narwhalify
 def apply_filters(df: IntoFrameT, filters: list[Filter]) -> IntoFrameT:
     for filter in filters:
-
         if df[filter.column_name].dtype in (nw.Datetime, nw.Date) and isinstance(filter.value, str):
             parsed_dt = datetime.datetime.fromisoformat(filter.value)
 
@@ -213,7 +208,6 @@ def apply_filters(df: IntoFrameT, filters: list[Filter]) -> IntoFrameT:
                         else:
                             filter_value = parsed_dt.replace(tzinfo=datetime.UTC)
                     else:
-
                         dtype_str = str(df[filter.column_name].dtype)
                         if "UTC" in dtype_str or "timezone" in dtype_str.lower():
                             filter_value = parsed_dt.replace(tzinfo=datetime.UTC)
@@ -353,7 +347,9 @@ class BaseScorer(ABC):
                 self._build_aggregation_expr(df, self.target, target_method),
             ]
             if self.sample_weight_column and self.sample_weight_column in df.columns:
-                agg_exprs.append(nw.col(self.sample_weight_column).sum().alias(self.sample_weight_column))
+                agg_exprs.append(
+                    nw.col(self.sample_weight_column).sum().alias(self.sample_weight_column)
+                )
             df = df.group_by(self.aggregation_level).agg(agg_exprs)
         return df
 
@@ -382,13 +378,14 @@ class BaseScorer(ABC):
     def _get_scorer_id(self) -> str:
         """Get scorer-specific identifier in snake_case. Override in subclasses if needed."""
         import re
+
         name = self.__class__.__name__
         # Check if name is all uppercase (acronym like PWMSE)
         if name.isupper():
             scorer_id = name.lower()
             return self._SCORER_ID_ABBREVIATIONS.get(scorer_id, scorer_id)
         # Otherwise use regular snake_case conversion
-        scorer_id = re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
+        scorer_id = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
         return self._SCORER_ID_ABBREVIATIONS.get(scorer_id, scorer_id)
 
     def _format_column_list(self, columns: list[str], max_display: int = 3) -> str:
@@ -402,7 +399,8 @@ class BaseScorer(ABC):
     def _sanitize_column_name(self, name: str) -> str:
         """Replace special characters with underscores."""
         import re
-        return re.sub(r'[^a-zA-Z0-9_]', '_', name)
+
+        return re.sub(r"[^a-zA-Z0-9_]", "_", name)
 
     def _is_datetime_like_filter_value(self, value: Any) -> bool:
         if isinstance(value, (datetime.datetime, datetime.date, np.datetime64, pd.Timestamp)):
@@ -488,7 +486,7 @@ class BaseScorer(ABC):
             >>> scorer.name
             'bias_gran:team_id_naive'
         """
-        if hasattr(self, '_name_override') and self._name_override is not None:
+        if hasattr(self, "_name_override") and self._name_override is not None:
             if self.granularity:
                 gran_str = self._format_column_list(self.granularity)
                 return f"{self._name_override}_gran:{gran_str}"
@@ -560,8 +558,7 @@ class PWMSE(BaseScorer):
                 self._needs_extension = True
                 eval_label_to_idx = {lbl: i for i, lbl in enumerate(self.evaluation_labels)}
                 self._extension_mapping = {
-                    train_idx: eval_label_to_idx[lbl]
-                    for train_idx, lbl in enumerate(self.labels)
+                    train_idx: eval_label_to_idx[lbl] for train_idx, lbl in enumerate(self.labels)
                 }
             else:
                 raise ValueError(
@@ -592,7 +589,9 @@ class PWMSE(BaseScorer):
             return self.evaluation_labels
         return self.labels
 
-    def _pwmse_score(self, targets: np.ndarray, preds: np.ndarray, weights: np.ndarray | None = None) -> float:
+    def _pwmse_score(
+        self, targets: np.ndarray, preds: np.ndarray, weights: np.ndarray | None = None
+    ) -> float:
         labels = np.asarray(self._get_scoring_labels(), dtype=np.float64)
         diffs_sqd = (labels[None, :] - targets[:, None]) ** 2
         per_row = (diffs_sqd * preds).sum(axis=1)
@@ -631,7 +630,6 @@ class PWMSE(BaseScorer):
         if self.aggregation_level:
             first_pred = df[self.pred_column].to_list()[0] if len(df) > 0 else None
             if isinstance(first_pred, (list, np.ndarray)):
-
                 pass
             else:
                 df = self._apply_aggregation_level(df)
@@ -650,7 +648,11 @@ class PWMSE(BaseScorer):
                     mask = col_mask if mask is None else (mask & col_mask)
                 gran_df = df.filter(mask)
 
-                weights = np.asarray(gran_df[self.sample_weight_column].to_list(), dtype=np.float64) if self.sample_weight_column else None
+                weights = (
+                    np.asarray(gran_df[self.sample_weight_column].to_list(), dtype=np.float64)
+                    if self.sample_weight_column
+                    else None
+                )
                 targets = gran_df[self.target].to_numpy().astype(np.float64)
                 preds = np.asarray(gran_df[self.pred_column].to_list(), dtype=np.float64)
                 preds = self._align_predictions(preds)
@@ -669,7 +671,11 @@ class PWMSE(BaseScorer):
 
             return results
 
-        weights = np.asarray(df[self.sample_weight_column].to_list(), dtype=np.float64) if self.sample_weight_column else None
+        weights = (
+            np.asarray(df[self.sample_weight_column].to_list(), dtype=np.float64)
+            if self.sample_weight_column
+            else None
+        )
         targets = df[self.target].to_numpy().astype(np.float64)
         preds = np.asarray(df[self.pred_column].to_list(), dtype=np.float64)
         preds = self._align_predictions(preds)
@@ -753,7 +759,9 @@ class MeanBiasScorer(BaseScorer):
         result = float(np.nanmean(diffs_arr))
         return 0.0 if pd.isna(result) else result
 
-    def _mean_bias_from_lists(self, preds: list[Any], targets: list[Any], weights: list[Any] | None = None) -> float:
+    def _mean_bias_from_lists(
+        self, preds: list[Any], targets: list[Any], weights: list[Any] | None = None
+    ) -> float:
         if not preds:
             return 0.0
         diffs = np.asarray(preds, dtype=np.float64) - np.asarray(targets, dtype=np.float64)
@@ -885,7 +893,11 @@ class MeanBiasScorer(BaseScorer):
                     mask = col_mask if mask is None else (mask & col_mask)
                 gran_df = df.filter(mask)
 
-                weights = gran_df[self.sample_weight_column].to_list() if self.sample_weight_column else None
+                weights = (
+                    gran_df[self.sample_weight_column].to_list()
+                    if self.sample_weight_column
+                    else None
+                )
                 # Calculate score for this group
                 preds = gran_df[self.pred_column].to_list()
                 targets = gran_df[self.target].to_list()
@@ -966,7 +978,6 @@ class MeanBiasScorer(BaseScorer):
 
 
 class SklearnScorer(BaseScorer):
-
     def __init__(
         self,
         scorer_function: Callable,
@@ -1018,10 +1029,10 @@ class SklearnScorer(BaseScorer):
 
     def _get_scorer_id(self) -> str:
         """Use the scorer function name."""
-        if hasattr(self.scorer_function, '__name__'):
+        if hasattr(self.scorer_function, "__name__"):
             name = self.scorer_function.__name__
             # Handle lambda functions
-            if name == '<lambda>':
+            if name == "<lambda>":
                 return "custom_metric"
             return self._SCORER_ID_ABBREVIATIONS.get(name, name)
         return "custom_metric"
@@ -1070,7 +1081,9 @@ class SklearnScorer(BaseScorer):
                 df, self.target, params.get("labels"), self.naive_granularity
             )
             if weights is not None:
-                naive_score = self.scorer_function(y_true, naive_probs, sample_weight=weights, **params)
+                naive_score = self.scorer_function(
+                    y_true, naive_probs, sample_weight=weights, **params
+                )
             else:
                 naive_score = self.scorer_function(y_true, naive_probs, **params)
             return float(naive_score - score)
@@ -1083,7 +1096,9 @@ class SklearnScorer(BaseScorer):
             return float(score)
         naive_preds = _naive_point_predictions_for_df(df, self.target, self.naive_granularity)
         if weights is not None:
-            naive_score = self.scorer_function(y_true, naive_preds, sample_weight=weights, **self.params)
+            naive_score = self.scorer_function(
+                y_true, naive_preds, sample_weight=weights, **self.params
+            )
         else:
             naive_score = self.scorer_function(y_true, naive_preds, **self.params)
         return float(naive_score - score)
@@ -1135,7 +1150,6 @@ class SklearnScorer(BaseScorer):
 
 
 class ProbabilisticMeanBias(BaseScorer):
-
     def __init__(
         self,
         pred_column: str,
@@ -1151,7 +1165,6 @@ class ProbabilisticMeanBias(BaseScorer):
         name: str | None = None,
         _name_override: str | None = None,
     ):
-
         self.pred_column_name = pred_column
         self.class_column_name = class_column_name
         super().__init__(
@@ -1168,9 +1181,7 @@ class ProbabilisticMeanBias(BaseScorer):
             _name_override=_name_override,
         )
 
-    def _aggregate_pandas_series(
-        self, df: pd.DataFrame, col: str, method: Any
-    ) -> pd.Series:
+    def _aggregate_pandas_series(self, df: pd.DataFrame, col: str, method: Any) -> pd.Series:
         grouped = df.groupby(self.aggregation_level, dropna=False)
         if isinstance(method, tuple):
             if len(method) != 2 or method[0] != "weighted_mean":
@@ -1180,9 +1191,7 @@ class ProbabilisticMeanBias(BaseScorer):
                 raise ValueError(
                     f"Aggregation weight column '{weight_col}' not found in dataframe columns."
                 )
-            return grouped.apply(
-                lambda g: (g[col] * g[weight_col]).sum() / g[weight_col].sum()
-            )
+            return grouped.apply(lambda g: (g[col] * g[weight_col]).sum() / g[weight_col].sum())
 
         if method == "sum":
             return grouped[col].sum()
@@ -1199,9 +1208,7 @@ class ProbabilisticMeanBias(BaseScorer):
         target_method = self._resolve_aggregation_method("target")
         agg_df = pd.DataFrame(
             {
-                self.pred_column: self._aggregate_pandas_series(
-                    df, self.pred_column, pred_method
-                ),
+                self.pred_column: self._aggregate_pandas_series(df, self.pred_column, pred_method),
                 self.target: self._aggregate_pandas_series(df, self.target, target_method),
                 self.class_column_name: df.groupby(self.aggregation_level, dropna=False)[
                     self.class_column_name
@@ -1223,7 +1230,6 @@ class ProbabilisticMeanBias(BaseScorer):
         sum_lrs = [0 for _ in range(len(distinct_classes_variations))]
         sum_lr = 0
         for variation_idx, distinct_class_variation in enumerate(distinct_classes_variations):
-
             if not isinstance(distinct_class_variation, list) and math.isnan(
                 distinct_class_variation
             ):
@@ -1237,7 +1243,6 @@ class ProbabilisticMeanBias(BaseScorer):
             rows_target_group[last_column_name] = probs.apply(lambda x: x[0])
 
             for idx, class_ in enumerate(distinct_class_variation[1:]):
-
                 prob_under = "prob_under_" + str(class_ + 0.5)
                 rows_target_group[prob_under] = (
                     probs.apply(lambda x, i=idx: x[i + 1]) + rows_target_group[last_column_name]
@@ -1820,5 +1825,5 @@ class ThresholdEventScorer(BaseScorer):
         )
         naive_score = self._score_with_probabilities(df, naive_list)
         if isinstance(score, dict) and isinstance(naive_score, dict):
-            return {k: naive_score[k] - score[k] for k in score.keys()}
+            return {k: naive_score[k] - score[k] for k in score}
         return float(naive_score - score)

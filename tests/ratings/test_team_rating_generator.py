@@ -373,7 +373,7 @@ def test_fit_transform_when_multiple_matches_then_each_match_creates_two_rows(
 
     for i in range(num_matches):
         match_ids.extend([i + 1, i + 1])
-        team_ids.extend([f"team_{i*2+1}", f"team_{i*2+2}"])
+        team_ids.extend([f"team_{i * 2 + 1}", f"team_{i * 2 + 2}"])
         dates.extend([datetime(2024, 1, i + 1), datetime(2024, 1, i + 1)])
         performances.extend([1.0, 0.0])
 
@@ -1046,14 +1046,11 @@ def test_fit_transform_when_confidence_weight_varies_then_new_teams_have_differe
     change_difference = new_team_change - experienced_change
 
     if confidence_weight == 0.0:
-
         assert change_difference > 0
         assert change_difference < 15.0
     elif confidence_weight == 1.0:
-
         assert change_difference >= 10.0
     else:
-
         assert change_difference > 0
         assert change_difference >= 5.0
 
@@ -1146,7 +1143,7 @@ def test_fit_transform_when_team_wins_multiple_matches_then_rating_increases_con
         df = pl.DataFrame(
             {
                 "match_id": [match_num, match_num],
-                "team_id": ["team_a", f"team_{match_num+1}"],
+                "team_id": ["team_a", f"team_{match_num + 1}"],
                 "start_date": [datetime(2024, 1, match_num), datetime(2024, 1, match_num)],
                 "won": [1.0, 0.0],
             }
@@ -2294,9 +2291,9 @@ def test_team_rating_features_out_combinations(
         result.columns.tolist() if hasattr(result.columns, "tolist") else list(result.columns)
     )
     for col in expected_cols:
-        assert (
-            col in result_cols
-        ), f"Expected column '{col}' not found in output. Columns: {result_cols}"
+        assert col in result_cols, (
+            f"Expected column '{col}' not found in output. Columns: {result_cols}"
+        )
 
     # Check that result has data
     assert len(result) > 0
@@ -2382,9 +2379,9 @@ def test_team_rating_only_requested_features_present(column_names, sample_team_d
     ]
     for feature in unwanted_features:
         if feature not in input_cols:
-            assert (
-                feature not in result_cols
-            ), f"Unrequested feature '{feature}' should not be in output"
+            assert feature not in result_cols, (
+                f"Unrequested feature '{feature}' should not be in output"
+            )
 
 
 def test_team_rating_combined_features_out_and_non_predictor(column_names, sample_team_df):

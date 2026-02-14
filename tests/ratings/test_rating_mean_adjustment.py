@@ -27,8 +27,12 @@ def create_matches_df(n_matches: int, base_date: str = "2024-01-01") -> pl.DataF
     rows = []
     for i in range(n_matches):
         date_str = (base + timedelta(days=i)).isoformat()[:10]
-        rows.append({"pid": "P1", "tid": "T1", "mid": f"M{i+1}", "dt": date_str, "perf": 0.6, "pw": 1.0})
-        rows.append({"pid": "P2", "tid": "T2", "mid": f"M{i+1}", "dt": date_str, "perf": 0.4, "pw": 1.0})
+        rows.append(
+            {"pid": "P1", "tid": "T1", "mid": f"M{i + 1}", "dt": date_str, "perf": 0.6, "pw": 1.0}
+        )
+        rows.append(
+            {"pid": "P2", "tid": "T2", "mid": f"M{i + 1}", "dt": date_str, "perf": 0.4, "pw": 1.0}
+        )
     return pl.DataFrame(rows)
 
 
@@ -228,7 +232,7 @@ def test_inactive_players_not_adjusted(base_cn):
     )
 
     # Create matches spread over time
-    base = datetime.fromisoformat("2024-01-01")
+    datetime.fromisoformat("2024-01-01")
     rows = []
 
     # Match 1: P1 vs P2 on day 1
@@ -251,7 +255,7 @@ def test_inactive_players_not_adjusted(base_cn):
     p3_def = gen._player_def_ratings["P3"].rating_value
 
     # P1's mean rating should not be 1000 (they were inactive during adjustment)
-    p1_mean = (p1_off + p1_def) / 2
+    (p1_off + p1_def) / 2
     p3_mean = (p3_off + p3_def) / 2
 
     # P3/P4 were active and should be close to target

@@ -60,7 +60,9 @@ class RollingWindowTransformer(LagGenerator):
             prefix = (
                 "rolling_mean"
                 if aggregation == "mean"
-                else "rolling_sum" if aggregation == "sum" else "rolling_var"
+                else "rolling_sum"
+                if aggregation == "sum"
+                else "rolling_var"
             )
         super().__init__(
             features=features,
@@ -144,7 +146,6 @@ class RollingWindowTransformer(LagGenerator):
         return self._forward_fill_future_features(df=df)
 
     def _generate_features(self, df: IntoFrameT, ori_df: IntoFrameT) -> IntoFrameT:
-
         if self.column_names and self._df is not None:
             sort_col = self.column_names.start_date
             concat_df = self._concat_with_stored(group_df=df, ori_df=ori_df)
@@ -172,7 +173,6 @@ class RollingWindowTransformer(LagGenerator):
             ),
         }
         if self.scale_by_participation_weight:
-
             concat_df = concat_df.with_columns(
                 (nw.col(feature) * nw.col(self.column_names.participation_weight)).alias(
                     f"__scaled_{feature}"
@@ -269,26 +269,29 @@ class RollingWindowTransformer(LagGenerator):
                     concat_df = concat_df.with_columns(
                         [
                             nw.col(date_col).shift(lag).over(self.granularity).alias(lag_date_col),
-                            nw.col(feature).shift(lag).over(self.granularity).alias(lag_feature_col),
+                            nw.col(feature)
+                            .shift(lag)
+                            .over(self.granularity)
+                            .alias(lag_feature_col),
                         ]
                     )
 
                 within_max_days = (
                     (
-                        (
-                            nw.col(date_col).cast(nw.Date) - nw.col(lag_date_col).cast(nw.Date)
-                        ).dt.total_minutes()
-                        / days_diff_divisor
-                    )
-                    <= self.max_days
-                )
+                        nw.col(date_col).cast(nw.Date) - nw.col(lag_date_col).cast(nw.Date)
+                    ).dt.total_minutes()
+                    / days_diff_divisor
+                ) <= self.max_days
 
                 concat_df = concat_df.with_columns(
-                    nw.when(within_max_days).then(nw.col(lag_feature_col)).otherwise(nw.lit(None)).alias(
-                        lag_feature_col
-                    )
+                    nw.when(within_max_days)
+                    .then(nw.col(lag_feature_col))
+                    .otherwise(nw.lit(None))
+                    .alias(lag_feature_col)
                 )
-                count_expr = count_expr + nw.when(nw.col(lag_feature_col).is_null()).then(0).otherwise(1)
+                count_expr = count_expr + nw.when(nw.col(lag_feature_col).is_null()).then(
+                    0
+                ).otherwise(1)
 
                 if self.scale_by_participation_weight:
                     concat_df = concat_df.with_columns(
@@ -303,16 +306,20 @@ class RollingWindowTransformer(LagGenerator):
                     sum_expr = sum_expr + nw.col(lag_feature_col).fill_null(0.0)
 
             if self.scale_by_participation_weight:
-                value_expr = nw.when(
-                    (count_expr >= self.min_periods) & (weight_sum_expr > 0.0)
-                ).then(sum_expr / weight_sum_expr).otherwise(nw.lit(None))
+                value_expr = (
+                    nw.when((count_expr >= self.min_periods) & (weight_sum_expr > 0.0))
+                    .then(sum_expr / weight_sum_expr)
+                    .otherwise(nw.lit(None))
+                )
             elif self.aggregation == "sum":
-                value_expr = nw.when(count_expr >= self.min_periods).then(sum_expr).otherwise(
-                    nw.lit(None)
+                value_expr = (
+                    nw.when(count_expr >= self.min_periods).then(sum_expr).otherwise(nw.lit(None))
                 )
             else:
-                value_expr = nw.when(count_expr >= self.min_periods).then(sum_expr / count_expr).otherwise(
-                    nw.lit(None)
+                value_expr = (
+                    nw.when(count_expr >= self.min_periods)
+                    .then(sum_expr / count_expr)
+                    .otherwise(nw.lit(None))
                 )
 
             concat_df = concat_df.with_columns(

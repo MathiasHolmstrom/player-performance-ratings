@@ -10,7 +10,6 @@ from spforge.scorer import BaseScorer
 
 
 class CrossValidator(ABC):
-
     def __init__(
         self,
         scorer: BaseScorer | None,
@@ -32,6 +31,7 @@ class CrossValidator(ABC):
         return_features: bool = False,
         add_train_prediction: bool = False,
     ) -> IntoFrameT:
+        _ = return_features, add_train_prediction
         pass
 
     def cross_validation_score(

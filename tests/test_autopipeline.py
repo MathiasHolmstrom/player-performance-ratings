@@ -581,8 +581,10 @@ def test_final_sklearn_enhancer_estimator_gets_expected_feature_columns(frame):
 
     fitted_final = _find_fitted(
         sk,
-        lambda o: isinstance(o, EstimatorTransformer)
-        and getattr(o, "prediction_column_name", None) == "points_estimate",
+        lambda o: (
+            isinstance(o, EstimatorTransformer)
+            and getattr(o, "prediction_column_name", None) == "points_estimate"
+        ),
     )
 
     expected_cols = ["num1", "num2", "location", "points_estimate_raw"] + list(
@@ -773,7 +775,14 @@ def test_feature_importances__with_sklearn_enhancer():
         {
             "num1": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
             "num2": [10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
-            "start_date": ["2022-01-01", "2022-01-02", "2022-01-03", "2022-01-04", "2022-01-05", "2022-01-06"],
+            "start_date": [
+                "2022-01-01",
+                "2022-01-02",
+                "2022-01-03",
+                "2022-01-04",
+                "2022-01-05",
+                "2022-01-06",
+            ],
         }
     )
     y = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], name="y")
@@ -908,10 +917,7 @@ def test_granularity_aggregation_weight__weighted_mean_correct(frame):
     reducer = GroupByReducer(granularity=["gameid"], aggregation_weight="weight")
     transformed = reducer.fit_transform(df)
 
-    if frame == "pl":
-        num1_val = transformed["num1"].item(0)
-    else:
-        num1_val = transformed["num1"].iloc[0]
+    num1_val = transformed["num1"].item(0) if frame == "pl" else transformed["num1"].iloc[0]
 
     expected = (10.0 * 0.25 + 30.0 * 0.75) / (0.25 + 0.75)
     assert abs(num1_val - expected) < 1e-6
@@ -974,10 +980,7 @@ def test_aggregation_weight_sums_weight_column(frame):
     reducer = GroupByReducer(granularity=["gameid"], aggregation_weight="weight")
     transformed = reducer.fit_transform(df)
 
-    if frame == "pl":
-        weight_val = transformed["weight"].item(0)
-    else:
-        weight_val = transformed["weight"].iloc[0]
+    weight_val = transformed["weight"].item(0) if frame == "pl" else transformed["weight"].iloc[0]
 
     expected = 0.25 + 0.75
     assert abs(weight_val - expected) < 1e-6

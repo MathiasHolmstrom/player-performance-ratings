@@ -13,7 +13,6 @@ from spforge.feature_generator._utils import (
 
 
 class BinaryOutcomeRollingMeanTransformer(LagGenerator):
-
     def __init__(
         self,
         features: list[str],
@@ -81,7 +80,6 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
     @required_lag_column_names
     @transformation_validator
     def fit_transform(self, df: IntoFrameT, column_names: ColumnNames | None = None) -> IntoFrameT:
-
         if df.schema[self.binary_column] in [nw.Float64, nw.Float32]:
             df = df.with_columns(nw.col(self.binary_column).cast(nw.Int64))
 
@@ -116,7 +114,6 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
     @future_validator
     @transformation_validator
     def future_transform(self, df: IntoFrameT) -> IntoFrameT:
-
         if self.binary_column in df.columns and df.schema[self.binary_column] in [
             nw.Float64,
             nw.Float32,
@@ -245,10 +242,8 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
         )
 
     def _add_weighted_prob(self, transformed_df: IntoFrameT) -> IntoFrameT:
-
         if self.prob_column:
             for _idx, feature_name in enumerate(self.features):
-
                 transformed_df = transformed_df.with_columns(
                     (
                         nw.col(f"{self.prefix}_{feature_name}{self.window}_1")

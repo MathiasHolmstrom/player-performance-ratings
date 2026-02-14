@@ -24,6 +24,7 @@ from spforge.data_structures import (
     PreMatchPlayersCollection,
     PreMatchTeamRating,
 )
+from spforge.feature_generator._utils import to_polars
 from spforge.performance_transformers._performance_manager import ColumnWeight, PerformanceManager
 from spforge.ratings._base import RatingGenerator, RatingKnownFeatures, RatingUnknownFeatures
 from spforge.ratings.start_rating_generator import StartRatingGenerator
@@ -35,7 +36,6 @@ from spforge.ratings.utils import (
     add_team_rating,
     add_team_rating_projected,
 )
-from spforge.feature_generator._utils import to_polars
 
 PLAYER_STATS = "__PLAYER_STATS"
 _SCALED_PW = "__scaled_participation_weight__"
@@ -183,7 +183,7 @@ class PlayerRatingGenerator(RatingGenerator):
         self.start_min_match_count_team_rating = start_min_match_count_team_rating
         self.start_hardcoded_start_rating = start_harcoded_start_rating
 
-        if hasattr(self._performance_predictor, '_reference_rating'):
+        if hasattr(self._performance_predictor, "_reference_rating"):
             effective_start = self.start_hardcoded_start_rating
 
             if effective_start is None and self.start_league_ratings:
@@ -255,7 +255,8 @@ class PlayerRatingGenerator(RatingGenerator):
         if defense_performance_manager:
             if (
                 self.defense_performance_column
-                and self.defense_performance_column != defense_performance_manager.performance_column
+                and self.defense_performance_column
+                != defense_performance_manager.performance_column
             ):
                 defense_performance_manager.performance_column = self.defense_performance_column
             elif not self.defense_performance_column:
@@ -275,7 +276,10 @@ class PlayerRatingGenerator(RatingGenerator):
                         wd["name"] = wd.pop("col")
                     converted.append(ColumnWeight(**wd))
                 weights = converted
-            from spforge.performance_transformers._performance_manager import PerformanceWeightsManager
+            from spforge.performance_transformers._performance_manager import (
+                PerformanceWeightsManager,
+            )
+
             return PerformanceWeightsManager(
                 weights=weights,
                 performance_column=self.defense_performance_column,
@@ -494,9 +498,13 @@ class PlayerRatingGenerator(RatingGenerator):
             if q_val is not None:
                 self._projected_defense_participation_weight_max = float(q_val)
         elif self._defense_participation_weight_max is not None:
-            self._projected_defense_participation_weight_max = self._defense_participation_weight_max
+            self._projected_defense_participation_weight_max = (
+                self._defense_participation_weight_max
+            )
         elif self._projected_participation_weight_max is not None:
-            self._projected_defense_participation_weight_max = self._projected_participation_weight_max
+            self._projected_defense_participation_weight_max = (
+                self._projected_participation_weight_max
+            )
 
     def _scale_participation_weight_columns(self, df: pl.DataFrame) -> pl.DataFrame:
         """Create internal scaled participation weight columns without mutating originals."""
@@ -512,9 +520,7 @@ class PlayerRatingGenerator(RatingGenerator):
         if cn.participation_weight and cn.participation_weight in df.columns:
             denom = float(self._participation_weight_max)
             df = df.with_columns(
-                (pl.col(cn.participation_weight) / denom)
-                .clip(0.0, 1.0)
-                .alias(_SCALED_PW)
+                (pl.col(cn.participation_weight) / denom).clip(0.0, 1.0).alias(_SCALED_PW)
             )
 
         if (
@@ -538,9 +544,7 @@ class PlayerRatingGenerator(RatingGenerator):
         ):
             denom = float(self._defense_participation_weight_max)
             df = df.with_columns(
-                (pl.col(cn.defense_participation_weight) / denom)
-                .clip(0.0, 1.0)
-                .alias(_SCALED_DPW)
+                (pl.col(cn.defense_participation_weight) / denom).clip(0.0, 1.0).alias(_SCALED_DPW)
             )
 
         if (
@@ -656,9 +660,7 @@ class PlayerRatingGenerator(RatingGenerator):
         result = self._add_rating_features(df_with_ratings)
         return self._remove_internal_scaled_columns(result)
 
-    def _team_individual_def_mean(
-        self, collection: PreMatchPlayersCollection
-    ) -> float | None:
+    def _team_individual_def_mean(self, collection: PreMatchPlayersCollection) -> float | None:
         """Weighted mean of individual defense stats for players in a team."""
         wsum = 0.0
         psum = 0.0
@@ -716,12 +718,8 @@ class PlayerRatingGenerator(RatingGenerator):
             team2_def_perf: float | None = None
 
             if self.use_off_def_split:
-                team1_def_perf = (
-                    1.0 - team2_off_perf if team2_off_perf is not None else None
-                )
-                team2_def_perf = (
-                    1.0 - team1_off_perf if team1_off_perf is not None else None
-                )
+                team1_def_perf = 1.0 - team2_off_perf if team2_off_perf is not None else None
+                team2_def_perf = 1.0 - team1_off_perf if team1_off_perf is not None else None
             else:
                 team1_def_perf = team1_off_perf
                 team2_def_perf = team2_off_perf
@@ -799,7 +797,9 @@ class PlayerRatingGenerator(RatingGenerator):
                     def_change = 0.0
                 else:
                     def_weight = pre_player.match_performance.defense_participation_weight
-                    def_weight_is_valid = def_weight is not None and math.isfinite(float(def_weight))
+                    def_weight_is_valid = def_weight is not None and math.isfinite(
+                        float(def_weight)
+                    )
                     if not def_weight_is_valid:
                         def_change = 0.0
                     else:
@@ -819,11 +819,7 @@ class PlayerRatingGenerator(RatingGenerator):
                             def_perf = float(perf_value)
 
                         mult_def = self._applied_multiplier_def(def_state)
-                        def_change = (
-                            (def_perf - float(pred_def))
-                            * mult_def
-                            * float(def_weight)
-                        )
+                        def_change = (def_perf - float(pred_def)) * mult_def * float(def_weight)
 
                 if math.isnan(off_change) or math.isnan(def_change):
                     raise ValueError(
@@ -908,7 +904,9 @@ class PlayerRatingGenerator(RatingGenerator):
                     def_change = 0.0
                 else:
                     def_weight = pre_player.match_performance.defense_participation_weight
-                    def_weight_is_valid = def_weight is not None and math.isfinite(float(def_weight))
+                    def_weight_is_valid = def_weight is not None and math.isfinite(
+                        float(def_weight)
+                    )
                     if not def_weight_is_valid:
                         def_change = 0.0
                     else:
@@ -928,11 +926,7 @@ class PlayerRatingGenerator(RatingGenerator):
                             def_perf = float(perf_value)
 
                         mult_def = self._applied_multiplier_def(def_state)
-                        def_change = (
-                            (def_perf - float(pred_def))
-                            * mult_def
-                            * float(def_weight)
-                        )
+                        def_change = (def_perf - float(pred_def)) * mult_def * float(def_weight)
 
                 if math.isnan(off_change) or math.isnan(def_change):
                     raise ValueError(
@@ -1006,7 +1000,6 @@ class PlayerRatingGenerator(RatingGenerator):
     def _apply_player_updates(
         self, updates: list[tuple[str, str, float, float, float, int, str | None]]
     ) -> None:
-
         for player_id, team_id, pre_rating, off_change, def_change, day_number, league in updates:
             off_state = self._player_off_ratings[player_id]
             off_state.confidence_sum = self._calculate_post_match_confidence_sum(
@@ -1245,22 +1238,13 @@ class PlayerRatingGenerator(RatingGenerator):
         if cn.league and cn.league in df.columns:
             player_stat_cols.append(cn.league)
 
-        if (
-            cn.team_players_playing_time
-            and cn.team_players_playing_time in df.columns
-        ):
+        if cn.team_players_playing_time and cn.team_players_playing_time in df.columns:
             player_stat_cols.append(cn.team_players_playing_time)
 
-        if (
-            cn.opponent_players_playing_time
-            and cn.opponent_players_playing_time in df.columns
-        ):
+        if cn.opponent_players_playing_time and cn.opponent_players_playing_time in df.columns:
             player_stat_cols.append(cn.opponent_players_playing_time)
 
-        if (
-            self.defense_performance_column
-            and self.defense_performance_column in df.columns
-        ):
+        if self.defense_performance_column and self.defense_performance_column in df.columns:
             player_stat_cols.append(self.defense_performance_column)
 
         df = df.with_columns(pl.struct(player_stat_cols).alias(PLAYER_STATS))
@@ -1313,9 +1297,7 @@ class PlayerRatingGenerator(RatingGenerator):
             try:
                 raw_value = json.loads(raw_value)
             except json.JSONDecodeError as exc:
-                raise ValueError(
-                    f"unable to parse playing time JSON {raw_text!r}: {exc}"
-                ) from exc
+                raise ValueError(f"unable to parse playing time JSON {raw_text!r}: {exc}") from exc
 
         if isinstance(raw_value, Mapping):
             normalized: dict[str, float] = {}
@@ -1531,9 +1513,7 @@ class PlayerRatingGenerator(RatingGenerator):
 
         return pre_match_player_ratings, pre_match_def_player_ratings, pre_match_player_off_values
 
-    def _team_off_perf_from_collection(
-        self, c: PreMatchPlayersCollection
-    ) -> float | None:
+    def _team_off_perf_from_collection(self, c: PreMatchPlayersCollection) -> float | None:
         # observed offense perf = weighted mean of player performance_value using participation_weight if present
         # skip players with null/non-finite performance
         cn = self.column_names
@@ -1569,11 +1549,15 @@ class PlayerRatingGenerator(RatingGenerator):
             for pid in c.player_ids
             if pid in self._player_off_ratings
         ]
-        def_vals = off_vals if not self.use_off_def_split else [
-            float(self._player_def_ratings[pid].rating_value)
-            for pid in c.player_ids
-            if pid in self._player_def_ratings
-        ]
+        def_vals = (
+            off_vals
+            if not self.use_off_def_split
+            else [
+                float(self._player_def_ratings[pid].rating_value)
+                for pid in c.player_ids
+                if pid in self._player_def_ratings
+            ]
+        )
         if not off_vals or not def_vals:
             return 0.0, 0.0
 
@@ -1657,7 +1641,14 @@ class PlayerRatingGenerator(RatingGenerator):
 
             def build_local_team(
                 stats_col: str,
-            ) -> tuple[list[PreMatchPlayerRating], list[PreMatchPlayerRating], list[str], list[float], list[float], float]:
+            ) -> tuple[
+                list[PreMatchPlayerRating],
+                list[PreMatchPlayerRating],
+                list[str],
+                list[float],
+                list[float],
+                float,
+            ]:
                 pre_list: list[PreMatchPlayerRating] = []
                 def_pre_list: list[PreMatchPlayerRating] = []
                 player_ids: list[str] = []
@@ -1765,7 +1756,9 @@ class PlayerRatingGenerator(RatingGenerator):
                 team_off_perf = psum / wsum if wsum else 0.0
                 return pre_list, def_pre_list, player_ids, off_vals, proj_w, team_off_perf
 
-            t1_pre, t1_def_pre, t1_ids, t1_off_vals, t1_proj_w, t1_off_perf = build_local_team(PLAYER_STATS)
+            t1_pre, t1_def_pre, t1_ids, t1_off_vals, t1_proj_w, t1_off_perf = build_local_team(
+                PLAYER_STATS
+            )
             t2_pre, t2_def_pre, t2_ids, t2_off_vals, t2_proj_w, t2_off_perf = build_local_team(
                 f"{PLAYER_STATS}_opponent"
             )
@@ -1789,7 +1782,9 @@ class PlayerRatingGenerator(RatingGenerator):
             for pre in t1_pre:
                 pid = pre.id
                 off_pre = float(local_off[pid].rating_value)
-                def_pre = off_pre if not self.use_off_def_split else float(local_def[pid].rating_value)
+                def_pre = (
+                    off_pre if not self.use_off_def_split else float(local_def[pid].rating_value)
+                )
 
                 pred_off = self._performance_predictor.predict_performance(
                     player_rating=pre,
@@ -1834,7 +1829,9 @@ class PlayerRatingGenerator(RatingGenerator):
             for pre in t2_pre:
                 pid = pre.id
                 off_pre = float(local_off[pid].rating_value)
-                def_pre = off_pre if not self.use_off_def_split else float(local_def[pid].rating_value)
+                def_pre = (
+                    off_pre if not self.use_off_def_split else float(local_def[pid].rating_value)
+                )
 
                 pred_off = self._performance_predictor.predict_performance(
                     player_rating=pre,

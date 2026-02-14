@@ -630,7 +630,6 @@ def test_rolling_mean_transform_future_granularity_differs_from_input_granularit
 
 @pytest.mark.parametrize("use_column_names", [True, False])
 def test_rolling_mean_historical_transform_higher_granularity(column_names, use_column_names: bool):
-
     data = pd.DataFrame(
         {
             column_names.start_date: [
@@ -810,9 +809,7 @@ def test_rolling_window__max_days_excludes_older_observations_historical(column_
             column_names.player_id: ["a", "a", "a"],
             column_names.match_id: [1, 2, 3],
             "points": [1.0, 2.0, 3.0],
-            column_names.start_date: pd.to_datetime(
-                ["2023-01-01", "2023-01-05", "2023-02-20"]
-            ),
+            column_names.start_date: pd.to_datetime(["2023-01-01", "2023-01-05", "2023-02-20"]),
             column_names.team_id: [1, 1, 1],
         }
     )
@@ -838,9 +835,7 @@ def test_rolling_window__max_days_excludes_older_observations_future(column_name
             column_names.player_id: ["a", "a", "a"],
             column_names.match_id: [1, 2, 3],
             "points": [1.0, 2.0, 3.0],
-            column_names.start_date: pd.to_datetime(
-                ["2023-01-01", "2023-01-05", "2023-02-20"]
-            ),
+            column_names.start_date: pd.to_datetime(["2023-01-01", "2023-01-05", "2023-02-20"]),
             column_names.team_id: [1, 1, 1],
         }
     )

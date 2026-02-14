@@ -1,7 +1,9 @@
 from ._player_rating import PlayerRatingGenerator as PlayerRatingGenerator
 from ._team_rating import TeamRatingGenerator as TeamRatingGenerator
-from .calibration import calibrate_reference_rating as calibrate_reference_rating
-from .calibration import sigmoid as sigmoid
+from .calibration import (
+    calibrate_reference_rating as calibrate_reference_rating,
+    sigmoid as sigmoid,
+)
 from .enums import (
     PredictedRatingMethod as PredictedRatingMethod,
     RatingKnownFeatures as RatingKnownFeatures,

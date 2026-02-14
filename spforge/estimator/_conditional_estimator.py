@@ -7,7 +7,6 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 
 
 class ConditionalEstimator(BaseEstimator, ClassifierMixin):
-
     def __init__(
         self,
         gate_estimator: Any,
@@ -99,7 +98,7 @@ class ConditionalEstimator(BaseEstimator, ClassifierMixin):
             out = np.zeros((n, C), dtype=float)
             class_to_idx = {int(c): j for j, c in enumerate(classes)}
             min_class = int(classes[0])
-            max_class = int(classes[-1])
+            int(classes[-1])
 
             for i in range(n):
                 gd = int(gate_distance[i])

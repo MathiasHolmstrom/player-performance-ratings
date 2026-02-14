@@ -63,7 +63,6 @@ def test_team_lag_transform_historical_group_to_team_granularity(
 
         df_with_lags = lag_transformation.fit_transform(data, column_names=column_names)
     else:
-
         lag_transformation = LagTransformer(
             features=["points"],
             lag_length=1,

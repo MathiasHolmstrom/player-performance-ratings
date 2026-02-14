@@ -1,0 +1,23 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.1
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: vulture-dead-code
+        name: vulture dead code
+        entry: vulture --min-confidence 90
+        language: python
+        additional_dependencies: [vulture==2.11]
+        types: [python]
+
+      - id: unit-tests-pre-push
+        name: unit tests (pre-push)
+        entry: uv run pytest -q tests --ignore=tests/end_to_end
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

@@ -742,7 +742,6 @@ def test_mean_bias_scorer_probabilities_use_expected_value(df_type):
     )
     scorer = MeanBiasScorer(pred_column="pred", target="target")
     score = scorer.score(df)
-    expected_preds = [0.8, 0.1]
     expected = ((0.8 - 1.0) + (0.1 - 0.0)) / 2
     assert abs(score - expected) < 1e-10
 
@@ -762,7 +761,6 @@ def test_mean_bias_scorer_probabilities_with_custom_labels(df_type):
     # Expected values: [-2, -1, 0, 1]
     # First pred: 0.1*(-2) + 0.2*(-1) + 0.4*(0) + 0.3*(1) = -0.2 - 0.2 + 0.3 = -0.1
     # Second pred: 0.3*(-2) + 0.4*(-1) + 0.2*(0) + 0.1*(1) = -0.6 - 0.4 + 0.1 = -0.9
-    expected_preds = [-0.1, -0.9]
     expected = ((-0.1 - (-2.0)) + (-0.9 - 0.0)) / 2  # (1.9 - 0.9) / 2 = 0.5
     assert abs(score - expected) < 1e-10
 
@@ -1279,7 +1277,9 @@ def test_ordinal_loss_scorer_consecutive_classes_validation(df_type):
     """OrdinalLossScorer validates classes are consecutive"""
     df = create_dataframe(df_type, {"pred": [[0.1, 0.6, 0.3], [0.5, 0.3, 0.2]], "target": [1, 0]})
     scorer = OrdinalLossScorer(
-        pred_column="pred", target="target", classes=[0, 2, 3]  # Not consecutive
+        pred_column="pred",
+        target="target",
+        classes=[0, 2, 3],  # Not consecutive
     )
     with pytest.raises(ValueError, match="classes must be consecutive integers"):
         scorer.score(df)
@@ -1318,7 +1318,9 @@ def test_ordinal_loss_scorer_list_length_validation(df_type):
     """OrdinalLossScorer validates List length matches classes length"""
     df = create_dataframe(df_type, {"pred": [[0.1, 0.6], [0.5, 0.3]], "target": [1, 0]})  # Length 2
     scorer = OrdinalLossScorer(
-        pred_column="pred", target="target", classes=[0, 1, 2]  # 3 classes, but list length is 2
+        pred_column="pred",
+        target="target",
+        classes=[0, 1, 2],  # 3 classes, but list length is 2
     )
     with pytest.raises(ValueError, match="List length.*does not match"):
         scorer.score(df)
@@ -1390,7 +1392,8 @@ def test_ordinal_loss_scorer_with_validation_column(df_type):
 def test_ordinal_loss_scorer_empty_after_filters(df_type):
     """OrdinalLossScorer returns 0.0 when no valid targets"""
     df = create_dataframe(
-        df_type, {"pred": [[0.1, 0.6, 0.3]], "target": [5]}  # Target >= max class
+        df_type,
+        {"pred": [[0.1, 0.6, 0.3]], "target": [5]},  # Target >= max class
     )
     scorer = OrdinalLossScorer(pred_column="pred", target="target", classes=[0, 1, 2])
     score = scorer.score(df)
@@ -1716,6 +1719,7 @@ def test_threshold_event_score_compare_to_naive_granularity():
     expected = baseline.score(naive_df) - baseline.score(df)
     assert abs(score - expected) < 1e-10
 
+
 # ============================================================================
 # NaN Handling Tests for All Scorers
 # ============================================================================
@@ -1893,7 +1897,6 @@ def test_mean_bias_scorer__accepts_ndarray_predictions(df_type):
     )
     scorer = MeanBiasScorer(pred_column="pred", target="target")
     score = scorer.score(df)
-    expected_preds = [0.8, 0.1]
     expected = ((0.8 - 1.0) + (0.1 - 0.0)) / 2
     assert abs(score - expected) < 1e-10
 
@@ -1942,7 +1945,11 @@ def test_sklearn_scorer__accepts_ndarray_predictions(df_type):
     df = create_dataframe(
         df_type,
         {
-            "pred": [np.array([0.1, 0.6, 0.3]), np.array([0.5, 0.3, 0.2]), np.array([0.2, 0.3, 0.5])],
+            "pred": [
+                np.array([0.1, 0.6, 0.3]),
+                np.array([0.5, 0.3, 0.2]),
+                np.array([0.2, 0.3, 0.5]),
+            ],
             "target": [1, 0, 2],
         },
     )
@@ -2148,9 +2155,13 @@ def test_all_scorers_handle_all_nan_targets(df_type):
         assert np.isnan(score) or score == 0.0
     except (ValueError, IndexError):
         pass
+
+
 SCORER_VALIDATION_CASES = [
     pytest.param(
-        lambda: MeanBiasScorer(pred_column="pred", target="target", validation_column="is_validation"),
+        lambda: MeanBiasScorer(
+            pred_column="pred", target="target", validation_column="is_validation"
+        ),
         lambda: pd.DataFrame(
             {
                 "pred": [2.0, 0.0],
@@ -2161,7 +2172,9 @@ SCORER_VALIDATION_CASES = [
         id="mean_bias",
     ),
     pytest.param(
-        lambda: PWMSE(pred_column="pred", target="target", labels=[0, 1], validation_column="is_validation"),
+        lambda: PWMSE(
+            pred_column="pred", target="target", labels=[0, 1], validation_column="is_validation"
+        ),
         lambda: pd.DataFrame(
             {
                 "pred": [[0.7, 0.3], [0.4, 0.6]],
@@ -2173,7 +2186,10 @@ SCORER_VALIDATION_CASES = [
     ),
     pytest.param(
         lambda: SklearnScorer(
-            scorer_function=mean_absolute_error, pred_column="pred", target="target", validation_column="is_validation"
+            scorer_function=mean_absolute_error,
+            pred_column="pred",
+            target="target",
+            validation_column="is_validation",
         ),
         lambda: pd.DataFrame(
             {
@@ -2186,7 +2202,10 @@ SCORER_VALIDATION_CASES = [
     ),
     pytest.param(
         lambda: ProbabilisticMeanBias(
-            pred_column="pred", target="target", class_column_name="classes", validation_column="is_validation"
+            pred_column="pred",
+            target="target",
+            class_column_name="classes",
+            validation_column="is_validation",
         ),
         lambda: pd.DataFrame(
             {
@@ -2199,7 +2218,9 @@ SCORER_VALIDATION_CASES = [
         id="probabilistic_mean_bias",
     ),
     pytest.param(
-        lambda: OrdinalLossScorer(pred_column="pred", target="target", classes=[0, 1], validation_column="is_validation"),
+        lambda: OrdinalLossScorer(
+            pred_column="pred", target="target", classes=[0, 1], validation_column="is_validation"
+        ),
         lambda: pd.DataFrame(
             {
                 "pred": [[0.2, 0.8], [0.6, 0.4]],
@@ -2356,12 +2377,14 @@ def test_pwmse__evaluation_labels_extends_with_compare_to_naive(df_type):
 
     n_eval_labels = 5
     eps = 1e-5
-    preds_original = np.array([
-        [0.8, 0.15, 0.05],
-        [0.1, 0.7, 0.2],
-        [0.05, 0.15, 0.8],
-        [0.3, 0.4, 0.3],
-    ])
+    preds_original = np.array(
+        [
+            [0.8, 0.15, 0.05],
+            [0.1, 0.7, 0.2],
+            [0.05, 0.15, 0.8],
+            [0.3, 0.4, 0.3],
+        ]
+    )
     extended = np.full((4, n_eval_labels), eps, dtype=np.float64)
     extended[:, 1] = preds_original[:, 0]
     extended[:, 2] = preds_original[:, 1]

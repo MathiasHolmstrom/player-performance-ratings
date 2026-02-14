@@ -229,11 +229,9 @@ def test_deep_copy_isolation__trials_independent(
         show_progress_bar=False,
     )
 
-    result = tuner.optimize(sample_player_df_pd)
+    tuner.optimize(sample_player_df_pd)
 
-    assert len(player_rating_generator._player_off_ratings) == len(
-        original_gen._player_off_ratings
-    )
+    assert len(player_rating_generator._player_off_ratings) == len(original_gen._player_off_ratings)
 
 
 def test_param_spec__suggests_float_correctly():
@@ -344,9 +342,7 @@ def test_invalid_direction__raises_error(player_rating_generator, cross_validato
         )
 
 
-def test_storage_without_study_name__raises_error(
-    player_rating_generator, cross_validator, scorer
-):
+def test_storage_without_study_name__raises_error(player_rating_generator, cross_validator, scorer):
     """Test that using storage without study_name raises ValueError."""
     with pytest.raises(ValueError, match="study_name is required"):
         RatingHyperparameterTuner(
