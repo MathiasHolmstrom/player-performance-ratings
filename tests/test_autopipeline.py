@@ -447,6 +447,34 @@ class CaptureFitEstimator(BaseEstimator):
         return np.zeros(n)
 
 
+class CaptureSampleWeightEstimator(BaseEstimator):
+    def __init__(self, has_proba: bool = False):
+        self.has_proba = has_proba
+        self.fit_columns = None
+        self.predict_columns = None
+        self.received_sample_weight = None
+        self.classes_ = np.array([0, 1]) if has_proba else None
+
+    def fit(self, X, y, sample_weight=None):
+        self.fit_columns = list(X.columns) if hasattr(X, "columns") else None
+        if sample_weight is None:
+            self.received_sample_weight = None
+        else:
+            self.received_sample_weight = np.asarray(sample_weight, dtype=np.float64)
+        return self
+
+    def predict(self, X):
+        self.predict_columns = list(X.columns) if hasattr(X, "columns") else None
+        return np.zeros(len(X))
+
+    def predict_proba(self, X):
+        self.predict_columns = list(X.columns) if hasattr(X, "columns") else None
+        out = np.zeros((len(X), 2), dtype=float)
+        out[:, 0] = 0.4
+        out[:, 1] = 0.6
+        return out
+
+
 class AddConstantPredictionTransformer(BaseEstimator):
     def __init__(self, col_name: str):
         self.col_name = col_name
@@ -584,6 +612,78 @@ def test_autopipeline_is_picklable_after_fit():
     model.fit(df, y)
 
     pickle.dumps(model)
+
+
+def test_required_features_includes_sample_weight_column():
+    model = AutoPipeline(
+        estimator=CaptureEstimator(),
+        estimator_features=["x"],
+        sample_weight_column="sw",
+    )
+
+    assert "sw" in model.required_features
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_fit_uses_sample_weight_column_and_aligns_after_preprocess(frame):
+    df_pd = pd.DataFrame(
+        {
+            "x": [1.0, 2.0, 3.0, 4.0],
+            "keep": [1, 0, 1, 1],
+            "sw": [0.5, 10.0, 1.5, 2.0],
+            "y": [1.0, 2.0, np.nan, 4.0],
+        }
+    )
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
+
+    estimator = CaptureSampleWeightEstimator()
+    model = AutoPipeline(
+        estimator=estimator,
+        estimator_features=["x"],
+        sample_weight_column="sw",
+        filters=[Filter(column_name="keep", value=1, operator=Operator.EQUALS)],
+        drop_rows_where_target_is_nan=True,
+    )
+
+    X = _select(df, ["x", "keep", "sw"])
+    y = _col(df, "y")
+    model.fit(X, y=y)
+
+    assert estimator.received_sample_weight is not None
+    np.testing.assert_allclose(estimator.received_sample_weight, np.array([0.5, 2.0]))
+    assert estimator.fit_columns is not None
+    assert "sw" not in estimator.fit_columns
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_predict_and_predict_proba_ignore_sample_weight_column(frame):
+    df_pd = pd.DataFrame(
+        {
+            "x": [1.0, 2.0, 3.0, 4.0],
+            "sw": [1.0, 2.0, 3.0, 4.0],
+            "y": [0, 1, 0, 1],
+        }
+    )
+    df = df_pd if frame == "pd" else pl.from_pandas(df_pd)
+
+    estimator = CaptureSampleWeightEstimator(has_proba=True)
+    model = AutoPipeline(
+        estimator=estimator,
+        estimator_features=["x"],
+        sample_weight_column="sw",
+    )
+
+    X = _select(df, ["x", "sw"])
+    y = _col(df, "y")
+    model.fit(X, y=y)
+
+    preds = model.predict(X)
+    proba = model.predict_proba(X)
+
+    assert preds.shape == (_height(df),)
+    assert proba.shape == (_height(df), 2)
+    assert estimator.predict_columns is not None
+    assert "sw" not in estimator.predict_columns
 
 
 # --- Feature Importances Tests ---
