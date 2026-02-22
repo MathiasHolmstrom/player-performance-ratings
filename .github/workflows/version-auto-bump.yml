@@ -75,12 +75,37 @@ jobs:
           PR_VERSION="${{ steps.versions.outputs.pr_version }}"
           NEXT_VERSION="${{ steps.next-version.outputs.next_version }}"
 
-          if [ "$PR_VERSION" != "$NEXT_VERSION" ]; then
+          version_compare() {
+            # Returns: -1 if $1 < $2, 0 if equal, 1 if $1 > $2
+            local IFS=.
+            local i
+            local v1=($1)
+            local v2=($2)
+            for ((i=${#v1[@]}; i<3; i++)); do v1[i]=0; done
+            for ((i=${#v2[@]}; i<3; i++)); do v2[i]=0; done
+            for i in 0 1 2; do
+              if ((10#${v1[i]} < 10#${v2[i]})); then
+                echo -1
+                return
+              fi
+              if ((10#${v1[i]} > 10#${v2[i]})); then
+                echo 1
+                return
+              fi
+            done
+            echo 0
+          }
+
+          COMP_RESULT=$(version_compare "$PR_VERSION" "$NEXT_VERSION")
+          if [ "$COMP_RESULT" = "-1" ]; then
             echo "needs_update=true" >> $GITHUB_OUTPUT
             echo "Version needs updating: $PR_VERSION → $NEXT_VERSION"
-          else
+          elif [ "$COMP_RESULT" = "0" ]; then
             echo "needs_update=false" >> $GITHUB_OUTPUT
             echo "Version is already correct: $NEXT_VERSION"
+          else
+            echo "needs_update=false" >> $GITHUB_OUTPUT
+            echo "Skipping auto-bump: PR version ($PR_VERSION) is ahead of expected ($NEXT_VERSION)."
           fi
 
       - name: Update version in pyproject.toml
