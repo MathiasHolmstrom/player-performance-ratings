@@ -155,30 +155,7 @@ class RollingWindowTransformer(LagGenerator):
         )
 
         joined_df = df.join(state_df, on=self.granularity, how="left")
-
-        if self.scale_by_participation_weight:
-            weight_sum_col = self._state_weight_sum_column_name()
-            joined_df = joined_df.with_columns(
-                [
-                    nw.when(nw.col(weight_sum_col) > 0.0)
-                    .then(
-                        nw.col(self._state_scaled_sum_column_name(feature)) / nw.col(weight_sum_col)
-                    )
-                    .otherwise(nw.lit(None))
-                    .alias(f"{self.prefix}_{feature}{self.window}")
-                    for feature in self.features
-                ]
-            )
-
-        state_auxiliary_cols = [state_marker_col]
-        if self.scale_by_participation_weight:
-            state_auxiliary_cols.extend(
-                [
-                    self._state_weight_sum_column_name(),
-                    *[self._state_scaled_sum_column_name(feature) for feature in self.features],
-                ]
-            )
-        joined_df = joined_df.drop([c for c in state_auxiliary_cols if c in joined_df.columns])
+        joined_df = joined_df.drop([c for c in [state_marker_col] if c in joined_df.columns])
         return self._post_features_generated(joined_df)
 
     def _store_future_state(self, grouped_with_feats: IntoFrameT) -> None:
@@ -196,35 +173,17 @@ class RollingWindowTransformer(LagGenerator):
             weight_col = self.column_names.participation_weight
             history_df = history_df.with_columns(
                 [
-                    nw.col(weight_col)
-                    .sum()
-                    .over(self.granularity)
-                    .alias(self._state_weight_sum_column_name()),
-                    *[
-                        (nw.col(feature) * nw.col(weight_col))
-                        .sum()
-                        .over(self.granularity)
-                        .alias(self._state_scaled_sum_column_name(feature))
-                        for feature in self.features
-                    ],
-                ]
-            ).with_columns(
-                [
-                    nw.when(nw.col(self._state_weight_sum_column_name()) > 0.0)
+                    nw.when(nw.col(weight_col).sum().over(self.granularity) > 0.0)
                     .then(
-                        nw.col(self._state_scaled_sum_column_name(feature))
-                        / nw.col(self._state_weight_sum_column_name())
+                        (nw.col(feature) * nw.col(weight_col)).sum().over(self.granularity)
+                        / nw.col(weight_col).sum().over(self.granularity)
                     )
                     .otherwise(nw.lit(None))
                     .alias(f"{self.prefix}_{feature}{self.window}")
                     for feature in self.features
                 ]
             )
-            state_value_columns = [
-                *feature_state_columns,
-                self._state_weight_sum_column_name(),
-                *[self._state_scaled_sum_column_name(feature) for feature in self.features],
-            ]
+            state_value_columns = feature_state_columns
         else:
             aggregation_expr_by_kind = {
                 "mean": lambda feature: nw.col(feature).mean(),
@@ -261,18 +220,6 @@ class RollingWindowTransformer(LagGenerator):
 
     def _feature_window_descriptors(self) -> list[str]:
         return [f"{feature}[window={self.window}]" for feature in self.features]
-
-    def _weighted_rolling_scaled_sum_column_name(self, feature: str) -> str:
-        return f"{self.prefix}___scaled_{feature}{self.window}__sum"
-
-    def _weighted_rolling_weight_sum_column_name(self) -> str:
-        return f"{self.prefix}_{self.column_names.participation_weight}{self.window}__sum"
-
-    def _state_scaled_sum_column_name(self, feature: str) -> str:
-        return f"__rolling_state_scaled_sum_{self.prefix}_{feature}{self.window}"
-
-    def _state_weight_sum_column_name(self) -> str:
-        return f"__rolling_state_weight_sum_{self.prefix}_{self.window}"
 
     def _generate_features(self, df: IntoFrameT, ori_df: IntoFrameT) -> IntoFrameT:
         if self.column_names and self._df is not None:
