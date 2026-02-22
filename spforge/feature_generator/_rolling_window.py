@@ -39,8 +39,6 @@ class RollingWindowTransformer(LagGenerator):
         unique_constraint: list[str] | None = None,
         match_id_column: str | None = None,
         update_column: str | None = None,
-        max_days: int | None = None,
-        future_mode: Literal["recompute", "state_lookup"] = "recompute",
     ):
         """
         :param features:   Features to create rolling mean for
@@ -54,8 +52,6 @@ class RollingWindowTransformer(LagGenerator):
         :param are_estimator_features: If True, the features will be added to the estimator features.
             If false, it makes it possible for the outer layer (Pipeline) to exclude these features from the estimator.
         :param prefix: Prefix for the new rolling mean columns
-        :param max_days: Optional max lookback horizon in days. If set, observations older than max_days
-            from the current row are ignored in the rolling calculation.
         """
         if prefix == "rolling_mean":
             prefix = (
@@ -85,14 +81,6 @@ class RollingWindowTransformer(LagGenerator):
             )
         self.window = window
         self.min_periods = min_periods
-        if max_days is not None and max_days <= 0:
-            raise ValueError("max_days must be positive when provided")
-        if future_mode not in {"recompute", "state_lookup"}:
-            raise ValueError("future_mode must be either 'recompute' or 'state_lookup'")
-        if future_mode == "state_lookup" and max_days is not None:
-            raise ValueError("future_mode='state_lookup' is not supported when max_days is set")
-        self.max_days = max_days
-        self.future_mode = future_mode
         self._future_state_df = None
 
     @nw.narwhalify
@@ -146,15 +134,7 @@ class RollingWindowTransformer(LagGenerator):
         :param df: Future data
         """
 
-        if self.future_mode == "state_lookup":
-            return self._future_transform_from_state(df)
-
-        sort_col = self.column_names.start_date if self.column_names else "__row_index"
-        grouped = self._group_to_granularity_level(df=df, sort_col=sort_col)
-        grouped_df_with_feats = self._generate_features(df=grouped, ori_df=df)
-        df = self._merge_into_input_df(df=df, concat_df=grouped_df_with_feats)
-        df = self._post_features_generated(df)
-        return self._forward_fill_future_features(df=df)
+        return self._future_transform_from_state(df)
 
     def _future_transform_from_state(self, df: IntoFrameT) -> IntoFrameT:
         if self._future_state_df is None:
@@ -175,17 +155,6 @@ class RollingWindowTransformer(LagGenerator):
         )
 
         joined_df = df.join(state_df, on=self.granularity, how="left")
-        missing_state_df = joined_df.filter(nw.col(state_marker_col).is_null())
-        if len(missing_state_df) > 0:
-            missing_keys = nw.to_native(
-                missing_state_df.select(self.granularity).unique().head(5)
-            ).to_dicts()
-            raise ValueError(
-                "Missing persisted rolling state for future state lookup. "
-                f"transformer={self.__class__.__name__}(id={id(self)}), "
-                f"feature_window={self._feature_window_descriptors()}, "
-                f"missing_keys_sample={missing_keys}."
-            )
 
         if self.scale_by_participation_weight:
             weight_sum_col = self._state_weight_sum_column_name()
@@ -213,56 +182,79 @@ class RollingWindowTransformer(LagGenerator):
         return self._post_features_generated(joined_df)
 
     def _store_future_state(self, grouped_with_feats: IntoFrameT) -> None:
-        if self.future_mode != "state_lookup":
+        _ = grouped_with_feats
+        if self._df is None:
+            self._future_state_df = None
             return
 
-        sort_cols = [self.column_names.start_date]
-        if self.update_column and self.update_column in grouped_with_feats.columns:
-            sort_cols.append(self.update_column)
-        elif "__row_index" in grouped_with_feats.columns:
-            sort_cols.append("__row_index")
-
-        state_value_columns = [*self._entity_features_out]
-        state_df = grouped_with_feats
+        history_df = nw.from_native(self._df)
+        feature_state_columns = [
+            f"{self.prefix}_{feature}{self.window}" for feature in self.features
+        ]
 
         if self.scale_by_participation_weight:
-            expected_state_sum_cols = [
-                self._weighted_rolling_weight_sum_column_name(),
-                *[
-                    self._weighted_rolling_scaled_sum_column_name(feature)
-                    for feature in self.features
-                ],
-            ]
-            missing_state_sum_cols = [
-                c for c in expected_state_sum_cols if c not in state_df.columns
-            ]
-            if missing_state_sum_cols:
-                raise ValueError(
-                    "Unable to persist weighted rolling state for future lookup because "
-                    f"required columns are missing: {missing_state_sum_cols}."
-                )
-
-            for feature in self.features:
-                state_df = state_df.with_columns(
-                    nw.col(self._weighted_rolling_scaled_sum_column_name(feature)).alias(
-                        self._state_scaled_sum_column_name(feature)
-                    )
-                )
-            state_df = state_df.with_columns(
-                nw.col(self._weighted_rolling_weight_sum_column_name()).alias(
-                    self._state_weight_sum_column_name()
-                )
-            )
-            state_value_columns.extend(
+            weight_col = self.column_names.participation_weight
+            history_df = history_df.with_columns(
                 [
-                    self._state_weight_sum_column_name(),
-                    *[self._state_scaled_sum_column_name(feature) for feature in self.features],
+                    nw.col(weight_col)
+                    .sum()
+                    .over(self.granularity)
+                    .alias(self._state_weight_sum_column_name()),
+                    *[
+                        (nw.col(feature) * nw.col(weight_col))
+                        .sum()
+                        .over(self.granularity)
+                        .alias(self._state_scaled_sum_column_name(feature))
+                        for feature in self.features
+                    ],
+                ]
+            ).with_columns(
+                [
+                    nw.when(nw.col(self._state_weight_sum_column_name()) > 0.0)
+                    .then(
+                        nw.col(self._state_scaled_sum_column_name(feature))
+                        / nw.col(self._state_weight_sum_column_name())
+                    )
+                    .otherwise(nw.lit(None))
+                    .alias(f"{self.prefix}_{feature}{self.window}")
+                    for feature in self.features
                 ]
             )
+            state_value_columns = [
+                *feature_state_columns,
+                self._state_weight_sum_column_name(),
+                *[self._state_scaled_sum_column_name(feature) for feature in self.features],
+            ]
+        else:
+            aggregation_expr_by_kind = {
+                "mean": lambda feature: nw.col(feature).mean(),
+                "sum": lambda feature: nw.col(feature).sum(),
+                "var": lambda feature: nw.col(feature).var(),
+            }
+            count_cols = [f"__rolling_state_count_{feature}" for feature in self.features]
+            history_df = history_df.with_columns(
+                [
+                    nw.col(feature).count().over(self.granularity).alias(count_col)
+                    for feature, count_col in zip(self.features, count_cols, strict=True)
+                ]
+            )
+            history_df = history_df.with_columns(
+                [
+                    nw.when(nw.col(count_col) >= self.min_periods)
+                    .then(
+                        aggregation_expr_by_kind[self.aggregation](feature).over(self.granularity)
+                    )
+                    .otherwise(nw.lit(None))
+                    .alias(state_feature_col)
+                    for feature, count_col, state_feature_col in zip(
+                        self.features, count_cols, feature_state_columns, strict=True
+                    )
+                ]
+            ).drop(count_cols)
+            state_value_columns = feature_state_columns
 
         self._future_state_df = (
-            state_df.sort(sort_cols)
-            .group_by(self.granularity)
+            history_df.group_by(self.granularity)
             .agg([nw.col(column).last().alias(column) for column in state_value_columns])
             .to_native()
         )
@@ -293,10 +285,6 @@ class RollingWindowTransformer(LagGenerator):
                 concat_df = concat_df.with_row_index(name="__row_index")
             sort_col = "__row_index"
         concat_df = concat_df.sort(sort_col)
-
-        if self.max_days is not None:
-            concat_df = self._generate_features_with_max_days(concat_df)
-            return concat_df
 
         agg_method = {
             "sum": lambda col: col.rolling_sum(
@@ -356,114 +344,6 @@ class RollingWindowTransformer(LagGenerator):
                 for f in self._entity_features_out
             ]
         )
-
-    def _generate_features_with_max_days(self, concat_df: IntoFrameT) -> IntoFrameT:
-        if self.column_names is None:
-            raise ValueError("max_days requires column_names to be provided")
-
-        if self.aggregation == "var":
-            raise NotImplementedError("max_days is not supported for aggregation='var'")
-
-        if self.scale_by_participation_weight and self.aggregation != "mean":
-            raise NotImplementedError(
-                "max_days with scale_by_participation_weight is only supported for aggregation='mean'"
-            )
-
-        date_col = self.column_names.start_date
-        if date_col not in concat_df.columns:
-            raise ValueError(f"Date column '{date_col}' not found in input dataframe")
-
-        days_diff_divisor = 60 * 24
-        for feature in self.features:
-            sum_expr = nw.lit(0.0)
-            count_expr = nw.lit(0)
-            weight_sum_expr = nw.lit(0.0)
-            temp_cols = []
-
-            for lag in range(1, self.window + 1):
-                lag_date_col = f"__max_days_date_lag_{feature}_{lag}"
-                lag_feature_col = f"__max_days_feature_lag_{feature}_{lag}"
-                temp_cols.extend([lag_date_col, lag_feature_col])
-
-                if self.scale_by_participation_weight:
-                    lag_weight_col = f"__max_days_weight_lag_{feature}_{lag}"
-                    temp_cols.append(lag_weight_col)
-
-                    concat_df = concat_df.with_columns(
-                        [
-                            nw.col(date_col).shift(lag).over(self.granularity).alias(lag_date_col),
-                            (nw.col(feature) * nw.col(self.column_names.participation_weight))
-                            .shift(lag)
-                            .over(self.granularity)
-                            .alias(lag_feature_col),
-                            nw.col(self.column_names.participation_weight)
-                            .shift(lag)
-                            .over(self.granularity)
-                            .alias(lag_weight_col),
-                        ]
-                    )
-                else:
-                    concat_df = concat_df.with_columns(
-                        [
-                            nw.col(date_col).shift(lag).over(self.granularity).alias(lag_date_col),
-                            nw.col(feature)
-                            .shift(lag)
-                            .over(self.granularity)
-                            .alias(lag_feature_col),
-                        ]
-                    )
-
-                within_max_days = (
-                    (
-                        nw.col(date_col).cast(nw.Date) - nw.col(lag_date_col).cast(nw.Date)
-                    ).dt.total_minutes()
-                    / days_diff_divisor
-                ) <= self.max_days
-
-                concat_df = concat_df.with_columns(
-                    nw.when(within_max_days)
-                    .then(nw.col(lag_feature_col))
-                    .otherwise(nw.lit(None))
-                    .alias(lag_feature_col)
-                )
-                count_expr = count_expr + nw.when(nw.col(lag_feature_col).is_null()).then(
-                    0
-                ).otherwise(1)
-
-                if self.scale_by_participation_weight:
-                    concat_df = concat_df.with_columns(
-                        nw.when(within_max_days)
-                        .then(nw.col(lag_weight_col))
-                        .otherwise(nw.lit(None))
-                        .alias(lag_weight_col)
-                    )
-                    sum_expr = sum_expr + nw.col(lag_feature_col).fill_null(0.0)
-                    weight_sum_expr = weight_sum_expr + nw.col(lag_weight_col).fill_null(0.0)
-                else:
-                    sum_expr = sum_expr + nw.col(lag_feature_col).fill_null(0.0)
-
-            if self.scale_by_participation_weight:
-                value_expr = (
-                    nw.when((count_expr >= self.min_periods) & (weight_sum_expr > 0.0))
-                    .then(sum_expr / weight_sum_expr)
-                    .otherwise(nw.lit(None))
-                )
-            elif self.aggregation == "sum":
-                value_expr = (
-                    nw.when(count_expr >= self.min_periods).then(sum_expr).otherwise(nw.lit(None))
-                )
-            else:
-                value_expr = (
-                    nw.when(count_expr >= self.min_periods)
-                    .then(sum_expr / count_expr)
-                    .otherwise(nw.lit(None))
-                )
-
-            concat_df = concat_df.with_columns(
-                value_expr.alias(f"{self.prefix}_{feature}{self.window}")
-            ).drop(temp_cols)
-
-        return concat_df
 
     def _store_df(
         self,
