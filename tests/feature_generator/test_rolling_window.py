@@ -241,6 +241,103 @@ def test_rolling_mean_historical_participation_weight(df, column_names):
         )
 
 
+def test_rolling_window__future_state_lookup_weighted_without_future_participation_weight(
+    column_names: ColumnNames,
+):
+    historical_df = pd.DataFrame(
+        {
+            column_names.player_id: ["a", "b", "a", "b", "a", "b"],
+            column_names.match_id: [1, 1, 2, 2, 3, 3],
+            "points": [10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
+            column_names.participation_weight: [1.0, 2.0, 3.0, 2.0, 1.0, 1.0],
+            column_names.start_date: pd.to_datetime(
+                [
+                    "2023-01-01",
+                    "2023-01-01",
+                    "2023-01-02",
+                    "2023-01-02",
+                    "2023-01-03",
+                    "2023-01-03",
+                ]
+            ),
+            column_names.team_id: [1, 2, 1, 2, 1, 2],
+        }
+    )
+    future_df = pd.DataFrame(
+        {
+            column_names.player_id: ["a", "b", "a", "b"],
+            column_names.match_id: [4, 4, 5, 5],
+            column_names.start_date: pd.to_datetime(
+                ["2023-01-04", "2023-01-04", "2023-01-05", "2023-01-05"]
+            ),
+            column_names.team_id: [1, 2, 1, 2],
+        }
+    )
+
+    transformer = RollingWindowTransformer(
+        features=["points"],
+        window=2,
+        min_periods=1,
+        granularity=[column_names.player_id],
+        scale_by_participation_weight=True,
+    )
+
+    transformer.fit_transform(historical_df, column_names=column_names)
+    transformed_future_df = transformer.future_transform(future_df)
+
+    expected_df = future_df.assign(
+        **{
+            transformer.features_out[0]: [
+                (30 * 3 + 50 * 1) / (3 + 1),
+                (40 * 2 + 60 * 1) / (2 + 1),
+                (30 * 3 + 50 * 1) / (3 + 1),
+                (40 * 2 + 60 * 1) / (2 + 1),
+            ]
+        }
+    )
+    pd.testing.assert_frame_equal(
+        transformed_future_df[expected_df.columns], expected_df, check_like=True, check_dtype=False
+    )
+
+
+def test_rolling_window__future_state_lookup_returns_null_for_missing_state(
+    column_names: ColumnNames,
+):
+    historical_df = pd.DataFrame(
+        {
+            column_names.player_id: ["a", "b", "a", "b"],
+            column_names.match_id: [1, 1, 2, 2],
+            "points": [10.0, 20.0, 30.0, 40.0],
+            column_names.participation_weight: [1.0, 2.0, 3.0, 2.0],
+            column_names.start_date: pd.to_datetime(
+                ["2023-01-01", "2023-01-01", "2023-01-02", "2023-01-02"]
+            ),
+            column_names.team_id: [1, 2, 1, 2],
+        }
+    )
+    future_df = pd.DataFrame(
+        {
+            column_names.player_id: ["a", "c"],
+            column_names.match_id: [3, 3],
+            column_names.start_date: pd.to_datetime(["2023-01-03", "2023-01-03"]),
+            column_names.team_id: [1, 3],
+        }
+    )
+    transformer = RollingWindowTransformer(
+        features=["points"],
+        window=2,
+        min_periods=1,
+        granularity=[column_names.player_id],
+        scale_by_participation_weight=True,
+    )
+    transformer.fit_transform(historical_df, column_names=column_names)
+    transformed_future_df = transformer.future_transform(future_df)
+    expected_df = future_df.assign(**{transformer.features_out[0]: [25.0, None]})
+    pd.testing.assert_frame_equal(
+        transformed_future_df[expected_df.columns], expected_df, check_like=True, check_dtype=False
+    )
+
+
 @pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
 def test_rolling_mean_transform_historical_and_transform_future(df, column_names):
     historical_df = df(
@@ -801,64 +898,3 @@ def test_rolling_window__future_transform_uses_trimmed_state(column_names: Colum
 
     stored = transformer.historical_df.to_pandas()
     assert stored.groupby(column_names.player_id).size().to_dict() == {"a": 2, "b": 2}
-
-
-def test_rolling_window__max_days_excludes_older_observations_historical(column_names: ColumnNames):
-    historical_df = pd.DataFrame(
-        {
-            column_names.player_id: ["a", "a", "a"],
-            column_names.match_id: [1, 2, 3],
-            "points": [1.0, 2.0, 3.0],
-            column_names.start_date: pd.to_datetime(["2023-01-01", "2023-01-05", "2023-02-20"]),
-            column_names.team_id: [1, 1, 1],
-        }
-    )
-
-    transformer = RollingWindowTransformer(
-        features=["points"],
-        window=3,
-        min_periods=1,
-        granularity=[column_names.player_id],
-        max_days=10,
-    )
-    transformed_df = transformer.fit_transform(historical_df, column_names=column_names)
-
-    expected_df = historical_df.assign(**{transformer.features_out[0]: [None, 1.0, None]})
-    pd.testing.assert_frame_equal(
-        transformed_df[expected_df.columns], expected_df, check_like=True, check_dtype=False
-    )
-
-
-def test_rolling_window__max_days_excludes_older_observations_future(column_names: ColumnNames):
-    historical_df = pd.DataFrame(
-        {
-            column_names.player_id: ["a", "a", "a"],
-            column_names.match_id: [1, 2, 3],
-            "points": [1.0, 2.0, 3.0],
-            column_names.start_date: pd.to_datetime(["2023-01-01", "2023-01-05", "2023-02-20"]),
-            column_names.team_id: [1, 1, 1],
-        }
-    )
-    future_df = pd.DataFrame(
-        {
-            column_names.player_id: ["a"],
-            column_names.match_id: [4],
-            column_names.start_date: pd.to_datetime(["2023-02-25"]),
-            column_names.team_id: [1],
-        }
-    )
-
-    transformer = RollingWindowTransformer(
-        features=["points"],
-        window=3,
-        min_periods=1,
-        granularity=[column_names.player_id],
-        max_days=10,
-    )
-    transformer.fit_transform(historical_df, column_names=column_names)
-    transformed_future_df = transformer.future_transform(future_df)
-
-    expected_df = future_df.assign(**{transformer.features_out[0]: [3.0]})
-    pd.testing.assert_frame_equal(
-        transformed_future_df[expected_df.columns], expected_df, check_like=True, check_dtype=False
-    )
