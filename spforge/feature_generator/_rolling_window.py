@@ -171,18 +171,28 @@ class RollingWindowTransformer(LagGenerator):
 
         if self.scale_by_participation_weight:
             weight_col = self.column_names.participation_weight
+            count_cols = [f"__rolling_state_count_{feature}" for feature in self.features]
             history_df = history_df.with_columns(
                 [
-                    nw.when(nw.col(weight_col).sum().over(self.granularity) > 0.0)
+                    nw.col(feature).count().over(self.granularity).alias(count_col)
+                    for feature, count_col in zip(self.features, count_cols, strict=True)
+                ]
+            )
+            history_df = history_df.with_columns(
+                [
+                    nw.when(
+                        (nw.col(count_col) >= self.min_periods)
+                        & (nw.col(weight_col).sum().over(self.granularity) > 0.0)
+                    )
                     .then(
                         (nw.col(feature) * nw.col(weight_col)).sum().over(self.granularity)
                         / nw.col(weight_col).sum().over(self.granularity)
                     )
                     .otherwise(nw.lit(None))
                     .alias(f"{self.prefix}_{feature}{self.window}")
-                    for feature in self.features
+                    for feature, count_col in zip(self.features, count_cols, strict=True)
                 ]
-            )
+            ).drop(count_cols)
             state_value_columns = feature_state_columns
         else:
             aggregation_expr_by_kind = {

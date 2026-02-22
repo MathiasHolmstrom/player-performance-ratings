@@ -300,6 +300,59 @@ def test_rolling_window__future_state_lookup_weighted_without_future_participati
     )
 
 
+def test_rolling_window__future_state_lookup_weighted_respects_min_periods(
+    column_names: ColumnNames,
+):
+    historical_df = pd.DataFrame(
+        {
+            column_names.player_id: ["a", "b", "a", "a"],
+            column_names.match_id: [1, 1, 2, 3],
+            "points": [10.0, 20.0, 30.0, 50.0],
+            column_names.participation_weight: [1.0, 2.0, 3.0, 1.0],
+            column_names.start_date: pd.to_datetime(
+                [
+                    "2023-01-01",
+                    "2023-01-01",
+                    "2023-01-02",
+                    "2023-01-03",
+                ]
+            ),
+            column_names.team_id: [1, 2, 1, 1],
+        }
+    )
+    future_df = pd.DataFrame(
+        {
+            column_names.player_id: ["a", "b"],
+            column_names.match_id: [4, 4],
+            column_names.start_date: pd.to_datetime(["2023-01-04", "2023-01-04"]),
+            column_names.team_id: [1, 2],
+        }
+    )
+
+    transformer = RollingWindowTransformer(
+        features=["points"],
+        window=3,
+        min_periods=2,
+        granularity=[column_names.player_id],
+        scale_by_participation_weight=True,
+    )
+
+    transformer.fit_transform(historical_df, column_names=column_names)
+    transformed_future_df = transformer.future_transform(future_df)
+
+    expected_df = future_df.assign(
+        **{
+            transformer.features_out[0]: [
+                (10.0 * 1.0 + 30.0 * 3.0 + 50.0 * 1.0) / (1.0 + 3.0 + 1.0),
+                None,
+            ]
+        }
+    )
+    pd.testing.assert_frame_equal(
+        transformed_future_df[expected_df.columns], expected_df, check_like=True, check_dtype=False
+    )
+
+
 def test_rolling_window__future_state_lookup_returns_null_for_missing_state(
     column_names: ColumnNames,
 ):
