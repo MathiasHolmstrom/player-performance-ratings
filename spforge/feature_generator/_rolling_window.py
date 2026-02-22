@@ -40,6 +40,7 @@ class RollingWindowTransformer(LagGenerator):
         match_id_column: str | None = None,
         update_column: str | None = None,
         max_days: int | None = None,
+        future_mode: Literal["recompute", "state_lookup"] = "recompute",
     ):
         """
         :param features:   Features to create rolling mean for
@@ -86,7 +87,13 @@ class RollingWindowTransformer(LagGenerator):
         self.min_periods = min_periods
         if max_days is not None and max_days <= 0:
             raise ValueError("max_days must be positive when provided")
+        if future_mode not in {"recompute", "state_lookup"}:
+            raise ValueError("future_mode must be either 'recompute' or 'state_lookup'")
+        if future_mode == "state_lookup" and max_days is not None:
+            raise ValueError("future_mode='state_lookup' is not supported when max_days is set")
         self.max_days = max_days
+        self.future_mode = future_mode
+        self._future_state_df = None
 
     @nw.narwhalify
     @historical_lag_transformations_wrapper
@@ -105,6 +112,7 @@ class RollingWindowTransformer(LagGenerator):
         if self.column_names:
             self._store_df(grouped_df=grouped, ori_df=df)
             grouped_with_feats = self._generate_features(grouped, ori_df=df)
+            self._store_future_state(grouped_with_feats)
             df = self._merge_into_input_df(
                 df=df,
                 concat_df=grouped_with_feats,
@@ -138,12 +146,141 @@ class RollingWindowTransformer(LagGenerator):
         :param df: Future data
         """
 
+        if self.future_mode == "state_lookup":
+            return self._future_transform_from_state(df)
+
         sort_col = self.column_names.start_date if self.column_names else "__row_index"
         grouped = self._group_to_granularity_level(df=df, sort_col=sort_col)
         grouped_df_with_feats = self._generate_features(df=grouped, ori_df=df)
         df = self._merge_into_input_df(df=df, concat_df=grouped_df_with_feats)
         df = self._post_features_generated(df)
         return self._forward_fill_future_features(df=df)
+
+    def _future_transform_from_state(self, df: IntoFrameT) -> IntoFrameT:
+        if self._future_state_df is None:
+            raise ValueError(
+                "No stored rolling state found. Call fit_transform() before future_transform()."
+            )
+
+        for granularity_col in self.granularity:
+            if granularity_col not in df.columns:
+                raise ValueError(
+                    f"Granularity column '{granularity_col}' not found in future dataframe "
+                    f"for {self.__class__.__name__}(id={id(self)})."
+                )
+
+        state_marker_col = "__rolling_state_lookup_marker"
+        state_df = nw.from_native(self._future_state_df).with_columns(
+            nw.lit(1).alias(state_marker_col)
+        )
+
+        joined_df = df.join(state_df, on=self.granularity, how="left")
+        missing_state_df = joined_df.filter(nw.col(state_marker_col).is_null())
+        if len(missing_state_df) > 0:
+            missing_keys = nw.to_native(
+                missing_state_df.select(self.granularity).unique().head(5)
+            ).to_dicts()
+            raise ValueError(
+                "Missing persisted rolling state for future state lookup. "
+                f"transformer={self.__class__.__name__}(id={id(self)}), "
+                f"feature_window={self._feature_window_descriptors()}, "
+                f"missing_keys_sample={missing_keys}."
+            )
+
+        if self.scale_by_participation_weight:
+            weight_sum_col = self._state_weight_sum_column_name()
+            joined_df = joined_df.with_columns(
+                [
+                    nw.when(nw.col(weight_sum_col) > 0.0)
+                    .then(
+                        nw.col(self._state_scaled_sum_column_name(feature)) / nw.col(weight_sum_col)
+                    )
+                    .otherwise(nw.lit(None))
+                    .alias(f"{self.prefix}_{feature}{self.window}")
+                    for feature in self.features
+                ]
+            )
+
+        state_auxiliary_cols = [state_marker_col]
+        if self.scale_by_participation_weight:
+            state_auxiliary_cols.extend(
+                [
+                    self._state_weight_sum_column_name(),
+                    *[self._state_scaled_sum_column_name(feature) for feature in self.features],
+                ]
+            )
+        joined_df = joined_df.drop([c for c in state_auxiliary_cols if c in joined_df.columns])
+        return self._post_features_generated(joined_df)
+
+    def _store_future_state(self, grouped_with_feats: IntoFrameT) -> None:
+        if self.future_mode != "state_lookup":
+            return
+
+        sort_cols = [self.column_names.start_date]
+        if self.update_column and self.update_column in grouped_with_feats.columns:
+            sort_cols.append(self.update_column)
+        elif "__row_index" in grouped_with_feats.columns:
+            sort_cols.append("__row_index")
+
+        state_value_columns = [*self._entity_features_out]
+        state_df = grouped_with_feats
+
+        if self.scale_by_participation_weight:
+            expected_state_sum_cols = [
+                self._weighted_rolling_weight_sum_column_name(),
+                *[
+                    self._weighted_rolling_scaled_sum_column_name(feature)
+                    for feature in self.features
+                ],
+            ]
+            missing_state_sum_cols = [
+                c for c in expected_state_sum_cols if c not in state_df.columns
+            ]
+            if missing_state_sum_cols:
+                raise ValueError(
+                    "Unable to persist weighted rolling state for future lookup because "
+                    f"required columns are missing: {missing_state_sum_cols}."
+                )
+
+            for feature in self.features:
+                state_df = state_df.with_columns(
+                    nw.col(self._weighted_rolling_scaled_sum_column_name(feature)).alias(
+                        self._state_scaled_sum_column_name(feature)
+                    )
+                )
+            state_df = state_df.with_columns(
+                nw.col(self._weighted_rolling_weight_sum_column_name()).alias(
+                    self._state_weight_sum_column_name()
+                )
+            )
+            state_value_columns.extend(
+                [
+                    self._state_weight_sum_column_name(),
+                    *[self._state_scaled_sum_column_name(feature) for feature in self.features],
+                ]
+            )
+
+        self._future_state_df = (
+            state_df.sort(sort_cols)
+            .group_by(self.granularity)
+            .agg([nw.col(column).last().alias(column) for column in state_value_columns])
+            .to_native()
+        )
+
+    def _feature_window_descriptors(self) -> list[str]:
+        return [f"{feature}[window={self.window}]" for feature in self.features]
+
+    def _weighted_rolling_scaled_sum_column_name(self, feature: str) -> str:
+        return f"{self.prefix}___scaled_{feature}{self.window}__sum"
+
+    def _weighted_rolling_weight_sum_column_name(self) -> str:
+        return f"{self.prefix}_{self.column_names.participation_weight}{self.window}__sum"
+
+    def _state_scaled_sum_column_name(self, feature: str) -> str:
+        return f"__rolling_state_scaled_sum_{self.prefix}_{feature}{self.window}"
+
+    def _state_weight_sum_column_name(self) -> str:
+        return f"__rolling_state_weight_sum_{self.prefix}_{self.window}"
 
     def _generate_features(self, df: IntoFrameT, ori_df: IntoFrameT) -> IntoFrameT:
         if self.column_names and self._df is not None:
@@ -360,3 +497,8 @@ class RollingWindowTransformer(LagGenerator):
             .sort(sort_cols)
             .to_native()
         )
+
+    def reset(self) -> "RollingWindowTransformer":
+        super().reset()
+        self._future_state_df = None
+        return self
