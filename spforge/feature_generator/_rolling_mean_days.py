@@ -34,7 +34,6 @@ class RollingMeanDaysTransformer(LagGenerator):
         if min_games is not None and min_games <= 0:
             raise ValueError("min_games must be positive when provided")
         self.min_games = min_games
-        self.scale_by_participation_weight = scale_by_participation_weight
         super().__init__(
             column_names=column_names,
             features=features,
@@ -44,6 +43,7 @@ class RollingMeanDaysTransformer(LagGenerator):
             granularity=granularity,
             update_column=update_column,
             unique_constraint=unique_constraint,
+            scale_by_participation_weight=scale_by_participation_weight,
         )
 
         self.add_count = add_count
@@ -156,17 +156,34 @@ class RollingMeanDaysTransformer(LagGenerator):
 
         concat_df = concat_df.sort(self.date_column)
         days_str = str(self.days + 1) + "d"
-        cols = self.features.copy()
+        rolling_numerator_cols = self.features.copy()
+        weight_col = (
+            self.column_names.participation_weight
+            if self.column_names and self.scale_by_participation_weight
+            else None
+        )
 
         concat_df = concat_df.with_columns(pl.lit(1).alias("__count1"))
-        cols.append("__count1")
+        aggregation_columns = [pl.col("__count1").sum()]
+
+        if self.scale_by_participation_weight:
+            assert self.column_names is not None
+            weighted_feature_columns = [f"__weighted_{col}" for col in self.features]
+            concat_df = concat_df.with_columns(
+                (pl.col(feature) * pl.col(weight_col)).alias(weighted_feature)
+                for feature, weighted_feature in zip(
+                    self.features, weighted_feature_columns, strict=True
+                )
+            )
+            rolling_numerator_cols = weighted_feature_columns
+            aggregation_columns.extend(
+                [pl.col(weight_col).sum(), pl.col(weighted_feature_columns).sum()]
+            )
+        else:
+            aggregation_columns.append(pl.col(self.features).sum())
 
         grp_cols = [self.date_column, *self.granularity]
-        grp = (
-            concat_df.group_by(grp_cols)
-            .agg([pl.col(self.features).sum(), pl.col("__count1").sum()])
-            .sort(grp_cols)
-        )
+        grp = concat_df.group_by(grp_cols).agg(aggregation_columns).sort(grp_cols)
         grp = grp.with_columns(
             pl.col("__count1")
             .rolling_sum_by(self.date_column, window_size=days_str)
@@ -178,21 +195,49 @@ class RollingMeanDaysTransformer(LagGenerator):
 
         grp = grp.with_columns(
             pl.col(col).sum().over([self.date_column, *self.granularity]).alias(f"days_sum_{col}")
-            for col in self.features
+            for col in rolling_numerator_cols
         )
 
-        rolling_means = [
-            (
+        if self.scale_by_participation_weight:
+            rolling_weight_col = "__rolling_participation_weight"
+            grp = grp.with_columns(
                 (
-                    pl.col(col)
+                    pl.col(weight_col)
                     .rolling_sum_by(self.date_column, window_size=days_str)
                     .over(self.granularity)
-                    - pl.col(f"days_sum_{col}")
+                    - pl.col(weight_col).sum().over([self.date_column, *self.granularity])
+                ).alias(rolling_weight_col)
+            )
+            rolling_means = [
+                pl.when(pl.col(rolling_weight_col) > 0)
+                .then(
+                    (
+                        pl.col(weighted_feature)
+                        .rolling_sum_by(self.date_column, window_size=days_str)
+                        .over(self.granularity)
+                        - pl.col(f"days_sum_{weighted_feature}")
+                    )
+                    / pl.col(rolling_weight_col)
                 )
-                / pl.col(self._count_column_name)
-            ).alias(f"{self.prefix}_{col}{str(self.days)}")
-            for col in self.features
-        ]
+                .otherwise(pl.lit(None))
+                .alias(f"{self.prefix}_{feature}{str(self.days)}")
+                for feature, weighted_feature in zip(
+                    self.features, rolling_numerator_cols, strict=True
+                )
+            ]
+        else:
+            rolling_means = [
+                (
+                    (
+                        pl.col(col)
+                        .rolling_sum_by(self.date_column, window_size=days_str)
+                        .over(self.granularity)
+                        - pl.col(f"days_sum_{col}")
+                    )
+                    / pl.col(self._count_column_name)
+                ).alias(f"{self.prefix}_{feature}{str(self.days)}")
+                for feature, col in zip(self.features, rolling_numerator_cols, strict=True)
+            ]
 
         grp = grp.with_columns(rolling_means)
         grp = grp.with_columns(
