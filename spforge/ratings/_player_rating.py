@@ -1,7 +1,6 @@
 # player_rating_generator.py
 from __future__ import annotations
 
-import copy
 import json
 import logging
 import math
@@ -1588,8 +1587,11 @@ class PlayerRatingGenerator(RatingGenerator):
 
         base_off = self._player_off_ratings
         base_def = self._player_def_ratings
-        local_off: dict[str, PlayerRating] = copy.deepcopy(base_off)
-        local_def: dict[str, PlayerRating] = copy.deepcopy(base_def)
+        # Shallow dict copy is sufficient: existing PlayerRating objects are only
+        # read here, never mutated. New entries are added for unseen players, so
+        # we still need a new dict to avoid polluting the persistent state.
+        local_off: dict[str, PlayerRating] = dict(base_off)
+        local_def: dict[str, PlayerRating] = dict(base_def)
 
         out = {
             cn.player_id: [],
