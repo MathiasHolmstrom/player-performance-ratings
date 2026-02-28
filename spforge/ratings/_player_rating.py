@@ -101,6 +101,7 @@ class PlayerRatingGenerator(RatingGenerator):
         defense_performance_weights: list[ColumnWeight] | None = None,
         defense_performance_manager: PerformanceManager | None = None,
         defense_lower_is_better: bool = False,
+        extra_granularity: list[str] | None = None,
         **kwargs: Any,
     ):
         super().__init__(
@@ -196,6 +197,7 @@ class PlayerRatingGenerator(RatingGenerator):
 
         self.team_id_change_confidence_sum_decrease = team_id_change_confidence_sum_decrease
         self.column_names = column_names
+        self.extra_granularity: list[str] = list(extra_granularity) if extra_granularity else []
 
         self.use_off_def_split = bool(use_off_def_split)
         self.scale_participation_weights = bool(scale_participation_weights)
@@ -646,15 +648,16 @@ class PlayerRatingGenerator(RatingGenerator):
             )
         ]
 
-        df_with_ratings = df.select(cols).join(
-            ratings,
-            on=[
-                self.column_names.player_id,
-                self.column_names.match_id,
-                self.column_names.team_id,
-            ],
-            how="left",
-        )
+        join_on = [
+            self.column_names.player_id,
+            self.column_names.match_id,
+            self.column_names.team_id,
+        ]
+        for col in self.extra_granularity:
+            if col in df.columns and col in ratings.columns:
+                join_on.append(col)
+
+        df_with_ratings = df.select(cols).join(ratings, on=join_on, how="left")
 
         result = self._add_rating_features(df_with_ratings)
         return self._remove_internal_scaled_columns(result)
@@ -1251,6 +1254,9 @@ class PlayerRatingGenerator(RatingGenerator):
         group_cols = [cn.match_id, cn.team_id, cn.start_date]
         if cn.update_match_id != cn.match_id:
             group_cols.append(cn.update_match_id)
+        for col in self.extra_granularity:
+            if col in df.columns:
+                group_cols.append(col)
 
         agg_df = df.group_by(group_cols).agg(pl.col(PLAYER_STATS).alias(PLAYER_STATS))
 
