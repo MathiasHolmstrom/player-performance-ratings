@@ -1441,7 +1441,7 @@ class OrdinalLossScorer(BaseScorer):
             def get_expr(i):
                 return pl.col(self.pred_column).list.get(i)
 
-        df = df.with_columns([get_expr(i).alias(f"prob_{c}") for i, c in enumerate(class_labels)])
+        df = df.with_columns(get_expr(i).alias(f"prob_{c}") for i, c in enumerate(class_labels))
 
         if len(class_labels) < 2:
             raise ValueError("OrdinalLossScorer: need at least 2 classes.")

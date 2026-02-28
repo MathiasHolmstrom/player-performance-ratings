@@ -149,13 +149,8 @@ class RollingWindowTransformer(LagGenerator):
                     f"for {self.__class__.__name__}(id={id(self)})."
                 )
 
-        state_marker_col = "__rolling_state_lookup_marker"
-        state_df = nw.from_native(self._future_state_df).with_columns(
-            nw.lit(1).alias(state_marker_col)
-        )
-
+        state_df = nw.from_native(self._future_state_df)
         joined_df = df.join(state_df, on=self.granularity, how="left")
-        joined_df = joined_df.drop([c for c in [state_marker_col] if c in joined_df.columns])
         return self._post_features_generated(joined_df)
 
     def _store_future_state(self, grouped_with_feats: IntoFrameT) -> None:

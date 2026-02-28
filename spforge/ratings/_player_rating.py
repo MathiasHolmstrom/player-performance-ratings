@@ -1068,9 +1068,6 @@ class PlayerRatingGenerator(RatingGenerator):
                 player_rating_col=self.PLAYER_OFF_RATING_COL,
                 team_rating_out=self.TEAM_OFF_RATING_PROJ_COL,
             )
-            df = df.with_columns(
-                pl.col(self.TEAM_OFF_RATING_PROJ_COL).alias(self.TEAM_RATING_PROJ_COL)
-            )
 
         if (
             self.TEAM_DEF_RATING_PROJ_COL in cols_to_add
@@ -1108,22 +1105,36 @@ class PlayerRatingGenerator(RatingGenerator):
                 team_rating_col=self.TEAM_DEF_RATING_PROJ_COL,
                 opp_team_rating_out=self.OPP_DEF_RATING_PROJ_COL,
             )
-            df = df.with_columns(
-                pl.col(self.OPP_DEF_RATING_PROJ_COL).alias(self.OPP_RATING_PROJ_COL)
+
+        # Batch independent alias/arithmetic expressions to reduce DataFrame materializations
+        batch_exprs = []
+        # Always alias TEAM_OFF_RATING_PROJ_COL → TEAM_RATING_PROJ_COL when available,
+        # since downstream steps (DIFF_PROJ_COL, MEAN_PROJ_COL) use it as an intermediate.
+        if self.TEAM_OFF_RATING_PROJ_COL in df.columns:
+            batch_exprs.append(
+                pl.col(self.TEAM_OFF_RATING_PROJ_COL).alias(self.TEAM_RATING_PROJ_COL)
             )
-        if self.PLAYER_DIFF_PROJ_COL in cols_to_add:
-            df = df.with_columns(
+        # Always alias OPP_DEF_RATING_PROJ_COL → OPP_RATING_PROJ_COL when available,
+        # since downstream steps (DIFF_PROJ_COL, PLAYER_OPP_MEAN_PROJ_COL) use it as an intermediate.
+        if self.OPP_DEF_RATING_PROJ_COL in df.columns:
+            batch_exprs.append(pl.col(self.OPP_DEF_RATING_PROJ_COL).alias(self.OPP_RATING_PROJ_COL))
+        if self.PLAYER_DIFF_PROJ_COL in cols_to_add and self.OPP_DEF_RATING_PROJ_COL in df.columns:
+            batch_exprs.append(
                 (pl.col(self.PLAYER_RATING_COL) - pl.col(self.OPP_DEF_RATING_PROJ_COL)).alias(
                     self.PLAYER_DIFF_PROJ_COL
                 )
             )
-
-        if self.PLAYER_DIFF_FROM_TEAM_PROJ_COL in cols_to_add:
-            df = df.with_columns(
+        if (
+            self.PLAYER_DIFF_FROM_TEAM_PROJ_COL in cols_to_add
+            and self.TEAM_OFF_RATING_PROJ_COL in df.columns
+        ):
+            batch_exprs.append(
                 (pl.col(self.PLAYER_OFF_RATING_COL) - pl.col(self.TEAM_OFF_RATING_PROJ_COL)).alias(
                     self.PLAYER_DIFF_FROM_TEAM_PROJ_COL
                 )
             )
+        if batch_exprs:
+            df = df.with_columns(*batch_exprs)
 
         if (
             self.TEAM_RATING_COL in cols_to_add
