@@ -280,6 +280,10 @@ class AutoPipeline(BaseEstimator):
         self._fitted_features: list[str] = []
         self._target_name: str | None = None
         self._resolved_categorical_handling: CategoricalHandling | None = None
+        # Columns that should pass through all pipeline steps at inference time even though
+        # they were not present during training (e.g. "scenario_id" for batched-scenario
+        # inference). Set after loading a trained model; ignored during fit.
+        self._extra_passthrough_columns: list[str] = []
 
     def _compute_context_features(self) -> list[str]:
         """Auto-compute context features from estimator and granularity.
@@ -689,7 +693,32 @@ class AutoPipeline(BaseEstimator):
             raise RuntimeError("Pipeline not fitted. Call fit() first.")
         if self.sample_weight_column and self.sample_weight_column in X.columns:
             X = X.drop([self.sample_weight_column])
-        return self.sklearn_pipeline.predict(X[self._fitted_features])
+
+        extra_cols = getattr(self, "_extra_passthrough_columns", [])
+        extra_present = [c for c in extra_cols if c in X.columns]
+
+        if not extra_present:
+            return self.sklearn_pipeline.predict(X[self._fitted_features])
+
+        # Extra passthrough columns (e.g. scenario_id for batched-scenario inference) need
+        # to survive all sklearn pipeline steps which use remainder="drop". Manually step
+        # through each transformer, re-injecting the extra columns after each one.
+        import pandas as pd
+
+        X_pd = X.to_pandas()
+        extra_data = {c: X_pd[c].to_numpy().copy() for c in extra_present}
+        X_step: pd.DataFrame = X_pd[[c for c in self._fitted_features if c in X_pd.columns]]
+
+        for _name, step in self.sklearn_pipeline.steps[:-1]:
+            X_step = step.transform(X_step)
+            if hasattr(X_step, "to_pandas") and not isinstance(X_step, pd.DataFrame):
+                X_step = X_step.to_pandas()
+            if isinstance(X_step, pd.DataFrame):
+                X_step = X_step.copy()
+                for col, vals in extra_data.items():
+                    X_step[col] = vals
+
+        return self.sklearn_pipeline.steps[-1][1].predict(X_step)
 
     @nw.narwhalify
     def predict_proba(self, X: IntoFrameT) -> np.ndarray:
