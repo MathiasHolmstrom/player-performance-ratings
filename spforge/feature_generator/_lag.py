@@ -11,6 +11,8 @@ from spforge.feature_generator._utils import (
     transformation_validator,
 )
 
+_MISSING_STATE_MSG = "No stored lag state found. Call fit_transform() before future_transform()."
+
 
 class LagTransformer(LagGenerator):
     def __init__(
@@ -18,7 +20,6 @@ class LagTransformer(LagGenerator):
         features: list[str],
         lag_length: int,
         granularity: list[str],
-        days_between_lags: list[int] | None = None,
         future_lag: bool = False,
         prefix: str = "lag",
         add_opponent: bool = False,
@@ -28,18 +29,6 @@ class LagTransformer(LagGenerator):
         update_column: str | None = None,
         match_id_column: str | None = None,
     ):
-        """
-        :param features. List of features to create lags for
-        :param lag_length: Number of lags
-        :param granularity: Columns to group by before lagging. E.g. player_id or [player_id, position].
-            In the latter case it will get the lag for each player_id and position combination.
-            Defaults to
-        :param days_between_lags. Adds a column with the number of days between the lagged date and the current date.
-        :param future_lag: If True, the lag will be calculated for the future instead of the past.
-        :param prefix:
-            Prefix for the new lag columns
-        """
-
         super().__init__(
             features=features,
             add_opponent=add_opponent,
@@ -52,23 +41,20 @@ class LagTransformer(LagGenerator):
             update_column=update_column,
             match_id_column=match_id_column,
         )
-        self.days_between_lags = days_between_lags or []
-        for days_lag in self.days_between_lags:
-            self._features_out.append(f"{prefix}{days_lag}_days_ago")
-
         self.lag_length = lag_length
         self.future_lag = future_lag
         self._df = None
+        self._future_state_df = None
 
     @nw.narwhalify
     @historical_lag_transformations_wrapper
     @required_lag_column_names
     @transformation_validator
     def fit_transform(self, df: IntoFrameT, column_names: ColumnNames | None = None) -> IntoFrameT:
-        """ """
         grouped = self._maybe_group(df)
         if self.column_names:
             self._store_df(grouped, ori_df=df)
+            self._store_future_state()
             df_with_feats = self._generate_features(grouped, ori_df=df)
             df = self._merge_into_input_df(df=df, concat_df=df_with_feats)
 
@@ -95,13 +81,56 @@ class LagTransformer(LagGenerator):
     @future_validator
     @transformation_validator
     def future_transform(self, df: IntoFrameT) -> IntoFrameT:
-        sort_col = self.column_names.start_date if self.column_names else "__row_index"
-        grouped = self._group_to_granularity_level(df=df, sort_col=sort_col)
+        return self._future_transform_from_state(df)
 
-        grouped_df_with_feats = self._generate_features(df=grouped, ori_df=df)
-        df = self._merge_into_input_df(df=df, concat_df=grouped_df_with_feats)
-        df = self._post_features_generated(df)
-        return self._forward_fill_future_features(df=df)
+    def _future_transform_from_state(self, df: IntoFrameT) -> IntoFrameT:
+        if self._future_state_df is None:
+            raise ValueError(_MISSING_STATE_MSG)
+
+        state_df = nw.from_native(self._future_state_df)
+        joined_df = df.join(state_df, on=self.granularity, how="left")
+        return self._post_features_generated(joined_df)
+
+    def _store_future_state(self) -> None:
+        """Precompute lag values per granularity entity from the trimmed stored history.
+
+        _df holds exactly the last lag_length rows per entity (sorted ascending).
+        Rank them descending so rank=1 is the most recent, rank=2 second-most-recent, etc.
+        Then pivot to one row per entity: lag_1=most recent, lag_2=second, ...
+        """
+        if self._df is None:
+            self._future_state_df = None
+            return
+
+        history_df = nw.from_native(self._df)
+        sort_col = self.column_names.start_date
+
+        # Rank rows per entity: 1 = most recent
+        ranked = history_df.sort([sort_col], descending=True).with_columns(
+            nw.col(sort_col).cum_count().over(self.granularity).alias("__lag_rank")
+        )
+
+        state_exprs = [
+            nw.when(nw.col("__lag_rank") == lag)
+            .then(nw.col(feature))
+            .otherwise(nw.lit(None))
+            .alias(f"{self.prefix}_{feature}{lag}")
+            for feature in self.features
+            for lag in range(1, self.lag_length + 1)
+        ]
+        ranked = ranked.with_columns(state_exprs)
+
+        lag_cols = [
+            f"{self.prefix}_{feature}{lag}"
+            for feature in self.features
+            for lag in range(1, self.lag_length + 1)
+        ]
+
+        self._future_state_df = (
+            ranked.group_by(self.granularity)
+            .agg([nw.col(col).max().alias(col) for col in lag_cols])
+            .to_native()
+        )
 
     def _generate_features(self, df: IntoFrameT, ori_df: IntoFrameT) -> IntoFrameT:
         if self.column_names and self._df is not None:
@@ -110,42 +139,6 @@ class LagTransformer(LagGenerator):
             )
         else:
             concat_df = df.sort("__row_index")
-
-        for days_lag in self.days_between_lags:
-            if self.future_lag:
-                concat_df = concat_df.with_columns(
-                    nw.col(self.column_names.start_date)
-                    .shift(-days_lag)
-                    .over(self.granularity)
-                    .alias("shifted_days")
-                )
-                concat_df = concat_df.with_columns(
-                    (
-                        (
-                            nw.col("shifted_days").cast(nw.Date)
-                            - nw.col(self.column_names.start_date).cast(nw.Date)
-                        ).dt.total_minutes()
-                        / 60
-                        / 24
-                    ).alias(f"{self.prefix}{days_lag}_days_ago")
-                )
-            else:
-                concat_df = concat_df.with_columns(
-                    nw.col(self.column_names.start_date)
-                    .shift(days_lag)
-                    .over(self.granularity)
-                    .alias("shifted_days")
-                )
-                concat_df = concat_df.with_columns(
-                    (
-                        (
-                            nw.col(self.column_names.start_date).cast(nw.Date)
-                            - nw.col("shifted_days").cast(nw.Date)
-                        ).dt.total_minutes()
-                        / 60
-                        / 24
-                    ).alias(f"{self.prefix}{days_lag}_days_ago")
-                ).drop("shifted_days")
 
         for feature_name in self.features:
             for lag in range(1, self.lag_length + 1):
@@ -180,13 +173,12 @@ class LagTransformer(LagGenerator):
         if self._df is None:
             return
 
-        max_history_rows = max([self.lag_length, *self.days_between_lags], default=self.lag_length)
-        if max_history_rows <= 0:
+        if self.lag_length <= 0:
             return
 
         stored_df = nw.from_native(self._df)
         if not self.granularity:
-            self._df = stored_df.tail(max_history_rows).to_native()
+            self._df = stored_df.tail(self.lag_length).to_native()
             return
 
         sort_cols = [self.column_names.start_date]
@@ -198,11 +190,16 @@ class LagTransformer(LagGenerator):
             .with_columns(
                 nw.col(sort_cols[0]).cum_count().over(self.granularity).alias("__state_row_rank")
             )
-            .filter(nw.col("__state_row_rank") <= max_history_rows)
+            .filter(nw.col("__state_row_rank") <= self.lag_length)
             .drop("__state_row_rank")
             .sort(sort_cols)
             .to_native()
         )
+
+    def reset(self) -> "LagTransformer":
+        super().reset()
+        self._future_state_df = None
+        return self
 
     @property
     def features_out(self) -> list[str]:

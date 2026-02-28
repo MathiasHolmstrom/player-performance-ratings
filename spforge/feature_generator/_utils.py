@@ -228,9 +228,6 @@ def required_lag_column_names(method):
             if "__row_index" not in df.columns:
                 df = df.with_row_index(name="__row_index")
 
-            if hasattr(self, "days_between_lags") and self.days_between_lags:
-                raise ValueError("column names must be passed if days_between_lags is set")
-
             assert self.update_column is not None or self.group_to_granularity is not None, (
                 "if column names is not passed. Either update_column or group_to_granularity must be passed"
             )
