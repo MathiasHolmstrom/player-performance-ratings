@@ -13,6 +13,10 @@ from spforge.feature_generator._utils import (
     transformation_validator,
 )
 
+_MISSING_STATE_MSG = (
+    "No stored rolling state found. Call fit_transform() before future_transform()."
+)
+
 
 class RollingMeanDaysTransformer(LagGenerator):
     def __init__(
@@ -49,6 +53,7 @@ class RollingMeanDaysTransformer(LagGenerator):
         self.add_count = add_count
         self.date_column = date_column
         self._fitted_game_ids = []
+        self._future_state_df = None
 
         self._count_column_name = f"{self.prefix}_count{str(self.days)}"
         if self.add_count:
@@ -82,6 +87,7 @@ class RollingMeanDaysTransformer(LagGenerator):
                 except nw.exceptions.InvalidOperationError:
                     df = df.with_columns(nw.col("__ori_date").cast(nw.Date).alias(self.date_column))
             self._store_df(nw.from_native(df))
+            self._store_future_state()
 
             concat_df = self._concat_with_stored_and_calculate_feats(df.to_polars())
             if "__ori_date" in df.columns:
@@ -114,39 +120,21 @@ class RollingMeanDaysTransformer(LagGenerator):
     @future_lag_transformations_wrapper
     @transformation_validator
     def future_transform(self, df: IntoFrameT) -> IntoFrameT:
-        ori_cols = df.columns
-        if self.column_names and df[self.date_column].dtype not in (nw.Date, nw.Datetime):
-            df = df.with_columns(nw.col(self.date_column).alias("__ori_date"))
-            try:
-                df = df.with_columns(
-                    nw.col("__ori_date")
-                    .str.to_datetime(format="%Y-%m-%d %H:%M:%S")
-                    .alias(self.date_column)
-                )
-            except nw.exceptions.InvalidOperationError:
-                df = df.with_columns(nw.col("__ori_date").cast(nw.Date).alias(self.date_column))
+        return self._future_transform_from_state(df)
 
-        if isinstance(df.to_native(), pd.DataFrame):
-            ori_type = "pd"
-            df = pl.DataFrame(df.to_native())
-        else:
-            df = df.to_native()
-            ori_type = "pl"
+    def _future_transform_from_state(self, df: IntoFrameT) -> IntoFrameT:
+        if self._future_state_df is None:
+            raise ValueError(_MISSING_STATE_MSG)
 
-        concat_df = self._concat_with_stored_and_calculate_feats(df=df)
-        concat_df = concat_df.filter(
-            pl.col(self.column_names.match_id).is_in(
-                df[self.column_names.match_id].unique().to_list()
+        state_df = nw.from_native(self._future_state_df)
+        joined_df = df.join(state_df, on=self.granularity, how="left")
+
+        if self.add_count:
+            joined_df = joined_df.with_columns(
+                nw.col(self._count_column_name).fill_null(0).alias(self._count_column_name)
             )
-        )
-        concat_df = self._post_features_generated(nw.from_native(concat_df))
-        transformed_future = self._forward_fill_future_features(df=nw.from_native(concat_df))
-        transformed_future = transformed_future.select(ori_cols + self.features_out)
 
-        if ori_type == "pd":
-            transformed_future = nw.from_native(transformed_future.to_pandas())
-
-        return transformed_future
+        return self._post_features_generated(joined_df)
 
     def _concat_with_stored_and_calculate_feats(self, df: pl.DataFrame) -> pl.DataFrame:
         if self.column_names:
@@ -269,6 +257,79 @@ class RollingMeanDaysTransformer(LagGenerator):
             return df.with_columns(pl.col("__ori_date").alias(self.date_column))
         return df
 
+    def _store_future_state(self) -> None:
+        """Precompute per-granularity rolling mean from the trimmed stored history.
+
+        rolling_sum_by uses a left-exclusive window: (D - window, D].
+        For a future game at max_date + 1, that means date > max_date - days.
+        _trim_stored_history_to_days_window uses >=, so we re-filter here to >
+        to match the exact rolling window semantics.
+        """
+        if self._df is None:
+            self._future_state_df = None
+            return
+
+        history_df = nw.from_native(self._df)
+
+        max_date_val = history_df[self.date_column].max()
+        if max_date_val is None:
+            self._future_state_df = None
+            return
+
+        exclusive_cutoff = max_date_val - pd.Timedelta(days=self.days)
+        history_df = history_df.filter(nw.col(self.date_column) > nw.lit(exclusive_cutoff))
+        feature_state_cols = [f"{self.prefix}_{feature}{self.days}" for feature in self.features]
+
+        if self.scale_by_participation_weight:
+            weight_col = self.column_names.participation_weight
+            total_weight = nw.col(weight_col).sum().over(self.granularity)
+            state_exprs = [
+                nw.when(total_weight > 0)
+                .then(
+                    (nw.col(feature) * nw.col(weight_col)).sum().over(self.granularity)
+                    / total_weight
+                )
+                .otherwise(nw.lit(None))
+                .alias(state_col)
+                for feature, state_col in zip(self.features, feature_state_cols, strict=True)
+            ]
+        else:
+            state_exprs = [
+                nw.col(feature).mean().over(self.granularity).alias(state_col)
+                for feature, state_col in zip(self.features, feature_state_cols, strict=True)
+            ]
+
+        history_df = history_df.with_columns(state_exprs)
+
+        agg_cols = list(feature_state_cols)
+
+        if self.min_games is not None or self.add_count:
+            count_tmp = "__state_count"
+            history_df = history_df.with_columns(
+                nw.col(self.features[0]).count().over(self.granularity).alias(count_tmp)
+            )
+            if self.min_games is not None:
+                history_df = history_df.with_columns(
+                    [
+                        nw.when(nw.col(count_tmp) >= self.min_games)
+                        .then(nw.col(state_col))
+                        .otherwise(nw.lit(None))
+                        .alias(state_col)
+                        for state_col in feature_state_cols
+                    ]
+                )
+            if self.add_count:
+                history_df = history_df.rename({count_tmp: self._count_column_name})
+                agg_cols.append(self._count_column_name)
+            else:
+                history_df = history_df.drop(count_tmp)
+
+        self._future_state_df = (
+            history_df.group_by(self.granularity)
+            .agg([nw.col(col).last().alias(col) for col in agg_cols])
+            .to_native()
+        )
+
     def _store_df(
         self,
         grouped_df: IntoFrameT,
@@ -296,6 +357,7 @@ class RollingMeanDaysTransformer(LagGenerator):
     def reset(self):
         self._df = None
         self._fitted_game_ids = []
+        self._future_state_df = None
 
     @property
     def features_out(self) -> list[str]:
