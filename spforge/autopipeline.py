@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import threading
 import warnings
 from typing import Any, Literal
 
@@ -19,6 +20,13 @@ from spforge.transformers import PredictorTransformer
 from spforge.transformers._other_transformer import ConvertDataFrameToCategoricalTransformer
 
 _logger = logging.getLogger(__name__)
+
+# Thread-local storage for extra context columns (e.g. scenario_id) injected by
+# AutoPipeline.predict during batched-scenario inference. _OnlyOutputColumns.transform
+# reads this to inject those columns before passing X to nested transformers that
+# wouldn't otherwise receive them (e.g. TeamPredAggregateTransformer inside a
+# ColumnTransformer with remainder="drop").
+_predict_extra_context: threading.local = threading.local()
 
 # --- Serializable Global Helpers ---
 
@@ -110,6 +118,21 @@ class _OnlyOutputColumns(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         cols = list(self.output_cols) if self.output_cols is not None else []
+        # Inject extra context columns (e.g. scenario_id) that were stripped by an
+        # enclosing ColumnTransformer's integer-index column selection (set at fit time).
+        extra_ctx = getattr(_predict_extra_context, "data", None)
+        if extra_ctx and isinstance(X, pd.DataFrame):
+            missing = [col for col in extra_ctx if col not in X.columns]
+            if missing:
+                X = X.copy()
+                idx = X.index
+                for col in missing:
+                    vals = extra_ctx[col]
+                    if hasattr(vals, "__len__") and len(vals) == len(X):
+                        X[col] = vals
+                    else:
+                        # vals indexed by original position — align by integer index
+                        X[col] = pd.Series(vals, index=idx)
         Z = self.transformer.transform(X)
 
         if hasattr(Z, "columns"):
@@ -709,20 +732,34 @@ class AutoPipeline(BaseEstimator):
 
         # Extra passthrough columns (e.g. scenario_id for batched-scenario inference) are
         # dropped by intermediate sklearn steps (remainder="drop"). Run all transformers
-        # normally, then inject the extra columns right before the final estimator.
+        # normally, and publish the extra columns via a thread-local context so that
+        # _OnlyOutputColumns.transform can inject them even when nested inside a
+        # ColumnTransformer that only selects columns by integer indices set at fit time.
         X_pd = X.to_pandas()
         extra_data = {c: X_pd[c].to_numpy().copy() for c in extra_present}
         X_step: pd.DataFrame = X_pd[[c for c in self._fitted_features if c in X_pd.columns]]
 
-        for _name, step in self.sklearn_pipeline.steps[:-1]:
-            X_step = step.transform(X_step)
-            if hasattr(X_step, "to_pandas") and not isinstance(X_step, pd.DataFrame):
-                X_step = X_step.to_pandas()
+        _predict_extra_context.data = extra_data
+        try:
+            for _name, step in self.sklearn_pipeline.steps[:-1]:
+                X_step = step.transform(X_step)
+                if hasattr(X_step, "to_pandas") and not isinstance(X_step, pd.DataFrame):
+                    X_step = X_step.to_pandas()
+                # Re-inject extra passthrough columns after each step that may have dropped them
+                # so that the *next* ColumnTransformer step sees them in its input DataFrame.
+                if isinstance(X_step, pd.DataFrame):
+                    dropped = [col for col in extra_data if col not in X_step.columns]
+                    if dropped:
+                        X_step = X_step.copy()
+                        for col in dropped:
+                            X_step[col] = extra_data[col]
 
-        if isinstance(X_step, pd.DataFrame):
-            X_step = X_step.copy()
-            for col, vals in extra_data.items():
-                X_step[col] = vals
+            if isinstance(X_step, pd.DataFrame):
+                X_step = X_step.copy()
+                for col, vals in extra_data.items():
+                    X_step[col] = vals
+        finally:
+            _predict_extra_context.data = None
 
         return self.sklearn_pipeline.steps[-1][1].predict(X_step)
 
