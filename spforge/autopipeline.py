@@ -700,11 +700,16 @@ class AutoPipeline(BaseEstimator):
         if not extra_present:
             return self.sklearn_pipeline.predict(X[self._fitted_features])
 
+        # Only use the manual step-through when there are multiple distinct values for
+        # the extra columns (i.e. truly batched inference). For single-value columns
+        # (per-scenario runs) the normal path is identical and avoids subtle differences
+        # in intermediate step outputs when bypassing sklearn's Pipeline.predict.
+        if all(X[c].n_unique() <= 1 for c in extra_present):
+            return self.sklearn_pipeline.predict(X[self._fitted_features])
+
         # Extra passthrough columns (e.g. scenario_id for batched-scenario inference) are
         # dropped by intermediate sklearn steps (remainder="drop"). Run all transformers
         # normally, then inject the extra columns right before the final estimator.
-        import pandas as pd
-
         X_pd = X.to_pandas()
         extra_data = {c: X_pd[c].to_numpy().copy() for c in extra_present}
         X_step: pd.DataFrame = X_pd[[c for c in self._fitted_features if c in X_pd.columns]]

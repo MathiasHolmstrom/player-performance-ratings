@@ -1070,6 +1070,26 @@ def test_extra_passthrough_columns_absent_from_x_does_not_raise(frame):
     assert "scenario_id" not in capture.last_predict_columns
 
 
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_extra_passthrough_single_value_uses_normal_path(frame):
+    """When all extra passthrough columns have only one unique value (per-scenario run),
+    the normal sklearn pipeline path must be used — identical to having no extra columns."""
+    capture = _CaptureFinalEstimator()
+    df_train = pd.DataFrame({"f1": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0]})
+    model = AutoPipeline(estimator=capture, estimator_features=["f1"])
+    model.fit(df_train, df_train["y"])
+
+    model._extra_passthrough_columns = ["scenario_id"]
+
+    # All rows have the same scenario_id → single unique value → normal path
+    df_pred_pd = pd.DataFrame({"f1": [1.0, 2.0], "scenario_id": ["s1", "s1"]})
+    df_pred = df_pred_pd if frame == "pd" else pl.from_pandas(df_pred_pd)
+    model.predict(df_pred)
+
+    # Normal path: extra column does NOT reach the final estimator
+    assert "scenario_id" not in capture.last_predict_columns
+
+
 def test_extra_passthrough_columns_not_set_on_old_pickled_model():
     """Pickled AutoPipeline objects without _extra_passthrough_columns must still
     predict correctly (backwards compatibility via getattr fallback)."""
