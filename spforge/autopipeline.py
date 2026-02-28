@@ -700,9 +700,9 @@ class AutoPipeline(BaseEstimator):
         if not extra_present:
             return self.sklearn_pipeline.predict(X[self._fitted_features])
 
-        # Extra passthrough columns (e.g. scenario_id for batched-scenario inference) need
-        # to survive all sklearn pipeline steps which use remainder="drop". Manually step
-        # through each transformer, re-injecting the extra columns after each one.
+        # Extra passthrough columns (e.g. scenario_id for batched-scenario inference) are
+        # dropped by intermediate sklearn steps (remainder="drop"). Run all transformers
+        # normally, then inject the extra columns right before the final estimator.
         import pandas as pd
 
         X_pd = X.to_pandas()
@@ -713,10 +713,11 @@ class AutoPipeline(BaseEstimator):
             X_step = step.transform(X_step)
             if hasattr(X_step, "to_pandas") and not isinstance(X_step, pd.DataFrame):
                 X_step = X_step.to_pandas()
-            if isinstance(X_step, pd.DataFrame):
-                X_step = X_step.copy()
-                for col, vals in extra_data.items():
-                    X_step[col] = vals
+
+        if isinstance(X_step, pd.DataFrame):
+            X_step = X_step.copy()
+            for col, vals in extra_data.items():
+                X_step[col] = vals
 
         return self.sklearn_pipeline.steps[-1][1].predict(X_step)
 
