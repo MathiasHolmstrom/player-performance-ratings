@@ -1014,3 +1014,73 @@ def test_aggregation_weight_sums_weight_column(frame):
 
     expected = 0.25 + 0.75
     assert abs(weight_val - expected) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# _extra_passthrough_columns
+# ---------------------------------------------------------------------------
+
+
+class _CaptureFinalEstimator(BaseEstimator):
+    """Records the columns present in X when predict() is called."""
+
+    def fit(self, X, y=None):
+        self.is_fitted_ = True  # needed so sklearn's check_is_fitted considers the pipeline fitted
+        return self
+
+    def predict(self, X):
+        self.last_predict_columns = list(X.columns) if hasattr(X, "columns") else []
+        return np.zeros(len(X), dtype=float)
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_extra_passthrough_columns_reach_final_estimator(frame):
+    """Columns in _extra_passthrough_columns that are present at predict-time
+    must survive all intermediate pipeline steps and arrive at the final estimator."""
+    capture = _CaptureFinalEstimator()
+    df_train = pd.DataFrame({"f1": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0]})
+    model = AutoPipeline(estimator=capture, estimator_features=["f1"])
+    model.fit(df_train, df_train["y"])
+
+    model._extra_passthrough_columns = ["scenario_id"]
+
+    df_pred_pd = pd.DataFrame({"f1": [1.0, 2.0], "scenario_id": ["s1", "s2"]})
+    df_pred = df_pred_pd if frame == "pd" else pl.from_pandas(df_pred_pd)
+    model.predict(df_pred)
+
+    assert "scenario_id" in capture.last_predict_columns
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_extra_passthrough_columns_absent_from_x_does_not_raise(frame):
+    """When a column in _extra_passthrough_columns is not in X, predict must
+    fall back to the normal code path without error."""
+    capture = _CaptureFinalEstimator()
+    df_train = pd.DataFrame({"f1": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0]})
+    model = AutoPipeline(estimator=capture, estimator_features=["f1"])
+    model.fit(df_train, df_train["y"])
+
+    model._extra_passthrough_columns = ["scenario_id"]
+
+    df_pred_pd = pd.DataFrame({"f1": [1.0, 2.0]})  # no scenario_id
+    df_pred = df_pred_pd if frame == "pd" else pl.from_pandas(df_pred_pd)
+    preds = model.predict(df_pred)
+
+    assert len(preds) == 2
+    assert "scenario_id" not in capture.last_predict_columns
+
+
+def test_extra_passthrough_columns_not_set_on_old_pickled_model():
+    """Pickled AutoPipeline objects without _extra_passthrough_columns must still
+    predict correctly (backwards compatibility via getattr fallback)."""
+    capture = _CaptureFinalEstimator()
+    df_train = pd.DataFrame({"f1": [1.0, 2.0, 3.0], "y": [1.0, 2.0, 3.0]})
+    model = AutoPipeline(estimator=capture, estimator_features=["f1"])
+    model.fit(df_train, df_train["y"])
+
+    # Simulate old pickled model by deleting the attribute
+    del model._extra_passthrough_columns
+
+    df_pred = pd.DataFrame({"f1": [1.0, 2.0]})
+    preds = model.predict(df_pred)
+    assert len(preds) == 2
