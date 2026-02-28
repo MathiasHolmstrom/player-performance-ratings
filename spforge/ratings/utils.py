@@ -1,3 +1,4 @@
+import numpy as np
 import polars as pl
 
 from spforge.data_structures import ColumnNames
@@ -5,6 +6,19 @@ from spforge.data_structures import ColumnNames
 # Internal column names for scaled participation weights
 _SCALED_PW = "__scaled_participation_weight__"
 _SCALED_PPW = "__scaled_projected_participation_weight__"
+
+_NUMPY_THRESHOLD = 500
+
+
+def _group_ids(keys: list) -> tuple[np.ndarray, int]:
+    """Map list of hashable keys to dense integer group IDs."""
+    mapping: dict = {}
+    ids = []
+    for k in keys:
+        if k not in mapping:
+            mapping[k] = len(mapping)
+        ids.append(mapping[k])
+    return np.array(ids, dtype=np.intp), len(mapping)
 
 
 def add_team_rating(
@@ -15,6 +29,18 @@ def add_team_rating(
 ) -> pl.DataFrame:
     mid = column_names.match_id
     tid = column_names.team_id
+
+    if len(df) < _NUMPY_THRESHOLD:
+        mid_vals = df[mid].to_list()
+        tid_vals = df[tid].to_list()
+        rating_arr = df[player_rating_col].to_numpy(allow_copy=True)
+        keys, n_groups = _group_ids(list(zip(mid_vals, tid_vals, strict=False)))
+        nan_mask = np.isnan(rating_arr)
+        r_safe = np.where(nan_mask, 0.0, rating_arr)
+        count = np.bincount(keys, weights=(~nan_mask).astype(float), minlength=n_groups)[keys]
+        r_sum = np.bincount(keys, weights=r_safe, minlength=n_groups)[keys]
+        result = np.where(count > 0, r_sum / count, np.nan)
+        return df.with_columns(pl.Series(name=team_rating_out, values=result))
 
     return df.with_columns(pl.col(player_rating_col).mean().over([mid, tid]).alias(team_rating_out))
 
@@ -54,6 +80,21 @@ def add_team_rating_projected(
     weight_col = _SCALED_PPW if _SCALED_PPW in df.columns else ppw
 
     if weight_col and weight_col in df.columns:
+        if len(df) < _NUMPY_THRESHOLD:
+            mid_vals = df[mid].to_list()
+            tid_vals = df[tid].to_list()
+            rating_arr = df[player_rating_col].to_numpy(allow_copy=True)
+            weight_arr = df[weight_col].to_numpy(allow_copy=True)
+            keys, n_groups = _group_ids(list(zip(mid_vals, tid_vals, strict=False)))
+            # Treat NaN weight or rating as 0 contribution
+            valid = ~(np.isnan(weight_arr) | np.isnan(rating_arr))
+            w_safe = np.where(valid, weight_arr, 0.0)
+            wr_safe = np.where(valid, weight_arr * rating_arr, 0.0)
+            w_sum = np.bincount(keys, weights=w_safe, minlength=n_groups)[keys]
+            wr_sum = np.bincount(keys, weights=wr_safe, minlength=n_groups)[keys]
+            result = np.where(w_sum > 0, wr_sum / w_sum, np.nan)
+            return df.with_columns(pl.Series(name=team_rating_out, values=result))
+
         return df.with_columns(
             (
                 (pl.col(weight_col) * pl.col(player_rating_col)).sum().over([mid, tid])
@@ -77,6 +118,30 @@ def add_opp_team_rating(
 ) -> pl.DataFrame:
     mid = column_names.match_id
     tid = column_names.team_id
+
+    if len(df) < _NUMPY_THRESHOLD:
+        mid_vals = df[mid].to_list()
+        tid_vals = df[tid].to_list()
+        rating_vals = df[team_rating_col].to_list()
+
+        # Build (match, team) → rating and match → set of teams mappings
+        team_rating_map: dict = {}
+        match_teams: dict = {}
+        for m, t, r in zip(mid_vals, tid_vals, rating_vals, strict=False):
+            team_rating_map[(m, t)] = r
+            if m not in match_teams:
+                match_teams[m] = []
+            if t not in match_teams[m]:
+                match_teams[m].append(t)
+
+        opp_ratings = []
+        for m, t in zip(mid_vals, tid_vals, strict=False):
+            opp_teams = [ot for ot in match_teams.get(m, []) if ot != t]
+            opp_ratings.append(team_rating_map.get((m, opp_teams[0])) if opp_teams else None)
+
+        return df.with_columns(
+            pl.Series(name=opp_team_rating_out, values=opp_ratings, dtype=pl.Float64)
+        )
 
     team_sums = df.select([mid, tid, team_rating_col]).unique()
 
