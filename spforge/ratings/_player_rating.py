@@ -653,7 +653,7 @@ class PlayerRatingGenerator(RatingGenerator):
             self.column_names.match_id,
             self.column_names.team_id,
         ]
-        for col in self.extra_granularity:
+        for col in getattr(self, "extra_granularity", []):
             if col in df.columns and col in ratings.columns:
                 join_on.append(col)
 
@@ -1254,7 +1254,7 @@ class PlayerRatingGenerator(RatingGenerator):
         group_cols = [cn.match_id, cn.team_id, cn.start_date]
         if cn.update_match_id != cn.match_id:
             group_cols.append(cn.update_match_id)
-        for col in self.extra_granularity:
+        for col in getattr(self, "extra_granularity", []):
             if col in df.columns:
                 group_cols.append(col)
 
