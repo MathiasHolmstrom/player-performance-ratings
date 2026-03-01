@@ -26,15 +26,22 @@ def add_team_rating(
     column_names: ColumnNames,  # ColumnNames
     player_rating_col: str,
     team_rating_out: str,
+    extra_granularity: list[str] | None = None,
 ) -> pl.DataFrame:
     mid = column_names.match_id
     tid = column_names.team_id
+    extra_cols = [c for c in (extra_granularity or []) if c in df.columns]
+    group_cols = [mid, tid, *extra_cols]
 
     if len(df) < _NUMPY_THRESHOLD:
         mid_vals = df[mid].to_list()
         tid_vals = df[tid].to_list()
+        extra_vals = [df[c].to_list() for c in extra_cols]
         rating_arr = df[player_rating_col].to_numpy(allow_copy=True)
-        keys, n_groups = _group_ids(list(zip(mid_vals, tid_vals, strict=False)))
+        if extra_vals:
+            keys, n_groups = _group_ids(list(zip(mid_vals, tid_vals, *extra_vals, strict=False)))
+        else:
+            keys, n_groups = _group_ids(list(zip(mid_vals, tid_vals, strict=False)))
         nan_mask = np.isnan(rating_arr)
         r_safe = np.where(nan_mask, 0.0, rating_arr)
         count = np.bincount(keys, weights=(~nan_mask).astype(float), minlength=n_groups)[keys]
@@ -42,7 +49,7 @@ def add_team_rating(
         result = np.where(count > 0, r_sum / count, np.nan)
         return df.with_columns(pl.Series(name=team_rating_out, values=result))
 
-    return df.with_columns(pl.col(player_rating_col).mean().over([mid, tid]).alias(team_rating_out))
+    return df.with_columns(pl.col(player_rating_col).mean().over(group_cols).alias(team_rating_out))
 
 
 def add_day_number_utc(
@@ -71,10 +78,13 @@ def add_team_rating_projected(
     column_names: ColumnNames,  # ColumnNames
     player_rating_col: str,
     team_rating_out: str,
+    extra_granularity: list[str] | None = None,
 ) -> pl.DataFrame:
     mid = column_names.match_id
     tid = column_names.team_id
     ppw = column_names.projected_participation_weight
+    extra_cols = [c for c in (extra_granularity or []) if c in df.columns]
+    group_cols = [mid, tid, *extra_cols]
 
     # Use scaled column if available (clipped to [0, 1]), otherwise raw column
     weight_col = _SCALED_PPW if _SCALED_PPW in df.columns else ppw
@@ -83,9 +93,15 @@ def add_team_rating_projected(
         if len(df) < _NUMPY_THRESHOLD:
             mid_vals = df[mid].to_list()
             tid_vals = df[tid].to_list()
+            extra_vals = [df[c].to_list() for c in extra_cols]
             rating_arr = df[player_rating_col].to_numpy(allow_copy=True)
             weight_arr = df[weight_col].to_numpy(allow_copy=True)
-            keys, n_groups = _group_ids(list(zip(mid_vals, tid_vals, strict=False)))
+            if extra_vals:
+                keys, n_groups = _group_ids(
+                    list(zip(mid_vals, tid_vals, *extra_vals, strict=False))
+                )
+            else:
+                keys, n_groups = _group_ids(list(zip(mid_vals, tid_vals, strict=False)))
             # Treat NaN weight or rating as 0 contribution
             valid = ~(np.isnan(weight_arr) | np.isnan(rating_arr))
             w_safe = np.where(valid, weight_arr, 0.0)
@@ -97,8 +113,8 @@ def add_team_rating_projected(
 
         return df.with_columns(
             (
-                (pl.col(weight_col) * pl.col(player_rating_col)).sum().over([mid, tid])
-                / pl.col(weight_col).sum().over([mid, tid])
+                (pl.col(weight_col) * pl.col(player_rating_col)).sum().over(group_cols)
+                / pl.col(weight_col).sum().over(group_cols)
             ).alias(team_rating_out)
         )
 
@@ -107,6 +123,7 @@ def add_team_rating_projected(
         column_names=column_names,
         player_rating_col=player_rating_col,
         team_rating_out=team_rating_out,
+        extra_granularity=extra_granularity,
     )
 
 
@@ -115,48 +132,77 @@ def add_opp_team_rating(
     column_names,  # ColumnNames
     team_rating_col: str,
     opp_team_rating_out: str,
+    extra_granularity: list[str] | None = None,
 ) -> pl.DataFrame:
     mid = column_names.match_id
     tid = column_names.team_id
+    extra_cols = [c for c in (extra_granularity or []) if c in df.columns]
+    match_key_cols = [mid, *extra_cols]
+    group_cols = [*match_key_cols, tid]
 
     if len(df) < _NUMPY_THRESHOLD:
         mid_vals = df[mid].to_list()
         tid_vals = df[tid].to_list()
+        extra_vals = [df[c].to_list() for c in extra_cols]
         rating_vals = df[team_rating_col].to_list()
 
-        # Build (match, team) → rating and match → set of teams mappings
+        # Build (match_key, team) -> rating and match_key -> set of teams mappings
         team_rating_map: dict = {}
         match_teams: dict = {}
-        for m, t, r in zip(mid_vals, tid_vals, rating_vals, strict=False):
-            team_rating_map[(m, t)] = r
-            if m not in match_teams:
-                match_teams[m] = []
-            if t not in match_teams[m]:
-                match_teams[m].append(t)
+        if extra_vals:
+            base_iter = zip(mid_vals, tid_vals, rating_vals, *extra_vals, strict=False)
+            for row in base_iter:
+                m, t, r, *extras = row
+                match_key = (m, *extras)
+                team_rating_map[(match_key, t)] = r
+                if match_key not in match_teams:
+                    match_teams[match_key] = []
+                if t not in match_teams[match_key]:
+                    match_teams[match_key].append(t)
+        else:
+            for m, t, r in zip(mid_vals, tid_vals, rating_vals, strict=False):
+                match_key = (m,)
+                team_rating_map[(match_key, t)] = r
+                if match_key not in match_teams:
+                    match_teams[match_key] = []
+                if t not in match_teams[match_key]:
+                    match_teams[match_key].append(t)
 
         opp_ratings = []
-        for m, t in zip(mid_vals, tid_vals, strict=False):
-            opp_teams = [ot for ot in match_teams.get(m, []) if ot != t]
-            opp_ratings.append(team_rating_map.get((m, opp_teams[0])) if opp_teams else None)
+        if extra_vals:
+            for row in zip(mid_vals, tid_vals, *extra_vals, strict=False):
+                m, t, *extras = row
+                match_key = (m, *extras)
+                opp_teams = [ot for ot in match_teams.get(match_key, []) if ot != t]
+                opp_ratings.append(
+                    team_rating_map.get((match_key, opp_teams[0])) if opp_teams else None
+                )
+        else:
+            for m, t in zip(mid_vals, tid_vals, strict=False):
+                match_key = (m,)
+                opp_teams = [ot for ot in match_teams.get(match_key, []) if ot != t]
+                opp_ratings.append(
+                    team_rating_map.get((match_key, opp_teams[0])) if opp_teams else None
+                )
 
         return df.with_columns(
             pl.Series(name=opp_team_rating_out, values=opp_ratings, dtype=pl.Float64)
         )
 
-    team_sums = df.select([mid, tid, team_rating_col]).unique()
+    team_sums = df.select([*group_cols, team_rating_col]).unique()
 
     opp_map = (
-        team_sums.join(team_sums, on=mid, suffix="_opp")
+        team_sums.join(team_sums, on=match_key_cols, suffix="_opp")
         .filter(pl.col(tid) != pl.col(f"{tid}_opp"))
         .select(
-            pl.col(mid),
+            *[pl.col(c) for c in match_key_cols],
             pl.col(tid),
             pl.col(f"{team_rating_col}_opp").alias(opp_team_rating_out),
         )
     )
 
     # Ensure we don't create duplicate columns - use coalesce to handle existing columns
-    result = df.join(opp_map, on=[mid, tid], how="left", coalesce=True)
+    result = df.join(opp_map, on=group_cols, how="left", coalesce=True)
     return result
 
 
@@ -185,10 +231,13 @@ def add_rating_mean_projected(
     column_names,  # ColumnNames
     player_rating_col: str,
     rating_mean_out: str,
+    extra_granularity: list[str] | None = None,
 ) -> pl.DataFrame:
     """Mean across the entire match (all players). Weighted if projected_participation_weight exists."""
     mid = column_names.match_id
     ppw = column_names.projected_participation_weight
+    extra_cols = [c for c in (extra_granularity or []) if c in df.columns]
+    group_cols = [mid, *extra_cols]
 
     # Use scaled column if available (clipped to [0, 1]), otherwise raw column
     weight_col = _SCALED_PPW if _SCALED_PPW in df.columns else ppw
@@ -196,12 +245,12 @@ def add_rating_mean_projected(
     if weight_col and weight_col in df.columns:
         return df.with_columns(
             (
-                (pl.col(weight_col) * pl.col(player_rating_col)).sum().over(mid)
-                / pl.col(weight_col).sum().over(mid)
+                (pl.col(weight_col) * pl.col(player_rating_col)).sum().over(group_cols)
+                / pl.col(weight_col).sum().over(group_cols)
             ).alias(rating_mean_out)
         )
 
-    return df.with_columns(pl.col(player_rating_col).mean().over(mid).alias(rating_mean_out))
+    return df.with_columns(pl.col(player_rating_col).mean().over(group_cols).alias(rating_mean_out))
 
 
 def add_player_opponent_mean_projected(
