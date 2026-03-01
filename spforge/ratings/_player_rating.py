@@ -1052,6 +1052,9 @@ class PlayerRatingGenerator(RatingGenerator):
         cols_to_add = set((self._features_out or []) + (self.non_predictor_features_out or []))
 
         cn = self.column_names
+        extra_granularity = [
+            col for col in getattr(self, "extra_granularity", []) if col in df.columns
+        ]
 
         if (
             self.TEAM_OFF_RATING_PROJ_COL in cols_to_add
@@ -1067,6 +1070,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 column_names=cn,
                 player_rating_col=self.PLAYER_OFF_RATING_COL,
                 team_rating_out=self.TEAM_OFF_RATING_PROJ_COL,
+                extra_granularity=extra_granularity,
             )
 
         if (
@@ -1082,6 +1086,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 column_names=cn,
                 player_rating_col=self.PLAYER_DEF_RATING_COL,
                 team_rating_out=self.TEAM_DEF_RATING_PROJ_COL,
+                extra_granularity=extra_granularity,
             )
 
         if self.OPP_OFF_RATING_PROJ_COL in cols_to_add:
@@ -1090,6 +1095,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 column_names=cn,
                 team_rating_col=self.TEAM_OFF_RATING_PROJ_COL,
                 opp_team_rating_out=self.OPP_OFF_RATING_PROJ_COL,
+                extra_granularity=extra_granularity,
             )
 
         if (
@@ -1104,6 +1110,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 column_names=cn,
                 team_rating_col=self.TEAM_DEF_RATING_PROJ_COL,
                 opp_team_rating_out=self.OPP_DEF_RATING_PROJ_COL,
+                extra_granularity=extra_granularity,
             )
 
         # Batch independent alias/arithmetic expressions to reduce DataFrame materializations
@@ -1146,6 +1153,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 column_names=cn,
                 player_rating_col=self.PLAYER_OFF_RATING_COL,
                 team_rating_out=self.TEAM_RATING_COL,
+                extra_granularity=extra_granularity,
             )
 
         if self.OPP_RATING_COL in cols_to_add or self.DIFF_COL in cols_to_add:
@@ -1154,6 +1162,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 column_names=cn,
                 team_rating_col=self.TEAM_RATING_COL,
                 opp_team_rating_out=self.OPP_RATING_COL,
+                extra_granularity=extra_granularity,
             )
 
         if self.DIFF_PROJ_COL in cols_to_add:
@@ -1170,6 +1179,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 column_names=cn,
                 player_rating_col=self.PLAYER_OFF_RATING_COL,
                 rating_mean_out=self.MEAN_PROJ_COL,
+                extra_granularity=extra_granularity,
             )
 
         if self.PLAYER_OPP_MEAN_PROJ_COL in cols_to_add:
@@ -1188,6 +1198,7 @@ class PlayerRatingGenerator(RatingGenerator):
                     column_names=cn,
                     player_rating_col=self.PLAYER_OFF_RATING_COL,
                     team_rating_out=self.TEAM_RATING_COL,
+                    extra_granularity=extra_granularity,
                 )
             if self.OPP_RATING_COL not in df.columns:
                 df = add_opp_team_rating(
@@ -1195,6 +1206,7 @@ class PlayerRatingGenerator(RatingGenerator):
                     column_names=cn,
                     team_rating_col=self.TEAM_RATING_COL,
                     opp_team_rating_out=self.OPP_RATING_COL,
+                    extra_granularity=extra_granularity,
                 )
             if self.TEAM_RATING_COL in df.columns and self.OPP_RATING_COL in df.columns:
                 df = df.with_columns(
