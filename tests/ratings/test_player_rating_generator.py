@@ -273,6 +273,34 @@ def test_create_match_df_respects_extra_granularity_in_opponent_pairing(base_cn)
     assert sorted(match_df["scenario_id"].to_list()) == [1, 2]
 
 
+def test_future_transform_with_extra_granularity_preserves_row_count(base_cn, sample_df):
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        extra_granularity=["scenario_id"],
+    )
+    gen.fit_transform(sample_df)
+
+    future_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4", "P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2", "T1", "T1", "T2", "T2"],
+            "mid": ["M2"] * 8,
+            "dt": ["2024-01-02"] * 8,
+            "pw": [1.0] * 8,
+            "scenario_id": [1, 1, 1, 1, 2, 2, 2, 2],
+        }
+    )
+
+    result = gen.future_transform(future_df)
+
+    assert result.height == future_df.height
+    assert (
+        result.select(["pid", "tid", "mid", "scenario_id"]).n_unique()
+        == future_df.select(["pid", "tid", "mid", "scenario_id"]).n_unique()
+    )
+
+
 def test_future_transform_cold_start_player(base_cn, sample_df):
     """Check that future_transform handles players not seen during fit_transform."""
     gen = PlayerRatingGenerator(
