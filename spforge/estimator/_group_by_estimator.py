@@ -25,6 +25,17 @@ class GroupByEstimator(BaseEstimator):
     def __sklearn_is_fitted__(self):
         return getattr(self, "_is_fitted_", False)
 
+    def _effective_granularity(self, X: IntoFrameT | None = None) -> list[str]:
+        keys = list(self.granularity)
+        runtime_extra = getattr(self, "_runtime_extra_granularity", None) or []
+        if X is None or not runtime_extra:
+            return keys
+        x_cols = set(getattr(X, "columns", []))
+        for col in runtime_extra:
+            if col in x_cols and col not in keys:
+                keys.append(col)
+        return keys
+
     @nw.narwhalify
     def fit(self, X: IntoFrameT, y: Any, sample_weight: np.ndarray | None = None):
         X = X.to_pandas()
@@ -52,20 +63,44 @@ class GroupByEstimator(BaseEstimator):
     def predict(self, X: IntoFrameT):
         if not self.__sklearn_is_fitted__():
             raise RuntimeError("GroupByEstimator not fitted. Call fit() first.")
-        X_red = nw.from_native(self._reducer.transform(X))
-        predicted = self._est.predict(X_red.drop(self.granularity).to_pandas())
-        return self._return_predicted(X=X, X_red=X_red, predicted=predicted)
+        effective_granularity = self._effective_granularity(X)
+        reducer = GroupByReducer(
+            effective_granularity,
+            aggregation_weight=getattr(self, "aggregation_weight", None),
+        )
+        X_red = nw.from_native(reducer.transform(X))
+        predicted = self._est.predict(X_red.drop(effective_granularity).to_pandas())
+        return self._return_predicted(
+            X=X,
+            X_red=X_red,
+            predicted=predicted,
+            granularity=effective_granularity,
+        )
 
     @nw.narwhalify
     def predict_proba(self, X: IntoFrameT) -> np.ndarray:
         if not self.__sklearn_is_fitted__():
             raise RuntimeError("GroupByEstimator not fitted. Call fit() first.")
-        X_red = nw.from_native(self._reducer.transform(X))
-        predicted = self._est.predict_proba(X_red.drop(self.granularity).to_pandas())
-        return self._return_predicted(X=X, X_red=X_red, predicted=predicted)
+        effective_granularity = self._effective_granularity(X)
+        reducer = GroupByReducer(
+            effective_granularity,
+            aggregation_weight=getattr(self, "aggregation_weight", None),
+        )
+        X_red = nw.from_native(reducer.transform(X))
+        predicted = self._est.predict_proba(X_red.drop(effective_granularity).to_pandas())
+        return self._return_predicted(
+            X=X,
+            X_red=X_red,
+            predicted=predicted,
+            granularity=effective_granularity,
+        )
 
     def _return_predicted(
-        self, X: IntoFrameT, X_red: IntoFrameT, predicted: np.ndarray
+        self,
+        X: IntoFrameT,
+        X_red: IntoFrameT,
+        predicted: np.ndarray,
+        granularity: list[str],
     ) -> np.ndarray:
         X_red = X_red.with_columns(
             nw.new_series(
@@ -75,8 +110,8 @@ class GroupByEstimator(BaseEstimator):
             )
         )
         joined = X.join(
-            X_red.select([*self.granularity, "__predicted"]),
-            on=self.granularity,
+            X_red.select([*granularity, "__predicted"]),
+            on=granularity,
             how="left",
         )
 
