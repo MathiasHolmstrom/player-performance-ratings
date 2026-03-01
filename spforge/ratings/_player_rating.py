@@ -620,10 +620,16 @@ class PlayerRatingGenerator(RatingGenerator):
             )
         ]
 
-        df = df.select(cols).join(
-            ratings,
-            on=[self.column_names.player_id, self.column_names.match_id, self.column_names.team_id],
-        )
+        join_on = [
+            self.column_names.player_id,
+            self.column_names.match_id,
+            self.column_names.team_id,
+        ]
+        for col in getattr(self, "extra_granularity", []):
+            if col in df.columns and col in ratings.columns:
+                join_on.append(col)
+
+        df = df.select(cols).join(ratings, on=join_on)
 
         result = self._add_rating_features(df)
         return self._remove_internal_scaled_columns(result)
@@ -692,6 +698,11 @@ class PlayerRatingGenerator(RatingGenerator):
             self.PLAYER_RATING_COL: [],
             self.PLAYER_PRED_PERF_COL: [],
         }
+        extra_out_cols = [
+            col for col in getattr(self, "extra_granularity", []) if col in match_df.columns
+        ]
+        for col in extra_out_cols:
+            out[col] = []
 
         for r in match_df.iter_rows(named=True):
             update_id = r[cn.update_match_id]
@@ -966,6 +977,8 @@ class PlayerRatingGenerator(RatingGenerator):
                 out[cn.player_id].append(pid)
                 out[cn.match_id].append(match_id)
                 out[cn.team_id].append(team_id)
+                for col in extra_out_cols:
+                    out[col].append(r[col])
 
                 out[self.PLAYER_OFF_RATING_COL].append(off_pre)
                 out[self.PLAYER_DEF_RATING_COL].append(def_pre)
@@ -1052,6 +1065,9 @@ class PlayerRatingGenerator(RatingGenerator):
         cols_to_add = set((self._features_out or []) + (self.non_predictor_features_out or []))
 
         cn = self.column_names
+        extra_granularity = [
+            col for col in getattr(self, "extra_granularity", []) if col in df.columns
+        ]
 
         if (
             self.TEAM_OFF_RATING_PROJ_COL in cols_to_add
@@ -1067,6 +1083,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 column_names=cn,
                 player_rating_col=self.PLAYER_OFF_RATING_COL,
                 team_rating_out=self.TEAM_OFF_RATING_PROJ_COL,
+                extra_granularity=extra_granularity,
             )
 
         if (
@@ -1082,6 +1099,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 column_names=cn,
                 player_rating_col=self.PLAYER_DEF_RATING_COL,
                 team_rating_out=self.TEAM_DEF_RATING_PROJ_COL,
+                extra_granularity=extra_granularity,
             )
 
         if self.OPP_OFF_RATING_PROJ_COL in cols_to_add:
@@ -1090,6 +1108,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 column_names=cn,
                 team_rating_col=self.TEAM_OFF_RATING_PROJ_COL,
                 opp_team_rating_out=self.OPP_OFF_RATING_PROJ_COL,
+                extra_granularity=extra_granularity,
             )
 
         if (
@@ -1104,6 +1123,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 column_names=cn,
                 team_rating_col=self.TEAM_DEF_RATING_PROJ_COL,
                 opp_team_rating_out=self.OPP_DEF_RATING_PROJ_COL,
+                extra_granularity=extra_granularity,
             )
 
         # Batch independent alias/arithmetic expressions to reduce DataFrame materializations
@@ -1146,6 +1166,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 column_names=cn,
                 player_rating_col=self.PLAYER_OFF_RATING_COL,
                 team_rating_out=self.TEAM_RATING_COL,
+                extra_granularity=extra_granularity,
             )
 
         if self.OPP_RATING_COL in cols_to_add or self.DIFF_COL in cols_to_add:
@@ -1154,6 +1175,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 column_names=cn,
                 team_rating_col=self.TEAM_RATING_COL,
                 opp_team_rating_out=self.OPP_RATING_COL,
+                extra_granularity=extra_granularity,
             )
 
         if self.DIFF_PROJ_COL in cols_to_add:
@@ -1170,6 +1192,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 column_names=cn,
                 player_rating_col=self.PLAYER_OFF_RATING_COL,
                 rating_mean_out=self.MEAN_PROJ_COL,
+                extra_granularity=extra_granularity,
             )
 
         if self.PLAYER_OPP_MEAN_PROJ_COL in cols_to_add:
@@ -1188,6 +1211,7 @@ class PlayerRatingGenerator(RatingGenerator):
                     column_names=cn,
                     player_rating_col=self.PLAYER_OFF_RATING_COL,
                     team_rating_out=self.TEAM_RATING_COL,
+                    extra_granularity=extra_granularity,
                 )
             if self.OPP_RATING_COL not in df.columns:
                 df = add_opp_team_rating(
@@ -1195,6 +1219,7 @@ class PlayerRatingGenerator(RatingGenerator):
                     column_names=cn,
                     team_rating_col=self.TEAM_RATING_COL,
                     opp_team_rating_out=self.OPP_RATING_COL,
+                    extra_granularity=extra_granularity,
                 )
             if self.TEAM_RATING_COL in df.columns and self.OPP_RATING_COL in df.columns:
                 df = df.with_columns(
@@ -1625,6 +1650,11 @@ class PlayerRatingGenerator(RatingGenerator):
             self.PLAYER_RATING_COL: [],
             self.PLAYER_PRED_PERF_COL: [],
         }
+        extra_out_cols = [
+            col for col in getattr(self, "extra_granularity", []) if col in match_df.columns
+        ]
+        for col in extra_out_cols:
+            out[col] = []
 
         def get_perf_value(team_player: dict) -> float | None:
             if (
@@ -1841,6 +1871,8 @@ class PlayerRatingGenerator(RatingGenerator):
                 out[cn.player_id].append(pid)
                 out[cn.match_id].append(match_id)
                 out[cn.team_id].append(team1)
+                for col in extra_out_cols:
+                    out[col].append(r[col])
                 out[self.PLAYER_OFF_RATING_COL].append(off_pre)
                 out[self.PLAYER_DEF_RATING_COL].append(def_pre)
                 out[self.PLAYER_PRED_OFF_PERF_COL].append(float(pred_off))
@@ -1888,6 +1920,8 @@ class PlayerRatingGenerator(RatingGenerator):
                 out[cn.player_id].append(pid)
                 out[cn.match_id].append(match_id)
                 out[cn.team_id].append(team2)
+                for col in extra_out_cols:
+                    out[col].append(r[col])
                 out[self.PLAYER_OFF_RATING_COL].append(off_pre)
                 out[self.PLAYER_DEF_RATING_COL].append(def_pre)
                 out[self.PLAYER_PRED_OFF_PERF_COL].append(float(pred_off))

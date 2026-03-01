@@ -1,3 +1,4 @@
+import copy
 from datetime import datetime, timedelta
 
 import polars as pl
@@ -271,6 +272,88 @@ def test_create_match_df_respects_extra_granularity_in_opponent_pairing(base_cn)
 
     assert match_df.height == 2
     assert sorted(match_df["scenario_id"].to_list()) == [1, 2]
+
+
+def test_future_transform_with_extra_granularity_preserves_row_count(base_cn, sample_df):
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        extra_granularity=["scenario_id"],
+    )
+    gen.fit_transform(sample_df)
+
+    future_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4", "P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2", "T1", "T1", "T2", "T2"],
+            "mid": ["M2"] * 8,
+            "dt": ["2024-01-02"] * 8,
+            "pw": [1.0] * 8,
+            "scenario_id": [1, 1, 1, 1, 2, 2, 2, 2],
+        }
+    )
+
+    result = gen.future_transform(future_df)
+
+    assert result.height == future_df.height
+    assert (
+        result.select(["pid", "tid", "mid", "scenario_id"]).n_unique()
+        == future_df.select(["pid", "tid", "mid", "scenario_id"]).n_unique()
+    )
+
+
+def test_future_transform_extra_granularity_matches_per_scenario_outputs(base_cn, sample_df):
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        extra_granularity=["scenario_id"],
+        features_out=[
+            RatingKnownFeatures.TEAM_RATING_PROJECTED,
+            RatingKnownFeatures.OPPONENT_RATING_PROJECTED,
+            RatingKnownFeatures.RATING_MEAN_PROJECTED,
+            RatingKnownFeatures.TEAM_RATING_DIFFERENCE_PROJECTED,
+            RatingKnownFeatures.PLAYER_OPPONENT_MEAN_PROJECTED,
+        ],
+    )
+    gen.fit_transform(sample_df)
+
+    future_df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4", "P1", "P5", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2", "T1", "T1", "T2", "T2"],
+            "mid": ["M2"] * 8,
+            "dt": ["2024-01-02"] * 8,
+            "pw": [1.0] * 8,
+            "scenario_id": [1, 1, 1, 1, 2, 2, 2, 2],
+        }
+    )
+
+    batched_gen = copy.deepcopy(gen)
+    split_gen = copy.deepcopy(gen)
+
+    batched = batched_gen.future_transform(future_df)
+    split = pl.concat(
+        [
+            split_gen.future_transform(future_df.filter(pl.col("scenario_id") == 1)),
+            split_gen.future_transform(future_df.filter(pl.col("scenario_id") == 2)),
+        ],
+        how="diagonal",
+    )
+
+    compare_cols = [
+        "pid",
+        "tid",
+        "mid",
+        "scenario_id",
+        "team_rating_projected_perf",
+        "opponent_rating_projected_perf",
+        "rating_mean_projected_perf",
+        "team_rating_difference_projected_perf",
+        "player_opponent_mean_projected_perf",
+    ]
+    batched = batched.select(compare_cols).sort(["scenario_id", "tid", "pid"])
+    split = split.select(compare_cols).sort(["scenario_id", "tid", "pid"])
+    assert batched.to_dicts() == split.to_dicts()
 
 
 def test_future_transform_cold_start_player(base_cn, sample_df):
