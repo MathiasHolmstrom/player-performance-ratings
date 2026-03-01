@@ -730,6 +730,35 @@ class AutoPipeline(BaseEstimator):
         if all(X[c].n_unique() <= 1 for c in extra_present):
             return self.sklearn_pipeline.predict(X[self._fitted_features])
 
+        return self._predict_with_extra_passthrough(X, extra_present, method_name="predict")
+
+    @nw.narwhalify
+    def predict_proba(self, X: IntoFrameT) -> np.ndarray:
+        if self.sklearn_pipeline is None:
+            raise RuntimeError("Pipeline not fitted. Call fit() first.")
+        if self.sample_weight_column and self.sample_weight_column in X.columns:
+            X = X.drop([self.sample_weight_column])
+
+        extra_cols = getattr(self, "_extra_passthrough_columns", [])
+        extra_present = [c for c in extra_cols if c in X.columns]
+
+        if not extra_present:
+            X_pred = X[self._fitted_features]
+            return self.sklearn_pipeline.predict_proba(X_pred)
+
+        if all(X[c].n_unique() <= 1 for c in extra_present):
+            X_pred = X[self._fitted_features]
+            return self.sklearn_pipeline.predict_proba(X_pred)
+
+        return self._predict_with_extra_passthrough(X, extra_present, method_name="predict_proba")
+
+    def _predict_with_extra_passthrough(
+        self,
+        X: IntoFrameT,
+        extra_present: list[str],
+        *,
+        method_name: str,
+    ) -> np.ndarray:
         # Extra passthrough columns (e.g. scenario_id for batched-scenario inference) are
         # dropped by intermediate sklearn steps (remainder="drop"). Run all transformers
         # normally, and publish the extra columns via a thread-local context so that
@@ -761,16 +790,8 @@ class AutoPipeline(BaseEstimator):
         finally:
             _predict_extra_context.data = None
 
-        return self.sklearn_pipeline.steps[-1][1].predict(X_step)
-
-    @nw.narwhalify
-    def predict_proba(self, X: IntoFrameT) -> np.ndarray:
-        if self.sklearn_pipeline is None:
-            raise RuntimeError("Pipeline not fitted. Call fit() first.")
-        if self.sample_weight_column and self.sample_weight_column in X.columns:
-            X = X.drop([self.sample_weight_column])
-        X_pred = X[self._fitted_features]
-        return self.sklearn_pipeline.predict_proba(X_pred)
+        final_estimator = self.sklearn_pipeline.steps[-1][1]
+        return getattr(final_estimator, method_name)(X_step)
 
     @property
     def required_features(self) -> list[str]:

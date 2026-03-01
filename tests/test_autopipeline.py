@@ -1033,6 +1033,23 @@ class _CaptureFinalEstimator(BaseEstimator):
         return np.zeros(len(X), dtype=float)
 
 
+class _CaptureFinalClassifier(BaseEstimator):
+    """Records columns present in X when predict_proba() is called."""
+
+    def fit(self, X, y=None):
+        self.is_fitted_ = True
+        self.classes_ = np.array([0, 1])
+        return self
+
+    def predict(self, X):
+        return np.zeros(len(X), dtype=int)
+
+    def predict_proba(self, X):
+        self.last_predict_proba_columns = list(X.columns) if hasattr(X, "columns") else []
+        n = len(X)
+        return np.tile(np.array([[0.5, 0.5]], dtype=float), (n, 1))
+
+
 @pytest.mark.parametrize("frame", ["pd", "pl"])
 def test_extra_passthrough_columns_reach_final_estimator(frame):
     """Columns in _extra_passthrough_columns that are present at predict-time
@@ -1104,3 +1121,20 @@ def test_extra_passthrough_columns_not_set_on_old_pickled_model():
     df_pred = pd.DataFrame({"f1": [1.0, 2.0]})
     preds = model.predict(df_pred)
     assert len(preds) == 2
+
+
+@pytest.mark.parametrize("frame", ["pd", "pl"])
+def test_extra_passthrough_columns_reach_final_classifier_predict_proba(frame):
+    """Columns in _extra_passthrough_columns must reach final estimator in predict_proba()."""
+    capture = _CaptureFinalClassifier()
+    df_train = pd.DataFrame({"f1": [1.0, 2.0, 3.0], "y": [0, 1, 0]})
+    model = AutoPipeline(estimator=capture, estimator_features=["f1"])
+    model.fit(df_train, df_train["y"])
+
+    model._extra_passthrough_columns = ["scenario_id"]
+
+    df_pred_pd = pd.DataFrame({"f1": [1.0, 2.0], "scenario_id": ["s1", "s2"]})
+    df_pred = df_pred_pd if frame == "pd" else pl.from_pandas(df_pred_pd)
+    model.predict_proba(df_pred)
+
+    assert "scenario_id" in capture.last_predict_proba_columns
