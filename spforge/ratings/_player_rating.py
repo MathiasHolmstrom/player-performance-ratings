@@ -1273,21 +1273,24 @@ class PlayerRatingGenerator(RatingGenerator):
 
         team_id_col = cn.team_id
 
-        right_cols = [
-            c for c in agg_df.columns if c not in [cn.match_id, cn.start_date, cn.update_match_id]
-        ]
+        match_key_cols = [cn.match_id]
+        if cn.update_match_id != cn.match_id and cn.update_match_id in agg_df.columns:
+            match_key_cols.append(cn.update_match_id)
+        for col in getattr(self, "extra_granularity", []):
+            if col in agg_df.columns and col not in match_key_cols:
+                match_key_cols.append(col)
+
+        right_cols = [c for c in agg_df.columns if c not in [*match_key_cols, cn.start_date]]
         right_df = agg_df.select(
-            [cn.match_id] + [pl.col(c).alias(f"{c}_opponent") for c in right_cols]
+            match_key_cols + [pl.col(c).alias(f"{c}_opponent") for c in right_cols]
         )
         match_df = (
-            agg_df.join(right_df, on=cn.match_id, how="inner")
+            agg_df.join(right_df, on=match_key_cols, how="inner")
             .filter(pl.col(team_id_col) != pl.col(f"{team_id_col}_opponent"))
-            .unique(cn.match_id)
+            .unique(match_key_cols)
         )
 
-        sort_cols = [cn.start_date, cn.match_id]
-        if cn.update_match_id != cn.match_id and cn.update_match_id in match_df.columns:
-            sort_cols.append(cn.update_match_id)
+        sort_cols = [cn.start_date] + match_key_cols
         match_df = match_df.sort(sort_cols)
 
         match_df = self._add_day_number(match_df, cn.start_date, "__day_number")

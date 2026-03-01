@@ -249,6 +249,30 @@ def test_future_transform_no_state_mutation(base_cn, sample_df):
     assert off_state_before == off_state_after
 
 
+def test_create_match_df_respects_extra_granularity_in_opponent_pairing(base_cn):
+    df = pl.DataFrame(
+        {
+            "pid": ["P1", "P2", "P3", "P4", "P1", "P2", "P3", "P4"],
+            "tid": ["T1", "T1", "T2", "T2", "T1", "T1", "T2", "T2"],
+            "mid": ["M1"] * 8,
+            "dt": ["2024-01-01"] * 8,
+            "perf": [0.60, 0.40, 0.70, 0.30, 0.55, 0.45, 0.75, 0.25],
+            "pw": [1.0] * 8,
+            "scenario_id": [1, 1, 1, 1, 2, 2, 2, 2],
+        }
+    )
+    gen = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        extra_granularity=["scenario_id"],
+    )
+
+    match_df = gen._create_match_df(df)
+
+    assert match_df.height == 2
+    assert sorted(match_df["scenario_id"].to_list()) == [1, 2]
+
+
 def test_future_transform_cold_start_player(base_cn, sample_df):
     """Check that future_transform handles players not seen during fit_transform."""
     gen = PlayerRatingGenerator(
