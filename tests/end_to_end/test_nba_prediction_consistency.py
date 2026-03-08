@@ -152,12 +152,12 @@ def test_nba_prediction_consistency__cv_vs_future_transform(dataframe_type):
     if dataframe_type == "pl":
         cv_test_games = df_with_cv_preds.filter(pl.col(column_names.match_id).is_in(test_games))
         # Filter to validation rows only
-        cv_test_games_validation = cv_test_games.filter(pl.col("is_validation") == 1)
+        cv_test_games_validation = cv_test_games.filter(pl.col("is_validation"))
         cv_test_pd = cv_test_games_validation.to_pandas()
     else:
         cv_test_games = df_with_cv_preds[df_with_cv_preds[column_names.match_id].isin(test_games)]
         # Filter to validation rows only
-        cv_test_games_validation = cv_test_games[cv_test_games["is_validation"] == 1].copy()
+        cv_test_games_validation = cv_test_games[cv_test_games["is_validation"]].copy()
         cv_test_pd = cv_test_games_validation
 
     # ============================================================

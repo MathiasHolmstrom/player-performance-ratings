@@ -35,7 +35,7 @@ Primary themes:
 ### cross_validator
 - Training data must always be before validation data
 - Estimator is deep-copied per fold
-- Output includes `is_validation` column (1=validation, 0=training)
+- Output includes `is_validation` column (True=validation, False=training)
 Pitfalls:
 - With `AutoPipeline`, pass `features=pipeline.context_feature_names + pipeline.feature_names`
 - Empty splits (check `min_validation_date`)

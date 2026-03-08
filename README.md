@@ -287,7 +287,7 @@ scorer = SklearnScorer(
     pred_column="points_pred",
     target="points",
     scorer_function=mean_absolute_error,
-    validation_column="is_validation",  # Only score where is_validation == 1
+    validation_column="is_validation",  # Only score where is_validation == True
     filters=[
         Filter(column_name="minutes", value=0, operator=Operator.GREATER_THAN)
     ],
@@ -299,7 +299,7 @@ print(f"Validation MAE: {mae:.2f}")
 
 **Key points:**
 - `add_training_predictions=True` returns both training and validation predictions
-  - `is_validation=1` marks validation rows, `is_validation=0` marks training rows
+  - `is_validation=True` marks validation rows, `is_validation=False` marks training rows
   - Use `validation_column` in scorer to score only validation rows
 - Training data always comes BEFORE validation data chronologically
 - Must pass all required features (use `pipeline.required_features`)

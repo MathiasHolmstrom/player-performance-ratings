@@ -2166,7 +2166,7 @@ SCORER_VALIDATION_CASES = [
             {
                 "pred": [2.0, 0.0],
                 "target": [1.0, 2.0],
-                "is_validation": [1, 0],
+                "is_validation": [True, False],
             }
         ),
         id="mean_bias",
@@ -2179,7 +2179,7 @@ SCORER_VALIDATION_CASES = [
             {
                 "pred": [[0.7, 0.3], [0.4, 0.6]],
                 "target": [0, 1],
-                "is_validation": [1, 0],
+                "is_validation": [True, False],
             }
         ),
         id="pwmse",
@@ -2195,7 +2195,7 @@ SCORER_VALIDATION_CASES = [
             {
                 "pred": [1.0, 0.0],
                 "target": [1.0, 0.0],
-                "is_validation": [1, 0],
+                "is_validation": [True, False],
             }
         ),
         id="sklearn",
@@ -2212,7 +2212,7 @@ SCORER_VALIDATION_CASES = [
                 "pred": [[0.2, 0.8], [0.6, 0.4]],
                 "target": [1, 0],
                 "classes": [[0, 1], [0, 1]],
-                "is_validation": [1, 0],
+                "is_validation": [True, False],
             }
         ),
         id="probabilistic_mean_bias",
@@ -2225,7 +2225,7 @@ SCORER_VALIDATION_CASES = [
             {
                 "pred": [[0.2, 0.8], [0.6, 0.4]],
                 "target": [1, 0],
-                "is_validation": [1, 0],
+                "is_validation": [True, False],
             }
         ),
         id="ordinal_loss",
@@ -2243,7 +2243,7 @@ SCORER_VALIDATION_CASES = [
                 "dist": [[0.2, 0.8], [0.6, 0.4], [0.3, 0.7]],
                 "threshold": [0.5, 0.2, 0.3],
                 "outcome": [1, 0, 1],
-                "is_validation": [1, 1, 0],
+                "is_validation": [True, True, False],
             }
         ),
         id="threshold_event",
@@ -2255,7 +2255,7 @@ SCORER_VALIDATION_CASES = [
 def test_scorers_respect_validation_column(scorer_factory, df_factory):
     """Scorers should filter on validation_column when specified."""
     df = df_factory()
-    df_valid = df[df["is_validation"] == 1]
+    df_valid = df[df["is_validation"]]
     score_all = scorer_factory().score(df)
     score_valid = scorer_factory().score(df_valid)
     assert score_all == score_valid
