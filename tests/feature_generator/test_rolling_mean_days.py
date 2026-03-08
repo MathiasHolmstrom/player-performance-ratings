@@ -1,5 +1,7 @@
 import pandas as pd
+import polars as pl
 import pytest
+from polars.testing import assert_frame_equal as pl_assert_frame_equal
 
 from spforge import ColumnNames
 from spforge.feature_generator import RollingMeanDaysTransformer
@@ -780,4 +782,92 @@ def test_rolling_mean_days__min_games_applies_to_future(column_names: ColumnName
     )
     pd.testing.assert_frame_equal(
         transformed_future_df[expected_df.columns], expected_df, check_like=True, check_dtype=False
+    )
+
+
+def test_rolling_mean_days__historical_lazyframe(column_names: ColumnNames):
+    historical_df = pl.DataFrame(
+        {
+            "player": ["a", "a", "b", "a"],
+            "game": [1, 2, 2, 3],
+            "points": [1.0, 2.0, 3.0, 4.0],
+            "start_date": pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-02", "2023-01-03"]),
+            "team": [1, 1, 2, 1],
+        }
+    ).lazy()
+
+    transformer = RollingMeanDaysTransformer(
+        features=["points"],
+        days=2,
+        granularity=["player"],
+        add_count=True,
+    )
+
+    transformed_df = transformer.fit_transform(historical_df, column_names=column_names)
+
+    assert isinstance(transformed_df, pl.LazyFrame)
+    expected_df = pl.DataFrame(
+        {
+            "player": ["a", "a", "b", "a"],
+            "game": [1, 2, 2, 3],
+            "points": [1.0, 2.0, 3.0, 4.0],
+            "start_date": pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-02", "2023-01-03"]),
+            "team": [1, 1, 2, 1],
+            transformer.features_out[0]: [None, 1.0, None, 1.5],
+            transformer.features_out[1]: [0, 1, 0, 2],
+        }
+    )
+    sort_cols = ["start_date", "game", "team", "player"]
+    pl_assert_frame_equal(
+        transformed_df.collect().select(expected_df.columns).sort(sort_cols),
+        expected_df.sort(sort_cols),
+        check_dtypes=False,
+    )
+
+
+def test_rolling_mean_days__future_lazyframe(column_names: ColumnNames):
+    historical_df = pl.DataFrame(
+        {
+            "player": ["a", "a", "b", "a"],
+            "game": [1, 2, 2, 3],
+            "points": [1.0, 2.0, 3.0, 4.0],
+            "start_date": pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-02", "2023-01-03"]),
+            "team": [1, 1, 2, 1],
+        }
+    ).lazy()
+    future_df = pl.DataFrame(
+        {
+            "player": ["a", "b"],
+            "game": [4, 4],
+            "start_date": pd.to_datetime(["2023-01-04", "2023-01-04"]),
+            "team": [1, 2],
+        }
+    ).lazy()
+
+    transformer = RollingMeanDaysTransformer(
+        features=["points"],
+        days=2,
+        granularity=["player"],
+        add_count=True,
+    )
+
+    transformer.fit_transform(historical_df, column_names=column_names)
+    transformed_future_df = transformer.future_transform(future_df)
+
+    assert isinstance(transformed_future_df, pl.LazyFrame)
+    expected_df = pl.DataFrame(
+        {
+            "player": ["a", "b"],
+            "game": [4, 4],
+            "start_date": pd.to_datetime(["2023-01-04", "2023-01-04"]),
+            "team": [1, 2],
+            transformer.features_out[0]: [3.0, 3.0],
+            transformer.features_out[1]: [2, 1],
+        }
+    )
+    sort_cols = ["start_date", "game", "team", "player"]
+    pl_assert_frame_equal(
+        transformed_future_df.collect().select(expected_df.columns).sort(sort_cols),
+        expected_df.sort(sort_cols),
+        check_dtypes=False,
     )

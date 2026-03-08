@@ -66,6 +66,10 @@ class LagGenerator(FeatureGenerator):
         df_native = nw.to_native(df)
         other_native = nw.to_native(other)
 
+        if isinstance(df_native, pl.LazyFrame) and isinstance(other_native, pl.DataFrame):
+            return nw.from_native(other_native.lazy())
+        if isinstance(df_native, pl.LazyFrame) and isinstance(other_native, pd.DataFrame):
+            return nw.from_native(pl.from_pandas(other_native).lazy())
         if isinstance(df_native, pd.DataFrame) and isinstance(other_native, pl.DataFrame):
             return nw.from_native(other_native.to_pandas())
         if isinstance(df_native, pl.DataFrame) and isinstance(other_native, pd.DataFrame):
@@ -286,8 +290,8 @@ class LagGenerator(FeatureGenerator):
             self.group_to_granularity if self.group_to_granularity else self.unique_constraint
         )
         for column in join_cols:
-            if concat_df[column].dtype != df[column].dtype:
-                concat_df = concat_df.with_columns(concat_df[column].cast(df[column].dtype))
+            if concat_df.schema[column] != df.schema[column]:
+                concat_df = concat_df.with_columns(concat_df[column].cast(df.schema[column]))
 
         transformed_df = (
             df.select(ori_cols)
