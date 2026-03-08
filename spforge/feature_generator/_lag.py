@@ -87,7 +87,7 @@ class LagTransformer(LagGenerator):
         if self._future_state_df is None:
             raise ValueError(_MISSING_STATE_MSG)
 
-        state_df = nw.from_native(self._future_state_df)
+        state_df = self._align_backend(df, nw.from_native(self._future_state_df))
         joined_df = df.join(state_df, on=self.granularity, how="left")
         return self._post_features_generated(joined_df)
 

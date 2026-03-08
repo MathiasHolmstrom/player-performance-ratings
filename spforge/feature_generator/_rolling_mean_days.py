@@ -54,6 +54,7 @@ class RollingMeanDaysTransformer(LagGenerator):
         self.date_column = date_column
         self._fitted_game_ids = []
         self._future_state_df = None
+        self._force_polars_backend = True
 
         self._count_column_name = f"{self.prefix}_count{str(self.days)}"
         if self.add_count:

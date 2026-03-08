@@ -9,6 +9,7 @@ from spforge.feature_generator._utils import (
     historical_lag_transformations_wrapper,
     required_lag_column_names,
     transformation_validator,
+    with_row_index_compatible,
 )
 
 
@@ -155,9 +156,10 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
         else:
             concat_df = df
             if "__row_index" not in concat_df.columns:
-                concat_df = concat_df.with_row_index(name="__row_index")
+                concat_df = with_row_index_compatible(concat_df, "__row_index")
             sort_col = "__row_index"
         concat_df = concat_df.sort(sort_col)
+        order_by = [sort_col]
         feats_added = []
 
         for feature in self.features:
@@ -172,28 +174,113 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
                 ]
             )
 
-            concat_df = concat_df.with_columns(
-                [
-                    nw.col("value_result_0")
-                    .shift(1)
-                    .over(self.granularity)
-                    .alias("value_result_0_shifted"),
-                    nw.col("value_result_1")
-                    .shift(1)
-                    .over(self.granularity)
-                    .alias("value_result_1_shifted"),
-                ]
-            ).with_columns(
-                [
-                    nw.col("value_result_1_shifted")
-                    .rolling_mean(window_size=self.window, min_samples=self.min_periods)
-                    .over(self.granularity)
-                    .alias(f"{self.prefix}_{feature}{self.window}_1"),
-                    nw.col("value_result_0_shifted")
-                    .rolling_mean(window_size=self.window, min_samples=self.min_periods)
-                    .over(self.granularity)
-                    .alias(f"{self.prefix}_{feature}{self.window}_0"),
-                ]
+            concat_df = (
+                concat_df.with_columns(
+                    [
+                        nw.col("value_result_1")
+                        .is_null()
+                        .__invert__()
+                        .cast(nw.Int64)
+                        .cum_sum()
+                        .over(self.granularity, order_by=order_by)
+                        .alias("__rolling_binary_count_1"),
+                        nw.col("value_result_0")
+                        .is_null()
+                        .__invert__()
+                        .cast(nw.Int64)
+                        .cum_sum()
+                        .over(self.granularity, order_by=order_by)
+                        .alias("__rolling_binary_count_0"),
+                        nw.col("value_result_1")
+                        .fill_null(0.0)
+                        .cum_sum()
+                        .over(self.granularity, order_by=order_by)
+                        .alias("__rolling_binary_cumsum_1"),
+                        nw.col("value_result_0")
+                        .fill_null(0.0)
+                        .cum_sum()
+                        .over(self.granularity, order_by=order_by)
+                        .alias("__rolling_binary_cumsum_0"),
+                    ]
+                )
+                .with_columns(
+                    [
+                        (
+                            nw.col("__rolling_binary_count_1")
+                            - nw.col("value_result_1").is_null().__invert__().cast(nw.Int64)
+                        ).alias("__rolling_binary_prev_count_1"),
+                        (
+                            nw.col("__rolling_binary_count_0")
+                            - nw.col("value_result_0").is_null().__invert__().cast(nw.Int64)
+                        ).alias("__rolling_binary_prev_count_0"),
+                        (
+                            nw.col("__rolling_binary_cumsum_1")
+                            - nw.col("value_result_1").fill_null(0.0)
+                        ).alias("__rolling_binary_prev_cumsum_1"),
+                        (
+                            nw.col("__rolling_binary_cumsum_0")
+                            - nw.col("value_result_0").fill_null(0.0)
+                        ).alias("__rolling_binary_prev_cumsum_0"),
+                    ]
+                )
+                .with_columns(
+                    [
+                        nw.col("__rolling_binary_prev_count_1")
+                        .shift(self.window)
+                        .over(self.granularity, order_by=order_by)
+                        .alias("__rolling_binary_prev_count_1_lag"),
+                        nw.col("__rolling_binary_prev_count_0")
+                        .shift(self.window)
+                        .over(self.granularity, order_by=order_by)
+                        .alias("__rolling_binary_prev_count_0_lag"),
+                        nw.col("__rolling_binary_prev_cumsum_1")
+                        .shift(self.window)
+                        .over(self.granularity, order_by=order_by)
+                        .alias("__rolling_binary_prev_cumsum_1_lag"),
+                        nw.col("__rolling_binary_prev_cumsum_0")
+                        .shift(self.window)
+                        .over(self.granularity, order_by=order_by)
+                        .alias("__rolling_binary_prev_cumsum_0_lag"),
+                    ]
+                )
+                .with_columns(
+                    [
+                        (
+                            nw.col("__rolling_binary_prev_count_1")
+                            - nw.col("__rolling_binary_prev_count_1_lag").fill_null(0)
+                        ).alias("__rolling_binary_count_window_1"),
+                        (
+                            nw.col("__rolling_binary_prev_count_0")
+                            - nw.col("__rolling_binary_prev_count_0_lag").fill_null(0)
+                        ).alias("__rolling_binary_count_window_0"),
+                        (
+                            nw.col("__rolling_binary_prev_cumsum_1")
+                            - nw.col("__rolling_binary_prev_cumsum_1_lag").fill_null(0.0)
+                        ).alias("__rolling_binary_sum_window_1"),
+                        (
+                            nw.col("__rolling_binary_prev_cumsum_0")
+                            - nw.col("__rolling_binary_prev_cumsum_0_lag").fill_null(0.0)
+                        ).alias("__rolling_binary_sum_window_0"),
+                    ]
+                )
+                .with_columns(
+                    [
+                        nw.when(nw.col("__rolling_binary_count_window_1") >= self.min_periods)
+                        .then(
+                            nw.col("__rolling_binary_sum_window_1")
+                            / nw.col("__rolling_binary_count_window_1")
+                        )
+                        .otherwise(nw.lit(None))
+                        .alias(f"{self.prefix}_{feature}{self.window}_1"),
+                        nw.when(nw.col("__rolling_binary_count_window_0") >= self.min_periods)
+                        .then(
+                            nw.col("__rolling_binary_sum_window_0")
+                            / nw.col("__rolling_binary_count_window_0")
+                        )
+                        .otherwise(nw.lit(None))
+                        .alias(f"{self.prefix}_{feature}{self.window}_0"),
+                    ]
+                )
             )
 
             feats_added.extend(

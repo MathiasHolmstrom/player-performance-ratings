@@ -1,8 +1,6 @@
 from typing import Literal
 
 import narwhals.stable.v2 as nw
-import pandas as pd
-import polars as pl
 from narwhals.typing import IntoFrameT
 
 from spforge.data_structures import ColumnNames
@@ -90,6 +88,7 @@ class RollingAgainstOpponentTransformer(LagGenerator):
         self.opponent_column = opponent_column
         self.transformation = transformation
         self._transformer: LagGenerator
+        self._reset_pandas_index_output = True
 
     @nw.narwhalify
     @historical_lag_transformations_wrapper
@@ -175,12 +174,6 @@ class RollingAgainstOpponentTransformer(LagGenerator):
         :param df: Future data
         """
 
-        if isinstance(nw.to_native(df), pd.DataFrame):
-            ori_type = "pd"
-            df = nw.from_native(pl.DataFrame(nw.to_native(df)))
-        else:
-            ori_type = "pl"
-
         concat_df = self._concat_with_stored_and_calculate_feats(df=df, is_future=True)
         concat_df = self._rename_features(concat_df)
 
@@ -199,11 +192,7 @@ class RollingAgainstOpponentTransformer(LagGenerator):
             on=[cn.player_id, cn.team_id, cn.match_id],
             how="left",
         )
-
-        if ori_type == "pd":
-            return df.to_pandas()
-
-        return df.to_native()
+        return df
 
     def _concat_with_stored_and_calculate_feats(
         self, df: IntoFrameT, is_future: bool

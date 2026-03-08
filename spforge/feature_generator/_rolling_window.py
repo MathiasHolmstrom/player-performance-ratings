@@ -11,6 +11,7 @@ from spforge.feature_generator._utils import (
     historical_lag_transformations_wrapper,
     required_lag_column_names,
     transformation_validator,
+    with_row_index_compatible,
 )
 
 
@@ -149,7 +150,7 @@ class RollingWindowTransformer(LagGenerator):
                     f"for {self.__class__.__name__}(id={id(self)})."
                 )
 
-        state_df = nw.from_native(self._future_state_df)
+        state_df = self._align_backend(df, nw.from_native(self._future_state_df))
         joined_df = df.join(state_df, on=self.granularity, how="left")
         return self._post_features_generated(joined_df)
 
@@ -166,62 +167,101 @@ class RollingWindowTransformer(LagGenerator):
 
         if self.scale_by_participation_weight:
             weight_col = self.column_names.participation_weight
-            count_cols = [f"__rolling_state_count_{feature}" for feature in self.features]
-            history_df = history_df.with_columns(
-                [
-                    nw.col(feature).count().over(self.granularity).alias(count_col)
-                    for feature, count_col in zip(self.features, count_cols, strict=True)
-                ]
+            agg_exprs = [nw.col(weight_col).sum().alias("__rolling_state_weight_sum")]
+            for feature in self.features:
+                agg_exprs.extend(
+                    [
+                        nw.col(feature).count().alias(f"__rolling_state_count_{feature}"),
+                        (nw.col(feature) * nw.col(weight_col))
+                        .sum()
+                        .alias(f"__rolling_state_weighted_sum_{feature}"),
+                    ]
+                )
+            self._future_state_df = (
+                history_df.group_by(self.granularity)
+                .agg(agg_exprs)
+                .with_columns(
+                    [
+                        nw.when(
+                            (nw.col(f"__rolling_state_count_{feature}") >= self.min_periods)
+                            & (nw.col("__rolling_state_weight_sum") > 0.0)
+                        )
+                        .then(
+                            nw.col(f"__rolling_state_weighted_sum_{feature}")
+                            / nw.col("__rolling_state_weight_sum")
+                        )
+                        .otherwise(nw.lit(None))
+                        .alias(state_col)
+                        for feature, state_col in zip(
+                            self.features, feature_state_columns, strict=True
+                        )
+                    ]
+                )
+                .select([*self.granularity, *feature_state_columns])
+                .to_native()
             )
-            history_df = history_df.with_columns(
-                [
-                    nw.when(
-                        (nw.col(count_col) >= self.min_periods)
-                        & (nw.col(weight_col).sum().over(self.granularity) > 0.0)
-                    )
-                    .then(
-                        (nw.col(feature) * nw.col(weight_col)).sum().over(self.granularity)
-                        / nw.col(weight_col).sum().over(self.granularity)
-                    )
-                    .otherwise(nw.lit(None))
-                    .alias(f"{self.prefix}_{feature}{self.window}")
-                    for feature, count_col in zip(self.features, count_cols, strict=True)
-                ]
-            ).drop(count_cols)
-            state_value_columns = feature_state_columns
+            return
         else:
-            aggregation_expr_by_kind = {
-                "mean": lambda feature: nw.col(feature).mean(),
-                "sum": lambda feature: nw.col(feature).sum(),
-                "var": lambda feature: nw.col(feature).var(),
-            }
-            count_cols = [f"__rolling_state_count_{feature}" for feature in self.features]
-            history_df = history_df.with_columns(
-                [
-                    nw.col(feature).count().over(self.granularity).alias(count_col)
-                    for feature, count_col in zip(self.features, count_cols, strict=True)
-                ]
-            )
-            history_df = history_df.with_columns(
-                [
-                    nw.when(nw.col(count_col) >= self.min_periods)
-                    .then(
-                        aggregation_expr_by_kind[self.aggregation](feature).over(self.granularity)
+            agg_exprs = []
+            for feature in self.features:
+                agg_exprs.extend(
+                    [
+                        nw.col(feature).count().alias(f"__rolling_state_count_{feature}"),
+                        nw.col(feature).sum().alias(f"__rolling_state_sum_{feature}"),
+                    ]
+                )
+                if self.aggregation == "var":
+                    agg_exprs.append(
+                        (nw.col(feature) * nw.col(feature))
+                        .sum()
+                        .alias(f"__rolling_state_sumsq_{feature}")
                     )
-                    .otherwise(nw.lit(None))
-                    .alias(state_feature_col)
-                    for feature, count_col, state_feature_col in zip(
-                        self.features, count_cols, feature_state_columns, strict=True
-                    )
-                ]
-            ).drop(count_cols)
-            state_value_columns = feature_state_columns
 
-        self._future_state_df = (
-            history_df.group_by(self.granularity)
-            .agg([nw.col(column).last().alias(column) for column in state_value_columns])
-            .to_native()
-        )
+            self._future_state_df = (
+                history_df.group_by(self.granularity)
+                .agg(agg_exprs)
+                .with_columns(
+                    [
+                        (
+                            nw.when(nw.col(f"__rolling_state_count_{feature}") >= self.min_periods)
+                            .then(nw.col(f"__rolling_state_sum_{feature}"))
+                            .otherwise(nw.lit(None))
+                            if self.aggregation == "sum"
+                            else nw.when(
+                                nw.col(f"__rolling_state_count_{feature}") >= self.min_periods
+                            )
+                            .then(
+                                nw.col(f"__rolling_state_sum_{feature}")
+                                / nw.col(f"__rolling_state_count_{feature}")
+                            )
+                            .otherwise(nw.lit(None))
+                            if self.aggregation == "mean"
+                            else nw.when(
+                                (nw.col(f"__rolling_state_count_{feature}") >= self.min_periods)
+                                & (nw.col(f"__rolling_state_count_{feature}") > 1)
+                            )
+                            .then(
+                                (
+                                    nw.col(f"__rolling_state_sumsq_{feature}")
+                                    - (
+                                        nw.col(f"__rolling_state_sum_{feature}")
+                                        * nw.col(f"__rolling_state_sum_{feature}")
+                                        / nw.col(f"__rolling_state_count_{feature}")
+                                    )
+                                )
+                                / (nw.col(f"__rolling_state_count_{feature}") - 1)
+                            )
+                            .otherwise(nw.lit(None))
+                        ).alias(state_col)
+                        for feature, state_col in zip(
+                            self.features, feature_state_columns, strict=True
+                        )
+                    ]
+                )
+                .select([*self.granularity, *feature_state_columns])
+                .to_native()
+            )
+            return
 
     def _feature_window_descriptors(self) -> list[str]:
         return [f"{feature}[window={self.window}]" for feature in self.features]
@@ -234,59 +274,217 @@ class RollingWindowTransformer(LagGenerator):
         else:
             concat_df = df
             if "__row_index" not in concat_df.columns:
-                concat_df = concat_df.with_row_index(name="__row_index")
+                concat_df = with_row_index_compatible(concat_df, "__row_index")
             sort_col = "__row_index"
         concat_df = concat_df.sort(sort_col)
-
-        agg_method = {
-            "sum": lambda col: col.rolling_sum(
-                window_size=self.window, min_samples=self.min_periods
-            ),
-            "mean": lambda col: col.rolling_mean(
-                window_size=self.window, min_samples=self.min_periods
-            ),
-            "var": lambda col: col.rolling_var(
-                window_size=self.window, min_samples=self.min_periods
-            ),
-        }
+        order_by = [sort_col]
         if self.scale_by_participation_weight:
+            weight_col = self.column_names.participation_weight
             concat_df = concat_df.with_columns(
-                (nw.col(feature) * nw.col(self.column_names.participation_weight)).alias(
-                    f"__scaled_{feature}"
-                )
+                (nw.col(feature) * nw.col(weight_col)).alias(f"__scaled_{feature}")
                 for feature in self.features
             )
-            scaled_feats = [f"__scaled_{feature}" for feature in self.features]
+            concat_df = (
+                concat_df.with_columns(
+                    nw.col(weight_col)
+                    .cum_sum()
+                    .over(self.granularity, order_by=order_by)
+                    .alias("__rolling_weight_cumsum")
+                )
+                .with_columns(
+                    (nw.col("__rolling_weight_cumsum") - nw.col(weight_col)).alias(
+                        "__rolling_weight_prev_cumsum"
+                    )
+                )
+                .with_columns(
+                    nw.col("__rolling_weight_prev_cumsum")
+                    .shift(self.window)
+                    .over(self.granularity, order_by=order_by)
+                    .alias("__rolling_weight_prev_cumsum_lag")
+                )
+                .with_columns(
+                    nw.col("__rolling_weight_cumsum").alias("__rolling_weight_cumsum_keep")
+                )
+            )
 
-            rolling_sums = [
-                agg_method["sum"](nw.col(feature_name).shift(n=1))
-                .over(self.granularity)
-                .alias(f"{self.prefix}_{feature_name}{self.window}__sum")
-                for feature_name in [
-                    *scaled_feats,
-                    self.column_names.participation_weight,
-                ]
-            ]
-            concat_df = concat_df.with_columns(rolling_sums)
-            if self.aggregation == "mean":
-                rolling_values = [
-                    (
-                        nw.col(f"{self.prefix}___scaled_{feature}{self.window}__sum")
-                        / nw.col(
-                            f"{self.prefix}_{self.column_names.participation_weight}{self.window}__sum"
+            rolling_values = []
+            for feature in self.features:
+                concat_df = (
+                    concat_df.with_columns(
+                        [
+                            nw.col(feature)
+                            .cum_count()
+                            .over(self.granularity, order_by=order_by)
+                            .alias(f"__rolling_count_{feature}"),
+                            nw.col(f"__scaled_{feature}")
+                            .cum_sum()
+                            .over(self.granularity, order_by=order_by)
+                            .alias(f"__rolling_scaled_cumsum_{feature}"),
+                        ]
+                    )
+                    .with_columns(
+                        [
+                            (nw.col(f"__rolling_count_{feature}") - 1).alias(
+                                f"__rolling_prev_count_{feature}"
+                            ),
+                            (
+                                nw.col(f"__rolling_scaled_cumsum_{feature}")
+                                - nw.col(f"__scaled_{feature}")
+                            ).alias(f"__rolling_scaled_prev_cumsum_{feature}"),
+                        ]
+                    )
+                    .with_columns(
+                        [
+                            nw.col(f"__rolling_prev_count_{feature}")
+                            .shift(self.window)
+                            .over(self.granularity, order_by=order_by)
+                            .alias(f"__rolling_prev_count_lag_{feature}"),
+                            nw.col(f"__rolling_scaled_prev_cumsum_{feature}")
+                            .shift(self.window)
+                            .over(self.granularity, order_by=order_by)
+                            .alias(f"__rolling_scaled_prev_cumsum_lag_{feature}"),
+                        ]
+                    )
+                    .with_columns(
+                        [
+                            nw.col(f"__rolling_count_{feature}").alias(
+                                f"__rolling_count_keep_{feature}"
+                            ),
+                            (
+                                nw.col(f"__rolling_prev_count_{feature}")
+                                - nw.col(f"__rolling_prev_count_lag_{feature}").fill_null(0)
+                            ).alias(f"__rolling_count_window_{feature}"),
+                            (
+                                nw.col(f"__rolling_scaled_prev_cumsum_{feature}")
+                                - nw.col(f"__rolling_scaled_prev_cumsum_lag_{feature}").fill_null(0)
+                            ).alias(f"__rolling_scaled_sum_window_{feature}"),
+                        ]
+                    )
+                )
+                rolling_values.append(
+                    nw.when(
+                        (nw.col(f"__rolling_count_window_{feature}") >= self.min_periods)
+                        & (
+                            nw.col("__rolling_weight_prev_cumsum")
+                            - nw.col("__rolling_weight_prev_cumsum_lag").fill_null(0)
+                            > 0
                         )
-                    ).alias(f"{self.prefix}_{feature}{self.window}")
-                    for feature in self.features
-                ]
-                concat_df = concat_df.with_columns(rolling_values)
+                    )
+                    .then(
+                        nw.col(f"__rolling_scaled_sum_window_{feature}")
+                        / (
+                            nw.col("__rolling_weight_prev_cumsum")
+                            - nw.col("__rolling_weight_prev_cumsum_lag").fill_null(0)
+                        )
+                    )
+                    .otherwise(nw.lit(None))
+                    .alias(f"{self.prefix}_{feature}{self.window}")
+                )
+            concat_df = concat_df.with_columns(rolling_values)
 
         else:
-            rolling_values = [
-                agg_method[self.aggregation](nw.col(feature_name).shift(n=1))
-                .over(self.granularity)
-                .alias(f"{self.prefix}_{feature_name}{self.window}")
-                for feature_name in self.features
-            ]
+            rolling_values = []
+            for feature in self.features:
+                concat_df = concat_df.with_columns(
+                    [
+                        nw.col(feature)
+                        .cum_count()
+                        .over(self.granularity, order_by=order_by)
+                        .alias(f"__rolling_count_{feature}"),
+                        nw.col(feature)
+                        .cum_sum()
+                        .over(self.granularity, order_by=order_by)
+                        .alias(f"__rolling_cumsum_{feature}"),
+                    ]
+                ).with_columns(
+                    [
+                        (nw.col(f"__rolling_count_{feature}") - 1).alias(
+                            f"__rolling_prev_count_{feature}"
+                        ),
+                        (nw.col(f"__rolling_cumsum_{feature}") - nw.col(feature)).alias(
+                            f"__rolling_prev_cumsum_{feature}"
+                        ),
+                    ]
+                )
+                if self.aggregation == "var":
+                    concat_df = concat_df.with_columns(
+                        (nw.col(feature) * nw.col(feature))
+                        .cum_sum()
+                        .over(self.granularity, order_by=order_by)
+                        .alias(f"__rolling_sumsq_cumsum_{feature}")
+                    ).with_columns(
+                        (
+                            nw.col(f"__rolling_sumsq_cumsum_{feature}")
+                            - (nw.col(feature) * nw.col(feature))
+                        ).alias(f"__rolling_sumsq_prev_cumsum_{feature}")
+                    )
+
+                concat_df = concat_df.with_columns(
+                    [
+                        (
+                            nw.col(f"__rolling_prev_count_{feature}")
+                            .shift(self.window)
+                            .over(self.granularity, order_by=order_by)
+                        ).alias(f"__rolling_prev_count_lag_{feature}"),
+                        (
+                            nw.col(f"__rolling_prev_cumsum_{feature}")
+                            .shift(self.window)
+                            .over(self.granularity, order_by=order_by)
+                        ).alias(f"__rolling_prev_cumsum_lag_{feature}"),
+                    ]
+                ).with_columns(
+                    [
+                        (
+                            nw.col(f"__rolling_prev_count_{feature}")
+                            - nw.col(f"__rolling_prev_count_lag_{feature}").fill_null(0)
+                        ).alias(f"__rolling_count_window_{feature}"),
+                        (
+                            nw.col(f"__rolling_prev_cumsum_{feature}")
+                            - nw.col(f"__rolling_prev_cumsum_lag_{feature}").fill_null(0)
+                        ).alias(f"__rolling_sum_window_{feature}"),
+                    ]
+                )
+                if self.aggregation == "sum":
+                    expr = nw.when(
+                        nw.col(f"__rolling_count_window_{feature}") >= self.min_periods
+                    ).then(nw.col(f"__rolling_sum_window_{feature}"))
+                elif self.aggregation == "mean":
+                    expr = nw.when(
+                        nw.col(f"__rolling_count_window_{feature}") >= self.min_periods
+                    ).then(
+                        nw.col(f"__rolling_sum_window_{feature}")
+                        / nw.col(f"__rolling_count_window_{feature}")
+                    )
+                else:
+                    concat_df = concat_df.with_columns(
+                        nw.col(f"__rolling_sumsq_prev_cumsum_{feature}")
+                        .shift(self.window)
+                        .over(self.granularity, order_by=order_by)
+                        .alias(f"__rolling_sumsq_prev_cumsum_lag_{feature}")
+                    ).with_columns(
+                        (
+                            nw.col(f"__rolling_sumsq_prev_cumsum_{feature}")
+                            - nw.col(f"__rolling_sumsq_prev_cumsum_lag_{feature}").fill_null(0)
+                        ).alias(f"__rolling_sumsq_window_{feature}")
+                    )
+                    expr = nw.when(
+                        (nw.col(f"__rolling_count_window_{feature}") >= self.min_periods)
+                        & (nw.col(f"__rolling_count_window_{feature}") > 1)
+                    ).then(
+                        (
+                            nw.col(f"__rolling_sumsq_window_{feature}")
+                            - (
+                                nw.col(f"__rolling_sum_window_{feature}")
+                                * nw.col(f"__rolling_sum_window_{feature}")
+                                / nw.col(f"__rolling_count_window_{feature}")
+                            )
+                        )
+                        / (nw.col(f"__rolling_count_window_{feature}") - 1)
+                    )
+
+                rolling_values.append(
+                    expr.otherwise(nw.lit(None)).alias(f"{self.prefix}_{feature}{self.window}")
+                )
 
             concat_df = concat_df.with_columns(rolling_values)
 
