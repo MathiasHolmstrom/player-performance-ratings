@@ -10,6 +10,7 @@ from spforge.feature_generator._utils import (
     numeric_null_literal,
     required_lag_column_names,
     transformation_validator,
+    with_row_index_compatible,
 )
 
 _MISSING_STATE_MSG = "No stored lag state found. Call fit_transform() before future_transform()."
@@ -93,37 +94,26 @@ class LagTransformer(LagGenerator):
         return self._post_features_generated(joined_df)
 
     def _store_future_state(self) -> None:
-        """Precompute lag values per granularity entity from the trimmed stored history.
-
-        _df holds exactly the last lag_length rows per entity (sorted ascending).
-        Rank them descending so rank=1 is the most recent, rank=2 second-most-recent, etc.
-        Then pivot to one row per entity: lag_1=most recent, lag_2=second, ...
-        """
+        """Precompute lag values per entity from the trimmed stored history."""
         if self._df is None:
             self._future_state_df = None
             return
 
         history_df = nw.from_native(self._df)
-        sort_col = self.column_names.start_date
+        sort_cols = [self.column_names.start_date]
+        if self.update_column and self.update_column in history_df.columns:
+            sort_cols.append(self.update_column)
 
-        # Rank rows per entity: 1 = most recent
-        ranked = history_df.sort([sort_col], descending=True).with_row_index("__state_order")
-        ranked = ranked.with_columns(
-            nw.col("__state_order")
-            .cum_count()
-            .over(self.granularity, order_by=["__state_order"])
-            .alias("__lag_rank")
+        ranked = with_row_index_compatible(history_df.sort(sort_cols), "__state_order").with_columns(
+            [
+                nw.col(feature)
+                .shift(lag - 1)
+                .over(self.granularity, order_by=["__state_order"])
+                .alias(f"{self.prefix}_{feature}{lag}")
+                for feature in self.features
+                for lag in range(1, self.lag_length + 1)
+            ]
         )
-
-        state_exprs = [
-            nw.when(nw.col("__lag_rank") == lag)
-            .then(nw.col(feature))
-            .otherwise(numeric_null_literal(history_df))
-            .alias(f"{self.prefix}_{feature}{lag}")
-            for feature in self.features
-            for lag in range(1, self.lag_length + 1)
-        ]
-        ranked = ranked.with_columns(state_exprs)
 
         lag_cols = [
             f"{self.prefix}_{feature}{lag}"
@@ -132,8 +122,8 @@ class LagTransformer(LagGenerator):
         ]
 
         self._future_state_df = (
-            ranked.group_by(self.granularity)
-            .agg([nw.col(col).max().alias(col) for col in lag_cols])
+            ranked.unique(self.granularity, keep="last", maintain_order=True)
+            .select([*self.granularity, *lag_cols])
             .to_native()
         )
 
@@ -191,17 +181,19 @@ class LagTransformer(LagGenerator):
             sort_cols.append(self.update_column)
 
         self._df = (
-            stored_df.sort(sort_cols, descending=True)
-            .with_row_index("__state_order")
+            stored_df.sort(sort_cols)
             .with_columns(
-                nw.col("__state_order")
-                .cum_count()
-                .over(self.granularity, order_by=["__state_order"])
-                .alias("__state_row_rank")
+                [
+                    (
+                        nw.col(sort_cols[0])
+                        .cum_count()
+                        .over(self.granularity, order_by=sort_cols)
+                    ).alias("__row_num"),
+                    nw.col(sort_cols[0]).count().over(self.granularity).alias("__group_size"),
+                ]
             )
-            .filter(nw.col("__state_row_rank") <= self.lag_length)
-            .drop(["__state_row_rank", "__state_order"])
-            .sort(sort_cols)
+            .filter((nw.col("__group_size") - nw.col("__row_num")) < self.lag_length)
+            .drop(["__row_num", "__group_size"])
             .to_native()
         )
 

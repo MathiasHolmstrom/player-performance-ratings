@@ -323,17 +323,19 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
             sort_cols.append(self.update_column)
 
         self._df = (
-            stored_df.sort(sort_cols, descending=True)
-            .with_row_index("__state_order")
+            stored_df.sort(sort_cols)
             .with_columns(
-                nw.col("__state_order")
-                .cum_count()
-                .over(self.granularity, order_by=["__state_order"])
-                .alias("__state_row_rank")
+                [
+                    (
+                        nw.col(sort_cols[0])
+                        .cum_count()
+                        .over(self.granularity, order_by=sort_cols)
+                    ).alias("__row_num"),
+                    nw.col(sort_cols[0]).count().over(self.granularity).alias("__group_size"),
+                ]
             )
-            .filter(nw.col("__state_row_rank") <= self.window)
-            .drop(["__state_row_rank", "__state_order"])
-            .sort(sort_cols)
+            .filter((nw.col("__group_size") - nw.col("__row_num")) < self.window)
+            .drop(["__row_num", "__group_size"])
             .to_native()
         )
 
