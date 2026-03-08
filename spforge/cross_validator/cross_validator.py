@@ -165,13 +165,13 @@ class MatchKFoldCrossValidator:
 
             if add_training_predictions and not added_train_preds:
                 train_pred_df = self._predict_smart(est, train_df).with_columns(
-                    nw.lit(0).alias("is_validation")
+                    nw.lit(False).alias("is_validation")
                 )
                 results.append(train_pred_df)
                 added_train_preds = True
 
             pred_df = self._predict_smart(est, val_df).with_columns(
-                nw.lit(1).alias("is_validation")
+                nw.lit(True).alias("is_validation")
             )
             results.append(pred_df)
 

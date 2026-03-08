@@ -114,7 +114,7 @@ def test_nba_player_points(dataframe_type):
     assert cross_validator_game_winnner.prediction_column_name in df.columns
     game_winner_score = SklearnScorer(
         scorer_function=log_loss,
-        filters=[Filter(column_name="is_validation", value=1, operator=Operator.EQUALS)],
+        filters=[Filter(column_name="is_validation", value=True, operator=Operator.EQUALS)],
         pred_column=cross_validator_game_winnner.prediction_column_name,
         target=cross_validator_game_winnner.target_column,
     )

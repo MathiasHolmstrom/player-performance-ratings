@@ -488,7 +488,7 @@ def test_generate_validation_df_add_training_predictions_pd_returns_pd_and_marks
     assert len(out) == len(df_pd_cv_reg)
 
     vals = set(out["is_validation"].tolist())
-    assert vals == {0, 1}
+    assert vals == {False, True}
 
     # training preds should be the earliest chunk (before min_validation_date median)
     # With 12 dates, median index = 6 => min_validation_date = 2024-01-07
@@ -499,8 +499,8 @@ def test_generate_validation_df_add_training_predictions_pd_returns_pd_and_marks
     train_mask = out["date"] < median_date
     val_mask = out["date"] >= median_date
 
-    assert (out.loc[train_mask, "is_validation"] == 0).all()
-    assert (out.loc[val_mask, "is_validation"] == 1).all()
+    assert (~out.loc[train_mask, "is_validation"]).all()
+    assert (out.loc[val_mask, "is_validation"]).all()
 
 
 def test_generate_validation_df_add_training_predictions_pl_roundtrip_type(
@@ -519,7 +519,7 @@ def test_generate_validation_df_add_training_predictions_pl_roundtrip_type(
     assert "pred" in out.columns
     assert "is_validation" in out.columns
     assert out.height == len(df_pd_cv_reg)
-    assert set(out["is_validation"].to_list()) == {0, 1}
+    assert set(out["is_validation"].to_list()) == {False, True}
 
 
 def test_generate_validation_df_preserves_timezone():

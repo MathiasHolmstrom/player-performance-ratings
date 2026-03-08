@@ -294,7 +294,7 @@ class BaseScorer(ABC):
             self.filters.append(
                 Filter(
                     column_name=self.validation_column,
-                    value=1,
+                    value=True,
                     operator=Operator.EQUALS,
                 )
             )
