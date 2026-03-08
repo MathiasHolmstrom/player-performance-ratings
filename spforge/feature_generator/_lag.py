@@ -7,7 +7,6 @@ from spforge.feature_generator._utils import (
     future_lag_transformations_wrapper,
     future_validator,
     historical_lag_transformations_wrapper,
-    numeric_null_literal,
     required_lag_column_names,
     transformation_validator,
     with_row_index_compatible,
@@ -104,7 +103,9 @@ class LagTransformer(LagGenerator):
         if self.update_column and self.update_column in history_df.columns:
             sort_cols.append(self.update_column)
 
-        ranked = with_row_index_compatible(history_df.sort(sort_cols), "__state_order").with_columns(
+        ranked = with_row_index_compatible(
+            history_df.sort(sort_cols), "__state_order"
+        ).with_columns(
             [
                 nw.col(feature)
                 .shift(lag - 1)
@@ -185,9 +186,7 @@ class LagTransformer(LagGenerator):
             .with_columns(
                 [
                     (
-                        nw.col(sort_cols[0])
-                        .cum_count()
-                        .over(self.granularity, order_by=sort_cols)
+                        nw.col(sort_cols[0]).cum_count().over(self.granularity, order_by=sort_cols)
                     ).alias("__row_num"),
                     nw.col(sort_cols[0]).count().over(self.granularity).alias("__group_size"),
                 ]

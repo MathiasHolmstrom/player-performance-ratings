@@ -327,9 +327,7 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
             .with_columns(
                 [
                     (
-                        nw.col(sort_cols[0])
-                        .cum_count()
-                        .over(self.granularity, order_by=sort_cols)
+                        nw.col(sort_cols[0]).cum_count().over(self.granularity, order_by=sort_cols)
                     ).alias("__row_num"),
                     nw.col(sort_cols[0]).count().over(self.granularity).alias("__group_size"),
                 ]
