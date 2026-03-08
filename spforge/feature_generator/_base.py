@@ -1,8 +1,11 @@
 import narwhals.stable.v2 as nw
+import pandas as pd
+import polars as pl
 from narwhals.typing import IntoFrameT
 
 from spforge.base_feature_generator import FeatureGenerator
 from spforge.data_structures import ColumnNames
+from spforge.feature_generator._utils import numeric_null_literal
 
 
 class LagGenerator(FeatureGenerator):
@@ -59,6 +62,32 @@ class LagGenerator(FeatureGenerator):
             )
         )
 
+    def _align_backend(self, df: IntoFrameT, other: IntoFrameT) -> IntoFrameT:
+        df_native = nw.to_native(df)
+        other_native = nw.to_native(other)
+
+        if isinstance(df_native, pd.DataFrame) and isinstance(other_native, pl.DataFrame):
+            return nw.from_native(other_native.to_pandas())
+        if isinstance(df_native, pl.DataFrame) and isinstance(other_native, pd.DataFrame):
+            return nw.from_native(pl.from_pandas(other_native))
+        return other
+
+    def _unique_compatible(
+        self,
+        df: IntoFrameT,
+        subset: list[str] | str | None = None,
+        maintain_order: bool = False,
+        keep: str = "any",
+    ) -> IntoFrameT:
+        native = nw.to_native(df)
+        if isinstance(native, pl.LazyFrame):
+            if keep == "last":
+                return nw.from_native(
+                    native.collect().unique(subset=subset, maintain_order=True, keep="last")
+                )
+            return df.unique(subset=subset, keep=keep)
+        return df.unique(subset=subset, maintain_order=maintain_order, keep=keep)
+
     @property
     def predictor_features_out(self) -> list[str]:
         if self._are_estimator_features:
@@ -108,6 +137,10 @@ class LagGenerator(FeatureGenerator):
         cols = [c for c in self._df.columns if c in df.columns]
 
         stored_df = nw.from_native(self._df)
+        if isinstance(nw.to_native(df), pl.LazyFrame) and isinstance(
+            nw.to_native(stored_df), pl.DataFrame
+        ):
+            stored_df = nw.from_native(nw.to_native(stored_df).lazy())
         for col in stored_df.columns:
             if col in df.columns and stored_df.schema[col] != df.schema[col]:
                 df = df.with_columns(df[col].cast(stored_df.schema[col]))
@@ -128,7 +161,8 @@ class LagGenerator(FeatureGenerator):
                 additional_cols=additional_cols,
             )
         feature_generation_constraint = self.group_to_granularity or self.unique_constraint
-        return concat_df.unique(
+        return self._unique_compatible(
+            concat_df,
             subset=feature_generation_constraint,
             maintain_order=True,
         )
@@ -184,8 +218,11 @@ class LagGenerator(FeatureGenerator):
 
         storage_unique_constraint = self._create_storage_unique_constraint()
 
-        self._df = self._df.unique(
-            subset=storage_unique_constraint, maintain_order=True, keep="last"
+        self._df = self._unique_compatible(
+            self._df,
+            subset=storage_unique_constraint,
+            maintain_order=True,
+            keep="last",
         ).to_native()
 
     def _create_storage_unique_constraint(self) -> list[str]:
@@ -338,7 +375,10 @@ class LagGenerator(FeatureGenerator):
         df = df.sort([cn.start_date, cn.match_id, cn.team_id])
         for f in self._entity_features_out:
             df = df.with_columns(
-                nw.when(nw.col(f) == -999.21345).then(nw.lit(None)).otherwise(nw.col(f)).alias(f)
+                nw.when(nw.col(f) == -999.21345)
+                .then(numeric_null_literal(df))
+                .otherwise(nw.col(f))
+                .alias(f)
             )
             if df[f].is_null().sum() == len(df):
                 df = df.with_columns(
@@ -381,7 +421,10 @@ class LagGenerator(FeatureGenerator):
         )
         new_df = new_df.with_columns(
             [
-                nw.when(nw.col(f) == -999.21345).then(nw.lit(None)).otherwise(nw.col(f)).alias(f)
+                nw.when(nw.col(f) == -999.21345)
+                .then(numeric_null_literal(new_df))
+                .otherwise(nw.col(f))
+                .alias(f)
                 for f in opponent_feat_names
             ]
         )
@@ -457,4 +500,4 @@ class LagGenerator(FeatureGenerator):
 
     @property
     def historical_df(self) -> IntoFrameT:
-        return self._df
+        return nw.from_native(self._df)

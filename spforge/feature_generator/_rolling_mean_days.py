@@ -9,6 +9,7 @@ from spforge.feature_generator._utils import (
     future_lag_transformations_wrapper,
     future_validator,
     historical_lag_transformations_wrapper,
+    numeric_null_literal,
     required_lag_column_names,
     transformation_validator,
 )
@@ -54,6 +55,7 @@ class RollingMeanDaysTransformer(LagGenerator):
         self.date_column = date_column
         self._fitted_game_ids = []
         self._future_state_df = None
+        self._force_polars_backend = True
 
         self._count_column_name = f"{self.prefix}_count{str(self.days)}"
         if self.add_count:
@@ -289,7 +291,7 @@ class RollingMeanDaysTransformer(LagGenerator):
                     (nw.col(feature) * nw.col(weight_col)).sum().over(self.granularity)
                     / total_weight
                 )
-                .otherwise(nw.lit(None))
+                .otherwise(numeric_null_literal(history_df))
                 .alias(state_col)
                 for feature, state_col in zip(self.features, feature_state_cols, strict=True)
             ]
@@ -313,7 +315,7 @@ class RollingMeanDaysTransformer(LagGenerator):
                     [
                         nw.when(nw.col(count_tmp) >= self.min_games)
                         .then(nw.col(state_col))
-                        .otherwise(nw.lit(None))
+                        .otherwise(numeric_null_literal(history_df))
                         .alias(state_col)
                         for state_col in feature_state_cols
                     ]

@@ -4,8 +4,10 @@ from functools import wraps
 from typing import Any, cast
 
 import narwhals.stable.v2 as nw
+import numpy as np
 import pandas as pd
 import polars as pl
+import pyarrow as pa
 from narwhals.typing import IntoFrameT
 
 from spforge.data_structures import ColumnNames
@@ -45,6 +47,8 @@ def _to_polars_eager(x: Any) -> pl.DataFrame:
         return x
     if isinstance(x, pl.LazyFrame):
         raise TypeError("Expected eager input here; got polars LazyFrame.")
+    if isinstance(x, pd.DataFrame):
+        return pl.from_arrow(pa.Table.from_pandas(x, preserve_index=False))
     return cast(pl.DataFrame, nw.from_native(x).to_polars())
 
 
@@ -92,21 +96,47 @@ def to_polars(method: Callable[..., Any]):
     return wrapper
 
 
+def _maybe_force_polars_input(df: IntoFrameT, force_polars_backend: bool) -> tuple[IntoFrameT, str]:
+    if not force_polars_backend:
+        return df, "native"
+
+    native = nw.to_native(df)
+    if isinstance(native, pd.DataFrame):
+        return nw.from_native(pl.DataFrame(native)), "pd"
+    return df, "native"
+
+
+def _is_polars_lazy(df: IntoFrameT) -> bool:
+    return isinstance(nw.to_native(df), pl.LazyFrame)
+
+
+def numeric_null_literal(df: IntoFrameT) -> nw.Expr:
+    native = nw.to_native(df)
+    if isinstance(native, pd.DataFrame):
+        return nw.lit(np.nan)
+    return nw.lit(None)
+
+
+def with_row_index_compatible(df: IntoFrameT, name: str) -> IntoFrameT:
+    native = nw.to_native(df)
+    if isinstance(native, pl.LazyFrame):
+        return df.with_row_index(name=name, order_by=list(df.columns))
+    return df.with_row_index(name=name)
+
+
 def future_lag_transformations_wrapper(method):
     @wraps(method)
     def wrapper(self, df: IntoFrameT, *args, **kwargs):
+        native_is_pandas = isinstance(nw.to_native(df), pd.DataFrame)
         df = df.drop([f for f in self.features_out if f in df.columns])
         input_cols = df.columns
         if "__row_index" not in df.columns:
-            df = df.with_row_index("__row_index")
+            df = with_row_index_compatible(df, "__row_index")
+        df, original_backend = _maybe_force_polars_input(
+            df, getattr(self, "_force_polars_backend", False)
+        )
 
-        if isinstance(nw.to_native(df), pd.DataFrame):
-            ori_native = "pd"
-            df = nw.from_native(pl.DataFrame(nw.to_native(df)))
-        else:
-            ori_native = "pl"
-
-        if self.unique_constraint:
+        if self.unique_constraint and not _is_polars_lazy(df):
             assert len(df.select(self.unique_constraint)) == len(df), (
                 f"Specified unique constraint {self.unique_constraint} is not unique on the input dataframe"
             )
@@ -114,9 +144,12 @@ def future_lag_transformations_wrapper(method):
         result = method(self, df, *args, **kwargs).sort("__row_index")
 
         input_cols = [c for c in input_cols]
-        if ori_native == "pd":
-            return result.select(list(set(input_cols + self.features_out))).to_pandas()
-        return result.select(list(set(input_cols + self.features_out)))
+        result = result.select(list(set(input_cols + self.features_out)))
+        if original_backend == "pd":
+            return result.to_pandas()
+        if native_is_pandas and getattr(self, "_reset_pandas_index_output", False):
+            return result.to_pandas().reset_index(drop=True)
+        return result
 
     return wrapper
 
@@ -124,9 +157,10 @@ def future_lag_transformations_wrapper(method):
 def historical_lag_transformations_wrapper(method):
     @wraps(method)
     def wrapper(self, df: IntoFrameT, column_names: ColumnNames | None = None, *args, **kwargs):
+        native_is_pandas = isinstance(nw.to_native(df), pd.DataFrame)
         input_cols = df.columns
         if "__row_index" not in df.columns:
-            df = df.with_row_index(name="__row_index")
+            df = with_row_index_compatible(df, "__row_index")
         self.column_names = column_names or self.column_names
         if self.__class__.__name__ != "RollingMeanDaysTransformer":
             if self.match_id_column is None and not self.column_names:
@@ -166,7 +200,7 @@ def historical_lag_transformations_wrapper(method):
                     "Unique Constraint could not be identified as neither player-id not team-id is present in the dataframe. Please pass unique_constraint explicitly"
                 )
 
-        if self.unique_constraint:
+        if self.unique_constraint and not _is_polars_lazy(df):
             assert len(df.select(self.unique_constraint)) == len(df), (
                 f"Specified unique constraint {self.unique_constraint} is not unique on the input dataframe"
             )
@@ -182,19 +216,18 @@ def historical_lag_transformations_wrapper(method):
         self.update_column = self.update_column or self.column_names.update_match_id
 
         self.group_to_granularity = self.group_to_granularity or self.unique_constraint
-        native = nw.to_native(df)
-        if isinstance(native, pd.DataFrame):
-            df = nw.from_native(pl.DataFrame(native))
-            ori_native = "pd"
-        else:
-            ori_native = "pl"
-
+        df, original_backend = _maybe_force_polars_input(
+            df, getattr(self, "_force_polars_backend", False)
+        )
         result = method(self, df, *args, **kwargs).sort("__row_index")
 
         input_cols = [c for c in input_cols]
-        if ori_native == "pd":
-            return result.select(list(set(input_cols + self.features_out))).to_pandas()
-        return result.select(list(set(input_cols + self.features_out)))
+        result = result.select(list(set(input_cols + self.features_out)))
+        if original_backend == "pd":
+            return result.to_pandas()
+        if native_is_pandas and getattr(self, "_reset_pandas_index_output", False):
+            return result.to_pandas().reset_index(drop=True)
+        return result
 
     return wrapper
 
@@ -202,6 +235,8 @@ def historical_lag_transformations_wrapper(method):
 def transformation_validator(method):
     @wraps(method)
     def wrapper(self, df: IntoFrameT, *args, **kwargs):
+        if _is_polars_lazy(df):
+            return method(self, df, *args, **kwargs)
         input_row_count = len(df)
         input_cols = df.columns
         result = method(self, df, *args, **kwargs)
@@ -226,7 +261,7 @@ def required_lag_column_names(method):
 
         if not self.column_names:
             if "__row_index" not in df.columns:
-                df = df.with_row_index(name="__row_index")
+                df = with_row_index_compatible(df, "__row_index")
 
             assert self.update_column is not None or self.group_to_granularity is not None, (
                 "if column names is not passed. Either update_column or group_to_granularity must be passed"

@@ -6,6 +6,7 @@ from spforge.autopipeline import AutoPipeline
 from spforge.base_feature_generator import FeatureGenerator
 from spforge.cross_validator import MatchKFoldCrossValidator
 from spforge.data_structures import ColumnNames
+from spforge.feature_generator._utils import with_row_index_compatible
 
 
 class RegressorFeatureGenerator(FeatureGenerator):
@@ -89,7 +90,7 @@ class RegressorFeatureGenerator(FeatureGenerator):
 
         input_cols = list(df.columns)
         if "__row_index" not in df.columns:
-            df = df.with_row_index(name="__row_index")
+            df = with_row_index_compatible(df, "__row_index")
 
         cv = self._build_cross_validator(df)
         pred_df = nw.from_native(cv.generate_validation_df(df, add_training_predictions=True))
@@ -118,7 +119,7 @@ class RegressorFeatureGenerator(FeatureGenerator):
 
         input_cols = list(df.columns)
         if "__row_index" not in df.columns:
-            df = df.with_row_index(name="__row_index")
+            df = with_row_index_compatible(df, "__row_index")
 
         predictions = self.estimator.predict(df)
         df = df.with_columns(
