@@ -669,3 +669,77 @@ def test_lag__future_transform_uses_trimmed_state(column_names: ColumnNames):
 
     stored_df = transformer.historical_df.to_pandas()
     assert stored_df.groupby(column_names.player_id).size().to_dict() == {"a": 2, "b": 2}
+
+
+def test_lag_transformer__historical_lazyframe(column_names: ColumnNames):
+    historical_df = pl.DataFrame(
+        {
+            "player": ["a", "a", "b", "b"],
+            "team": [1, 1, 2, 2],
+            "game": [1, 2, 1, 2],
+            "points": [1.0, 2.0, 3.0, 4.0],
+            "start_date": pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-01", "2023-01-02"]),
+        }
+    ).lazy()
+
+    transformer = LagTransformer(features=["points"], lag_length=1, granularity=["player"])
+    transformed_df = transformer.fit_transform(historical_df, column_names=column_names)
+
+    assert isinstance(transformed_df, pl.LazyFrame)
+    expected_df = pl.DataFrame(
+        {
+            "player": ["a", "a", "b", "b"],
+            "team": [1, 1, 2, 2],
+            "game": [1, 2, 1, 2],
+            "points": [1.0, 2.0, 3.0, 4.0],
+            "start_date": pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-01", "2023-01-02"]),
+            "lag_points1": [None, 1.0, None, 3.0],
+        }
+    )
+    sort_cols = ["start_date", "game", "team", "player"]
+    assert_frame_equal(
+        transformed_df.collect().select(expected_df.columns).sort(sort_cols),
+        expected_df.sort(sort_cols),
+        check_dtypes=False,
+    )
+
+
+def test_lag_transformer__future_lazyframe(column_names: ColumnNames):
+    historical_df = pl.DataFrame(
+        {
+            "player": ["a", "a", "b", "b"],
+            "team": [1, 1, 2, 2],
+            "game": [1, 2, 1, 2],
+            "points": [1.0, 2.0, 3.0, 4.0],
+            "start_date": pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-01", "2023-01-02"]),
+        }
+    ).lazy()
+    future_df = pl.DataFrame(
+        {
+            "player": ["a", "b"],
+            "team": [1, 2],
+            "game": [3, 3],
+            "start_date": pd.to_datetime(["2023-01-03", "2023-01-03"]),
+        }
+    ).lazy()
+
+    transformer = LagTransformer(features=["points"], lag_length=1, granularity=["player"])
+    transformer.fit_transform(historical_df, column_names=column_names)
+    transformed_df = transformer.future_transform(future_df)
+
+    assert isinstance(transformed_df, pl.LazyFrame)
+    expected_df = pl.DataFrame(
+        {
+            "player": ["a", "b"],
+            "team": [1, 2],
+            "game": [3, 3],
+            "start_date": pd.to_datetime(["2023-01-03", "2023-01-03"]),
+            "lag_points1": [2.0, 4.0],
+        }
+    )
+    sort_cols = ["start_date", "game", "team", "player"]
+    assert_frame_equal(
+        transformed_df.collect().select(expected_df.columns).sort(sort_cols),
+        expected_df.sort(sort_cols),
+        check_dtypes=False,
+    )

@@ -292,7 +292,11 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
             )
 
         concat_df = concat_df.with_columns(
-            [nw.col(feats_added).fill_null(strategy="forward").over(self.granularity)]
+            [
+                nw.col(feats_added)
+                .fill_null(strategy="forward")
+                .over(self.granularity, order_by=order_by)
+            ]
         )
         return concat_df
 
@@ -319,13 +323,17 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
             sort_cols.append(self.update_column)
 
         self._df = (
-            stored_df.sort(sort_cols, descending=True)
+            stored_df.sort(sort_cols)
             .with_columns(
-                nw.col(sort_cols[0]).cum_count().over(self.granularity).alias("__state_row_rank")
+                [
+                    (
+                        nw.col(sort_cols[0]).cum_count().over(self.granularity, order_by=sort_cols)
+                    ).alias("__row_num"),
+                    nw.col(sort_cols[0]).count().over(self.granularity).alias("__group_size"),
+                ]
             )
-            .filter(nw.col("__state_row_rank") <= self.window)
-            .drop("__state_row_rank")
-            .sort(sort_cols)
+            .filter((nw.col("__group_size") - nw.col("__row_num")) < self.window)
+            .drop(["__row_num", "__group_size"])
             .to_native()
         )
 

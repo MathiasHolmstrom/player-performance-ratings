@@ -79,14 +79,13 @@ class RollingMeanDaysTransformer(LagGenerator):
         if self.column_names:
             if df.schema[self.date_column] not in (nw.Date, nw.Datetime):
                 df = df.with_columns(nw.col(self.date_column).alias("__ori_date"))
-                try:
-                    df = df.with_columns(
-                        nw.col("__ori_date")
-                        .str.to_datetime(format="%Y-%m-%d %H:%M:%S")
-                        .alias(self.date_column)
-                    )
-                except nw.exceptions.InvalidOperationError:
-                    df = df.with_columns(nw.col("__ori_date").cast(nw.Date).alias(self.date_column))
+                df = df.with_columns(nw.col("__ori_date").str.to_datetime().alias(self.date_column))
+                df = df.with_columns(
+                    nw.when(nw.col(self.date_column).is_null())
+                    .then(nw.col("__ori_date").str.to_date().cast(nw.Datetime))
+                    .otherwise(nw.col(self.date_column))
+                    .alias(self.date_column)
+                )
             self._store_df(nw.from_native(df))
             self._store_future_state()
 

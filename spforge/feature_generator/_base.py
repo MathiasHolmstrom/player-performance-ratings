@@ -365,7 +365,7 @@ class LagGenerator(FeatureGenerator):
             df.with_columns(
                 nw.col(self.column_names.match_id)
                 .cum_count()
-                .over(self.granularity)
+                .over(self.granularity, order_by=[cn.start_date, cn.match_id, cn.team_id])
                 .alias("__entity_row_index")
             )
             .filter(nw.col("__entity_row_index") == 1)
@@ -384,11 +384,13 @@ class LagGenerator(FeatureGenerator):
                 .otherwise(nw.col(f))
                 .alias(f)
             )
-            if df[f].is_null().sum() == len(df):
-                df = df.with_columns(
-                    nw.col(f).fill_null(strategy="forward").over(self.granularity).alias(f)
-                    for f in self._entity_features_out
-                )
+        df = df.with_columns(
+            nw.col(f)
+            .fill_null(strategy="forward")
+            .over(self.granularity, order_by=[cn.start_date, cn.match_id, cn.team_id])
+            .alias(f)
+            for f in self._entity_features_out
+        )
 
         team_features = df.group_by([self.column_names.team_id, self.column_names.match_id]).agg(
             [nw.col(f).mean().alias(f) for f in self._entity_features_out]
@@ -413,7 +415,10 @@ class LagGenerator(FeatureGenerator):
             new_df.with_columns(
                 nw.col(self.column_names.match_id)
                 .cum_count()
-                .over("__opponent_team_id")
+                .over(
+                    "__opponent_team_id",
+                    order_by=[cn.start_date, cn.match_id, "__opponent_team_id"],
+                )
                 .alias("__opp_row_index")
             )
             .filter(nw.col("__opp_row_index") == 1)
@@ -436,7 +441,13 @@ class LagGenerator(FeatureGenerator):
         new_df = new_df.sort([cn.start_date, cn.match_id, "__opponent_team_id"])
         for f in opponent_feat_names:
             new_df = new_df.with_columns(
-                nw.col(f).fill_null(strategy="forward").over("__opponent_team_id").alias(f)
+                nw.col(f)
+                .fill_null(strategy="forward")
+                .over(
+                    "__opponent_team_id",
+                    order_by=[cn.start_date, cn.match_id, "__opponent_team_id"],
+                )
+                .alias(f)
             )
         join_cols = self.unique_constraint or [
             self.column_names.match_id,
@@ -464,7 +475,10 @@ class LagGenerator(FeatureGenerator):
             [
                 nw.col("one")
                 .cum_sum()
-                .over([self.update_column, *self.granularity])
+                .over(
+                    [self.update_column, *self.granularity],
+                    order_by=["__row_index"],
+                )
                 .alias("__game_rank")
             ]
         )

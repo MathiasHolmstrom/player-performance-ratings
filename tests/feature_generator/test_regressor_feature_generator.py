@@ -85,3 +85,23 @@ def test_regressor_feature_generator__requires_regressor(column_names):
 
     with pytest.raises(ValueError, match="regressor"):
         transformer.fit_transform(df, column_names=column_names)
+
+
+def test_regressor_feature_generator__accepts_lazy_input(column_names):
+    df = _make_df("pl").lazy()
+    pipeline = AutoPipeline(estimator=LinearRegression(), estimator_features=["x1", "x2"])
+    transformer = RegressorFeatureGenerator(
+        estimator=pipeline,
+        target_name="y",
+        prediction_column_name="pred",
+        column_names=column_names,
+        n_splits=2,
+    )
+
+    out = transformer.fit_transform(df, column_names=column_names)
+    assert isinstance(out, pl.DataFrame)
+    assert out["pred"].null_count() == 0
+
+    future_out = transformer.future_transform(df.drop("y"))
+    assert isinstance(future_out, pl.DataFrame)
+    assert future_out["pred"].null_count() == 0

@@ -180,3 +180,60 @@ def test_rolling_mean_transform_future(column_names, df):
             expected_data.select(transformed_future_data.columns),
             check_dtype=False,
         )
+
+
+def test_rolling_against_opponent__historical_lazyframe(column_names: ColumnNames):
+    historical_df = pl.DataFrame(
+        {
+            "game": [1, 1, 1, 1, 2, 2, 2, 2],
+            "points": [1, 2, 3, 4, 5, 6, 7, 8],
+            "start_date": pd.to_datetime(["2023-01-01"] * 4 + ["2023-01-02"] * 4),
+            "team": [1, 1, 2, 2, 1, 1, 2, 2],
+            "player": [1, 2, 3, 4, 1, 2, 3, 4],
+            "position": ["G", "F", "G", "F", "G", "F", "G", "F"],
+        }
+    ).lazy()
+
+    transformer = RollingAgainstOpponentTransformer(
+        granularity=["position"], features=["points"], window=2
+    )
+    transformed_df = transformer.fit_transform(historical_df, column_names=column_names)
+
+    assert isinstance(transformed_df, pl.LazyFrame)
+    collected = transformed_df.collect()
+    assert collected.height == 8
+    assert transformer.features_out[0] in collected.columns
+
+
+def test_rolling_against_opponent__future_lazyframe(column_names: ColumnNames):
+    historical_df = pl.DataFrame(
+        {
+            "game": [1, 1, 1, 1, 2, 2, 2, 2],
+            "points": [1, 2, 3, 4, 5, 6, 7, 8],
+            "start_date": pd.to_datetime(["2023-01-01"] * 4 + ["2023-01-02"] * 4),
+            "team": [1, 1, 2, 2, 1, 1, 2, 2],
+            "player": [1, 2, 3, 4, 1, 2, 3, 4],
+            "position": ["G", "F", "G", "F", "G", "F", "G", "F"],
+        }
+    ).lazy()
+    future_df = pl.DataFrame(
+        {
+            "game": [3, 3, 3, 3],
+            "start_date": pd.to_datetime(["2023-01-03"] * 4),
+            "team": [1, 1, 2, 2],
+            "player": [1, 2, 3, 4],
+            "position": ["G", "F", "G", "F"],
+        }
+    ).lazy()
+
+    transformer = RollingAgainstOpponentTransformer(
+        granularity=["position"], features=["points"], window=2
+    )
+    transformer.fit_transform(historical_df, column_names=column_names)
+    transformed_df = transformer.future_transform(future_df)
+
+    assert isinstance(transformed_df, pl.LazyFrame)
+    collected = transformed_df.collect()
+    assert collected.height == 4
+    assert transformer.features_out[0] in collected.columns
+    assert collected[transformer.features_out[0]].null_count() == 0

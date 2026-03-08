@@ -177,11 +177,13 @@ class RollingAgainstOpponentTransformer(LagGenerator):
         concat_df = self._concat_with_stored_and_calculate_feats(df=df, is_future=True)
         concat_df = self._rename_features(concat_df)
 
-        unique_match_ids = df.select(nw.col(self.column_names.match_id).unique())[
-            self.column_names.match_id
-        ].to_list()
-        transformed_df = concat_df.filter(
-            nw.col(self.column_names.match_id).is_in(unique_match_ids)
+        future_matches = df.unique(subset=[self.column_names.match_id]).select(
+            [self.column_names.match_id]
+        )
+        transformed_df = concat_df.join(
+            future_matches,
+            on=[self.column_names.match_id],
+            how="inner",
         )
         transformed_df = self._forward_fill_future_features(df=transformed_df)
 
@@ -199,7 +201,7 @@ class RollingAgainstOpponentTransformer(LagGenerator):
     ) -> IntoFrameT:
         cols_to_drop = [c for c in self.features_out if c in df.columns]
         df = df.drop(cols_to_drop)
-        concat_df = df.clone()
+        concat_df = df
 
         if self.opponent_column not in concat_df.columns:
             gt = concat_df.unique([self.update_column, self.team_column]).select(
