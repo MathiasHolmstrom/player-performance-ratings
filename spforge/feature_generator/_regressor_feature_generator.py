@@ -1,4 +1,5 @@
 import narwhals.stable.v2 as nw
+import polars as pl
 from narwhals.typing import IntoFrameT
 from sklearn.base import is_regressor
 
@@ -29,6 +30,12 @@ class RegressorFeatureGenerator(FeatureGenerator):
         self.min_validation_date = min_validation_date
         self.features = features
         self._is_fitted = False
+
+    def _materialize_if_lazy(self, df: IntoFrameT) -> IntoFrameT:
+        native = nw.to_native(df)
+        if isinstance(native, pl.LazyFrame):
+            return nw.from_native(native.collect())
+        return df
 
     def _assert_regressor(self) -> None:
         base_estimator = self.estimator
@@ -87,6 +94,7 @@ class RegressorFeatureGenerator(FeatureGenerator):
             raise ValueError("column_names must be provided before calling fit_transform.")
 
         self._assert_regressor()
+        df = self._materialize_if_lazy(df)
 
         input_cols = list(df.columns)
         if "__row_index" not in df.columns:
@@ -117,6 +125,7 @@ class RegressorFeatureGenerator(FeatureGenerator):
         if not self._is_fitted:
             raise RuntimeError("RegressorFeatureGenerator is not fitted.")
 
+        df = self._materialize_if_lazy(df)
         input_cols = list(df.columns)
         if "__row_index" not in df.columns:
             df = with_row_index_compatible(df, "__row_index")

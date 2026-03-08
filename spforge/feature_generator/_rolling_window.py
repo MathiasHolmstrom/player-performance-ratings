@@ -491,7 +491,10 @@ class RollingWindowTransformer(LagGenerator):
 
         return concat_df.with_columns(
             [
-                nw.col(f).fill_null(strategy="forward").over(self.granularity).alias(f)
+                nw.col(f)
+                .fill_null(strategy="forward")
+                .over(self.granularity, order_by=order_by)
+                .alias(f)
                 for f in self._entity_features_out
             ]
         )
@@ -523,11 +526,15 @@ class RollingWindowTransformer(LagGenerator):
 
         self._df = (
             stored_df.sort(sort_cols, descending=True)
+            .with_row_index("__state_order")
             .with_columns(
-                nw.col(sort_cols[0]).cum_count().over(self.granularity).alias("__state_row_rank")
+                nw.col("__state_order")
+                .cum_count()
+                .over(self.granularity, order_by=["__state_order"])
+                .alias("__state_row_rank")
             )
             .filter(nw.col("__state_row_rank") <= self.window)
-            .drop("__state_row_rank")
+            .drop(["__state_row_rank", "__state_order"])
             .sort(sort_cols)
             .to_native()
         )

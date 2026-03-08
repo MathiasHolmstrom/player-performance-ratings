@@ -107,8 +107,12 @@ class LagTransformer(LagGenerator):
         sort_col = self.column_names.start_date
 
         # Rank rows per entity: 1 = most recent
-        ranked = history_df.sort([sort_col], descending=True).with_columns(
-            nw.col(sort_col).cum_count().over(self.granularity).alias("__lag_rank")
+        ranked = history_df.sort([sort_col], descending=True).with_row_index("__state_order")
+        ranked = ranked.with_columns(
+            nw.col("__state_order")
+            .cum_count()
+            .over(self.granularity, order_by=["__state_order"])
+            .alias("__lag_rank")
         )
 
         state_exprs = [
@@ -135,10 +139,10 @@ class LagTransformer(LagGenerator):
 
     def _generate_features(self, df: IntoFrameT, ori_df: IntoFrameT) -> IntoFrameT:
         if self.column_names and self._df is not None:
-            concat_df = self._concat_with_stored(group_df=df, ori_df=ori_df).sort(
-                self.column_names.start_date
-            )
+            sort_col = self.column_names.start_date
+            concat_df = self._concat_with_stored(group_df=df, ori_df=ori_df).sort(sort_col)
         else:
+            sort_col = "__row_index"
             concat_df = df.sort("__row_index")
 
         for feature_name in self.features:
@@ -148,14 +152,14 @@ class LagTransformer(LagGenerator):
                     concat_df = concat_df.with_columns(
                         nw.col(feature_name)
                         .shift(-lag)
-                        .over(self.granularity)
+                        .over(self.granularity, order_by=[sort_col])
                         .alias(output_column_name)
                     )
                 else:
                     concat_df = concat_df.with_columns(
                         nw.col(feature_name)
                         .shift(lag)
-                        .over(self.granularity)
+                        .over(self.granularity, order_by=[sort_col])
                         .alias(output_column_name)
                     )
 
@@ -188,11 +192,15 @@ class LagTransformer(LagGenerator):
 
         self._df = (
             stored_df.sort(sort_cols, descending=True)
+            .with_row_index("__state_order")
             .with_columns(
-                nw.col(sort_cols[0]).cum_count().over(self.granularity).alias("__state_row_rank")
+                nw.col("__state_order")
+                .cum_count()
+                .over(self.granularity, order_by=["__state_order"])
+                .alias("__state_row_rank")
             )
             .filter(nw.col("__state_row_rank") <= self.lag_length)
-            .drop("__state_row_rank")
+            .drop(["__state_row_rank", "__state_order"])
             .sort(sort_cols)
             .to_native()
         )

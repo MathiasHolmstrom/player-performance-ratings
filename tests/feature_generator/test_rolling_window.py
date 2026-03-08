@@ -951,3 +951,84 @@ def test_rolling_window__future_transform_uses_trimmed_state(column_names: Colum
 
     stored = transformer.historical_df.to_pandas()
     assert stored.groupby(column_names.player_id).size().to_dict() == {"a": 2, "b": 2}
+
+
+def test_rolling_window__historical_lazyframe(column_names: ColumnNames):
+    historical_df = pl.DataFrame(
+        {
+            "player": ["a", "a", "b", "b"],
+            "team": [1, 1, 2, 2],
+            "game": [1, 2, 1, 2],
+            "points": [1.0, 2.0, 3.0, 4.0],
+            "participation_weight": [1.0, 1.0, 1.0, 1.0],
+            "start_date": pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-01", "2023-01-02"]),
+        }
+    ).lazy()
+
+    transformer = RollingWindowTransformer(
+        features=["points"], window=2, granularity=["player"], min_periods=1
+    )
+    transformed_df = transformer.fit_transform(historical_df, column_names=column_names)
+
+    assert isinstance(transformed_df, pl.LazyFrame)
+    expected_df = pl.DataFrame(
+        {
+            "player": ["a", "a", "b", "b"],
+            "team": [1, 1, 2, 2],
+            "game": [1, 2, 1, 2],
+            "points": [1.0, 2.0, 3.0, 4.0],
+            "participation_weight": [1.0, 1.0, 1.0, 1.0],
+            "start_date": pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-01", "2023-01-02"]),
+            transformer.features_out[0]: [None, 1.0, None, 3.0],
+        }
+    )
+    sort_cols = ["start_date", "game", "team", "player"]
+    assert_frame_equal(
+        transformed_df.collect().select(expected_df.columns).sort(sort_cols),
+        expected_df.sort(sort_cols),
+        check_dtypes=False,
+    )
+
+
+def test_rolling_window__future_lazyframe(column_names: ColumnNames):
+    historical_df = pl.DataFrame(
+        {
+            "player": ["a", "a", "b", "b"],
+            "team": [1, 1, 2, 2],
+            "game": [1, 2, 1, 2],
+            "points": [1.0, 2.0, 3.0, 4.0],
+            "participation_weight": [1.0, 1.0, 1.0, 1.0],
+            "start_date": pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-01", "2023-01-02"]),
+        }
+    ).lazy()
+    future_df = pl.DataFrame(
+        {
+            "player": ["a", "b"],
+            "team": [1, 2],
+            "game": [3, 3],
+            "start_date": pd.to_datetime(["2023-01-03", "2023-01-03"]),
+        }
+    ).lazy()
+
+    transformer = RollingWindowTransformer(
+        features=["points"], window=2, granularity=["player"], min_periods=1
+    )
+    transformer.fit_transform(historical_df, column_names=column_names)
+    transformed_df = transformer.future_transform(future_df)
+
+    assert isinstance(transformed_df, pl.LazyFrame)
+    expected_df = pl.DataFrame(
+        {
+            "player": ["a", "b"],
+            "team": [1, 2],
+            "game": [3, 3],
+            "start_date": pd.to_datetime(["2023-01-03", "2023-01-03"]),
+            transformer.features_out[0]: [1.5, 3.5],
+        }
+    )
+    sort_cols = ["start_date", "game", "team", "player"]
+    assert_frame_equal(
+        transformed_df.collect().select(expected_df.columns).sort(sort_cols),
+        expected_df.sort(sort_cols),
+        check_dtypes=False,
+    )

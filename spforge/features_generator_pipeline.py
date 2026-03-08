@@ -1,6 +1,7 @@
 from itertools import chain
 
 import narwhals.stable.v2 as nw
+import polars as pl
 from narwhals.typing import IntoFrameT
 
 from spforge.base_feature_generator import FeatureGenerator
@@ -105,6 +106,12 @@ class FeatureGeneratorPipeline(FeatureGenerator):
                 )
         return df.group_by(group_cols).agg(aggs).sort(group_cols)
 
+    def _maybe_row_count(self, df: IntoFrameT) -> int | None:
+        native = nw.to_native(df)
+        if isinstance(native, pl.LazyFrame):
+            return None
+        return len(df)
+
     @nw.narwhalify
     def fit_transform(self, df: IntoFrameT, column_names: ColumnNames | None = None) -> IntoFrameT:
         """
@@ -119,10 +126,11 @@ class FeatureGeneratorPipeline(FeatureGenerator):
         feats_not_added = []
 
         for transformer in self.feature_generators:
-            pre_row_count = len(df)
+            pre_row_count = self._maybe_row_count(df)
             native_df = df.to_native()
             df = nw.from_native(transformer.fit_transform(native_df, column_names=column_names))
-            assert len(df) == pre_row_count
+            if pre_row_count is not None:
+                assert len(df) == pre_row_count
             for f in transformer.features_out:
                 if f in expected_feats_added:
                     dup_feats.append(f)
@@ -151,10 +159,11 @@ class FeatureGeneratorPipeline(FeatureGenerator):
         feats_not_added = []
 
         for transformer in self.feature_generators:
-            pre_row_count = len(df)
+            pre_row_count = self._maybe_row_count(df)
             native_df = df.to_native()
             df = nw.from_native(transformer.transform(native_df))
-            assert len(df) == pre_row_count
+            if pre_row_count is not None:
+                assert len(df) == pre_row_count
             for f in transformer.features_out:
                 if f in expected_feats_added:
                     dup_feats.append(f)
@@ -181,14 +190,15 @@ class FeatureGeneratorPipeline(FeatureGenerator):
         feats_not_added = []
 
         for transformer in self.feature_generators:
-            pre_row_count = len(df)
+            pre_row_count = self._maybe_row_count(df)
             if hasattr(transformer, "future_transform") and callable(transformer.future_transform):
                 native_df = df.to_native()
                 df = nw.from_native(transformer.future_transform(native_df))
             else:
                 native_df = df.to_native()
                 df = nw.from_native(transformer.transform(native_df))
-            assert len(df) == pre_row_count
+            if pre_row_count is not None:
+                assert len(df) == pre_row_count
             for f in transformer.features_out:
                 if f in expected_feats_added:
                     dup_feats.append(f)
