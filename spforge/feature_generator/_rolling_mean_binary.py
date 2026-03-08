@@ -7,6 +7,7 @@ from spforge.feature_generator._utils import (
     future_lag_transformations_wrapper,
     future_validator,
     historical_lag_transformations_wrapper,
+    numeric_null_literal,
     required_lag_column_names,
     transformation_validator,
     with_row_index_compatible,
@@ -270,14 +271,14 @@ class BinaryOutcomeRollingMeanTransformer(LagGenerator):
                             nw.col("__rolling_binary_sum_window_1")
                             / nw.col("__rolling_binary_count_window_1")
                         )
-                        .otherwise(nw.lit(None))
+                        .otherwise(numeric_null_literal(concat_df))
                         .alias(f"{self.prefix}_{feature}{self.window}_1"),
                         nw.when(nw.col("__rolling_binary_count_window_0") >= self.min_periods)
                         .then(
                             nw.col("__rolling_binary_sum_window_0")
                             / nw.col("__rolling_binary_count_window_0")
                         )
-                        .otherwise(nw.lit(None))
+                        .otherwise(numeric_null_literal(concat_df))
                         .alias(f"{self.prefix}_{feature}{self.window}_0"),
                     ]
                 )

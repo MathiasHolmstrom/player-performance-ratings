@@ -9,6 +9,7 @@ from spforge.feature_generator._utils import (
     future_lag_transformations_wrapper,
     future_validator,
     historical_lag_transformations_wrapper,
+    numeric_null_literal,
     required_lag_column_names,
     transformation_validator,
     with_row_index_compatible,
@@ -182,16 +183,17 @@ class RollingWindowTransformer(LagGenerator):
                 .agg(agg_exprs)
                 .with_columns(
                     [
-                        nw.when(
-                            (nw.col(f"__rolling_state_count_{feature}") >= self.min_periods)
-                            & (nw.col("__rolling_state_weight_sum") > 0.0)
+                        self._float_output(
+                            nw.when(
+                                (nw.col(f"__rolling_state_count_{feature}") >= self.min_periods)
+                                & (nw.col("__rolling_state_weight_sum") > 0.0)
+                            ).then(
+                                nw.col(f"__rolling_state_weighted_sum_{feature}")
+                                / nw.col("__rolling_state_weight_sum")
+                            ),
+                            state_col,
+                            history_df,
                         )
-                        .then(
-                            nw.col(f"__rolling_state_weighted_sum_{feature}")
-                            / nw.col("__rolling_state_weight_sum")
-                        )
-                        .otherwise(nw.lit(None))
-                        .alias(state_col)
                         for feature, state_col in zip(
                             self.features, feature_state_columns, strict=True
                         )
@@ -222,25 +224,22 @@ class RollingWindowTransformer(LagGenerator):
                 .agg(agg_exprs)
                 .with_columns(
                     [
-                        (
-                            nw.when(nw.col(f"__rolling_state_count_{feature}") >= self.min_periods)
-                            .then(nw.col(f"__rolling_state_sum_{feature}"))
-                            .otherwise(nw.lit(None))
+                        self._float_output(
+                            nw.when(
+                                nw.col(f"__rolling_state_count_{feature}") >= self.min_periods
+                            ).then(nw.col(f"__rolling_state_sum_{feature}"))
                             if self.aggregation == "sum"
                             else nw.when(
                                 nw.col(f"__rolling_state_count_{feature}") >= self.min_periods
-                            )
-                            .then(
+                            ).then(
                                 nw.col(f"__rolling_state_sum_{feature}")
                                 / nw.col(f"__rolling_state_count_{feature}")
                             )
-                            .otherwise(nw.lit(None))
                             if self.aggregation == "mean"
                             else nw.when(
                                 (nw.col(f"__rolling_state_count_{feature}") >= self.min_periods)
                                 & (nw.col(f"__rolling_state_count_{feature}") > 1)
-                            )
-                            .then(
+                            ).then(
                                 (
                                     nw.col(f"__rolling_state_sumsq_{feature}")
                                     - (
@@ -250,9 +249,10 @@ class RollingWindowTransformer(LagGenerator):
                                     )
                                 )
                                 / (nw.col(f"__rolling_state_count_{feature}") - 1)
-                            )
-                            .otherwise(nw.lit(None))
-                        ).alias(state_col)
+                            ),
+                            state_col,
+                            history_df,
+                        )
                         for feature, state_col in zip(
                             self.features, feature_state_columns, strict=True
                         )
@@ -362,23 +362,24 @@ class RollingWindowTransformer(LagGenerator):
                     )
                 )
                 rolling_values.append(
-                    nw.when(
-                        (nw.col(f"__rolling_count_window_{feature}") >= self.min_periods)
-                        & (
-                            nw.col("__rolling_weight_prev_cumsum")
-                            - nw.col("__rolling_weight_prev_cumsum_lag").fill_null(0)
-                            > 0
-                        )
+                    self._float_output(
+                        nw.when(
+                            (nw.col(f"__rolling_count_window_{feature}") >= self.min_periods)
+                            & (
+                                nw.col("__rolling_weight_prev_cumsum")
+                                - nw.col("__rolling_weight_prev_cumsum_lag").fill_null(0)
+                                > 0
+                            )
+                        ).then(
+                            nw.col(f"__rolling_scaled_sum_window_{feature}")
+                            / (
+                                nw.col("__rolling_weight_prev_cumsum")
+                                - nw.col("__rolling_weight_prev_cumsum_lag").fill_null(0)
+                            )
+                        ),
+                        f"{self.prefix}_{feature}{self.window}",
+                        concat_df,
                     )
-                    .then(
-                        nw.col(f"__rolling_scaled_sum_window_{feature}")
-                        / (
-                            nw.col("__rolling_weight_prev_cumsum")
-                            - nw.col("__rolling_weight_prev_cumsum_lag").fill_null(0)
-                        )
-                    )
-                    .otherwise(nw.lit(None))
-                    .alias(f"{self.prefix}_{feature}{self.window}")
                 )
             concat_df = concat_df.with_columns(rolling_values)
 
@@ -483,7 +484,7 @@ class RollingWindowTransformer(LagGenerator):
                     )
 
                 rolling_values.append(
-                    expr.otherwise(nw.lit(None)).alias(f"{self.prefix}_{feature}{self.window}")
+                    self._float_output(expr, f"{self.prefix}_{feature}{self.window}", concat_df)
                 )
 
             concat_df = concat_df.with_columns(rolling_values)
@@ -494,6 +495,9 @@ class RollingWindowTransformer(LagGenerator):
                 for f in self._entity_features_out
             ]
         )
+
+    def _float_output(self, expr: nw.Expr, alias: str, df: IntoFrameT) -> nw.Expr:
+        return expr.otherwise(numeric_null_literal(df)).cast(nw.Float64).alias(alias)
 
     def _store_df(
         self,

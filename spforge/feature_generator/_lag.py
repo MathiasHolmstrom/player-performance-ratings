@@ -7,6 +7,7 @@ from spforge.feature_generator._utils import (
     future_lag_transformations_wrapper,
     future_validator,
     historical_lag_transformations_wrapper,
+    numeric_null_literal,
     required_lag_column_names,
     transformation_validator,
 )
@@ -113,7 +114,7 @@ class LagTransformer(LagGenerator):
         state_exprs = [
             nw.when(nw.col("__lag_rank") == lag)
             .then(nw.col(feature))
-            .otherwise(nw.lit(None))
+            .otherwise(numeric_null_literal(history_df))
             .alias(f"{self.prefix}_{feature}{lag}")
             for feature in self.features
             for lag in range(1, self.lag_length + 1)

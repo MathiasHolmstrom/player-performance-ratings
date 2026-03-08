@@ -5,6 +5,7 @@ from narwhals.typing import IntoFrameT
 
 from spforge.base_feature_generator import FeatureGenerator
 from spforge.data_structures import ColumnNames
+from spforge.feature_generator._utils import numeric_null_literal
 
 
 class LagGenerator(FeatureGenerator):
@@ -374,7 +375,10 @@ class LagGenerator(FeatureGenerator):
         df = df.sort([cn.start_date, cn.match_id, cn.team_id])
         for f in self._entity_features_out:
             df = df.with_columns(
-                nw.when(nw.col(f) == -999.21345).then(nw.lit(None)).otherwise(nw.col(f)).alias(f)
+                nw.when(nw.col(f) == -999.21345)
+                .then(numeric_null_literal(df))
+                .otherwise(nw.col(f))
+                .alias(f)
             )
             if df[f].is_null().sum() == len(df):
                 df = df.with_columns(
@@ -417,7 +421,10 @@ class LagGenerator(FeatureGenerator):
         )
         new_df = new_df.with_columns(
             [
-                nw.when(nw.col(f) == -999.21345).then(nw.lit(None)).otherwise(nw.col(f)).alias(f)
+                nw.when(nw.col(f) == -999.21345)
+                .then(numeric_null_literal(new_df))
+                .otherwise(nw.col(f))
+                .alias(f)
                 for f in opponent_feat_names
             ]
         )

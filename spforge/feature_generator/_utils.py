@@ -4,8 +4,10 @@ from functools import wraps
 from typing import Any, cast
 
 import narwhals.stable.v2 as nw
+import numpy as np
 import pandas as pd
 import polars as pl
+import pyarrow as pa
 from narwhals.typing import IntoFrameT
 
 from spforge.data_structures import ColumnNames
@@ -45,6 +47,8 @@ def _to_polars_eager(x: Any) -> pl.DataFrame:
         return x
     if isinstance(x, pl.LazyFrame):
         raise TypeError("Expected eager input here; got polars LazyFrame.")
+    if isinstance(x, pd.DataFrame):
+        return pl.from_arrow(pa.Table.from_pandas(x, preserve_index=False))
     return cast(pl.DataFrame, nw.from_native(x).to_polars())
 
 
@@ -104,6 +108,13 @@ def _maybe_force_polars_input(df: IntoFrameT, force_polars_backend: bool) -> tup
 
 def _is_polars_lazy(df: IntoFrameT) -> bool:
     return isinstance(nw.to_native(df), pl.LazyFrame)
+
+
+def numeric_null_literal(df: IntoFrameT) -> nw.Expr:
+    native = nw.to_native(df)
+    if isinstance(native, pd.DataFrame):
+        return nw.lit(np.nan)
+    return nw.lit(None)
 
 
 def with_row_index_compatible(df: IntoFrameT, name: str) -> IntoFrameT:
