@@ -241,6 +241,81 @@ def test_rolling_mean_historical_participation_weight(df, column_names):
         )
 
 
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_rolling_mean_weighted_with_null_features_and_zero_weights(df, column_names):
+    """Regression test: when feature is null (and weight=0) for several consecutive rows,
+    cum_sum returns null at those positions. The shifted lag then picks up null,
+    and fill_null(0) incorrectly inflates the windowed sum."""
+    historical_df = df(
+        {
+            "player": ["a"] * 10,
+            "game": list(range(1, 11)),
+            "points": [2.0, 2.0, 2.0, None, None, None, None, 1.5, None, 2.0],
+            "start_date": pd.to_datetime([f"2023-01-{i:02d}" for i in range(1, 11)]),
+            "team": [1] * 10,
+            "participation_weight": [18.0, 5.0, 21.0, 0.0, 0.0, 0.0, 0.0, 1.2, 0.0, 15.0],
+        }
+    )
+    transformer = RollingWindowTransformer(
+        features=["points"],
+        window=5,
+        min_periods=1,
+        granularity=["player"],
+        scale_by_participation_weight=True,
+    )
+    transformed_df = transformer.fit_transform(historical_df, column_names=column_names)
+    col = transformer.features_out[0]
+
+    if isinstance(historical_df, pl.DataFrame):
+        rolling_vals = transformed_df[col].to_list()
+    else:
+        rolling_vals = transformed_df[col].tolist()
+
+    max_raw = 2.0
+    for i, val in enumerate(rolling_vals):
+        if val is not None and not (isinstance(val, float) and pd.isna(val)):
+            assert val <= max_raw + 1e-9, (
+                f"Row {i}: weighted rolling mean {val} exceeds max raw value {max_raw}. "
+                "Likely cum_sum null propagation bug."
+            )
+
+
+@pytest.mark.parametrize("df", [pd.DataFrame, pl.DataFrame])
+def test_rolling_mean_unweighted_with_null_features(df, column_names):
+    """Same null cum_sum bug can affect the unweighted path."""
+    historical_df = df(
+        {
+            "player": ["a"] * 10,
+            "game": list(range(1, 11)),
+            "points": [5.0, 5.0, 5.0, None, None, None, None, 3.0, None, 4.0],
+            "start_date": pd.to_datetime([f"2023-01-{i:02d}" for i in range(1, 11)]),
+            "team": [1] * 10,
+            "participation_weight": [10.0] * 10,
+        }
+    )
+    transformer = RollingWindowTransformer(
+        features=["points"],
+        window=5,
+        min_periods=1,
+        granularity=["player"],
+    )
+    transformed_df = transformer.fit_transform(historical_df, column_names=column_names)
+    col = transformer.features_out[0]
+
+    if isinstance(historical_df, pl.DataFrame):
+        rolling_vals = transformed_df[col].to_list()
+    else:
+        rolling_vals = transformed_df[col].tolist()
+
+    max_raw = 5.0
+    for i, val in enumerate(rolling_vals):
+        if val is not None and not (isinstance(val, float) and pd.isna(val)):
+            assert val <= max_raw + 1e-9, (
+                f"Row {i}: rolling mean {val} exceeds max raw value {max_raw}. "
+                "Likely cum_sum null propagation bug."
+            )
+
+
 def test_rolling_window__future_state_lookup_weighted_without_future_participation_weight(
     column_names: ColumnNames,
 ):

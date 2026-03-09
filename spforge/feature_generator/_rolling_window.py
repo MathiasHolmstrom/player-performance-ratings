@@ -316,6 +316,7 @@ class RollingWindowTransformer(LagGenerator):
                             .over(self.granularity, order_by=order_by)
                             .alias(f"__rolling_count_{feature}"),
                             nw.col(f"__scaled_{feature}")
+                            .fill_null(0.0)
                             .cum_sum()
                             .over(self.granularity, order_by=order_by)
                             .alias(f"__rolling_scaled_cumsum_{feature}"),
@@ -323,12 +324,13 @@ class RollingWindowTransformer(LagGenerator):
                     )
                     .with_columns(
                         [
-                            (nw.col(f"__rolling_count_{feature}") - 1).alias(
-                                f"__rolling_prev_count_{feature}"
-                            ),
+                            (
+                                nw.col(f"__rolling_count_{feature}")
+                                - nw.col(feature).is_null().__invert__().cast(nw.Int64)
+                            ).alias(f"__rolling_prev_count_{feature}"),
                             (
                                 nw.col(f"__rolling_scaled_cumsum_{feature}")
-                                - nw.col(f"__scaled_{feature}")
+                                - nw.col(f"__scaled_{feature}").fill_null(0.0)
                             ).alias(f"__rolling_scaled_prev_cumsum_{feature}"),
                         ]
                     )
@@ -392,30 +394,32 @@ class RollingWindowTransformer(LagGenerator):
                         .over(self.granularity, order_by=order_by)
                         .alias(f"__rolling_count_{feature}"),
                         nw.col(feature)
+                        .fill_null(0.0)
                         .cum_sum()
                         .over(self.granularity, order_by=order_by)
                         .alias(f"__rolling_cumsum_{feature}"),
                     ]
                 ).with_columns(
                     [
-                        (nw.col(f"__rolling_count_{feature}") - 1).alias(
-                            f"__rolling_prev_count_{feature}"
-                        ),
-                        (nw.col(f"__rolling_cumsum_{feature}") - nw.col(feature)).alias(
-                            f"__rolling_prev_cumsum_{feature}"
-                        ),
+                        (
+                            nw.col(f"__rolling_count_{feature}")
+                            - nw.col(feature).is_null().__invert__().cast(nw.Int64)
+                        ).alias(f"__rolling_prev_count_{feature}"),
+                        (
+                            nw.col(f"__rolling_cumsum_{feature}") - nw.col(feature).fill_null(0.0)
+                        ).alias(f"__rolling_prev_cumsum_{feature}"),
                     ]
                 )
                 if self.aggregation == "var":
                     concat_df = concat_df.with_columns(
-                        (nw.col(feature) * nw.col(feature))
+                        (nw.col(feature).fill_null(0.0) * nw.col(feature).fill_null(0.0))
                         .cum_sum()
                         .over(self.granularity, order_by=order_by)
                         .alias(f"__rolling_sumsq_cumsum_{feature}")
                     ).with_columns(
                         (
                             nw.col(f"__rolling_sumsq_cumsum_{feature}")
-                            - (nw.col(feature) * nw.col(feature))
+                            - (nw.col(feature).fill_null(0.0) * nw.col(feature).fill_null(0.0))
                         ).alias(f"__rolling_sumsq_prev_cumsum_{feature}")
                     )
 
