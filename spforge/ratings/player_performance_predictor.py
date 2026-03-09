@@ -2,6 +2,7 @@ import math
 from abc import ABC, abstractmethod
 
 from spforge.data_structures import (
+    MatchPerformance,
     PreMatchPlayerRating,
     PreMatchTeamRating,
 )
@@ -28,6 +29,36 @@ class PlayerPerformancePredictor(ABC):
         team_rating: PreMatchTeamRating,
     ) -> float:
         pass
+
+    def predict_performance_value(
+        self,
+        player_rating_value: float,
+        opponent_team_rating_value: float,
+        team_rating_value: float,
+        match_performance: MatchPerformance | None = None,
+        opponent_team_rating: PreMatchTeamRating | None = None,
+        team_rating: PreMatchTeamRating | None = None,
+    ) -> float:
+        if match_performance is None:
+            match_performance = MatchPerformance(
+                performance_value=None,
+                participation_weight=1.0,
+                projected_participation_weight=1.0,
+            )
+        return self.predict_performance(
+            player_rating=PreMatchPlayerRating(
+                id="",
+                rating_value=player_rating_value,
+                games_played=0,
+                league=None,
+                position=None,
+                match_performance=match_performance,
+            ),
+            opponent_team_rating=opponent_team_rating
+            or PreMatchTeamRating(id="", players=[], rating_value=opponent_team_rating_value),
+            team_rating=team_rating
+            or PreMatchTeamRating(id="", players=[], rating_value=team_rating_value),
+        )
 
 
 class PlayerRatingNonOpponentPerformancePredictor(PlayerPerformancePredictor):
@@ -69,6 +100,20 @@ class PlayerRatingNonOpponentPerformancePredictor(PlayerPerformancePredictor):
         prediction = (math.exp(value)) / (1 + math.exp(value))
 
         return prediction
+
+    def predict_performance_value(
+        self,
+        player_rating_value: float,
+        opponent_team_rating_value: float,
+        team_rating_value: float,
+        match_performance: MatchPerformance | None = None,
+        opponent_team_rating: PreMatchTeamRating | None = None,
+        team_rating: PreMatchTeamRating | None = None,
+    ) -> float:
+        historical_average_rating = self._get_reference_rating()
+        net_mean_rating_over_historical_average = player_rating_value - historical_average_rating
+        value = self.coef * net_mean_rating_over_historical_average
+        return math.exp(value) / (1 + math.exp(value))
 
 
 class RatingPlayerDifferencePerformancePredictor(PlayerPerformancePredictor):
@@ -174,6 +219,54 @@ class RatingPlayerDifferencePerformancePredictor(PlayerPerformancePredictor):
 
         return prediction
 
+    def predict_performance_value(
+        self,
+        player_rating_value: float,
+        opponent_team_rating_value: float,
+        team_rating_value: float,
+        match_performance: MatchPerformance | None = None,
+        opponent_team_rating: PreMatchTeamRating | None = None,
+        team_rating: PreMatchTeamRating | None = None,
+    ) -> float:
+        if (
+            match_performance is not None
+            and (
+                match_performance.team_players_playing_time
+                or match_performance.opponent_players_playing_time
+            )
+            and opponent_team_rating is not None
+            and team_rating is not None
+        ):
+            return self.predict_performance(
+                player_rating=PreMatchPlayerRating(
+                    id="",
+                    rating_value=player_rating_value,
+                    games_played=0,
+                    league=None,
+                    position=None,
+                    match_performance=match_performance,
+                ),
+                opponent_team_rating=opponent_team_rating,
+                team_rating=team_rating,
+            )
+
+        rating_difference = player_rating_value - opponent_team_rating_value
+        rating_diff_team_from_entity = team_rating_value - player_rating_value
+        team_rating_diff = team_rating_value - opponent_team_rating_value
+
+        value = (
+            self.rating_diff_coef * rating_difference
+            + self.rating_diff_team_from_entity_coef * rating_diff_team_from_entity
+            + team_rating_diff * self.team_rating_diff_coef
+        )
+
+        prediction = math.exp(value) / (1 + math.exp(value))
+        if prediction > self.max_predict_value:
+            return self.max_predict_value
+        if prediction < (1 - self.max_predict_value):
+            return 1 - self.max_predict_value
+        return prediction
+
 
 class RatingMeanPerformancePredictor(PlayerPerformancePredictor):
     def __init__(
@@ -217,5 +310,32 @@ class RatingMeanPerformancePredictor(PlayerPerformancePredictor):
         if prediction > self.max_predict_value:
             return self.max_predict_value
         elif prediction < (1 - self.max_predict_value):
+            return 1 - self.max_predict_value
+        return prediction
+
+    def predict_performance_value(
+        self,
+        player_rating_value: float,
+        opponent_team_rating_value: float,
+        team_rating_value: float,
+        match_performance: MatchPerformance | None = None,
+        opponent_team_rating: PreMatchTeamRating | None = None,
+        team_rating: PreMatchTeamRating | None = None,
+    ) -> float:
+        self.sum_ratings.append(player_rating_value)
+        self.rating_count += 1
+        self.sum_rating += player_rating_value
+        start_index = max(0, len(self.sum_ratings) - self.last_sample_count)
+        self.sum_ratings = self.sum_ratings[start_index:]
+        historical_average_rating = self.sum_rating / self.rating_count
+        net_mean_rating_over_historical_average = (
+            player_rating_value * 0.5 + opponent_team_rating_value * 0.5 - historical_average_rating
+        )
+
+        value = self.coef * net_mean_rating_over_historical_average
+        prediction = math.exp(value) / (1 + math.exp(value))
+        if prediction > self.max_predict_value:
+            return self.max_predict_value
+        if prediction < (1 - self.max_predict_value):
             return 1 - self.max_predict_value
         return prediction

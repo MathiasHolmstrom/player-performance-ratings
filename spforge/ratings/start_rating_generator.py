@@ -49,12 +49,16 @@ class StartRatingGenerator:
         self._league_to_player_ids: dict[str, list[str]] = {}
         self._league_player_ratings: dict[str, list] = {}
         self._player_to_league: dict[str, str] = {}
+        self._league_to_player_index: dict[str, dict[str, int]] = {}
+        self._start_rating_cache: dict[tuple[str, int], float] = {}
 
     def reset(self):
         self._league_to_last_day_number = {}
         self._league_to_player_ids = {}
         self._league_player_ratings = {}
         self._player_to_league = {}
+        self._league_to_player_index = {}
+        self._start_rating_cache = {}
 
     def generate_rating_value(
         self,
@@ -72,6 +76,7 @@ class StartRatingGenerator:
         if league not in self._league_to_player_ids:
             self._league_to_player_ids[league] = []
             self._league_to_last_day_number[league] = []
+            self._league_to_player_index[league] = {}
 
         if league not in self._league_player_ratings:
             self._league_player_ratings[league] = []
@@ -114,15 +119,23 @@ class StartRatingGenerator:
         match_day_number: int,
         league: str,
     ) -> float:
+        cache_key = (league, match_day_number)
+        cached_value = self._start_rating_cache.get(cache_key)
+        if cached_value is not None:
+            return cached_value
+
         new_player_ratings = self._get_new_players_ratings(
             match_day_number=match_day_number,
             league=league,
         )
         region_player_count = len(new_player_ratings)
         if region_player_count < self.min_count_for_percentiles:
-            return self.league_ratings[league]
+            start_rating = self.league_ratings[league]
         else:
-            return self._start_rating_value_for_above_threshold(new_player_ratings)
+            start_rating = self._start_rating_value_for_above_threshold(new_player_ratings)
+
+        self._start_rating_cache[cache_key] = start_rating
+        return start_rating
 
     def _get_new_players_ratings(
         self,
@@ -144,37 +157,75 @@ class StartRatingGenerator:
         return float(percentile)
 
     def update_players_to_leagues(self, rating_change: PlayerRatingChange):
-        league = rating_change.league
-        id = rating_change.id
-        day_number = rating_change.day_number
-        rating_value = rating_change.pre_match_rating_value + rating_change.rating_change_value
+        self.update_player_rating(
+            player_id=rating_change.id,
+            league=rating_change.league,
+            day_number=rating_change.day_number,
+            pre_match_rating_value=rating_change.pre_match_rating_value,
+            rating_change_value=rating_change.rating_change_value,
+        )
+
+    def update_player_rating(
+        self,
+        player_id: str,
+        league: str | None,
+        day_number: int,
+        pre_match_rating_value: float,
+        rating_change_value: float,
+    ) -> None:
+        id = player_id
+        rating_value = pre_match_rating_value + rating_change_value
 
         league_data = self._league_player_ratings.setdefault(league, [])
         league_player_ids = self._league_to_player_ids.setdefault(league, [])
         league_last_day_numbers = self._league_to_last_day_number.setdefault(league, [])
+        league_player_index = self._league_to_player_index.setdefault(league, {})
 
-        if id not in league_player_ids:
+        player_index = league_player_index.get(id)
+        if player_index is None:
             league_data.append(rating_value)
             league_player_ids.append(id)
             league_last_day_numbers.append(day_number)
+            league_player_index[id] = len(league_player_ids) - 1
             self._player_to_league[id] = league
         else:
-            index = league_player_ids.index(id)
-            league_last_day_numbers[index] = day_number
-            league_data[index] = rating_value
+            league_last_day_numbers[player_index] = day_number
+            league_data[player_index] = rating_value
 
         current_player_league = self._player_to_league.get(id, league)
         if league != current_player_league:
-            player_index = self._league_to_player_ids[current_player_league].index(id)
-
-            for data_structure in (
-                self._league_player_ratings[current_player_league],
-                self._league_to_last_day_number[current_player_league],
-                self._league_to_player_ids[current_player_league],
-            ):
-                del data_structure[player_index]
+            self._remove_player_from_league(current_player_league, id)
 
             self._player_to_league[id] = league
+
+        self._invalidate_start_rating_cache(league)
+        if league != current_player_league:
+            self._invalidate_start_rating_cache(current_player_league)
+
+    def _remove_player_from_league(self, league: str, player_id: str) -> None:
+        league_player_ids = self._league_to_player_ids[league]
+        league_last_day_numbers = self._league_to_last_day_number[league]
+        league_ratings = self._league_player_ratings[league]
+        league_player_index = self._league_to_player_index[league]
+
+        remove_index = league_player_index.pop(player_id)
+        last_index = len(league_player_ids) - 1
+
+        if remove_index != last_index:
+            moved_player_id = league_player_ids[last_index]
+            league_player_ids[remove_index] = moved_player_id
+            league_last_day_numbers[remove_index] = league_last_day_numbers[last_index]
+            league_ratings[remove_index] = league_ratings[last_index]
+            league_player_index[moved_player_id] = remove_index
+
+        league_player_ids.pop()
+        league_last_day_numbers.pop()
+        league_ratings.pop()
+
+    def _invalidate_start_rating_cache(self, league: str) -> None:
+        keys_to_remove = [key for key in self._start_rating_cache if key[0] == league]
+        for key in keys_to_remove:
+            del self._start_rating_cache[key]
 
     @property
     def league_player_ratings(self) -> dict[str, list]:
