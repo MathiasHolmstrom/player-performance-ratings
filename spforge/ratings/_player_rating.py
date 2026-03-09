@@ -5,6 +5,7 @@ import json
 import logging
 import math
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, Literal
 
 import narwhals.stable.v2 as nw
@@ -14,14 +15,10 @@ from narwhals.stable.v2.typing import IntoFrameT
 
 from spforge.data_structures import (
     ColumnNames,
-    MatchPerformance,
     MatchPlayer,
     PlayerRating,
-    PlayerRatingChange,
     PlayerRatingsResult,
-    PreMatchPlayerRating,
     PreMatchPlayersCollection,
-    PreMatchTeamRating,
 )
 from spforge.feature_generator._utils import to_polars
 from spforge.performance_transformers._performance_manager import ColumnWeight, PerformanceManager
@@ -43,6 +40,36 @@ _SCALED_DPW = "__scaled_defense_participation_weight__"
 _SCALED_PDPW = "__scaled_projected_defense_participation_weight__"
 
 _MIN_CALIBRATION_SAMPLES = 100
+
+
+@dataclass(slots=True)
+class _MatchPerformanceView:
+    performance_value: float | None
+    participation_weight: float | None
+    projected_participation_weight: float
+    defense_participation_weight: float | None = None
+    projected_defense_participation_weight: float | None = None
+    defense_performance_value: float | None = None
+    team_players_playing_time: dict[str, float] | None = None
+    opponent_players_playing_time: dict[str, float] | None = None
+
+
+@dataclass(slots=True)
+class _PreMatchPlayerView:
+    id: str
+    rating_value: float
+    games_played: int
+    league: str | None
+    position: str | None
+    match_performance: _MatchPerformanceView
+    other: dict[str, Any] | None = None
+
+
+@dataclass(slots=True)
+class _PreMatchTeamView:
+    id: str
+    players: list[_PreMatchPlayerView]
+    rating_value: float
 
 
 class PlayerRatingGenerator(RatingGenerator):
@@ -754,6 +781,27 @@ class PlayerRatingGenerator(RatingGenerator):
             team1_mean_def = self._team_individual_def_mean(c1) if self.use_off_def_split else None
             team2_mean_def = self._team_individual_def_mean(c2) if self.use_off_def_split else None
 
+            team1_off_team = _PreMatchTeamView(
+                id=team1,
+                players=c1.pre_match_player_ratings,
+                rating_value=team1_off_rating,
+            )
+            team2_off_team = _PreMatchTeamView(
+                id=team2,
+                players=c2.pre_match_player_ratings,
+                rating_value=team2_off_rating,
+            )
+            team1_def_team = _PreMatchTeamView(
+                id=team1,
+                players=c1.pre_match_def_player_ratings or c1.pre_match_player_ratings,
+                rating_value=team1_def_rating,
+            )
+            team2_def_team = _PreMatchTeamView(
+                id=team2,
+                players=c2.pre_match_def_player_ratings or c2.pre_match_player_ratings,
+                rating_value=team2_def_rating,
+            )
+
             player_updates: list[
                 tuple[str, str, float, float, float, float, float, float, int, str | None]
             ] = []
@@ -767,40 +815,18 @@ class PlayerRatingGenerator(RatingGenerator):
                 off_pre = float(off_state.rating_value)
                 def_pre = float(def_state.rating_value)
 
-                pred_off = self._performance_predictor.predict_performance(
-                    player_rating=pre_player,
-                    opponent_team_rating=PreMatchTeamRating(
-                        id=team2,
-                        players=c2.pre_match_def_player_ratings or c2.pre_match_player_ratings,
-                        rating_value=team2_def_rating,
-                    ),
-                    team_rating=PreMatchTeamRating(
-                        id=team1,
-                        players=c1.pre_match_player_ratings,
-                        rating_value=team1_off_rating,
-                    ),
+                pred_off = self._predict_performance_for_view(
+                    player=pre_player,
+                    player_rating_value=off_pre,
+                    opponent_team=team2_def_team,
+                    team=team1_off_team,
                 )
 
-                pred_def = self._performance_predictor.predict_performance(
-                    player_rating=PreMatchPlayerRating(
-                        id=pid,
-                        rating_value=def_pre,
-                        match_performance=pre_player.match_performance,
-                        games_played=pre_player.games_played,
-                        league=pre_player.league,
-                        position=pre_player.position,
-                        other=getattr(pre_player, "other", None),
-                    ),
-                    opponent_team_rating=PreMatchTeamRating(
-                        id=team2,
-                        players=c2.pre_match_player_ratings,
-                        rating_value=team2_off_rating,
-                    ),
-                    team_rating=PreMatchTeamRating(
-                        id=team1,
-                        players=c1.pre_match_def_player_ratings or c1.pre_match_player_ratings,
-                        rating_value=team1_def_rating,
-                    ),
+                pred_def = self._predict_performance_for_view(
+                    player=pre_player,
+                    player_rating_value=def_pre,
+                    opponent_team=team2_off_team,
+                    team=team1_def_team,
                 )
 
                 perf_value = pre_player.match_performance.performance_value
@@ -874,40 +900,18 @@ class PlayerRatingGenerator(RatingGenerator):
                 off_pre = float(off_state.rating_value)
                 def_pre = float(def_state.rating_value)
 
-                pred_off = self._performance_predictor.predict_performance(
-                    player_rating=pre_player,
-                    opponent_team_rating=PreMatchTeamRating(
-                        id=team1,
-                        players=c1.pre_match_def_player_ratings or c1.pre_match_player_ratings,
-                        rating_value=team1_def_rating,
-                    ),
-                    team_rating=PreMatchTeamRating(
-                        id=team2,
-                        players=c2.pre_match_player_ratings,
-                        rating_value=team2_off_rating,
-                    ),
+                pred_off = self._predict_performance_for_view(
+                    player=pre_player,
+                    player_rating_value=off_pre,
+                    opponent_team=team1_def_team,
+                    team=team2_off_team,
                 )
 
-                pred_def = self._performance_predictor.predict_performance(
-                    player_rating=PreMatchPlayerRating(
-                        id=pid,
-                        rating_value=def_pre,
-                        match_performance=pre_player.match_performance,
-                        games_played=pre_player.games_played,
-                        league=pre_player.league,
-                        position=pre_player.position,
-                        other=getattr(pre_player, "other", None),
-                    ),
-                    opponent_team_rating=PreMatchTeamRating(
-                        id=team1,
-                        players=c1.pre_match_player_ratings,
-                        rating_value=team1_off_rating,
-                    ),
-                    team_rating=PreMatchTeamRating(
-                        id=team2,
-                        players=c2.pre_match_def_player_ratings or c2.pre_match_player_ratings,
-                        rating_value=team2_def_rating,
-                    ),
+                pred_def = self._predict_performance_for_view(
+                    player=pre_player,
+                    player_rating_value=def_pre,
+                    opponent_team=team1_off_team,
+                    team=team2_def_team,
                 )
 
                 perf_value = pre_player.match_performance.performance_value
@@ -1026,40 +1030,50 @@ class PlayerRatingGenerator(RatingGenerator):
     def _apply_player_updates(
         self, updates: list[tuple[str, str, float, float, float, int, str | None]]
     ) -> None:
+        max_days = self.confidence_max_days
+        days_multiplier = self.confidence_days_ago_multiplier
+        confidence_max_sum = self.confidence_max_sum
+        start_rating_generator = self.start_rating_generator
+
         for player_id, team_id, pre_rating, off_change, def_change, day_number, league in updates:
             off_state = self._player_off_ratings[player_id]
-            off_state.confidence_sum = self._calculate_post_match_confidence_sum(
-                entity_rating=off_state,
-                day_number=day_number,
-                particpation_weight=1.0,
+            if off_state.last_match_day_number is None:
+                off_days_ago = 0.0
+            else:
+                off_days_ago = float(day_number - off_state.last_match_day_number)
+            off_confidence = (
+                -min(off_days_ago, max_days) * days_multiplier
+                + off_state.confidence_sum
+                + 1.0
             )
+            off_state.confidence_sum = max(0.0, min(float(off_confidence), confidence_max_sum))
             off_state.rating_value += float(off_change)
             off_state.games_played += 1.0
             off_state.last_match_day_number = int(day_number)
             off_state.most_recent_team_id = team_id
 
             def_state = self._player_def_ratings[player_id]
-            def_state.confidence_sum = self._calculate_post_match_confidence_sum(
-                entity_rating=def_state,
-                day_number=day_number,
-                particpation_weight=1.0,
+            if def_state.last_match_day_number is None:
+                def_days_ago = 0.0
+            else:
+                def_days_ago = float(day_number - def_state.last_match_day_number)
+            def_confidence = (
+                -min(def_days_ago, max_days) * days_multiplier
+                + def_state.confidence_sum
+                + 1.0
             )
+            def_state.confidence_sum = max(0.0, min(float(def_confidence), confidence_max_sum))
             def_state.rating_value += float(def_change)
             def_state.games_played += 1.0
             def_state.last_match_day_number = int(day_number)
             def_state.most_recent_team_id = team_id
 
-            self.start_rating_generator.update_players_to_leagues(
-                PlayerRatingChange(
-                    id=player_id,
-                    day_number=day_number,
-                    league=league,
-                    participation_weight=1.0,
-                    predicted_performance=0.0,
-                    performance=0.0,
-                    pre_match_rating_value=pre_rating,
-                    rating_change_value=off_change,
-                )
+            start_rating_generator.update_player_rating(
+                player_id=player_id,
+                day_number=day_number,
+                league=league,
+                pre_match_rating_value=pre_rating,
+                rating_change_value=off_change,
             )
 
         self._matches_since_last_adjustment_check += 1
@@ -1071,6 +1085,22 @@ class PlayerRatingGenerator(RatingGenerator):
             last_day_number = updates[-1][5] if updates else 0
             self._apply_rating_mean_adjustment(last_day_number)
             self._matches_since_last_adjustment_check = 0
+
+    def _predict_performance_for_view(
+        self,
+        player: _PreMatchPlayerView,
+        player_rating_value: float,
+        opponent_team: _PreMatchTeamView,
+        team: _PreMatchTeamView,
+    ) -> float:
+        return self._performance_predictor.predict_performance_value(
+            player_rating_value=player_rating_value,
+            opponent_team_rating_value=opponent_team.rating_value,
+            team_rating_value=team.rating_value,
+            match_performance=player.match_performance,
+            opponent_team_rating=opponent_team,
+            team_rating=team,
+        )
 
     def _add_rating_features(self, df: pl.DataFrame) -> pl.DataFrame:
         cols_to_add = set((self._features_out or []) + (self.non_predictor_features_out or []))
@@ -1369,8 +1399,8 @@ class PlayerRatingGenerator(RatingGenerator):
     ) -> PreMatchPlayersCollection:
         cn = self.column_names
 
-        pre_match_player_ratings: list[PreMatchPlayerRating] = []
-        pre_match_def_player_ratings: list[PreMatchPlayerRating] = []
+        pre_match_player_ratings: list[_PreMatchPlayerView] = []
+        pre_match_def_player_ratings: list[_PreMatchPlayerView] = []
         new_players: list[MatchPlayer] = []
         player_ids: list[str] = []
         player_off_rating_values: list[float] = []
@@ -1450,7 +1480,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 team_player, cn.opponent_players_playing_time
             )
 
-            mp = MatchPerformance(
+            mp = _MatchPerformanceView(
                 performance_value=perf_val,
                 projected_participation_weight=projected_participation_weight,
                 participation_weight=participation_weight,
@@ -1464,7 +1494,7 @@ class PlayerRatingGenerator(RatingGenerator):
             if player_id in self._player_off_ratings and player_id in self._player_def_ratings:
                 off_state = self._player_off_ratings[player_id]
                 def_state = self._player_def_ratings[player_id]
-                pre = PreMatchPlayerRating(
+                pre = _PreMatchPlayerView(
                     id=player_id,
                     rating_value=off_state.rating_value,
                     match_performance=mp,
@@ -1476,7 +1506,7 @@ class PlayerRatingGenerator(RatingGenerator):
                 player_off_rating_values.append(float(off_state.rating_value))
 
                 # Also create DEF player rating for use in opponent predictions
-                pre_def = PreMatchPlayerRating(
+                pre_def = _PreMatchPlayerView(
                     id=player_id,
                     rating_value=def_state.rating_value,
                     match_performance=mp,
@@ -1519,14 +1549,14 @@ class PlayerRatingGenerator(RatingGenerator):
         self,
         day_number: int,
         new_players: list[MatchPlayer],
-        team_pre_match_player_ratings: list[PreMatchPlayerRating],
-    ) -> tuple[list[PreMatchPlayerRating], list[PreMatchPlayerRating], list[float]]:
+        team_pre_match_player_ratings: list[_PreMatchPlayerView],
+    ) -> tuple[list[_PreMatchPlayerView], list[_PreMatchPlayerView], list[float]]:
         """
         Creates BOTH off+def states for new players using the same start rating.
         Returns (off_ratings, def_ratings, off_values).
         """
-        pre_match_player_ratings: list[PreMatchPlayerRating] = []
-        pre_match_def_player_ratings: list[PreMatchPlayerRating] = []
+        pre_match_player_ratings: list[_PreMatchPlayerView] = []
+        pre_match_def_player_ratings: list[_PreMatchPlayerView] = []
         pre_match_player_off_values: list[float] = []
 
         for match_player in new_players:
@@ -1543,7 +1573,7 @@ class PlayerRatingGenerator(RatingGenerator):
 
             pre_match_player_off_values.append(float(start_val))
 
-            pre = PreMatchPlayerRating(
+            pre = _PreMatchPlayerView(
                 id=pid,
                 rating_value=float(start_val),  # OFF rating value for predictor
                 match_performance=match_player.performance,
@@ -1555,7 +1585,7 @@ class PlayerRatingGenerator(RatingGenerator):
             pre_match_player_ratings.append(pre)
 
             # For new players, DEF rating starts same as OFF rating
-            pre_def = PreMatchPlayerRating(
+            pre_def = _PreMatchPlayerView(
                 id=pid,
                 rating_value=float(start_val),  # DEF rating (same as OFF for new players)
                 match_performance=match_player.performance,
@@ -1680,10 +1710,10 @@ class PlayerRatingGenerator(RatingGenerator):
         def ensure_new_player(
             pid: str,
             day_number: int,
-            mp: MatchPerformance,
+            mp: _MatchPerformanceView,
             league,
             position,
-            team_pre: list[PreMatchPlayerRating],
+            team_pre: list[_PreMatchPlayerView],
         ) -> None:
             if pid in local_off and pid in local_def:
                 return
@@ -1705,15 +1735,15 @@ class PlayerRatingGenerator(RatingGenerator):
             def build_local_team(
                 stats_col: str,
             ) -> tuple[
-                list[PreMatchPlayerRating],
-                list[PreMatchPlayerRating],
+                list[_PreMatchPlayerView],
+                list[_PreMatchPlayerView],
                 list[str],
                 list[float],
                 list[float],
                 float,
             ]:
-                pre_list: list[PreMatchPlayerRating] = []
-                def_pre_list: list[PreMatchPlayerRating] = []
+                pre_list: list[_PreMatchPlayerView] = []
+                def_pre_list: list[_PreMatchPlayerView] = []
                 player_ids: list[str] = []
                 proj_w: list[float] = []
                 off_vals: list[float] = []
@@ -1776,7 +1806,7 @@ class PlayerRatingGenerator(RatingGenerator):
                         tp, cn.opponent_players_playing_time
                     )
 
-                    mp = MatchPerformance(
+                    mp = _MatchPerformanceView(
                         performance_value=get_perf_value(tp),
                         projected_participation_weight=ppw,
                         participation_weight=pw,
@@ -1790,7 +1820,7 @@ class PlayerRatingGenerator(RatingGenerator):
                     ensure_new_player(pid, day_number, mp, league, position, pre_list)  # noqa: B023
 
                     pre_list.append(
-                        PreMatchPlayerRating(
+                        _PreMatchPlayerView(
                             id=pid,
                             rating_value=float(local_off[pid].rating_value),
                             match_performance=mp,
@@ -1801,7 +1831,7 @@ class PlayerRatingGenerator(RatingGenerator):
                     )
                     # Also build DEF player ratings for opponent weighting
                     def_pre_list.append(
-                        PreMatchPlayerRating(
+                        _PreMatchPlayerView(
                             id=pid,
                             rating_value=float(local_def[pid].rating_value),
                             match_performance=mp,
@@ -1842,6 +1872,11 @@ class PlayerRatingGenerator(RatingGenerator):
             t1_off_rating, t1_def_rating = team_off_def_rating(t1_ids, t1_proj_w)
             t2_off_rating, t2_def_rating = team_off_def_rating(t2_ids, t2_proj_w)
 
+            t1_off_team = _PreMatchTeamView(id=team1, players=t1_pre, rating_value=t1_off_rating)
+            t2_off_team = _PreMatchTeamView(id=team2, players=t2_pre, rating_value=t2_off_rating)
+            t1_def_team = _PreMatchTeamView(id=team1, players=t1_def_pre, rating_value=t1_def_rating)
+            t2_def_team = _PreMatchTeamView(id=team2, players=t2_def_pre, rating_value=t2_def_rating)
+
             for pre in t1_pre:
                 pid = pre.id
                 off_pre = float(local_off[pid].rating_value)
@@ -1849,31 +1884,18 @@ class PlayerRatingGenerator(RatingGenerator):
                     off_pre if not self.use_off_def_split else float(local_def[pid].rating_value)
                 )
 
-                pred_off = self._performance_predictor.predict_performance(
-                    player_rating=pre,
-                    opponent_team_rating=PreMatchTeamRating(
-                        id=team2, players=t2_def_pre, rating_value=t2_def_rating
-                    ),
-                    team_rating=PreMatchTeamRating(
-                        id=team1, players=t1_pre, rating_value=t1_off_rating
-                    ),
+                pred_off = self._predict_performance_for_view(
+                    player=pre,
+                    player_rating_value=off_pre,
+                    opponent_team=t2_def_team,
+                    team=t1_off_team,
                 )
 
-                pred_def = self._performance_predictor.predict_performance(
-                    player_rating=PreMatchPlayerRating(
-                        id=pid,
-                        rating_value=def_pre,
-                        match_performance=pre.match_performance,
-                        games_played=pre.games_played,
-                        league=pre.league,
-                        position=pre.position,
-                    ),
-                    opponent_team_rating=PreMatchTeamRating(
-                        id=team2, players=t2_pre, rating_value=t2_off_rating
-                    ),
-                    team_rating=PreMatchTeamRating(
-                        id=team1, players=t1_def_pre, rating_value=t1_def_rating
-                    ),
+                pred_def = self._predict_performance_for_view(
+                    player=pre,
+                    player_rating_value=def_pre,
+                    opponent_team=t2_off_team,
+                    team=t1_def_team,
                 )
 
                 if not self.use_off_def_split:
@@ -1898,31 +1920,18 @@ class PlayerRatingGenerator(RatingGenerator):
                     off_pre if not self.use_off_def_split else float(local_def[pid].rating_value)
                 )
 
-                pred_off = self._performance_predictor.predict_performance(
-                    player_rating=pre,
-                    opponent_team_rating=PreMatchTeamRating(
-                        id=team1, players=t1_def_pre, rating_value=t1_def_rating
-                    ),
-                    team_rating=PreMatchTeamRating(
-                        id=team2, players=t2_pre, rating_value=t2_off_rating
-                    ),
+                pred_off = self._predict_performance_for_view(
+                    player=pre,
+                    player_rating_value=off_pre,
+                    opponent_team=t1_def_team,
+                    team=t2_off_team,
                 )
 
-                pred_def = self._performance_predictor.predict_performance(
-                    player_rating=PreMatchPlayerRating(
-                        id=pid,
-                        rating_value=def_pre,
-                        match_performance=pre.match_performance,
-                        games_played=pre.games_played,
-                        league=pre.league,
-                        position=pre.position,
-                    ),
-                    opponent_team_rating=PreMatchTeamRating(
-                        id=team1, players=t1_pre, rating_value=t1_off_rating
-                    ),
-                    team_rating=PreMatchTeamRating(
-                        id=team2, players=t2_def_pre, rating_value=t2_def_rating
-                    ),
+                pred_def = self._predict_performance_for_view(
+                    player=pre,
+                    player_rating_value=def_pre,
+                    opponent_team=t1_off_team,
+                    team=t2_def_team,
                 )
 
                 if not self.use_off_def_split:

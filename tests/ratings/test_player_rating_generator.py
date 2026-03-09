@@ -198,6 +198,120 @@ def test_player_rating_generator_team_rating_coef_affects_predictor(base_cn):
     assert low_pred < 0.5
 
 
+def test_difference_predictor_scalar_fast_path_matches_object_path(base_cn):
+    generator = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        performance_predictor="difference",
+        rating_diff_coef=0.01,
+        rating_diff_team_from_entity_coef=0.02,
+        team_rating_diff_coef=0.03,
+    )
+
+    predictor = generator._performance_predictor
+    match_perf = MatchPerformance(
+        performance_value=0.55,
+        participation_weight=0.8,
+        projected_participation_weight=0.9,
+    )
+    player_rating = PreMatchPlayerRating(
+        id="P1",
+        rating_value=1010.0,
+        games_played=7,
+        league=None,
+        position=None,
+        match_performance=match_perf,
+    )
+    team_rating = PreMatchTeamRating(id="T1", players=[player_rating], rating_value=1005.0)
+    opponent_rating = PreMatchTeamRating(id="T2", players=[player_rating], rating_value=995.0)
+
+    object_pred = predictor.predict_performance(
+        player_rating=player_rating,
+        opponent_team_rating=opponent_rating,
+        team_rating=team_rating,
+    )
+    scalar_pred = predictor.predict_performance_value(
+        player_rating_value=player_rating.rating_value,
+        opponent_team_rating_value=opponent_rating.rating_value,
+        team_rating_value=team_rating.rating_value,
+        match_performance=match_perf,
+        opponent_team_rating=opponent_rating,
+        team_rating=team_rating,
+    )
+
+    assert scalar_pred == pytest.approx(object_pred)
+
+
+def test_difference_predictor_scalar_path_falls_back_for_playing_time_weights(base_cn):
+    generator = PlayerRatingGenerator(
+        performance_column="perf",
+        column_names=base_cn,
+        performance_predictor="difference",
+        rating_diff_coef=0.01,
+        rating_diff_team_from_entity_coef=0.02,
+        team_rating_diff_coef=0.03,
+    )
+
+    predictor = generator._performance_predictor
+    team_player = PreMatchPlayerRating(
+        id="P2",
+        rating_value=1000.0,
+        games_played=4,
+        league=None,
+        position=None,
+        match_performance=MatchPerformance(
+            performance_value=0.5,
+            participation_weight=1.0,
+            projected_participation_weight=1.0,
+        ),
+    )
+    opp_player = PreMatchPlayerRating(
+        id="P3",
+        rating_value=980.0,
+        games_played=4,
+        league=None,
+        position=None,
+        match_performance=MatchPerformance(
+            performance_value=0.5,
+            participation_weight=1.0,
+            projected_participation_weight=1.0,
+        ),
+    )
+    weighted_perf = MatchPerformance(
+        performance_value=0.55,
+        participation_weight=0.8,
+        projected_participation_weight=0.9,
+        team_players_playing_time={"P2": 30.0},
+        opponent_players_playing_time={"P3": 28.0},
+    )
+    player_rating = PreMatchPlayerRating(
+        id="P1",
+        rating_value=1010.0,
+        games_played=7,
+        league=None,
+        position=None,
+        match_performance=weighted_perf,
+    )
+    team_rating = PreMatchTeamRating(id="T1", players=[team_player], rating_value=1005.0)
+    opponent_rating = PreMatchTeamRating(id="T2", players=[opp_player], rating_value=995.0)
+
+    object_pred = predictor.predict_performance(
+        player_rating=player_rating,
+        opponent_team_rating=opponent_rating,
+        team_rating=team_rating,
+    )
+    scalar_pred = predictor.predict_performance_value(
+        player_rating_value=player_rating.rating_value,
+        opponent_team_rating_value=opponent_rating.rating_value,
+        team_rating_value=team_rating.rating_value,
+        match_performance=weighted_perf,
+        opponent_team_rating=opponent_rating,
+        team_rating=team_rating,
+    )
+
+    assert scalar_pred == pytest.approx(object_pred)
+
+
 def test_fit_transform_batch_update_logic(base_cn):
     """Test that ratings do not update between matches if update_match_id is the same."""
     from dataclasses import replace

@@ -13,7 +13,7 @@ Primary themes:
 - Support pandas + polars via narwhals (`@nw.narwhalify`)
 - sklearn API compatibility: `fit(X, y)`, `transform(X)`, `predict(X)`, `predict_proba(X)`
 - Public classes/Enums must be importable from module `__init__.py`
-- Update version in `pyproject.toml` when releasing/pushing changes
+- Do not manually update version in `pyproject.toml`; version bumps are handled automatically in GitHub
 - Always create a new branch for new tasks
 - Always run all tests before committing
 
