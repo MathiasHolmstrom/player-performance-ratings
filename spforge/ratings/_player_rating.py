@@ -301,6 +301,9 @@ class PlayerRatingGenerator(RatingGenerator):
         df: IntoFrameT,
         column_names: ColumnNames | None = None,
     ) -> DataFrame | IntoFrameT:
+        pl_df, was_lazy = self._to_polars_eager(df)
+        df = nw.from_native(pl_df)
+
         self.column_names = column_names if column_names else self.column_names
         self._maybe_enable_participation_weight_scaling(df)
         self._set_participation_weight_max(df)
@@ -318,7 +321,15 @@ class PlayerRatingGenerator(RatingGenerator):
         if self.performance_predictor == "ignore_opponent":
             self._calibrate_reference_rating(df)
 
-        return super().fit_transform(df, column_names)
+        # super().fit_transform already handles was_lazy via _to_polars_eager,
+        # but df is guaranteed eager here so it won't double-collect
+        result = super().fit_transform(df, column_names)
+        native_result = (
+            result if isinstance(result, (pl.DataFrame, pl.LazyFrame)) else nw.to_native(result)
+        )
+        if was_lazy and isinstance(native_result, pl.DataFrame):
+            return native_result.lazy()
+        return result
 
     def _reset_rating_state(self) -> None:
         """Clear all accumulated rating state for re-processing."""

@@ -5,10 +5,13 @@ import inspect
 import math
 from typing import Literal
 
+import narwhals.stable.v2 as nw
 import polars as pl
+from narwhals.stable.v2 import DataFrame
+from narwhals.stable.v2.typing import IntoFrameT
 
 from spforge.data_structures import ColumnNames, GameColumnNames, TeamRatingsResult
-from spforge.feature_generator._utils import _to_polars_eager
+from spforge.feature_generator._utils import _to_polars_eager, to_polars
 from spforge.performance_transformers._performance_manager import ColumnWeight, PerformanceManager
 from spforge.ratings._base import RatingGenerator, RatingState
 from spforge.ratings.enums import RatingKnownFeatures, RatingUnknownFeatures
@@ -144,32 +147,49 @@ class TeamRatingGenerator(RatingGenerator):
             **performance_predictor_params
         )
 
-    def fit_transform(self, df: pl.DataFrame, column_names: ColumnNames | None = None):
-        """Override to handle game-level data conversion before base class processing."""
-        # Convert game-level data to game+team format if needed
+    @to_polars
+    @nw.narwhalify
+    def fit_transform(
+        self, df: IntoFrameT, column_names: ColumnNames | None = None
+    ) -> DataFrame | IntoFrameT:
+        pl_df, was_lazy = self._to_polars_eager(df)
         if self._game_column_names is not None:
-            df = self._convert_game_to_game_team(df, self._game_column_names)
+            pl_df = self._convert_game_to_game_team(pl_df, self._game_column_names)
+        result = super().fit_transform(pl_df, column_names)
+        native = (
+            result if isinstance(result, (pl.DataFrame, pl.LazyFrame)) else nw.to_native(result)
+        )
+        if was_lazy and isinstance(native, pl.DataFrame):
+            return native.lazy()
+        return result
 
-        # Call parent fit_transform
-        return super().fit_transform(df, column_names)
-
-    def transform(self, df: pl.DataFrame):
-        """Override to handle game-level data conversion before base class processing."""
-        # Convert game-level data to game+team format if needed
+    @to_polars
+    @nw.narwhalify
+    def transform(self, df: IntoFrameT) -> IntoFrameT:
+        pl_df, was_lazy = self._to_polars_eager(df)
         if self._game_column_names is not None:
-            df = self._convert_game_to_game_team(df, self._game_column_names)
+            pl_df = self._convert_game_to_game_team(pl_df, self._game_column_names)
+        result = super().transform(pl_df)
+        native = (
+            result if isinstance(result, (pl.DataFrame, pl.LazyFrame)) else nw.to_native(result)
+        )
+        if was_lazy and isinstance(native, pl.DataFrame):
+            return native.lazy()
+        return result
 
-        # Call parent transform
-        return super().transform(df)
-
-    def future_transform(self, df: pl.DataFrame):
-        """Override to handle game-level data conversion before base class processing."""
-        # Convert game-level data to game+team format if needed
+    @to_polars
+    @nw.narwhalify
+    def future_transform(self, df: IntoFrameT) -> IntoFrameT:
+        pl_df, was_lazy = self._to_polars_eager(df)
         if self._game_column_names is not None:
-            df = self._convert_game_to_game_team(df, self._game_column_names)
-
-        # Call parent future_transform
-        return super().future_transform(df)
+            pl_df = self._convert_game_to_game_team(pl_df, self._game_column_names)
+        result = super().future_transform(pl_df)
+        native = (
+            result if isinstance(result, (pl.DataFrame, pl.LazyFrame)) else nw.to_native(result)
+        )
+        if was_lazy and isinstance(native, pl.DataFrame):
+            return native.lazy()
+        return result
 
     def _ensure_team_off(self, team_id: str, day_number: int, league: str) -> RatingState:
         if team_id not in self._team_off_ratings:
