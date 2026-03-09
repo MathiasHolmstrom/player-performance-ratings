@@ -129,6 +129,25 @@ class RatingGenerator(FeatureGenerator):
             return col
         return f"{col}_{self.output_suffix}"
 
+    @staticmethod
+    def _to_polars_eager(df: Any) -> tuple[pl.DataFrame, bool]:
+        """Convert any narwhals/native frame to an eager pl.DataFrame.
+
+        Returns (eager_df, was_lazy) so callers can restore LazyFrame on output.
+        """
+        if isinstance(df, pl.LazyFrame):
+            return df.collect(), True
+        if isinstance(df, pl.DataFrame):
+            return df, False
+        # narwhals-wrapped frame
+        native = df.to_native() if hasattr(df, "to_native") else nw.to_native(df)
+        if isinstance(native, pl.LazyFrame):
+            return native.collect(), True
+        if isinstance(native, pl.DataFrame):
+            return native, False
+        # pandas / other backend — convert to polars
+        return nw.from_native(native).to_polars().to_native(), False
+
     @to_polars
     @nw.narwhalify
     def fit_transform(
@@ -136,6 +155,9 @@ class RatingGenerator(FeatureGenerator):
         df: IntoFrameT,
         column_names: ColumnNames | None = None,
     ) -> DataFrame | IntoFrameT:
+        pl_df, was_lazy = self._to_polars_eager(df)
+        df = nw.from_native(pl_df)
+
         if not self.performance_manager:
             assert self.performance_column in df.columns, (
                 f"{self.performance_column} not in df. If performance_weights are not set, "
@@ -187,23 +209,25 @@ class RatingGenerator(FeatureGenerator):
                     "Either transform it manually or set auto_scale_performance to True"
                 )
 
-        pl_df: pl.DataFrame
         pl_df = df.to_native() if df.implementation.is_polars() else df.to_polars().to_native()
-
-        return self._historical_transform(pl_df)
+        result = self._historical_transform(pl_df)
+        return result.lazy() if was_lazy else result
 
     @to_polars
     @nw.narwhalify
     def transform(self, df: IntoFrameT) -> IntoFrameT:
+        pl_df, was_lazy = self._to_polars_eager(df)
+        df = nw.from_native(pl_df)
+
         if (
             self.performance_manager
             and self.performance_manager.ori_performance_column in df.columns
         ):
             df = nw.from_native(self.performance_manager.transform(df))
 
-        pl_df: pl.DataFrame
         pl_df = df.to_native() if df.implementation.is_polars() else df.to_polars().to_native()
-        return self._historical_transform(pl_df)
+        result = self._historical_transform(pl_df)
+        return result.lazy() if was_lazy else result
 
     @to_polars
     @nw.narwhalify
@@ -213,9 +237,9 @@ class RatingGenerator(FeatureGenerator):
         - use existing ratings to compute pre-match ratings/features
         - do NOT update ratings
         """
-        pl_df: pl.DataFrame
-        pl_df = df.to_native() if df.implementation.is_polars() else df.to_polars().to_native()
-        return self._future_transform(pl_df)
+        pl_df, was_lazy = self._to_polars_eager(df)
+        result = self._future_transform(pl_df)
+        return result.lazy() if was_lazy else result
 
     @abstractmethod
     def _future_transform(self, df: pl.DataFrame):

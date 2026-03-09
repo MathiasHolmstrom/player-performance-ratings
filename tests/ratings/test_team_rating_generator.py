@@ -2944,3 +2944,105 @@ def test_plus_minus_future_transform_team_diff(column_names):
 
     assert a_diff > 0
     assert b_diff < 0
+
+
+class TestLazyFrameSupport:
+    """Verify that TeamRatingGenerator accepts LazyFrame and returns LazyFrame."""
+
+    def test_fit_transform_lazyframe(self, column_names):
+        df = pl.DataFrame(
+            {
+                "match_id": ["M1", "M1"],
+                "team_id": ["T1", "T2"],
+                "start_date": ["2024-01-01", "2024-01-01"],
+                "won": [0.7, 0.3],
+            }
+        )
+        gen = TeamRatingGenerator(
+            performance_column="won",
+            column_names=column_names,
+            auto_scale_performance=True,
+        )
+        result = gen.fit_transform(df.lazy())
+        assert isinstance(result, pl.LazyFrame)
+        collected = result.collect()
+        assert len(collected) == 2
+
+    def test_fit_transform_lazyframe_matches_eager(self, column_names):
+        df = pl.DataFrame(
+            {
+                "match_id": ["M1", "M1", "M2", "M2"],
+                "team_id": ["T1", "T2", "T1", "T2"],
+                "start_date": ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"],
+                "won": [0.8, 0.2, 0.6, 0.4],
+            }
+        )
+        gen_eager = TeamRatingGenerator(
+            performance_column="won",
+            column_names=column_names,
+            auto_scale_performance=True,
+        )
+        eager_result = gen_eager.fit_transform(df)
+
+        gen_lazy = TeamRatingGenerator(
+            performance_column="won",
+            column_names=column_names,
+            auto_scale_performance=True,
+        )
+        lazy_result = gen_lazy.fit_transform(df.lazy())
+        assert isinstance(lazy_result, pl.LazyFrame)
+        collected = lazy_result.collect()
+
+        sort_cols = ["match_id", "team_id"]
+        eager_sorted = eager_result.sort(sort_cols)
+        lazy_sorted = collected.sort(sort_cols)
+        for col in eager_sorted.columns:
+            if eager_sorted[col].dtype in (pl.Float32, pl.Float64):
+                assert eager_sorted[col].to_list() == pytest.approx(
+                    lazy_sorted[col].to_list(), nan_ok=True
+                ), f"Column {col} differs"
+            else:
+                assert eager_sorted[col].to_list() == lazy_sorted[col].to_list(), (
+                    f"Column {col} differs"
+                )
+
+    def test_future_transform_lazyframe(self, column_names):
+        df = pl.DataFrame(
+            {
+                "match_id": ["M1", "M1"],
+                "team_id": ["T1", "T2"],
+                "start_date": ["2024-01-01", "2024-01-01"],
+                "won": [0.7, 0.3],
+            }
+        )
+        gen = TeamRatingGenerator(
+            performance_column="won",
+            column_names=column_names,
+            auto_scale_performance=True,
+        )
+        gen.fit_transform(df)
+
+        future_df = df.with_columns(pl.lit("M-FUTURE").alias("match_id"))
+        result = gen.future_transform(future_df.lazy())
+        assert isinstance(result, pl.LazyFrame)
+        assert len(result.collect()) == 2
+
+    def test_transform_lazyframe(self, column_names):
+        df = pl.DataFrame(
+            {
+                "match_id": ["M1", "M1"],
+                "team_id": ["T1", "T2"],
+                "start_date": ["2024-01-01", "2024-01-01"],
+                "won": [0.7, 0.3],
+            }
+        )
+        gen = TeamRatingGenerator(
+            performance_column="won",
+            column_names=column_names,
+            auto_scale_performance=True,
+        )
+        gen.fit_transform(df)
+
+        result = gen.transform(df.lazy())
+        assert isinstance(result, pl.LazyFrame)
+        assert len(result.collect()) == 2

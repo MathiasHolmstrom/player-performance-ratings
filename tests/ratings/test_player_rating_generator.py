@@ -3660,3 +3660,87 @@ class TestIndividualDefensePerformance:
         assert p1_def > p2_def
         gap = p1_def - p2_def
         assert gap > 5.0, f"DEF rating gap should grow over matches, got {gap:.2f}"
+
+
+class TestLazyFrameSupport:
+    """Verify that PlayerRatingGenerator accepts LazyFrame and returns LazyFrame."""
+
+    def test_fit_transform_lazyframe(self, base_cn, sample_df):
+        gen = PlayerRatingGenerator(
+            performance_column="perf", column_names=base_cn, auto_scale_performance=True
+        )
+        result = gen.fit_transform(sample_df.lazy())
+        assert isinstance(result, pl.LazyFrame)
+        collected = result.collect()
+        assert len(collected) == 4
+        assert "P1" in gen._player_off_ratings
+
+    def test_fit_transform_lazyframe_matches_eager(self, base_cn, sequential_df):
+        gen_eager = PlayerRatingGenerator(
+            performance_column="perf", column_names=base_cn, auto_scale_performance=True
+        )
+        eager_result = gen_eager.fit_transform(sequential_df)
+
+        gen_lazy = PlayerRatingGenerator(
+            performance_column="perf", column_names=base_cn, auto_scale_performance=True
+        )
+        lazy_result = gen_lazy.fit_transform(sequential_df.lazy())
+        assert isinstance(lazy_result, pl.LazyFrame)
+        collected = lazy_result.collect()
+
+        sort_cols = ["mid", "pid"]
+        eager_sorted = eager_result.sort(sort_cols)
+        lazy_sorted = collected.sort(sort_cols)
+        for col in eager_sorted.columns:
+            if eager_sorted[col].dtype in (pl.Float32, pl.Float64):
+                assert eager_sorted[col].to_list() == pytest.approx(
+                    lazy_sorted[col].to_list(), nan_ok=True
+                ), f"Column {col} differs"
+            else:
+                assert eager_sorted[col].to_list() == lazy_sorted[col].to_list(), (
+                    f"Column {col} differs"
+                )
+
+    def test_future_transform_lazyframe(self, base_cn, sample_df):
+        gen = PlayerRatingGenerator(
+            performance_column="perf", column_names=base_cn, auto_scale_performance=True
+        )
+        gen.fit_transform(sample_df)
+
+        future_df = sample_df.with_columns(pl.lit("M-FUTURE").alias("mid"))
+        result = gen.future_transform(future_df.lazy())
+        assert isinstance(result, pl.LazyFrame)
+        collected = result.collect()
+        assert len(collected) == 4
+
+    def test_transform_lazyframe(self, base_cn, sample_df):
+        gen = PlayerRatingGenerator(
+            performance_column="perf", column_names=base_cn, auto_scale_performance=True
+        )
+        gen.fit_transform(sample_df)
+
+        result = gen.transform(sample_df.lazy())
+        assert isinstance(result, pl.LazyFrame)
+        collected = result.collect()
+        assert len(collected) == 4
+
+    def test_fit_transform_lazyframe_with_participation_weight_scaling(self, base_cn):
+        df = pl.DataFrame(
+            {
+                "pid": ["P1", "P2", "P3", "P4"],
+                "tid": ["T1", "T1", "T2", "T2"],
+                "mid": ["M1", "M1", "M1", "M1"],
+                "dt": ["2024-01-01"] * 4,
+                "perf": [0.6, 0.4, 0.7, 0.3],
+                "pw": [30.0, 20.0, 25.0, 15.0],
+            }
+        )
+        gen = PlayerRatingGenerator(
+            performance_column="perf",
+            column_names=base_cn,
+            auto_scale_performance=True,
+            scale_participation_weights=True,
+        )
+        result = gen.fit_transform(df.lazy())
+        assert isinstance(result, pl.LazyFrame)
+        assert len(result.collect()) == 4
