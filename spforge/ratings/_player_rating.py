@@ -1042,9 +1042,7 @@ class PlayerRatingGenerator(RatingGenerator):
             else:
                 off_days_ago = float(day_number - off_state.last_match_day_number)
             off_confidence = (
-                -min(off_days_ago, max_days) * days_multiplier
-                + off_state.confidence_sum
-                + 1.0
+                -min(off_days_ago, max_days) * days_multiplier + off_state.confidence_sum + 1.0
             )
             off_state.confidence_sum = max(0.0, min(float(off_confidence), confidence_max_sum))
             off_state.rating_value += float(off_change)
@@ -1058,9 +1056,7 @@ class PlayerRatingGenerator(RatingGenerator):
             else:
                 def_days_ago = float(day_number - def_state.last_match_day_number)
             def_confidence = (
-                -min(def_days_ago, max_days) * days_multiplier
-                + def_state.confidence_sum
-                + 1.0
+                -min(def_days_ago, max_days) * days_multiplier + def_state.confidence_sum + 1.0
             )
             def_state.confidence_sum = max(0.0, min(float(def_confidence), confidence_max_sum))
             def_state.rating_value += float(def_change)
@@ -1874,8 +1870,12 @@ class PlayerRatingGenerator(RatingGenerator):
 
             t1_off_team = _PreMatchTeamView(id=team1, players=t1_pre, rating_value=t1_off_rating)
             t2_off_team = _PreMatchTeamView(id=team2, players=t2_pre, rating_value=t2_off_rating)
-            t1_def_team = _PreMatchTeamView(id=team1, players=t1_def_pre, rating_value=t1_def_rating)
-            t2_def_team = _PreMatchTeamView(id=team2, players=t2_def_pre, rating_value=t2_def_rating)
+            t1_def_team = _PreMatchTeamView(
+                id=team1, players=t1_def_pre, rating_value=t1_def_rating
+            )
+            t2_def_team = _PreMatchTeamView(
+                id=team2, players=t2_def_pre, rating_value=t2_def_rating
+            )
 
             for pre in t1_pre:
                 pid = pre.id

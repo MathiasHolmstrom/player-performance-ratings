@@ -56,7 +56,8 @@ class PlayerPerformancePredictor(ABC):
             ),
             opponent_team_rating=opponent_team_rating
             or PreMatchTeamRating(id="", players=[], rating_value=opponent_team_rating_value),
-            team_rating=team_rating or PreMatchTeamRating(id="", players=[], rating_value=team_rating_value),
+            team_rating=team_rating
+            or PreMatchTeamRating(id="", players=[], rating_value=team_rating_value),
         )
 
 
