@@ -586,7 +586,6 @@ class PWMSE(BaseScorer):
         _name_override: str | None = None,
         sample_weight_column: str | None = None,
     ):
-        self.pred_column_name = pred_column
         super().__init__(
             target=target,
             pred_column=pred_column,
@@ -790,7 +789,6 @@ class MeanBiasScorer(BaseScorer):
             (mean_pred_when_1 - mean_pred_when_0) - (mean_target_when_1 - mean_target_when_0)
         """
 
-        self.pred_column_name = pred_column
         self.labels = labels
         self.relative_bias_column = relative_bias_column
         super().__init__(
@@ -1086,7 +1084,6 @@ class SklearnScorer(BaseScorer):
             _name_override=_name_override,
             sample_weight_column=sample_weight_column,
         )
-        self.pred_column_name = pred_column
         self.scorer_function = scorer_function
         self.params = params or {}
 
@@ -1201,13 +1198,13 @@ class SklearnScorer(BaseScorer):
                     mask = col_mask if mask is None else (mask & col_mask)
                 gran_df = df.filter(mask)
 
-                preds = gran_df[self.pred_column_name].to_list()
+                preds = gran_df[self.pred_column].to_list()
                 is_probabilistic = len(preds) > 0 and isinstance(preds[0], (list, np.ndarray))
                 results[gran_tuple] = self._score_group(gran_df, preds, is_probabilistic)
 
             return results
 
-        preds = df[self.pred_column_name].to_list()
+        preds = df[self.pred_column].to_list()
         is_probabilistic = len(preds) > 0 and isinstance(preds[0], (list, np.ndarray))
         return self._score_group(df, preds, is_probabilistic)
 
@@ -1228,7 +1225,6 @@ class ProbabilisticMeanBias(BaseScorer):
         name: str | None = None,
         _name_override: str | None = None,
     ):
-        self.pred_column_name = pred_column
         self.class_column_name = class_column_name
         super().__init__(
             target=target,
@@ -1301,7 +1297,7 @@ class ProbabilisticMeanBias(BaseScorer):
             rows_target_group = df[
                 df[self.class_column_name].apply(lambda x, dcv=distinct_class_variation: x == dcv)
             ]
-            probs = rows_target_group[self.pred_column_name]
+            probs = rows_target_group[self.pred_column]
             last_column_name = f"prob_under_{distinct_class_variation[0] - 0.5}"
             rows_target_group[last_column_name] = probs.apply(lambda x: x[0])
 
@@ -1366,7 +1362,7 @@ class ProbabilisticMeanBias(BaseScorer):
                 probs = _empirical_probabilities_from_targets(
                     rows_target_group[self.target].tolist(), distinct_class_variation
                 )
-                df.loc[rows_mask, self.pred_column_name] = pd.Series(
+                df.loc[rows_mask, self.pred_column] = pd.Series(
                     [probs] * len(rows_target_group), index=df.loc[rows_mask].index
                 )
                 continue
@@ -1388,7 +1384,7 @@ class ProbabilisticMeanBias(BaseScorer):
                 probs = _empirical_probabilities_from_targets(
                     grouped[key], distinct_class_variation
                 )
-                df.at[idx, self.pred_column_name] = probs
+                df.at[idx, self.pred_column] = probs
 
         return df
 
@@ -1460,7 +1456,6 @@ class OrdinalLossScorer(BaseScorer):
         name: str | None = None,
         _name_override: str | None = None,
     ):
-        self.pred_column_name = pred_column
         super().__init__(
             target=target,
             pred_column=pred_column,
@@ -1817,7 +1812,6 @@ class ThresholdEventScorer(BaseScorer):
         name: str | None = None,
         _name_override: str | None = None,
     ):
-        self.pred_column_name = dist_column
         super().__init__(
             target=self._EVENT_COL,
             pred_column=dist_column,
