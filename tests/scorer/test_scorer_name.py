@@ -12,7 +12,6 @@ from spforge.scorer import (
 )
 from spforge.scorer._score import (
     PWMSE,
-    ProbabilisticMeanBias,
     ThresholdEventScorer,
 )
 
@@ -37,10 +36,6 @@ class TestScorerNameProperty:
             target="yards", pred_column="pred", scorer_function=mean_absolute_error
         )
         assert scorer.name == "mae"
-
-    def test_simple_probabilistic_mean_bias(self):
-        scorer = ProbabilisticMeanBias(target="points", pred_column="pred")
-        assert scorer.name == "probabilistic_mean_bias"
 
     def test_simple_threshold_event_scorer(self):
         scorer = ThresholdEventScorer(

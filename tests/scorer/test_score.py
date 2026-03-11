@@ -19,7 +19,7 @@ from spforge.scorer import (
     SklearnScorer,
     apply_filters,
 )
-from spforge.scorer._score import PWMSE, ProbabilisticMeanBias, ThresholdEventScorer
+from spforge.scorer._score import PWMSE, ThresholdEventScorer
 
 
 # Helper function to create dataframe based on type
@@ -1001,101 +1001,7 @@ def test_sklearn_scorer_empty_after_filters(df_type):
 
 
 # ============================================================================
-# F. ProbabilisticMeanBias Tests
-# ============================================================================
-
-
-@pytest.mark.parametrize("df_type", [pd.DataFrame])  # Only pandas supported
-def test_probabilistic_mean_bias_basic(df_type):
-    """ProbabilisticMeanBias basic calculation"""
-    df = create_dataframe(
-        df_type,
-        {
-            "pred": [[0.1, 0.6, 0.3], [0.5, 0.3, 0.2], [0.2, 0.3, 0.5]],
-            "__target": [1, 0, 2],
-            "classes": [[0, 1, 2], [0, 1, 2], [0, 1, 2]],
-        },
-    )
-    scorer = ProbabilisticMeanBias(
-        pred_column="pred", target="__target", class_column_name="classes"
-    )
-    score = scorer.score(df)
-    assert isinstance(score, float)
-
-
-@pytest.mark.parametrize("df_type", [pd.DataFrame])
-def test_probabilistic_mean_bias_with_granularity(df_type):
-    """ProbabilisticMeanBias with granularity returns separate scores per group"""
-    df = create_dataframe(
-        df_type,
-        {
-            "group": [1, 1, 2, 2],
-            "pred": [[0.1, 0.6, 0.3], [0.5, 0.3, 0.2], [0.2, 0.3, 0.5], [0.4, 0.4, 0.2]],
-            "__target": [1, 0, 2, 1],
-            "classes": [[0, 1, 2], [0, 1, 2], [0, 1, 2], [0, 1, 2]],
-        },
-    )
-    scorer = ProbabilisticMeanBias(
-        pred_column="pred", target="__target", class_column_name="classes", granularity=["group"]
-    )
-    result = scorer.score(df)
-    # With granularity, returns dict mapping group tuples to scores
-    assert isinstance(result, dict)
-    assert len(result) == 2
-    assert (1,) in result
-    assert (2,) in result
-    assert all(isinstance(v, float) for v in result.values())
-
-
-@pytest.mark.skip(
-    reason="ProbabilisticMeanBias.score() calls apply_filters which uses narwhals, but score() expects pandas DataFrame - implementation bug"
-)
-@pytest.mark.parametrize("df_type", [pd.DataFrame])
-def test_probabilistic_mean_bias_with_filters(df_type):
-    """ProbabilisticMeanBias with filters"""
-    df = create_dataframe(
-        df_type,
-        {
-            "pred": [[0.1, 0.6, 0.3], [0.5, 0.3, 0.2], [0.2, 0.3, 0.5]],
-            "__target": [1, 0, 2],
-            "classes": [[0, 1, 2], [0, 1, 2], [0, 1, 2]],
-            "filter_col": [1, 1, 0],
-        },
-    )
-    scorer = ProbabilisticMeanBias(
-        pred_column="pred",
-        target="__target",
-        class_column_name="classes",
-        filters=[Filter(column_name="filter_col", value=1, operator=Operator.EQUALS)],
-    )
-    score = scorer.score(df)
-    assert isinstance(score, float)
-
-
-@pytest.mark.parametrize("df_type", [pd.DataFrame])
-def test_probabilistic_mean_bias_with_validation_column(df_type):
-    """ProbabilisticMeanBias with validation column"""
-    df = create_dataframe(
-        df_type,
-        {
-            "pred": [[0.1, 0.6, 0.3], [0.5, 0.3, 0.2], [0.2, 0.3, 0.5]],
-            "__target": [1, 0, 2],
-            "classes": [[0, 1, 2], [0, 1, 2], [0, 1, 2]],
-            "valid": [1, 1, 0],
-        },
-    )
-    scorer = ProbabilisticMeanBias(
-        pred_column="pred",
-        target="__target",
-        class_column_name="classes",
-        validation_column="valid",
-    )
-    score = scorer.score(df)
-    assert isinstance(score, float)
-
-
-# ============================================================================
-# G. OrdinalLossScorer Tests
+# F. OrdinalLossScorer Tests
 # ============================================================================
 
 
@@ -1108,33 +1014,6 @@ def test_ordinal_loss_scorer_basic_list(df_type):
     scorer = OrdinalLossScorer(pred_column="pred", target="target", classes=[0, 1, 2])
     score = scorer.score(df)
     assert isinstance(score, float)
-
-
-@pytest.mark.parametrize("df_type", [pd.DataFrame])
-def test_probabilistic_mean_bias_compare_to_naive(df_type):
-    """ProbabilisticMeanBias compares against naive empirical distribution."""
-    df = create_dataframe(
-        df_type,
-        {
-            "pred": [[0.6, 0.3, 0.1], [0.2, 0.5, 0.3], [0.1, 0.2, 0.7]],
-            "__target": [0, 1, 2],
-            "classes": [[0, 1, 2], [0, 1, 2], [0, 1, 2]],
-        },
-    )
-    scorer = ProbabilisticMeanBias(
-        pred_column="pred", target="__target", class_column_name="classes", compare_to_naive=True
-    )
-    score = scorer.score(df)
-
-    naive_probs = [1 / 3, 1 / 3, 1 / 3]
-    naive_df = df.copy()
-    naive_df["pred"] = [naive_probs] * len(naive_df)
-    baseline = ProbabilisticMeanBias(
-        pred_column="pred", target="__target", class_column_name="classes"
-    )
-    expected = baseline.score(naive_df) - baseline.score(df)
-    assert abs(score - expected) < 1e-10
-    assert score >= 0
 
 
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
@@ -1156,51 +1035,6 @@ def test_ordinal_loss_scorer_compare_to_naive(df_type):
     naive_probs = [1 / 3, 1 / 3, 1 / 3]
     naive_df = create_dataframe(df_type, {"pred": [naive_probs] * 3, "target": [0, 1, 2]})
     baseline = OrdinalLossScorer(pred_column="pred", target="target", classes=classes)
-    expected = baseline.score(naive_df) - baseline.score(df)
-    assert abs(score - expected) < 1e-10
-
-
-@pytest.mark.parametrize("df_type", [pd.DataFrame])
-def test_probabilistic_mean_bias_compare_to_naive_granularity(df_type):
-    """ProbabilisticMeanBias compares against per-group naive distribution."""
-    df = create_dataframe(
-        df_type,
-        {
-            "team": ["A", "A", "A", "B", "B", "B"],
-            "pred": [
-                [0.6, 0.3, 0.1],
-                [0.5, 0.3, 0.2],
-                [0.2, 0.5, 0.3],
-                [0.4, 0.4, 0.2],
-                [0.3, 0.4, 0.3],
-                [0.2, 0.3, 0.5],
-            ],
-            "__target": [0, 0, 2, 0, 1, 2],
-            "classes": [[0, 1, 2]] * 6,
-        },
-    )
-    scorer = ProbabilisticMeanBias(
-        pred_column="pred",
-        target="__target",
-        class_column_name="classes",
-        compare_to_naive=True,
-        naive_granularity=["team"],
-    )
-    score = scorer.score(df)
-
-    naive_probs = [
-        [2 / 3, 0.0, 1 / 3],
-        [2 / 3, 0.0, 1 / 3],
-        [2 / 3, 0.0, 1 / 3],
-        [1 / 3, 1 / 3, 1 / 3],
-        [1 / 3, 1 / 3, 1 / 3],
-        [1 / 3, 1 / 3, 1 / 3],
-    ]
-    naive_df = df.copy()
-    naive_df["pred"] = naive_probs
-    baseline = ProbabilisticMeanBias(
-        pred_column="pred", target="__target", class_column_name="classes"
-    )
     expected = baseline.score(naive_df) - baseline.score(df)
     assert abs(score - expected) < 1e-10
 
@@ -1307,7 +1141,7 @@ def test_ordinal_loss_scorer_array_width_validation(df_type):
             target="target",
             classes=[0, 1, 2],  # 3 classes, but Array width is 2
         )
-        with pytest.raises(ValueError, match="Array width.*does not match"):
+        with pytest.raises(ValueError, match="does not match len\\(classes\\)"):
             scorer.score(df)
     else:
         pytest.skip("Array dtype only supported in Polars")
@@ -1322,7 +1156,7 @@ def test_ordinal_loss_scorer_list_length_validation(df_type):
         target="target",
         classes=[0, 1, 2],  # 3 classes, but list length is 2
     )
-    with pytest.raises(ValueError, match="List length.*does not match"):
+    with pytest.raises(ValueError, match="does not match len\\(classes\\)"):
         scorer.score(df)
 
 
@@ -1813,25 +1647,6 @@ def test_mean_bias_scorer_with_probability_predictions_and_nan(df_type):
     assert not np.isnan(score)
 
 
-def test_probabilistic_mean_bias_filters_nan_targets():
-    """ProbabilisticMeanBias filters out NaN targets (pandas only)"""
-    df = pd.DataFrame(
-        {
-            "pred": [[0.1, 0.9], [0.5, 0.5], [0.8, 0.2], [0.3, 0.7]],
-            "target": [0.0, None, 1.0, np.nan],
-            "classes": [[0, 1], [0, 1], [0, 1], [0, 1]],
-        }
-    )
-    scorer = ProbabilisticMeanBias(
-        pred_column="pred",
-        target="target",
-        class_column_name="classes",
-    )
-    score = scorer.score(df)
-    assert isinstance(score, float)
-    assert not np.isnan(score)
-
-
 @pytest.mark.parametrize("df_type", [pl.DataFrame, pd.DataFrame])
 def test_ordinal_loss_scorer_filters_nan_targets(df_type):
     """OrdinalLossScorer filters out NaN targets"""
@@ -2199,23 +2014,6 @@ SCORER_VALIDATION_CASES = [
             }
         ),
         id="sklearn",
-    ),
-    pytest.param(
-        lambda: ProbabilisticMeanBias(
-            pred_column="pred",
-            target="target",
-            class_column_name="classes",
-            validation_column="is_validation",
-        ),
-        lambda: pd.DataFrame(
-            {
-                "pred": [[0.2, 0.8], [0.6, 0.4]],
-                "target": [1, 0],
-                "classes": [[0, 1], [0, 1]],
-                "is_validation": [True, False],
-            }
-        ),
-        id="probabilistic_mean_bias",
     ),
     pytest.param(
         lambda: OrdinalLossScorer(
