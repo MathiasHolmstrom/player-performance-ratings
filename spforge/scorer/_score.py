@@ -11,8 +11,6 @@ from typing import Any
 import narwhals
 import narwhals.stable.v2 as nw
 import numpy as np
-import pandas as pd
-import polars as pl
 from narwhals.typing import IntoFrameT
 from sklearn.metrics import log_loss
 
@@ -142,57 +140,6 @@ class Filter:
     operator: Operator
 
 
-def _apply_filters_pandas(df: pd.DataFrame, filters: list[Filter]) -> pd.DataFrame:
-    for filter in filters:
-        if filter.operator == Operator.EQUALS:
-            df = df[df[filter.column_name] == filter.value]
-        elif filter.operator == Operator.NOT_EQUALS:
-            df = df[df[filter.column_name] != filter.value]
-        elif filter.operator == Operator.GREATER_THAN:
-            df = df[df[filter.column_name] > filter.value]
-        elif filter.operator == Operator.LESS_THAN:
-            df = df[df[filter.column_name] < filter.value]
-        elif filter.operator == Operator.GREATER_THAN_OR_EQUALS:
-            df = df[df[filter.column_name] >= filter.value]
-        elif filter.operator == Operator.LESS_THAN_OR_EQUALS:
-            df = df[df[filter.column_name] <= filter.value]
-        elif filter.operator == Operator.IN:
-            df = df[df[filter.column_name].isin(filter.value)]
-        elif filter.operator == Operator.NOT_IN:
-            df = df[~df[filter.column_name].isin(filter.value)]
-
-    return df
-
-
-def _apply_filters_polars(df: pl.DataFrame, filters: list[Filter]) -> pl.DataFrame:
-    for filter in filters:
-        if df[filter.column_name].dtype in (pl.Datetime, pl.Date) and isinstance(filter.value, str):
-            filter_value = datetime.datetime.fromisoformat(filter.value).replace(
-                tzinfo=datetime.UTC
-            )
-        else:
-            filter_value = filter.value
-
-        if filter.operator == Operator.EQUALS:
-            df = df.filter(pl.col(filter.column_name) == pl.lit(filter_value))
-        elif filter.operator == Operator.NOT_EQUALS:
-            df = df.filter(pl.col(filter.column_name) != pl.lit(filter_value))
-        elif filter.operator == Operator.GREATER_THAN:
-            df = df.filter(pl.col(filter.column_name) > pl.lit(filter_value))
-        elif filter.operator == Operator.LESS_THAN:
-            df = df.filter(pl.col(filter.column_name) < pl.lit(filter_value))
-        elif filter.operator == Operator.GREATER_THAN_OR_EQUALS:
-            df = df.filter(pl.col(filter.column_name) >= pl.lit(filter_value))
-        elif filter.operator == Operator.LESS_THAN_OR_EQUALS:
-            df = df.filter(pl.col(filter.column_name) <= pl.lit(filter_value))
-        elif filter.operator == Operator.IN:
-            df = df.filter(pl.col(filter.column_name).is_in(filter_value))
-        elif filter.operator == Operator.NOT_IN:
-            df = df.filter(~pl.col(filter.column_name).is_in(filter_value))
-
-    return df
-
-
 @narwhals.narwhalify
 def apply_filters(df: IntoFrameT, filters: list[Filter]) -> IntoFrameT:
     for filter in filters:
@@ -202,8 +149,8 @@ def apply_filters(df: IntoFrameT, filters: list[Filter]) -> IntoFrameT:
             try:
                 first_val = df[filter.column_name].to_list()[0] if len(df) > 0 else None
                 if first_val is not None:
-                    if isinstance(first_val, pd.Timestamp):
-                        if first_val.tz is None:
+                    if isinstance(first_val, datetime.datetime):
+                        if getattr(first_val, "tzinfo", None) is None:
                             filter_value = parsed_dt.replace(tzinfo=None)
                         else:
                             filter_value = parsed_dt.replace(tzinfo=datetime.UTC)
@@ -337,24 +284,37 @@ class BaseScorer(ABC):
             return nw.col(col).first().alias(col)
         raise ValueError(f"Unsupported aggregation method for {col}: {method}")
 
-    def _aggregate_list_column(
+    def _aggregate_list_column_nw(
         self,
-        df_pl: pl.DataFrame,
+        df: IntoFrameT,
         col: str,
         method: str,
     ) -> dict[tuple, list[float]]:
-        """Element-wise aggregation (mean or sum) for list/array columns via native polars."""
+        """Element-wise aggregation (mean or sum) for list/array columns via narwhals."""
         result: dict[tuple, list[float]] = {}
-        for group_keys, group_df in df_pl.group_by(self.aggregation_level):
+        for gran_tuple in self._get_aggregation_groups(df):
+            group_df = self._filter_to_aggregation(df, gran_tuple)
             vals = np.array(group_df[col].to_list(), dtype=np.float64)
-            key = group_keys if isinstance(group_keys, tuple) else (group_keys,)
             if method == "mean":
-                result[key] = vals.mean(axis=0).tolist()
+                result[gran_tuple] = vals.mean(axis=0).tolist()
             elif method == "sum":
-                result[key] = vals.sum(axis=0).tolist()
+                result[gran_tuple] = vals.sum(axis=0).tolist()
             else:
                 raise ValueError(f"Unsupported list aggregation method for {col}: {method}")
         return result
+
+    def _get_aggregation_groups(self, df: IntoFrameT) -> list[tuple]:
+        """Get unique aggregation key tuples."""
+        agg_values = df.select(self.aggregation_level).unique().to_dict(as_series=False)
+        return list(zip(*[agg_values[col] for col in self.aggregation_level], strict=False))
+
+    def _filter_to_aggregation(self, df: IntoFrameT, agg_tuple: tuple) -> IntoFrameT:
+        """Filter dataframe to a specific aggregation group."""
+        mask = None
+        for i, col in enumerate(self.aggregation_level):
+            col_mask = nw.col(col) == agg_tuple[i]
+            mask = col_mask if mask is None else (mask & col_mask)
+        return df.filter(mask)
 
     def _apply_aggregation_level(self, df: IntoFrameT) -> IntoFrameT:
         """Apply aggregation_level grouping if set."""
@@ -364,8 +324,8 @@ class BaseScorer(ABC):
         pred_method = self._resolve_aggregation_method("pred")
         target_method = self._resolve_aggregation_method("target")
 
-        pred_is_list = isinstance(df.schema[self.pred_column], nw.List)
-        target_is_list = isinstance(df.schema[self.target], nw.List)
+        pred_is_list = isinstance(df.schema[self.pred_column], (nw.List, nw.Array))
+        target_is_list = isinstance(df.schema[self.target], (nw.List, nw.Array))
 
         if not pred_is_list and not target_is_list:
             agg_exprs = [
@@ -378,10 +338,7 @@ class BaseScorer(ABC):
                 )
             return df.group_by(self.aggregation_level).agg(agg_exprs)
 
-        # At least one column is a list type — use native polars for element-wise agg
-        df_native = df.to_native()
-        df_pl = pl.DataFrame(df_native) if isinstance(df_native, pd.DataFrame) else df_native
-
+        # At least one column is a list type — iterate groups via narwhals
         scalar_agg_exprs = []
         list_cols: dict[str, dict[tuple, list[float]]] = {}
 
@@ -392,7 +349,7 @@ class BaseScorer(ABC):
             if is_list:
                 if isinstance(method, (list, tuple)):
                     raise ValueError(f"weighted_mean not supported for list column {col}")
-                list_cols[col] = self._aggregate_list_column(df_pl, col, method)
+                list_cols[col] = self._aggregate_list_column_nw(df, col, method)
             else:
                 scalar_agg_exprs.append(self._build_aggregation_expr(df, col, method))
 
@@ -403,18 +360,18 @@ class BaseScorer(ABC):
 
         if scalar_agg_exprs:
             result_df = df.group_by(self.aggregation_level).agg(scalar_agg_exprs)
-            result_pl = result_df.to_native()
-            if isinstance(result_pl, pd.DataFrame):
-                result_pl = pl.DataFrame(result_pl)
         else:
-            result_pl = df_pl.select(self.aggregation_level).unique()
+            result_df = df.select(self.aggregation_level).unique()
 
+        backend = nw.get_native_namespace(result_df)
         for col, group_map in list_cols.items():
-            key_rows = result_pl.select(self.aggregation_level).iter_rows()
+            key_rows = list(result_df.select(self.aggregation_level).iter_rows())
             values = [group_map[row] for row in key_rows]
-            result_pl = result_pl.with_columns(pl.Series(col, values))
+            result_df = result_df.with_columns(
+                nw.new_series(name=col, values=values, backend=backend)
+            )
 
-        return nw.from_native(result_pl)
+        return result_df
 
     @narwhals.narwhalify
     def aggregate(self, df: IntoFrameT) -> IntoFrameT:
@@ -466,7 +423,7 @@ class BaseScorer(ABC):
         return re.sub(r"[^a-zA-Z0-9_]", "_", name)
 
     def _is_datetime_like_filter_value(self, value: Any) -> bool:
-        if isinstance(value, (datetime.datetime, datetime.date, np.datetime64, pd.Timestamp)):
+        if isinstance(value, (datetime.datetime, datetime.date, np.datetime64)):
             return True
         if isinstance(value, str):
             candidate = value.strip()
@@ -818,7 +775,7 @@ class MeanBiasScorer(BaseScorer):
                 return 0.0
             return float(np.average(diffs_arr[mask], weights=w[mask]))
         result = float(np.nanmean(diffs_arr))
-        return 0.0 if pd.isna(result) else result
+        return 0.0 if math.isnan(result) else result
 
     def _mean_bias_from_lists(
         self, preds: list[Any], targets: list[Any], weights: list[Any] | None = None
@@ -853,7 +810,7 @@ class MeanBiasScorer(BaseScorer):
 
         group_values: list[float] = []
         for value in relative_groups:
-            if pd.isna(value):
+            if value is None or (isinstance(value, float) and math.isnan(value)):
                 group_values.append(np.nan)
             elif value is True or value == 1:
                 group_values.append(1.0)
@@ -935,24 +892,10 @@ class MeanBiasScorer(BaseScorer):
         # If granularity is set, calculate separate scores per group
         if self.granularity:
             results = {}
-            # Get unique granularity combinations - convert to native first to use select
-            df_native = df.to_native()
-            if isinstance(df_native, pd.DataFrame):
-                # For pandas, use unique() and convert to list of tuples
-                gran_df_unique = df_native[self.granularity].drop_duplicates()
-                granularity_tuples = [tuple(row) for row in gran_df_unique.values]
-            else:
-                # For polars, use select and unique
-                gran_df_unique = df_native.select(self.granularity).unique()
-                granularity_tuples = [tuple(row) for row in gran_df_unique.iter_rows()]
+            granularity_tuples = self._get_granularity_groups(df)
 
             for gran_tuple in granularity_tuples:
-                # Filter to this granularity combination using Narwhals
-                mask = None
-                for i, col in enumerate(self.granularity):
-                    col_mask = nw.col(col) == nw.lit(gran_tuple[i])
-                    mask = col_mask if mask is None else (mask & col_mask)
-                gran_df = df.filter(mask)
+                gran_df = self._filter_to_granularity(df, gran_tuple)
 
                 weights = (
                     gran_df[self.sample_weight_column].to_list()
@@ -1209,236 +1152,6 @@ class SklearnScorer(BaseScorer):
         return self._score_group(df, preds, is_probabilistic)
 
 
-class ProbabilisticMeanBias(BaseScorer):
-    def __init__(
-        self,
-        pred_column: str,
-        target: str,
-        class_column_name: str = "classes",
-        validation_column: str | None = None,
-        aggregation_level: list[str] | None = None,
-        aggregation_method: dict[str, Any] | None = None,
-        granularity: list[str] | None = None,
-        filters: list[Filter] | None = None,
-        compare_to_naive: bool = False,
-        naive_granularity: list[str] | None = None,
-        name: str | None = None,
-        _name_override: str | None = None,
-    ):
-        self.class_column_name = class_column_name
-        super().__init__(
-            target=target,
-            pred_column=pred_column,
-            aggregation_level=aggregation_level,
-            aggregation_method=aggregation_method,
-            granularity=granularity,
-            filters=filters,
-            validation_column=validation_column,
-            compare_to_naive=compare_to_naive,
-            naive_granularity=naive_granularity,
-            name=name,
-            _name_override=_name_override,
-        )
-
-    def _aggregate_pandas_series(self, df: pd.DataFrame, col: str, method: Any) -> pd.Series:
-        grouped = df.groupby(self.aggregation_level, dropna=False)
-        if isinstance(method, tuple):
-            if len(method) != 2 or method[0] != "weighted_mean":
-                raise ValueError(f"Unsupported aggregation method for {col}: {method}")
-            weight_col = method[1]
-            if weight_col not in df.columns:
-                raise ValueError(
-                    f"Aggregation weight column '{weight_col}' not found in dataframe columns."
-                )
-            return grouped.apply(lambda g: (g[col] * g[weight_col]).sum() / g[weight_col].sum())
-
-        if method == "sum":
-            return grouped[col].sum()
-        if method == "mean":
-            return grouped[col].mean()
-        if method == "first":
-            return grouped[col].first()
-        raise ValueError(f"Unsupported aggregation method for {col}: {method}")
-
-    def _aggregate_pandas(self, df: pd.DataFrame) -> pd.DataFrame:
-        if not self.aggregation_level:
-            return df
-        pred_method = self._resolve_aggregation_method("pred")
-        target_method = self._resolve_aggregation_method("target")
-        agg_df = pd.DataFrame(
-            {
-                self.pred_column: self._aggregate_pandas_series(df, self.pred_column, pred_method),
-                self.target: self._aggregate_pandas_series(df, self.target, target_method),
-                self.class_column_name: df.groupby(self.aggregation_level, dropna=False)[
-                    self.class_column_name
-                ].first(),
-            }
-        )
-        agg_df.reset_index(inplace=True)
-        return agg_df
-
-    def _calculate_score_for_group(self, df: pd.DataFrame) -> float:
-        """Calculate score for a single group (used for granularity)"""
-        df = df.copy()
-        df.reset_index(drop=True, inplace=True)
-
-        distinct_classes_variations = df.drop_duplicates(subset=[self.class_column_name])[
-            self.class_column_name
-        ].tolist()
-
-        sum_lrs = [0 for _ in range(len(distinct_classes_variations))]
-        sum_lr = 0
-        for variation_idx, distinct_class_variation in enumerate(distinct_classes_variations):
-            if not isinstance(distinct_class_variation, list) and math.isnan(
-                distinct_class_variation
-            ):
-                continue
-
-            rows_target_group = df[
-                df[self.class_column_name].apply(lambda x, dcv=distinct_class_variation: x == dcv)
-            ]
-            probs = rows_target_group[self.pred_column]
-            last_column_name = f"prob_under_{distinct_class_variation[0] - 0.5}"
-            rows_target_group[last_column_name] = probs.apply(lambda x: x[0])
-
-            for idx, class_ in enumerate(distinct_class_variation[1:]):
-                prob_under = "prob_under_" + str(class_ + 0.5)
-                rows_target_group[prob_under] = (
-                    probs.apply(lambda x, i=idx: x[i + 1]) + rows_target_group[last_column_name]
-                )
-
-                count_exact = len(rows_target_group[rows_target_group[self.target] == class_])
-                weight_class = count_exact / len(rows_target_group)
-
-                if self.aggregation_level:
-                    grouped = (
-                        rows_target_group.groupby(self.aggregation_level + [self.target])[
-                            prob_under
-                        ]
-                        .mean()
-                        .reset_index()
-                    )
-                else:
-                    grouped = rows_target_group
-
-                grouped["min"] = 0.0001
-                grouped["max"] = 0.9999
-                grouped[prob_under] = np.minimum(grouped["max"], grouped[prob_under])
-                grouped[prob_under] = np.maximum(grouped["min"], grouped[prob_under])
-
-                grouped.loc[grouped[self.target] <= class_, "__went_under"] = 1
-                grouped.loc[grouped[self.target] > class_, "__went_under"] = 0
-
-                under_prob_mean = grouped[prob_under].mean()
-                under_actual_mean = grouped["__went_under"].mean()
-
-                overbias = under_prob_mean - under_actual_mean
-                sum_lrs[variation_idx] += overbias * weight_class
-
-                last_column_name = prob_under
-            sum_lr += sum_lrs[variation_idx] * len(rows_target_group) / len(df)
-        return sum_lr
-
-    def _naive_predictions_for_group(self, df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy()
-        distinct_classes_variations = df.drop_duplicates(subset=[self.class_column_name])[
-            self.class_column_name
-        ].tolist()
-
-        for distinct_class_variation in distinct_classes_variations:
-            if not isinstance(distinct_class_variation, list) and math.isnan(
-                distinct_class_variation
-            ):
-                continue
-
-            rows_mask = df[self.class_column_name].apply(
-                lambda x, dcv=distinct_class_variation: x == dcv
-            )
-            rows_target_group = df[rows_mask]
-            if rows_target_group.empty:
-                continue
-
-            if not self.naive_granularity:
-                probs = _empirical_probabilities_from_targets(
-                    rows_target_group[self.target].tolist(), distinct_class_variation
-                )
-                df.loc[rows_mask, self.pred_column] = pd.Series(
-                    [probs] * len(rows_target_group), index=df.loc[rows_mask].index
-                )
-                continue
-
-            grouped = (
-                rows_target_group.groupby(self.naive_granularity, dropna=False)[self.target]
-                .apply(list)
-                .to_dict()
-            )
-            if len(self.naive_granularity) == 1:
-                group_keys = rows_target_group[self.naive_granularity[0]].tolist()
-            else:
-                group_keys = [
-                    tuple(row)
-                    for row in rows_target_group[self.naive_granularity].itertuples(index=False)
-                ]
-
-            for idx, key in zip(rows_target_group.index, group_keys, strict=False):
-                probs = _empirical_probabilities_from_targets(
-                    grouped[key], distinct_class_variation
-                )
-                df.at[idx, self.pred_column] = probs
-
-        return df
-
-    def score(self, df: pd.DataFrame) -> float | dict[tuple, float]:
-        df = df.copy()
-        df = apply_filters(df, self.filters)
-
-        # Filter out null and NaN targets (notna() handles both None and np.nan in pandas)
-        before = len(df)
-        df = df[df[self.target].notna()]
-        after = len(df)
-        if before != after:
-            _logger.info(
-                "ProbabilisticMeanBias: Dropped %d rows with NaN target (%d → %d)",
-                before - after,
-                before,
-                after,
-            )
-
-        # Apply aggregation_level if set
-        if self.aggregation_level:
-            df = self._aggregate_pandas(df)
-
-        # If granularity is set, calculate separate scores per group
-        if self.granularity:
-            results = {}
-            granularity_groups = df.groupby(self.granularity)
-            for gran_tuple, gran_df in granularity_groups:
-                if isinstance(gran_tuple, tuple):
-                    score = self._calculate_score_for_group(gran_df)
-                    if self.compare_to_naive:
-                        naive_df = self._naive_predictions_for_group(gran_df)
-                        naive_score = self._calculate_score_for_group(naive_df)
-                        score = naive_score - score
-                    results[gran_tuple] = score
-                else:
-                    # Single column granularity
-                    score = self._calculate_score_for_group(gran_df)
-                    if self.compare_to_naive:
-                        naive_df = self._naive_predictions_for_group(gran_df)
-                        naive_score = self._calculate_score_for_group(naive_df)
-                        score = naive_score - score
-                    results[(gran_tuple,)] = score
-            return results
-
-        # Single score calculation
-        score = self._calculate_score_for_group(df)
-        if self.compare_to_naive:
-            naive_df = self._naive_predictions_for_group(df)
-            naive_score = self._calculate_score_for_group(naive_df)
-            return float(naive_score - score)
-        return score
-
-
 class OrdinalLossScorer(BaseScorer):
     def __init__(
         self,
@@ -1471,95 +1184,61 @@ class OrdinalLossScorer(BaseScorer):
         )
         self.classes = classes
 
-    def _calculate_score_for_group(self, df: pl.DataFrame) -> float:
-        """Calculate score for a single group (used for granularity)"""
-        pred_dtype = df.schema[self.pred_column]
-
-        class_labels = [int(c) for c in self.classes]
-        class_labels.sort()
+    def _calculate_score_for_group(self, df: IntoFrameT) -> float:
+        """Calculate score for a single group via numpy."""
+        class_labels = sorted(int(c) for c in self.classes)
         expected_len = len(class_labels)
-
-        if pred_dtype == pl.Array:
-            width = int(pred_dtype.shape[0])
-            if width != expected_len:
-                raise ValueError(
-                    f"OrdinalLossScorer: pred_column Array width ({width}) does not match len(classes) ({expected_len})."
-                )
-
-            def get_expr(i):
-                return pl.col(self.pred_column).arr.get(i)
-
-        else:
-            max_len = df.select(pl.col(self.pred_column).list.len().max()).item()
-            if max_len is not None and int(max_len) != expected_len:
-                raise ValueError(
-                    f"OrdinalLossScorer: pred_column List length ({int(max_len)}) does not match len(classes) ({expected_len})."
-                )
-
-            def get_expr(i):
-                return pl.col(self.pred_column).list.get(i)
-
-        df = df.with_columns(get_expr(i).alias(f"prob_{c}") for i, c in enumerate(class_labels))
 
         if len(class_labels) < 2:
             raise ValueError("OrdinalLossScorer: need at least 2 classes.")
-
         if class_labels != list(range(class_labels[0], class_labels[0] + len(class_labels))):
             raise ValueError(
                 f"OrdinalLossScorer: classes must be consecutive integers. Got: {class_labels[:10]}..."
             )
 
-        min_field = class_labels[0]
-        prob_col_under = "sum_prob_under"
-        df = df.with_columns(pl.col(f"prob_{min_field}").alias(prob_col_under))
+        preds = np.asarray(df[self.pred_column].to_list(), dtype=np.float64)
+        targets = np.asarray(df[self.target].to_list(), dtype=np.float64)
 
-        counts = df.group_by(self.target).len().rename({"len": "n"})
-        total = counts.filter(pl.col(self.target) < class_labels[-1])["n"].sum()
-        total = int(total) if total is not None else 0
+        if preds.ndim != 2 or preds.shape[1] != expected_len:
+            raise ValueError(
+                f"OrdinalLossScorer: pred_column width ({preds.shape[1] if preds.ndim == 2 else '?'}) "
+                f"does not match len(classes) ({expected_len})."
+            )
+
+        # Count targets for weights
+        from collections import Counter as _Counter
+
+        target_counts = _Counter(targets.tolist())
+        total = sum(cnt for val, cnt in target_counts.items() if val < class_labels[-1])
         if total <= 0:
             return 0.0
 
+        sum_prob_under = preds[:, 0].copy()
         sum_lr = 0.0
 
-        for class_ in class_labels[1:]:
-            n_exact = counts.filter(pl.col(self.target) == class_ - 1)["n"].sum()
-            n_exact = int(n_exact) if n_exact is not None else 0
+        for idx, class_ in enumerate(class_labels[1:], start=1):
+            n_exact = target_counts.get(float(class_ - 1), 0)
             weight_class = n_exact / total
             if weight_class == 0.0:
-                df = df.with_columns(
-                    (pl.col(f"prob_{class_}") + pl.col(prob_col_under))
-                    .clip(0.0, 1.0)
-                    .alias(prob_col_under)
-                )
+                sum_prob_under = np.clip(sum_prob_under + preds[:, idx], 0.0, 1.0)
                 continue
 
-            df = df.with_columns(pl.col(prob_col_under).clip(0.0001, 0.9999).alias(prob_col_under))
+            clipped = np.clip(sum_prob_under, 0.0001, 0.9999)
+            went_under = (targets < class_).astype(np.float64)
+            log_vals = went_under * np.log(clipped) + (1 - went_under) * np.log(1 - clipped)
+            log_loss_val = log_vals.mean()
 
-            log_loss = df.select(
-                pl.when(pl.col(self.target) < class_)
-                .then(pl.col(prob_col_under).log())
-                .otherwise((1 - pl.col(prob_col_under)).log())
-                .mean()
-            ).item()
-
-            sum_lr -= float(log_loss) * float(weight_class)
-
-            df = df.with_columns(
-                (pl.col(f"prob_{class_}") + pl.col(prob_col_under))
-                .clip(0.0, 1.0)
-                .alias(prob_col_under)
-            )
+            sum_lr -= float(log_loss_val) * float(weight_class)
+            sum_prob_under = np.clip(clipped + preds[:, idx], 0.0, 1.0)
 
         return float(sum_lr)
 
     @narwhals.narwhalify
     def score(self, df: IntoFrameT) -> float | dict[tuple, float]:
         df = apply_filters(df, self.filters)
-        # Ensure df is a Narwhals DataFrame
         if not hasattr(df, "to_native"):
             df = nw.from_native(df)
 
-        # Filter out null and NaN targets
         before = len(df)
         df = _filter_nulls_and_nans(df, self.target)
         after = len(df)
@@ -1574,47 +1253,42 @@ class OrdinalLossScorer(BaseScorer):
         if self.aggregation_level:
             df = self._apply_aggregation_level(df)
 
-        df_native = df.to_native()
-        df_pl = pl.DataFrame(df_native) if isinstance(df_native, pd.DataFrame) else df_native
-        if df_pl.is_empty():
+        if len(df) == 0:
             return {} if self.granularity else 0.0
 
         if self.granularity:
             results = {}
-            granularity_values = df_pl.select(self.granularity).unique().to_dict(as_series=False)
-            granularity_tuples = list(
-                zip(*[granularity_values[col] for col in self.granularity], strict=False)
-            )
+            granularity_tuples = self._get_granularity_groups(df)
 
             for gran_tuple in granularity_tuples:
-                mask = None
-                for i, col in enumerate(self.granularity):
-                    col_mask = pl.col(col) == gran_tuple[i]
-                    mask = col_mask if mask is None else (mask & col_mask)
-                gran_df = df_pl.filter(mask)
+                gran_df = self._filter_to_granularity(df, gran_tuple)
 
                 score = self._calculate_score_for_group(gran_df)
                 if self.compare_to_naive:
-                    class_labels = [int(c) for c in self.classes]
-                    class_labels.sort()
+                    class_labels = sorted(int(c) for c in self.classes)
                     naive_probs = _naive_probability_predictions_for_df(
                         gran_df, self.target, class_labels, self.naive_granularity
                     )
-                    naive_df = gran_df.with_columns(pl.Series(self.pred_column, naive_probs))
+                    backend = nw.get_native_namespace(gran_df)
+                    naive_df = gran_df.with_columns(
+                        nw.new_series(name=self.pred_column, values=naive_probs, backend=backend)
+                    )
                     naive_score = self._calculate_score_for_group(naive_df)
                     score = naive_score - score
                 results[gran_tuple] = score
 
             return results
 
-        score = self._calculate_score_for_group(df_pl)
+        score = self._calculate_score_for_group(df)
         if self.compare_to_naive:
-            class_labels = [int(c) for c in self.classes]
-            class_labels.sort()
+            class_labels = sorted(int(c) for c in self.classes)
             naive_probs = _naive_probability_predictions_for_df(
-                df_pl, self.target, class_labels, self.naive_granularity
+                df, self.target, class_labels, self.naive_granularity
             )
-            naive_df = df_pl.with_columns(pl.Series(self.pred_column, naive_probs))
+            backend = nw.get_native_namespace(df)
+            naive_df = df.with_columns(
+                nw.new_series(name=self.pred_column, values=naive_probs, backend=backend)
+            )
             naive_score = self._calculate_score_for_group(naive_df)
             return float(naive_score - score)
         return score
@@ -1658,40 +1332,25 @@ class RankedProbabilityScorer(BaseScorer):
         )
         self.num_classes = num_classes
 
-    def _calculate_score_for_group(self, df: pl.DataFrame) -> float:
-        pred_dtype = df.schema[self.pred_column]
+    def _calculate_score_for_group(self, df: IntoFrameT) -> float:
+        """Calculate RPS for a single group via numpy."""
         k = self.num_classes
+        preds = np.asarray(df[self.pred_column].to_list(), dtype=np.float64)
+        targets = np.asarray(df[self.target].to_list(), dtype=np.float64)
 
-        def get_expr(i: int) -> pl.Expr:
-            if pred_dtype == pl.Array:
-                return pl.col(self.pred_column).arr.get(i)
-            return pl.col(self.pred_column).list.get(i)
+        # CDF of predictions: cumsum along columns
+        cdf_pred = np.cumsum(preds, axis=1)[:, : k - 1]
+        # CDF of actuals: 1 where target <= j
+        j_vals = np.arange(k - 1, dtype=np.float64)[None, :]
+        cdf_actual = (targets[:, None] <= j_vals).astype(np.float64)
 
-        cdf_exprs = []
-        cumsum_expr = get_expr(0)
-        for j in range(k - 1):
-            if j > 0:
-                cumsum_expr = cumsum_expr + get_expr(j)
-            cdf_pred = cumsum_expr.alias(f"_cdf_pred_{j}")
-            cdf_actual = (
-                pl.when(pl.col(self.target) <= j).then(1.0).otherwise(0.0).alias(f"_cdf_actual_{j}")
-            )
-            cdf_exprs.extend([cdf_pred, cdf_actual])
-
-        df = df.with_columns(cdf_exprs)
-
-        sq_diff_terms = [
-            (pl.col(f"_cdf_pred_{j}") - pl.col(f"_cdf_actual_{j}")).pow(2) for j in range(k - 1)
-        ]
-
-        rps_per_row = sum(sq_diff_terms) / (k - 1)
-        mean_rps = df.select(rps_per_row.mean()).item()
-        return float(mean_rps)
+        rps_per_row = ((cdf_pred - cdf_actual) ** 2).sum(axis=1) / (k - 1)
+        return float(rps_per_row.mean())
 
     def _build_naive_predictions(
         self,
-        df: pl.DataFrame,
-    ) -> pl.DataFrame:
+        df: IntoFrameT,
+    ) -> IntoFrameT:
         targets = df[self.target].to_list()
         k = self.num_classes
 
@@ -1699,7 +1358,10 @@ class RankedProbabilityScorer(BaseScorer):
             counts = Counter(targets)
             total = len(targets)
             probs = [counts.get(i, 0) / total if total > 0 else 1.0 / k for i in range(k)]
-            return df.with_columns(pl.Series(self.pred_column, [probs] * df.height))
+            backend = nw.get_native_namespace(df)
+            return df.with_columns(
+                nw.new_series(name=self.pred_column, values=[probs] * len(df), backend=backend)
+            )
 
         group_keys_per_col = df.select(self.naive_granularity).to_dict(as_series=False)
         if len(self.naive_granularity) == 1:
@@ -1718,11 +1380,14 @@ class RankedProbabilityScorer(BaseScorer):
             probs_by_group[key] = [counts.get(i, 0) / total for i in range(k)]
 
         naive_preds = [probs_by_group[key] for key in keys]
-        return df.with_columns(pl.Series(self.pred_column, naive_preds))
+        backend = nw.get_native_namespace(df)
+        return df.with_columns(
+            nw.new_series(name=self.pred_column, values=naive_preds, backend=backend)
+        )
 
-    def _score_with_naive(self, df_pl: pl.DataFrame) -> float:
-        model_score = self._calculate_score_for_group(df_pl)
-        naive_df = self._build_naive_predictions(df_pl)
+    def _score_with_naive(self, df: IntoFrameT) -> float:
+        model_score = self._calculate_score_for_group(df)
+        naive_df = self._build_naive_predictions(df)
         naive_score = self._calculate_score_for_group(naive_df)
         return naive_score - model_score
 
@@ -1746,23 +1411,14 @@ class RankedProbabilityScorer(BaseScorer):
         if self.aggregation_level:
             df = self._apply_aggregation_level(df)
 
-        df_native = df.to_native()
-        df_pl = pl.DataFrame(df_native) if isinstance(df_native, pd.DataFrame) else df_native
-        if df_pl.is_empty():
+        if len(df) == 0:
             return {} if self.granularity else 0.0
 
         if self.granularity:
             results = {}
-            granularity_values = df_pl.select(self.granularity).unique().to_dict(as_series=False)
-            granularity_tuples = list(
-                zip(*[granularity_values[col] for col in self.granularity], strict=False)
-            )
+            granularity_tuples = self._get_granularity_groups(df)
             for gran_tuple in granularity_tuples:
-                mask = None
-                for i, col in enumerate(self.granularity):
-                    col_mask = pl.col(col) == gran_tuple[i]
-                    mask = col_mask if mask is None else (mask & col_mask)
-                gran_df = df_pl.filter(mask)
+                gran_df = self._filter_to_granularity(df, gran_tuple)
                 if self.compare_to_naive:
                     results[gran_tuple] = self._score_with_naive(gran_df)
                 else:
@@ -1770,8 +1426,8 @@ class RankedProbabilityScorer(BaseScorer):
             return results
 
         if self.compare_to_naive:
-            return self._score_with_naive(df_pl)
-        return self._calculate_score_for_group(df_pl)
+            return self._score_with_naive(df)
+        return self._calculate_score_for_group(df)
 
 
 class ThresholdEventScorer(BaseScorer):
