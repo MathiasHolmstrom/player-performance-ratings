@@ -163,6 +163,4 @@ cython_debug/
 tmpclaude-*
 
 # Claude config
-CLAUDE.md
-.claude/settings.json
-.claude/settings.local.json
+.claude/
